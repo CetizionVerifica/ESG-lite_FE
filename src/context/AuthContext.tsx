@@ -50,7 +50,7 @@ useEffect(() => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const res = await axios.post(`${baseUrl}/auth/login`, {
+    const res = await axios.post(`${baseUrl}auth/login`, {
       email,
       password,
     });
