@@ -168,10 +168,10 @@ const Sidebar = () => {
                 isExpanded ? "opacity-100 w-auto" : "opacity-0 w-0 absolute"
               }`}
             >
-              <p className="text-sm font-medium text-white truncate max-w-[140px]">
+              <p className="text-sm font-medium text-white truncate max-w-35">
                 {user.name}
               </p>
-              <p className="text-xs text-slate-400 truncate max-w-[140px]">
+              <p className="text-xs text-slate-400 truncate max-w-35">
                 {user.email}
               </p>
             </div>

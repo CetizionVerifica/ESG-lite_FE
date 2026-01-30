@@ -12,6 +12,7 @@ import { useEmissionIntensity } from "./hooks/useEmissionIntensity";
 import PendingEmissionsList from "./components/PendingEmissionsList";
 import EmissionIntensityCard from "./components/EmissionIntensityCard";
 
+
 const ManagerDashboard = () => {
   const { user } = useAuth();
   const { isDark } = useTheme();

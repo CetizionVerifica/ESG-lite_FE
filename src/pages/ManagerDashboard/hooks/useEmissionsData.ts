@@ -6,7 +6,7 @@ interface UseEmissionsDataProps {
   selectedSite: number | null;
   selectedCategory: number | null;
   selectedYear: number | null;
-  availableSites: Site[];
+  availableSites?: Site[];
 }
 
 interface UseEmissionsDataReturn {
@@ -55,7 +55,7 @@ export function useEmissionsData({
 
   // Fetch emissions for all sites (for comparison charts)
   const fetchAllSitesEmissions = useCallback(async () => {
-    if (availableSites.length === 0) return;
+    if (!availableSites || availableSites.length === 0) return;
 
     try {
       const allData: SiteEmissionsMap = {};
@@ -112,7 +112,7 @@ export function useEmissionsData({
   // Create a mapping of category_id to scope
   const categoryToScope = useMemo(() => {
     const mapping: Record<number, string> = {};
-    availableSites.forEach((site) => {
+    availableSites?.forEach((site) => {
       site.categories?.forEach((cat) => {
         mapping[cat.category_id] = cat.scope;
       });
