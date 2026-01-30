@@ -33,10 +33,7 @@ interface ChartOptions {
 export function useChartOptions({
   filteredEmissions,
   approvedEmissions,
-  emissions,
-  kpis,
   availableSites,
-  allSitesEmissions,
   approvedSitesEmissions,
   comparisonYear,
   selectedComparisonYears,

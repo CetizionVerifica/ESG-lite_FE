@@ -104,7 +104,7 @@ export function useEmissionsData({
   const approvedSitesEmissions = useMemo((): SiteEmissionsMap => {
     const result: SiteEmissionsMap = {};
     Object.entries(allSitesEmissions).forEach(([siteId, emissions]) => {
-      result[Number(siteId)] = emissions.filter((e) => e.status === "approved");
+      result[Number(siteId)] = emissions.filter((e:any) => e.status === "approved");
     });
     return result;
   }, [allSitesEmissions]);
