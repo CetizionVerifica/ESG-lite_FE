@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { EmissionData, EmissionStatus } from "../../services/emissionService";
+import { getDocumentsByEmission, EmissionDocument } from "../../services/documentService";
+import DocumentViewerModal from "../../components/DocumentViewerModal";
 
 interface EmissionsTableProps {
   emissions: EmissionData[];
@@ -43,6 +45,12 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
   const [selectedApprovedIds, setSelectedApprovedIds] = useState<Set<number>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Document viewer state
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerDocuments, setViewerDocuments] = useState<EmissionDocument[]>([]);
+  const [selectedDocument, setSelectedDocument] = useState<EmissionDocument | null>(null);
+  const [loadingDocs, setLoadingDocs] = useState(false);
 
   // Get pending and approved emissions
   const pendingEmissions = emissions.filter((e) => e.status === "pending");
@@ -159,6 +167,36 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
   const handleRejectCancel = () => {
     setRejectingId(null);
     setRejectComment("");
+  };
+
+  // Document viewer handlers
+  const handleViewDocuments = async (emissionId: number) => {
+    try {
+      setLoadingDocs(true);
+      const docs = await getDocumentsByEmission(emissionId);
+      if (docs.length > 0) {
+        setViewerDocuments(docs);
+        setSelectedDocument(docs[0]);
+        setViewerOpen(true);
+      } else {
+        alert("No documents found for this emission.");
+      }
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      alert("Failed to load documents.");
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
+
+  const handleCloseViewer = () => {
+    setViewerOpen(false);
+    setViewerDocuments([]);
+    setSelectedDocument(null);
+  };
+
+  const handleNavigateDocument = (doc: EmissionDocument) => {
+    setSelectedDocument(doc);
   };
 
   if (loading) {
@@ -306,6 +344,9 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
               <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
                 Submitted At
               </th>
+              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
+                Documents
+              </th>
             {showActions && (
               <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
                 Actions
@@ -379,6 +420,15 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                 <td className="border border-gray-300 px-4 py-3">
                   {formatDate(emission.created_at)}
                 </td>
+                <td className="border border-gray-300 px-4 py-3">
+                  <button
+                    onClick={() => handleViewDocuments(emission.pk_id)}
+                    disabled={loadingDocs}
+                    className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50 transition-colors"
+                  >
+                    View Docs
+                  </button>
+                </td>
                 {showActions && (
                   <td className="border border-gray-300 px-4 py-3">
                     {isPending && !isRejecting && (
@@ -437,6 +487,15 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
         </tbody>
         </table>
       </div>
+
+      {/* Document Viewer Modal */}
+      <DocumentViewerModal
+        isOpen={viewerOpen}
+        onClose={handleCloseViewer}
+        document={selectedDocument}
+        documents={viewerDocuments}
+        onNavigate={handleNavigateDocument}
+      />
     </div>
   );
 }

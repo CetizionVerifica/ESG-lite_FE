@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { useAuth } from "../context/AuthContext";
 import { getEmissionsBySite, EmissionData, EmissionStatus } from "../services/emissionService";
+import DocumentViewerModal from "../components/DocumentViewerModal";
+import { getDocumentsByEmission, EmissionDocument } from "../services/documentService";
 
 interface Category {
   category_id: number;
@@ -85,6 +87,12 @@ const UserEmissionsPage = () => {
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Document viewer state
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerDocuments, setViewerDocuments] = useState<EmissionDocument[]>([]);
+  const [selectedDocument, setSelectedDocument] = useState<EmissionDocument | null>(null);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+
   // Get current site and its categories
   const currentSite = availableSites.find((s) => s.site_id === selectedSite);
   const categories: Category[] = currentSite?.categories || [];
@@ -134,6 +142,36 @@ const UserEmissionsPage = () => {
   useEffect(() => {
     fetchEmissions();
   }, [fetchEmissions]);
+
+  // Document viewer handlers
+  const handleViewDocuments = async (emissionId: number) => {
+    try {
+      setLoadingDocs(true);
+      const docs = await getDocumentsByEmission(emissionId);
+      if (docs.length > 0) {
+        setViewerDocuments(docs);
+        setSelectedDocument(docs[0]);
+        setViewerOpen(true);
+      } else {
+        alert("No documents found for this emission.");
+      }
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      alert("Failed to load documents.");
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
+
+  const handleCloseViewer = () => {
+    setViewerOpen(false);
+    setViewerDocuments([]);
+    setSelectedDocument(null);
+  };
+
+  const handleNavigateDocument = (doc: EmissionDocument) => {
+    setSelectedDocument(doc);
+  };
 
   // Filter emissions based on selected category, year, and month
   const filteredEmissions = useMemo(() => {
@@ -343,6 +381,9 @@ const UserEmissionsPage = () => {
                 <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
                   Submitted At
                 </th>
+                <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
+                  Documents
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -380,12 +421,30 @@ const UserEmissionsPage = () => {
                   <td className="border border-gray-300 px-4 py-3">
                     {formatDate(emission.created_at)}
                   </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <button
+                      onClick={() => handleViewDocuments(emission.pk_id)}
+                      disabled={loadingDocs}
+                      className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50 transition-colors"
+                    >
+                      View Docs
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Document Viewer Modal */}
+      <DocumentViewerModal
+        isOpen={viewerOpen}
+        onClose={handleCloseViewer}
+        document={selectedDocument}
+        documents={viewerDocuments}
+        onNavigate={handleNavigateDocument}
+      />
     </div>
   );
 };

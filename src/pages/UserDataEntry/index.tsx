@@ -18,7 +18,7 @@ import {
 } from "../../services/unitService";
 import { canConvert, unitsMatchExact } from "../../utils/unitConversions";
 import { useEmissionCalculation } from "./useEmissionCalculation";
-import { UnitSelector, EmissionPreview, ValidationError } from "./components";
+import { UnitSelector, EmissionPreview, ValidationError, DocumentUploadModal } from "./components";
 import {
   Category,
   ColumnEntity,
@@ -73,6 +73,10 @@ const UserDataEntryPage = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [nextRowId, setNextRowId] = useState(1);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Document modal state
+  const [documentModalOpen, setDocumentModalOpen] = useState(false);
+  const [selectedEmissionForDocs, setSelectedEmissionForDocs] = useState<EmissionRow | null>(null);
 
   // ---------------------------------------------------------------------------
   // Derived Data
@@ -350,6 +354,16 @@ const UserDataEntryPage = () => {
       console.error("Error deleting emission:", error);
       throw error;
     }
+  };
+
+  const handleOpenDocuments = (row: EmissionRow) => {
+    setSelectedEmissionForDocs(row);
+    setDocumentModalOpen(true);
+  };
+
+  const handleCloseDocuments = () => {
+    setDocumentModalOpen(false);
+    setSelectedEmissionForDocs(null);
   };
 
   // ---------------------------------------------------------------------------
@@ -650,11 +664,24 @@ const UserDataEntryPage = () => {
               loading={loading}
               showActions={true}
               renderActions={(row, { editButton, deleteButton }) => {
+                const docsButton = (
+                  <button
+                    onClick={() => handleOpenDocuments(row)}
+                    className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
+                    title="Manage Documents"
+                  >
+                    Docs
+                  </button>
+                );
+
                 if (row.status === "approved") {
                   return (
-                    <span className="text-sm text-green-700">
-                      Approved by {row.reviewed_by?.name || "Manager"}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm text-green-700">
+                        Approved by {row.reviewed_by?.name || "Manager"}
+                      </span>
+                      <div className="flex gap-2">{docsButton}</div>
+                    </div>
                   );
                 }
                 if (row.status === "rejected") {
@@ -664,7 +691,10 @@ const UserDataEntryPage = () => {
                         Rejected
                         {row.review_comment ? `: ${row.review_comment}` : ""}
                       </span>
-                      <div className="flex gap-2">{editButton}</div>
+                      <div className="flex gap-2">
+                        {editButton}
+                        {docsButton}
+                      </div>
                     </div>
                   );
                 }
@@ -673,6 +703,7 @@ const UserDataEntryPage = () => {
                   <div className="flex gap-2">
                     {editButton}
                     {deleteButton}
+                    {docsButton}
                   </div>
                 );
               }}
@@ -683,6 +714,16 @@ const UserDataEntryPage = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* Document Upload Modal */}
+      {selectedEmissionForDocs && (
+        <DocumentUploadModal
+          isOpen={documentModalOpen}
+          onClose={handleCloseDocuments}
+          emissionId={selectedEmissionForDocs.pk_id}
+          emissionCategory={selectedEmissionForDocs.emission_category}
+        />
       )}
     </div>
   );

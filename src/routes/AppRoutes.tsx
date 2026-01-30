@@ -2,6 +2,7 @@ import Layout from "../components/Layout";
 import CompanyPage from "../pages/CompanyPage";
 import CountryPage from "../pages/CountryPage";
 import Login from "../pages/Login";
+import ResetPassword from "../pages/ResetPassword";
 import SitePage from "../pages/SitePage";
 import SuperAdminPage from "../pages/SuperAdminPage";
 import ProtectedRoute from "./ProtectedRoute";
@@ -24,6 +25,10 @@ const routes = [
   {
     path: "/login",
     element: <Login />,
+  },
+  {
+    path: "/reset-password",
+    element: <ResetPassword />,
   },
   {
     path: "",
