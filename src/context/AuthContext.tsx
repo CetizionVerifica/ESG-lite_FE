@@ -7,6 +7,8 @@ import {
 } from "react";
 import axios from "axios";
 
+const baseUrl = import.meta.env.VITE_API_URL;
+
 interface AuthContextType {
   token: string | null;
   role: string | null;
@@ -48,7 +50,7 @@ useEffect(() => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const res = await axios.post("http://localhost:3000/auth/login", {
+    const res = await axios.post(`${baseUrl}/auth/login`, {
       email,
       password,
     });
