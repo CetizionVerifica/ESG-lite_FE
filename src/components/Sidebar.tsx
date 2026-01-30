@@ -158,7 +158,7 @@ const Sidebar = () => {
         {/* User Profile */}
         {user && (
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 bg-linear-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shrink-0">
               <span className="text-white font-semibold text-xs">
                 {getInitials(user.name)}
               </span>
