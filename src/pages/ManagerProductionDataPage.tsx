@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import Modal from "../components/Modal";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import {
   getProductionDataForManager,
   approveProductionData,
@@ -34,16 +35,22 @@ function formatDate(dateString: string): string {
   });
 }
 
-const StatusBadge = ({ status }: { status: ProductionDataStatus }) => {
-  const statusStyles: Record<ProductionDataStatus, string> = {
-    pending: "bg-yellow-100 text-yellow-800",
-    approved: "bg-green-100 text-green-800",
-    rejected: "bg-red-100 text-red-800",
-  };
+const StatusBadge = ({ status, isDark = false }: { status: ProductionDataStatus; isDark?: boolean }) => {
+  const statusStyles: Record<ProductionDataStatus, string> = isDark
+    ? {
+        pending: "bg-yellow-900/30 text-yellow-400 border border-yellow-700/50",
+        approved: "bg-green-900/30 text-green-400 border border-green-700/50",
+        rejected: "bg-red-900/30 text-red-400 border border-red-700/50",
+      }
+    : {
+        pending: "bg-yellow-100 text-yellow-800",
+        approved: "bg-green-100 text-green-800",
+        rejected: "bg-red-100 text-red-800",
+      };
 
   return (
     <span
-      className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${statusStyles[status] || "bg-gray-100 text-gray-800"}`}
+      className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${statusStyles[status] || (isDark ? "bg-slate-700 text-slate-300" : "bg-gray-100 text-gray-800")}`}
     >
       {status}
     </span>
@@ -52,6 +59,7 @@ const StatusBadge = ({ status }: { status: ProductionDataStatus }) => {
 
 const ManagerProductionDataPage = () => {
   const { user } = useAuth();
+  const { isDark } = useTheme();
 
   // Get available sites
   const sites: Site[] = user?.sites || [];
@@ -265,14 +273,79 @@ const ManagerProductionDataPage = () => {
     productionData.find((p) => p.production_id === id && p.status === "pending")
   );
 
+  // Theme classes
+  const containerClass = isDark
+    ? "p-6 bg-slate-900 min-h-screen text-slate-100"
+    : "p-6 bg-gray-50 min-h-screen text-gray-900";
+
+  const labelClass = isDark
+    ? "block text-sm font-medium mb-1 text-slate-300"
+    : "block text-sm font-medium mb-1 text-gray-700";
+
+  const refreshBtnClass = isDark
+    ? "px-4 py-2 bg-slate-700 text-slate-200 rounded hover:bg-slate-600"
+    : "px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200";
+
+  const infoTextClass = isDark
+    ? "text-sm text-slate-400"
+    : "text-sm text-gray-600";
+
+  const pendingTextClass = isDark
+    ? "ml-2 text-yellow-400"
+    : "ml-2 text-yellow-600";
+
+  const loadingClass = isDark
+    ? "text-center py-8 text-slate-300"
+    : "text-center py-8";
+
+  const emptyClass = isDark
+    ? "text-center py-8 text-slate-400"
+    : "text-center py-8 text-gray-500";
+
+  const tableClass = isDark
+    ? "w-full border-collapse border border-slate-600"
+    : "w-full border-collapse border border-gray-300";
+
+  const headerRowClass = isDark
+    ? "bg-slate-700"
+    : "bg-gray-100";
+
+  const headerCellClass = isDark
+    ? "border border-slate-600 px-4 py-2 text-left text-slate-200"
+    : "border border-gray-300 px-4 py-2 text-left";
+
+  const cellClass = isDark
+    ? "border border-slate-600 px-4 py-2 text-slate-200"
+    : "border border-gray-300 px-4 py-2";
+
+  const rowHoverClass = isDark
+    ? "hover:bg-slate-700"
+    : "hover:bg-gray-50";
+
+  const inputClass = isDark
+    ? "w-full border border-slate-600 bg-slate-700 text-slate-200 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-500/30"
+    : "w-full border px-3 py-2 rounded focus:outline-none focus:ring";
+
+  const cancelBtnClass = isDark
+    ? "px-4 py-2 bg-slate-600 text-slate-200 rounded hover:bg-slate-500"
+    : "px-4 py-2 bg-gray-300 rounded hover:bg-gray-400";
+
+  const reviewTextClass = isDark
+    ? "text-xs text-slate-400 mt-1"
+    : "text-xs text-gray-500 mt-1";
+
+  const rejectReasonClass = isDark
+    ? "text-xs text-red-400 mt-1"
+    : "text-xs text-red-600 mt-1";
+
   return (
-    <div className="p-6">
+    <div className={containerClass}>
       <h1 className="text-2xl font-bold mb-6">Manage Production Data</h1>
 
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div>
-          <label className="block text-sm font-medium mb-1">Site</label>
+          <label className={labelClass}>Site</label>
           <Dropdown
             options={siteOptions}
             placeholder="Select Site"
@@ -282,7 +355,7 @@ const ManagerProductionDataPage = () => {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Product</label>
+          <label className={labelClass}>Product</label>
           <Dropdown
             options={productOptions}
             placeholder="All Products"
@@ -293,7 +366,7 @@ const ManagerProductionDataPage = () => {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Status</label>
+          <label className={labelClass}>Status</label>
           <Dropdown
             options={STATUS_OPTIONS}
             placeholder="All Statuses"
@@ -305,7 +378,7 @@ const ManagerProductionDataPage = () => {
         <div className="flex items-end">
           <button
             onClick={fetchData}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+            className={refreshBtnClass}
           >
             Refresh
           </button>
@@ -316,10 +389,10 @@ const ManagerProductionDataPage = () => {
       <div className="flex justify-between items-center mb-4">
         <div>
           {currentSite && (
-            <span className="text-sm text-gray-600">
+            <span className={infoTextClass}>
               {productionData.length} record{productionData.length !== 1 ? "s" : ""} found
               {pendingCount > 0 && (
-                <span className="ml-2 text-yellow-600">({pendingCount} pending)</span>
+                <span className={pendingTextClass}>({pendingCount} pending)</span>
               )}
             </span>
           )}
@@ -347,69 +420,69 @@ const ManagerProductionDataPage = () => {
 
       {/* Table */}
       {loading ? (
-        <div className="text-center py-8">Loading...</div>
+        <div className={loadingClass}>Loading...</div>
       ) : productionData.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
+        <div className={emptyClass}>
           No production data found for the selected filters.
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-300">
+          <table className={tableClass}>
             <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-gray-300 px-3 py-2 w-10">
+              <tr className={headerRowClass}>
+                <th className={`${headerCellClass} w-10`}>
                   <input
                     type="checkbox"
                     checked={selectedIds.length === productionData.length && productionData.length > 0}
                     onChange={(e) => handleSelectAll(e.target.checked)}
                   />
                 </th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Product</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Quantity</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Unit</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Period</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Created By</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Status</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
+                <th className={headerCellClass}>Product</th>
+                <th className={headerCellClass}>Quantity</th>
+                <th className={headerCellClass}>Unit</th>
+                <th className={headerCellClass}>Period</th>
+                <th className={headerCellClass}>Created By</th>
+                <th className={headerCellClass}>Status</th>
+                <th className={headerCellClass}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {productionData.map((data) => (
-                <tr key={data.production_id} className="hover:bg-gray-50">
-                  <td className="border border-gray-300 px-3 py-2 text-center">
+                <tr key={data.production_id} className={rowHoverClass}>
+                  <td className={`${cellClass} text-center`}>
                     <input
                       type="checkbox"
                       checked={selectedIds.includes(data.production_id)}
                       onChange={(e) => handleSelectOne(data.production_id, e.target.checked)}
                     />
                   </td>
-                  <td className="border border-gray-300 px-4 py-2">
+                  <td className={cellClass}>
                     {data.product?.name || "N/A"}
                   </td>
-                  <td className="border border-gray-300 px-4 py-2">
+                  <td className={cellClass}>
                     {Number(data.quantity).toLocaleString()}
                   </td>
-                  <td className="border border-gray-300 px-4 py-2">{data.unit}</td>
-                  <td className="border border-gray-300 px-4 py-2">
+                  <td className={cellClass}>{data.unit}</td>
+                  <td className={cellClass}>
                     {formatDate(data.start_date)} - {formatDate(data.end_date)}
                   </td>
-                  <td className="border border-gray-300 px-4 py-2">
+                  <td className={cellClass}>
                     {data.created_by?.name || "N/A"}
                   </td>
-                  <td className="border border-gray-300 px-4 py-2">
-                    <StatusBadge status={data.status} />
+                  <td className={cellClass}>
+                    <StatusBadge status={data.status} isDark={isDark} />
                     {data.status === "rejected" && data.review_comment && (
-                      <div className="text-xs text-red-600 mt-1">
+                      <div className={rejectReasonClass}>
                         {data.review_comment}
                       </div>
                     )}
                     {data.status !== "pending" && data.reviewed_by && (
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className={reviewTextClass}>
                         by {data.reviewed_by.name}
                       </div>
                     )}
                   </td>
-                  <td className="border border-gray-300 px-4 py-2">
+                  <td className={cellClass}>
                     <div className="flex gap-1">
                       {data.status === "pending" && (
                         <>
@@ -455,15 +528,16 @@ const ManagerProductionDataPage = () => {
           setBulkRejectMode(false);
         }}
         title={bulkRejectMode ? `Reject ${pendingSelectedIds.length} Items` : "Reject Production Data"}
+        isDark={isDark}
       >
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">
+          <label className={labelClass}>
             Rejection Reason (Optional)
           </label>
           <textarea
             value={rejectComment}
             onChange={(e) => setRejectComment(e.target.value)}
-            className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+            className={inputClass}
             rows={3}
             placeholder="Enter reason for rejection..."
           />
@@ -476,7 +550,7 @@ const ManagerProductionDataPage = () => {
               setRejectingId(null);
               setBulkRejectMode(false);
             }}
-            className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+            className={cancelBtnClass}
           >
             Cancel
           </button>
@@ -497,51 +571,52 @@ const ManagerProductionDataPage = () => {
           setEditingData(null);
         }}
         title="Edit Production Data"
+        isDark={isDark}
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Quantity</label>
+            <label className={labelClass}>Quantity</label>
             <input
               type="number"
               value={editForm.quantity}
               onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })}
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+              className={inputClass}
               step="0.0001"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Unit</label>
+            <label className={labelClass}>Unit</label>
             <input
               type="text"
               value={editForm.unit}
               onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+              className={inputClass}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Start Date</label>
+            <label className={labelClass}>Start Date</label>
             <input
               type="date"
               value={editForm.start_date}
               onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+              className={inputClass}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">End Date</label>
+            <label className={labelClass}>End Date</label>
             <input
               type="date"
               value={editForm.end_date}
               onChange={(e) => setEditForm({ ...editForm, end_date: e.target.value })}
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+              className={inputClass}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Notes</label>
+            <label className={labelClass}>Notes</label>
             <textarea
               value={editForm.notes}
               onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+              className={inputClass}
               rows={2}
             />
           </div>
@@ -552,7 +627,7 @@ const ManagerProductionDataPage = () => {
               setEditModalOpen(false);
               setEditingData(null);
             }}
-            className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+            className={cancelBtnClass}
           >
             Cancel
           </button>

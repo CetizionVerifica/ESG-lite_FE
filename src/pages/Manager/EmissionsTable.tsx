@@ -10,6 +10,7 @@ interface EmissionsTableProps {
   onReject?: (id: number, comment: string) => Promise<void>;
   onBulkApprove?: (ids: number[]) => Promise<void>;
   onBulkDelete?: (ids: number[]) => Promise<void>;
+  isDark?: boolean;
 }
 
 function formatDate(dateString: string): string {
@@ -21,23 +22,34 @@ function formatDate(dateString: string): string {
   });
 }
 
-const StatusBadge = ({ status }: { status: EmissionStatus }) => {
-  const statusStyles: Record<EmissionStatus, string> = {
-    pending: "bg-yellow-100 text-yellow-800",
-    approved: "bg-green-100 text-green-800",
-    rejected: "bg-red-100 text-red-800",
+const StatusBadge = ({ status, isDark = false }: { status: EmissionStatus; isDark?: boolean }) => {
+  const statusStyles: Record<EmissionStatus, { light: string; dark: string }> = {
+    pending: {
+      light: "bg-yellow-100 text-yellow-800",
+      dark: "bg-yellow-900/30 text-yellow-400",
+    },
+    approved: {
+      light: "bg-green-100 text-green-800",
+      dark: "bg-green-900/30 text-green-400",
+    },
+    rejected: {
+      light: "bg-red-100 text-red-800",
+      dark: "bg-red-900/30 text-red-400",
+    },
   };
+
+  const style = statusStyles[status] || { light: "bg-gray-100 text-gray-800", dark: "bg-slate-700 text-slate-300" };
 
   return (
     <span
-      className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${statusStyles[status] || "bg-gray-100 text-gray-800"}`}
+      className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${isDark ? style.dark : style.light}`}
     >
       {status}
     </span>
   );
 };
 
-const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove, onBulkDelete }: EmissionsTableProps) => {
+const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove, onBulkDelete, isDark = false }: EmissionsTableProps) => {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectComment, setRejectComment] = useState("");
@@ -199,13 +211,55 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     setSelectedDocument(doc);
   };
 
+  // Theme classes
+  const loadingClass = isDark ? "text-center py-8 text-slate-300" : "text-center py-8 text-gray-700";
+  const emptyClass = isDark ? "text-center py-8 text-slate-400" : "text-center py-8 text-gray-500";
+
+  const bulkApproveBgClass = isDark
+    ? "mb-4 p-3 bg-green-900/20 border border-green-700/30 rounded-lg flex items-center justify-between"
+    : "mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between";
+
+  const bulkDeleteBgClass = isDark
+    ? "mb-4 p-3 bg-red-900/20 border border-red-700/30 rounded-lg flex items-center justify-between"
+    : "mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between";
+
+  const tableClass = isDark
+    ? "w-full border-collapse border border-slate-600"
+    : "w-full border-collapse border border-gray-300";
+
+  const thClass = isDark
+    ? "border border-slate-600 px-4 py-3 text-left font-semibold text-slate-200 bg-slate-800"
+    : "border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700 bg-gray-100";
+
+  const tdClass = isDark
+    ? "border border-slate-600 px-4 py-3 text-slate-300"
+    : "border border-gray-300 px-4 py-3 text-gray-900";
+
+  const getRowClass = (isPendingSelected: boolean, isApprovedSelected: boolean) => {
+    if (isPendingSelected) {
+      return isDark ? "bg-green-900/20" : "bg-green-50";
+    }
+    if (isApprovedSelected) {
+      return isDark ? "bg-red-900/20" : "bg-red-50";
+    }
+    return isDark ? "hover:bg-slate-800" : "hover:bg-gray-50";
+  };
+
+  const inputClass = isDark
+    ? "w-full border border-slate-600 bg-slate-700 text-slate-200 px-2 py-1 rounded text-sm focus:outline-none focus:ring focus:ring-red-500/30"
+    : "w-full border border-gray-300 px-2 py-1 rounded text-sm focus:outline-none focus:ring focus:ring-red-300";
+
+  const viewDocsClass = isDark
+    ? "px-3 py-1 text-sm bg-blue-600/30 text-blue-300 rounded hover:bg-blue-600/50 disabled:opacity-50 transition-colors"
+    : "px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50 transition-colors";
+
   if (loading) {
-    return <div className="text-center py-8">Loading emissions...</div>;
+    return <div className={loadingClass}>Loading emissions...</div>;
   }
 
   if (emissions.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
+      <div className={emptyClass}>
         No emissions found for the selected filters.
       </div>
     );
@@ -220,7 +274,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     <div>
       {/* Bulk Actions Bar for Pending (Approve) */}
       {showBulkApprove && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+        <div className={bulkApproveBgClass}>
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -232,9 +286,9 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                 onChange={toggleSelectAllPending}
                 className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
               />
-              <span className="text-sm font-medium text-green-700">Select All Pending</span>
+              <span className={`text-sm font-medium ${isDark ? "text-green-400" : "text-green-700"}`}>Select All Pending</span>
             </label>
-            <span className="text-sm text-gray-600">
+            <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
               {selectedPendingIds.size > 0 ? (
                 <>{selectedPendingIds.size} of {pendingEmissions.length} pending row{selectedPendingIds.size !== 1 ? "s" : ""} selected</>
               ) : (
@@ -247,7 +301,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
               <>
                 <button
                   onClick={() => setSelectedPendingIds(new Set())}
-                  className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+                  className={`px-3 py-1.5 text-sm ${isDark ? "text-slate-400 hover:text-slate-200" : "text-gray-600 hover:text-gray-800"}`}
                 >
                   Clear
                 </button>
@@ -266,7 +320,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
 
       {/* Bulk Actions Bar for Approved (Delete) */}
       {showBulkDelete && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+        <div className={bulkDeleteBgClass}>
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -278,9 +332,9 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                 onChange={toggleSelectAllApproved}
                 className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
               />
-              <span className="text-sm font-medium text-red-700">Select All Approved</span>
+              <span className={`text-sm font-medium ${isDark ? "text-red-400" : "text-red-700"}`}>Select All Approved</span>
             </label>
-            <span className="text-sm text-gray-600">
+            <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
               {selectedApprovedIds.size > 0 ? (
                 <>{selectedApprovedIds.size} of {approvedEmissions.length} approved row{selectedApprovedIds.size !== 1 ? "s" : ""} selected</>
               ) : (
@@ -293,7 +347,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
               <>
                 <button
                   onClick={() => setSelectedApprovedIds(new Set())}
-                  className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+                  className={`px-3 py-1.5 text-sm ${isDark ? "text-slate-400 hover:text-slate-200" : "text-gray-600 hover:text-gray-800"}`}
                 >
                   Clear
                 </button>
@@ -311,46 +365,26 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse border border-gray-300">
+        <table className={tableClass}>
           <thead>
-            <tr className="bg-gray-100">
+            <tr>
               {/* Checkbox column for bulk selection */}
               {showCheckboxColumn && (
-                <th className="border border-gray-300 px-3 py-3 text-center w-12">
-                  <span className="text-xs text-gray-500">Select</span>
+                <th className={`${thClass} text-center w-12`}>
+                  <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Select</span>
                 </th>
               )}
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
-                Category
-              </th>
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
-                Activity Data
-              </th>
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
-                Activity Unit
-              </th>
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
-                Total Emission (tCO2e)
-              </th>
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
-                Date of Reporting
-              </th>
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
-                Status
-              </th>
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
-                Submitted By
-              </th>
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
-                Submitted At
-              </th>
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
-                Documents
-              </th>
+              <th className={thClass}>Category</th>
+              <th className={thClass}>Activity Data</th>
+              <th className={thClass}>Activity Unit</th>
+              <th className={thClass}>Total Emission (tCO2e)</th>
+              <th className={thClass}>Date of Reporting</th>
+              <th className={thClass}>Status</th>
+              <th className={thClass}>Submitted By</th>
+              <th className={thClass}>Submitted At</th>
+              <th className={thClass}>Documents</th>
             {showActions && (
-              <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
-                Actions
-              </th>
+              <th className={thClass}>Actions</th>
             )}
           </tr>
         </thead>
@@ -365,10 +399,10 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
             const isApprovedSelected = selectedApprovedIds.has(emission.pk_id);
 
             return (
-              <tr key={emission.pk_id} className={`hover:bg-gray-50 ${isPendingSelected ? "bg-green-50" : ""} ${isApprovedSelected ? "bg-red-50" : ""}`}>
+              <tr key={emission.pk_id} className={getRowClass(isPendingSelected, isApprovedSelected)}>
                 {/* Checkbox for selection */}
                 {showCheckboxColumn && (
-                  <td className="border border-gray-300 px-3 py-3 text-center">
+                  <td className={`${tdClass} text-center`}>
                     {isPending && showBulkApprove ? (
                       <input
                         type="checkbox"
@@ -386,14 +420,14 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                         title="Select for deletion"
                       />
                     ) : (
-                      <span className="text-gray-300">-</span>
+                      <span className={isDark ? "text-slate-600" : "text-gray-300"}>-</span>
                     )}
                   </td>
                 )}
-                <td className="border border-gray-300 px-4 py-3">
+                <td className={tdClass}>
                   {emission.category?.category_name || "-"}
                 </td>
-                <td className="border border-gray-300 px-4 py-3">
+                <td className={tdClass}>
                   <div className="max-w-xs">
                     {Object.entries(emission.activity_data || {}).map(([key, value]) => (
                       <div key={key} className="text-sm">
@@ -402,35 +436,35 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                     ))}
                   </div>
                 </td>
-                <td className="border border-gray-300 px-4 py-3">
+                <td className={tdClass}>
                   {emission.activity_data_unit || "-"}
                 </td>
-                <td className="border border-gray-300 px-4 py-3">
+                <td className={tdClass}>
                   {Number(emission.total_emission).toFixed(2)}
                 </td>
-                <td className="border border-gray-300 px-4 py-3">
+                <td className={tdClass}>
                   {formatDate(emission.date_of_reporting)}
                 </td>
-                <td className="border border-gray-300 px-4 py-3">
-                  <StatusBadge status={emission.status} />
+                <td className={tdClass}>
+                  <StatusBadge status={emission.status} isDark={isDark} />
                 </td>
-                <td className="border border-gray-300 px-4 py-3">
+                <td className={tdClass}>
                   {emission.created_by?.name || "-"}
                 </td>
-                <td className="border border-gray-300 px-4 py-3">
+                <td className={tdClass}>
                   {formatDate(emission.created_at)}
                 </td>
-                <td className="border border-gray-300 px-4 py-3">
+                <td className={tdClass}>
                   <button
                     onClick={() => handleViewDocuments(emission.pk_id)}
                     disabled={loadingDocs}
-                    className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50 transition-colors"
+                    className={viewDocsClass}
                   >
                     View Docs
                   </button>
                 </td>
                 {showActions && (
-                  <td className="border border-gray-300 px-4 py-3">
+                  <td className={tdClass}>
                     {isPending && !isRejecting && (
                       <div className="flex gap-2">
                         <button
@@ -456,7 +490,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                           placeholder="Rejection reason (required)"
                           value={rejectComment}
                           onChange={(e) => setRejectComment(e.target.value)}
-                          className="w-full border border-gray-300 px-2 py-1 rounded text-sm focus:outline-none focus:ring focus:ring-red-300"
+                          className={inputClass}
                         />
                         <div className="flex gap-2">
                           <button
@@ -469,7 +503,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                           <button
                             onClick={handleRejectCancel}
                             disabled={isLoading}
-                            className="px-3 py-1 bg-gray-400 text-white rounded text-sm hover:bg-gray-500"
+                            className={`px-3 py-1 rounded text-sm ${isDark ? "bg-slate-600 text-slate-200 hover:bg-slate-500" : "bg-gray-400 text-white hover:bg-gray-500"}`}
                           >
                             Cancel
                           </button>
@@ -477,7 +511,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                       </div>
                     )}
                     {!isPending && (
-                      <span className="text-sm text-gray-500">-</span>
+                      <span className={`text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>-</span>
                     )}
                   </td>
                 )}

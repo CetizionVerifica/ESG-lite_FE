@@ -15,6 +15,7 @@ interface UseChartOptionsProps {
   selectedComparisonYears: number[];
   yoySelectedSite: number | null;
   selectedYear: number | null;
+  isDark?: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,7 +40,14 @@ export function useChartOptions({
   selectedComparisonYears,
   yoySelectedSite,
   selectedYear,
+  isDark = false,
 }: UseChartOptionsProps): ChartOptions {
+  // Dark theme colors
+  const textColor = isDark ? "#e2e8f0" : "#333";
+  const subTextColor = isDark ? "#94a3b8" : "#666";
+  const axisLineColor = isDark ? "#475569" : "#ccc";
+  const splitLineColor = isDark ? "#334155" : "#eee";
+  const bgColor = isDark ? "#1e293b" : "#fff";
   // Chart: Emissions by Category (Pie Chart) - Only approved emissions
   const categoryChartOptions = useMemo(() => {
     const categoryData: { [key: string]: number } = {};
@@ -57,6 +65,9 @@ export function useChartOptions({
     return {
       tooltip: {
         trigger: "item",
+        backgroundColor: isDark ? "#334155" : "#fff",
+        borderColor: isDark ? "#475569" : "#ccc",
+        textStyle: { color: textColor },
         formatter: (params: { name: string; value: number; percent: number }) => {
           return `${params.name}<br/>Emissions: <b>${params.value.toFixed(2)}</b> tCO2e<br/>Share: <b>${params.percent.toFixed(1)}%</b>`;
         },
@@ -65,6 +76,7 @@ export function useChartOptions({
         orient: "vertical",
         left: "left",
         top: "center",
+        textStyle: { color: textColor },
       },
       series: [
         {
@@ -75,7 +87,7 @@ export function useChartOptions({
           avoidLabelOverlap: false,
           itemStyle: {
             borderRadius: 10,
-            borderColor: "#fff",
+            borderColor: bgColor,
             borderWidth: 2,
           },
           label: {
@@ -85,6 +97,7 @@ export function useChartOptions({
               return `${params.value.toFixed(2)}`;
             },
             fontSize: 12,
+            color: textColor,
           },
           emphasis: {
             label: {
@@ -97,12 +110,13 @@ export function useChartOptions({
             show: true,
             length: 10,
             length2: 10,
+            lineStyle: { color: subTextColor },
           },
           data,
         },
       ],
     };
-  }, [approvedEmissions]);
+  }, [approvedEmissions, isDark, textColor, subTextColor, bgColor]);
 
   // Chart: Status Distribution (Donut Chart)
   const statusChartOptions = useMemo(() => {
@@ -120,11 +134,15 @@ export function useChartOptions({
     return {
       tooltip: {
         trigger: "item",
+        backgroundColor: isDark ? "#334155" : "#fff",
+        borderColor: isDark ? "#475569" : "#ccc",
+        textStyle: { color: textColor },
         formatter: "{b}: {c} ({d}%)",
       },
       legend: {
         orient: "horizontal",
         bottom: "0%",
+        textStyle: { color: textColor },
       },
       series: [
         {
@@ -141,11 +159,11 @@ export function useChartOptions({
               a: {
                 fontSize: 24,
                 fontWeight: "bold",
-                color: "#333",
+                color: textColor,
               },
               b: {
                 fontSize: 12,
-                color: "#666",
+                color: subTextColor,
                 padding: [5, 0, 0, 0],
               },
             },
@@ -161,7 +179,7 @@ export function useChartOptions({
         },
       ],
     };
-  }, [filteredEmissions]);
+  }, [filteredEmissions, isDark, textColor, subTextColor]);
 
   // Chart: Site Comparison (Bar Chart) - Only approved emissions
   const siteComparisonOptions = useMemo(() => {
@@ -186,6 +204,9 @@ export function useChartOptions({
     return {
       tooltip: {
         trigger: "axis",
+        backgroundColor: isDark ? "#334155" : "#fff",
+        borderColor: isDark ? "#475569" : "#ccc",
+        textStyle: { color: textColor },
         axisPointer: {
           type: "shadow",
         },
@@ -209,14 +230,20 @@ export function useChartOptions({
         axisLabel: {
           rotate: 30,
           fontSize: 11,
+          color: textColor,
         },
+        axisLine: { lineStyle: { color: axisLineColor } },
       },
       yAxis: {
         type: "value",
         name: "Emissions (tCO2e)",
+        nameTextStyle: { color: subTextColor },
         axisLabel: {
           formatter: "{value}",
+          color: textColor,
         },
+        axisLine: { lineStyle: { color: axisLineColor } },
+        splitLine: { lineStyle: { color: splitLineColor } },
       },
       series: [
         {
@@ -233,11 +260,12 @@ export function useChartOptions({
             position: "top",
             formatter: (params: { value: number }) => params.value.toFixed(2),
             fontSize: 10,
+            color: textColor,
           },
         },
       ],
     };
-  }, [availableSites, approvedSitesEmissions, comparisonYear]);
+  }, [availableSites, approvedSitesEmissions, comparisonYear, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
 
   // Chart: Year-over-Year Monthly Comparison (Line Chart) - Only approved emissions
   const yearOverYearOptions = useMemo(() => {
@@ -276,6 +304,9 @@ export function useChartOptions({
     return {
       tooltip: {
         trigger: "axis",
+        backgroundColor: isDark ? "#334155" : "#fff",
+        borderColor: isDark ? "#475569" : "#ccc",
+        textStyle: { color: textColor },
         formatter: (params: { seriesName: string; value: number; marker: string; axisValue: string }[]) => {
           let result = `${params[0]?.axisValue || ""}<br/>`;
           params.forEach((p) => {
@@ -287,6 +318,7 @@ export function useChartOptions({
       legend: {
         data: selectedComparisonYears.map(String),
         bottom: 0,
+        textStyle: { color: textColor },
       },
       grid: {
         left: "3%",
@@ -298,17 +330,23 @@ export function useChartOptions({
         type: "category",
         data: months,
         boundaryGap: false,
+        axisLabel: { color: textColor },
+        axisLine: { lineStyle: { color: axisLineColor } },
       },
       yAxis: {
         type: "value",
         name: "Emissions (tCO2e)",
+        nameTextStyle: { color: subTextColor },
         axisLabel: {
           formatter: "{value}",
+          color: textColor,
         },
+        axisLine: { lineStyle: { color: axisLineColor } },
+        splitLine: { lineStyle: { color: splitLineColor } },
       },
       series,
     };
-  }, [approvedSitesEmissions, yoySelectedSite, selectedComparisonYears]);
+  }, [approvedSitesEmissions, yoySelectedSite, selectedComparisonYears, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
 
   // Chart: Monthly Emissions Trend (Bar Chart) - Only approved emissions (filtered by category/year)
   const monthlyTrendOptions = useMemo(() => {
@@ -356,6 +394,9 @@ export function useChartOptions({
     return {
       tooltip: {
         trigger: "axis",
+        backgroundColor: isDark ? "#334155" : "#fff",
+        borderColor: isDark ? "#475569" : "#ccc",
+        textStyle: { color: textColor },
         axisPointer: {
           type: "shadow",
         },
@@ -376,13 +417,19 @@ export function useChartOptions({
         axisTick: {
           alignWithLabel: true,
         },
+        axisLabel: { color: textColor },
+        axisLine: { lineStyle: { color: axisLineColor } },
       },
       yAxis: {
         type: "value",
         name: "Emissions (tCO2e)",
+        nameTextStyle: { color: subTextColor },
         axisLabel: {
           formatter: "{value}",
+          color: textColor,
         },
+        axisLine: { lineStyle: { color: axisLineColor } },
+        splitLine: { lineStyle: { color: splitLineColor } },
       },
       series: [
         {
@@ -397,7 +444,7 @@ export function useChartOptions({
         },
       ],
     };
-  }, [approvedEmissions, selectedYear]);
+  }, [approvedEmissions, selectedYear, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
 
   // Check if category chart has data
   const hasCategoryData = useMemo(() => {

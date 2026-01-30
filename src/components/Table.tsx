@@ -21,6 +21,7 @@ export interface TableProps<T> {
     loading?: boolean
     actionsLabel?: string
     renderActions?: (row: T, defaultActions: { editButton: React.ReactNode; deleteButton: React.ReactNode }) => React.ReactNode
+    isDark?: boolean
 }
 
 export function Table<T extends Record<string, any>>({
@@ -33,11 +34,32 @@ export function Table<T extends Record<string, any>>({
     loading = false,
     actionsLabel = "Actions",
     renderActions,
+    isDark = false,
 }: TableProps<T>) {
     const [editingId, setEditingId] = useState<any>(null)
     const [editValues, setEditValues] = useState<Partial<T>>({})
     const [savingId, setSavingId] = useState<any>(null)
     const [deletingId, setDeletingId] = useState<any>(null)
+
+    // Theme classes
+    const loadingClass = isDark ? "text-center py-8 text-slate-300" : "text-center py-8"
+    const emptyClass = isDark ? "text-center py-8 text-slate-400" : "text-center py-8 text-gray-500"
+    const tableClass = isDark
+        ? "w-full border-collapse border border-slate-600"
+        : "w-full border-collapse border border-gray-300"
+    const headerRowClass = isDark ? "bg-slate-700" : "bg-gray-100"
+    const headerCellClass = isDark
+        ? "border border-slate-600 px-4 py-3 text-left font-semibold text-slate-200"
+        : "border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700"
+    const cellClass = isDark
+        ? "border border-slate-600 px-4 py-3 text-slate-200"
+        : "border border-gray-300 px-4 py-3"
+    const inputClass = isDark
+        ? "w-full border border-slate-500 bg-slate-600 text-slate-200 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-500/30"
+        : "w-full border border-gray-400 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
+    const getRowClass = (isEditing: boolean) => isDark
+        ? `${isEditing ? "bg-blue-900/30" : "hover:bg-slate-700"} transition-colors`
+        : `${isEditing ? "bg-blue-50" : "hover:bg-gray-50"} transition-colors`
 
     const handleEditStart = (row: T) => {
         setEditingId(row[keyField])
@@ -98,28 +120,28 @@ export function Table<T extends Record<string, any>>({
     }
 
     if (loading) {
-        return <div className="text-center py-8">Loading...</div>
+        return <div className={loadingClass}>Loading...</div>
     }
 
     if (data.length === 0) {
-        return <div className="text-center py-8 text-gray-500">No data available</div>
+        return <div className={emptyClass}>No data available</div>
     }
 
     return (
         <div className={`mt-6 ${editingId !== null ? "overflow-visible" : "overflow-x-auto"}`}>
-            <table className="w-full border-collapse border border-gray-300">
+            <table className={tableClass}>
                 <thead>
-                    <tr className="bg-gray-100">
+                    <tr className={headerRowClass}>
                         {columns.map((col) => (
                             <th
                                 key={String(col.key)}
-                                className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700"
+                                className={headerCellClass}
                             >
                                 {col.label}
                             </th>
                         ))}
                         {showActions && (
-                            <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
+                            <th className={headerCellClass}>
                                 {actionsLabel}
                             </th>
                         )}
@@ -131,12 +153,12 @@ export function Table<T extends Record<string, any>>({
                         return (
                             <tr
                                 key={String(row[keyField])}
-                                className={`${isEditing ? "bg-blue-50" : "hover:bg-gray-50"} transition-colors`}
+                                className={getRowClass(isEditing)}
                             >
                                 {columns.map((col) => (
                                     <td
                                         key={String(col.key)}
-                                        className="border border-gray-300 px-4 py-3"
+                                        className={cellClass}
                                     >
                                         {isEditing && col.editable ? (
                                             col.type === "dropdown" && col.options ? (
@@ -174,7 +196,7 @@ export function Table<T extends Record<string, any>>({
                                                     onChange={(e) =>
                                                         handleEditChange(col.key, e.target.value)
                                                     }
-                                                    className="w-full border border-gray-400 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                                                    className={inputClass}
                                                 />
                                             )
                                         ) : col.render ? (
@@ -185,7 +207,7 @@ export function Table<T extends Record<string, any>>({
                                     </td>
                                 ))}
                                 {showActions && (
-                                    <td className="border border-gray-300 px-4 py-3">
+                                    <td className={cellClass}>
                                         {isEditing ? (
                                             <div className="flex gap-2">
                                                 <button

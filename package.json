@@ -16,6 +16,7 @@
     "dotenv": "^17.2.3",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",
+    "lucide-react": "^0.563.0",
     "postcss": "^8.5.6",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

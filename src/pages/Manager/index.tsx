@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Dropdown, { DropdownOption } from "../../components/Dropdown";
 import { useAuth } from "../../context/AuthContext";
+import { useTheme } from "../../context/ThemeContext";
 import {
   getEmissionsBySite,
   approveEmission,
@@ -47,6 +48,7 @@ function generateDateOptions(): DropdownOption[] {
 
 const ManagerPage = () => {
   const { user } = useAuth();
+  const { isDark } = useTheme();
 
   // For managers with multiple sites
   const sites: Site[] = user?.sites || [];
@@ -165,15 +167,32 @@ const ManagerPage = () => {
     return result;
   }, [emissions, selectedCategory, selectedDate]);
 
+  // Theme classes
+  const containerClass = isDark
+    ? "p-6 bg-slate-900 min-h-screen text-slate-100"
+    : "p-6 bg-gray-50 min-h-screen text-gray-900";
+
+  const labelClass = isDark
+    ? "block text-sm font-medium mb-1 text-slate-300"
+    : "block text-sm font-medium mb-1 text-gray-700";
+
+  const infoTextClass = isDark
+    ? "text-sm font-medium text-slate-300"
+    : "text-sm font-medium text-gray-700";
+
+  const countTextClass = isDark
+    ? "text-sm text-slate-400 ml-4"
+    : "text-sm text-gray-500 ml-4";
+
   return (
-    <div className="p-6">
+    <div className={containerClass}>
       <h1 className="text-2xl font-bold mb-6">Manage data</h1>
 
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {/* Site Selection - only show if manager has multiple sites */}
         <div>
-          <label className="block text-sm font-medium mb-1">Site</label>
+          <label className={labelClass}>Site</label>
           <Dropdown
             options={siteOptions}
             placeholder="Select Site"
@@ -183,7 +202,7 @@ const ManagerPage = () => {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Category</label>
+          <label className={labelClass}>Category</label>
           <Dropdown
             options={categoryOptions}
             placeholder="All Categories"
@@ -193,7 +212,7 @@ const ManagerPage = () => {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Date</label>
+          <label className={labelClass}>Date</label>
           <Dropdown
             options={dateOptions}
             placeholder="All Dates"
@@ -207,10 +226,10 @@ const ManagerPage = () => {
       {/* Current Site Info */}
       {currentSite && (
         <div className="mb-4">
-          <span className="text-sm font-medium text-gray-700">
+          <span className={infoTextClass}>
             Viewing: {currentSite.name}
           </span>
-          <span className="text-sm text-gray-500 ml-4">
+          <span className={countTextClass}>
             {filteredEmissions.length} emission{filteredEmissions.length !== 1 ? "s" : ""} found
           </span>
         </div>
@@ -224,6 +243,7 @@ const ManagerPage = () => {
         onReject={handleReject}
         onBulkApprove={handleBulkApprove}
         onBulkDelete={handleBulkDelete}
+        isDark={isDark}
       />
     </div>
   );
