@@ -1,11 +1,14 @@
 import Layout from "../components/Layout";
 import CompanyPage from "../pages/CompanyPage";
+import CompanyOnboardingPage from "../pages/CompanyOnboardingPage";
 import CountryPage from "../pages/CountryPage";
 import Login from "../pages/Login";
+import AdminLogin from "../pages/AdminLogin";
 import ResetPassword from "../pages/ResetPassword";
 import SitePage from "../pages/SitePage";
 import SuperAdminPage from "../pages/SuperAdminPage";
 import ProtectedRoute from "./ProtectedRoute";
+import RootRedirect from "./RootRedirect";
 import CategoryPage from "../pages/CategoryPage";
 import UserPage from "../pages/UserPage";
 import EmissionFactorPage from "../pages/EmissionFactorPage";
@@ -27,20 +30,36 @@ const routes = [
     element: <Login />,
   },
   {
+    path: "/admin/login",
+    element: <AdminLogin />,
+  },
+  {
     path: "/reset-password",
     element: <ResetPassword />,
+  },
+  {
+    path: "/",
+    element: <RootRedirect />,
   },
   {
     path: "",
     element: <ProtectedRoute />,
     children: [
       {
-        path: "home",
+        path: "",
         element: <Layout />,
         children: [
           {
-            path: "superadmin",
+            path: "superadmin", // Keep original
             element: <SuperAdminPage />,
+          },
+          {
+            path: "admin/dashboard", // Alias for SuperAdmin
+            element: <SuperAdminPage />,
+          },
+          {
+            path: "company/dashboard", // Alias for ManagerDashboard
+            element: <ManagerDashboard />,
           },
           {
             path: "countries",
@@ -53,6 +72,10 @@ const routes = [
           {
             path: "companies",
             element: <CompanyPage />,
+          },
+          {
+            path: "companies/onboard",
+            element: <CompanyOnboardingPage />,
           },
           {
             path: "sites",
@@ -80,39 +103,43 @@ const routes = [
           },
           {
             path: "data-entry",
-            element: <UserDataEntryPage/>,
+            element: <UserDataEntryPage />,
           },
           {
             path: "data-manage",
-            element: <ManagerPage/>,
+            element: <ManagerPage />,
           },
           {
             path: "manager-dashboard",
-            element: <ManagerDashboard/>
+            element: <ManagerDashboard />
           },
           {
             path: "products",
-            element: <ProductPage/>
+            element: <ProductPage />
           },
           {
             path: "production-data",
-            element: <ProductionDataPage/>
+            element: <ProductionDataPage />
           },
           {
             path: "upload-data",
-            element: <UploadPage/>
+            element: <UploadPage />
           },
           {
             path: "my-emissions",
-            element: <UserEmissionsPage/>
+            element: <UserEmissionsPage />
           },
           {
             path: "manage-production-data",
-            element: <ManagerProductionDataPage/>
+            element: <ManagerProductionDataPage />
           }
         ],
       },
     ],
+  },
+  {
+    path: "*",
+    element: <Login />,
   },
 ];
 

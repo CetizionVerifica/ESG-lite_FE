@@ -1,4 +1,5 @@
 import { useActionState, useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Modal from "../components/Modal";
 import { Table, Column } from "../components/Table";
 import { getCompanies, createCompany, updateCompany, deleteCompany } from "../services/companyService";
@@ -11,6 +12,7 @@ interface Company {
 }
 
 const CompanyPage = () => {
+  const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(false);
@@ -36,7 +38,7 @@ const CompanyPage = () => {
     },
     null
   );
-const fetchCompanies = useCallback(async () => {
+  const fetchCompanies = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getCompanies();
@@ -112,10 +114,10 @@ const fetchCompanies = useCallback(async () => {
         <h1 className="text-2xl font-bold">Companies</h1>
         <div className="flex gap-2">
           <button
-            onClick={() => setModalOpen(true)}
+            onClick={() => navigate("onboard")}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
-            Add Company
+            Onboard Company
           </button>
         </div>
       </div>

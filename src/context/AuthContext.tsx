@@ -26,11 +26,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-  const token = localStorage.getItem("token");
-  if (token) setToken(token);
-  setLoading(false);
-}, []);
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    console.log("AuthProvider: Initial Load", { token });
+    if (token) setToken(token);
+    setLoading(false);
+  }, []);
 
 
   // 🔄 Restore session ONCE

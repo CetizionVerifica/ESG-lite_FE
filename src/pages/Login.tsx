@@ -17,21 +17,27 @@ const Login = () => {
     async (_prevData: any, data: any) => {
       try {
         const role = await login(data.get("email"), data.get("password"));
+
+        if (role === "Superadmin") {
+          // Strictly redirect SuperAdmin to their own login or show error
+          // setForgotMessage({ type: "error", text: "Please use /admin/login for SuperAdmin access" });
+          // For now, let's just redirect them to the admin login if they try here?
+          // Or better, show an error.
+          throw new Error("SuperAdmins must login at /admin/login");
+        }
+
         switch (role) {
-          case "Superadmin":
-            navigate("/home/superadmin");
-            break;
           case "User":
-            navigate("/home/data-entry");
+            navigate("/data-entry");
             break;
           case "Admin":
-            navigate("/home/admin");
+            navigate("/company/dashboard"); // Changed from /home/admin
             break;
           case "Employee":
-            navigate("/home/expenses");
+            navigate("/expenses");
             break;
           case "Manager":
-            navigate("/home/data-manage");
+            navigate("/company/dashboard"); // Changed from /home/data-manage to company dashboard as requested
             break;
           default:
             break;
@@ -153,11 +159,10 @@ const Login = () => {
 
               {forgotMessage && (
                 <div
-                  className={`mb-4 p-3 rounded text-sm ${
-                    forgotMessage.type === "success"
-                      ? "bg-green-50 text-green-700 border border-green-200"
-                      : "bg-red-50 text-red-700 border border-red-200"
-                  }`}
+                  className={`mb-4 p-3 rounded text-sm ${forgotMessage.type === "success"
+                    ? "bg-green-50 text-green-700 border border-green-200"
+                    : "bg-red-50 text-red-700 border border-red-200"
+                    }`}
                 >
                   {forgotMessage.text}
                 </div>

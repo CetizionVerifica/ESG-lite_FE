@@ -15,7 +15,7 @@ export const createCompany = async (data: {
 
 export const updateCompany = async (
   id: string | number,
-  data: { name?: string; [key: string]: any }
+  data: { name?: string;[key: string]: any }
 ) => {
   const response = await api.put(`/admin/companies/${id}`, data);
   return response.data;
@@ -23,5 +23,10 @@ export const updateCompany = async (
 
 export const deleteCompany = async (id: string | number) => {
   const response = await api.delete(`/admin/companies/${id}`);
+  return response.data;
+};
+
+export const onboardCompany = async (data: any) => {
+  const response = await api.post(`/admin/onboarding/company`, data);
   return response.data;
 };
