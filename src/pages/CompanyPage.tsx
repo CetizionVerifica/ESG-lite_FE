@@ -4,11 +4,21 @@ import Modal from "../components/Modal";
 import { Table, Column } from "../components/Table";
 import { getCompanies, createCompany, updateCompany, deleteCompany } from "../services/companyService";
 
+interface Category {
+  category_name: string;
+}
+
+interface Site {
+  site_id: number;
+  categories?: Category[];
+}
+
 interface Company {
   company_id: number;
   name: string;
   address: string;
   contact_person: string;
+  sites?: Site[];
 }
 
 const CompanyPage = () => {
@@ -38,6 +48,7 @@ const CompanyPage = () => {
     },
     null
   );
+
   const fetchCompanies = useCallback(async () => {
     setLoading(true);
     try {
@@ -105,6 +116,35 @@ const CompanyPage = () => {
       label: "Contact Person",
       editable: true,
       type: "text",
+    },
+    {
+      key: "sites" as keyof Company, // Virtual key for display
+      label: "Categories",
+      editable: false,
+      render: (_: any, row: Company) => {
+        const uniqueCategories = new Set<string>();
+        if (row.sites) {
+          row.sites.forEach(site => {
+            if (site.categories) {
+              site.categories.forEach(cat => uniqueCategories.add(cat.category_name));
+            }
+          });
+        }
+        const cats = Array.from(uniqueCategories);
+        return (
+          <div className="flex flex-wrap gap-1">
+            {cats.length > 0 ? (
+              cats.map((cat, i) => (
+                <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
+                  {cat}
+                </span>
+              ))
+            ) : (
+              <span className="text-gray-400 text-xs text-center">-</span>
+            )}
+          </div>
+        );
+      }
     },
   ];
 

@@ -56,6 +56,7 @@ const Sidebar = () => {
     { to: "emission-factors", label: "Emission Factors", icon: <Gauge size={20} /> },
     { to: "manage-columns", label: "Manage Columns", icon: <Columns3 size={20} /> },
     { to: "column-config", label: "Column Config", icon: <Settings size={20} /> },
+    { to: "master-data", label: "Master Entry", icon: <FolderTree size={20} /> }, // Added
     { to: "units", label: "Manage Units", icon: <Scale size={20} /> },
     { to: "products", label: "Products", icon: <Package size={20} /> },
     { to: "upload-data", label: "Upload Data", icon: <Upload size={20} /> },
@@ -143,9 +144,8 @@ const Sidebar = () => {
           >
             <span className="shrink-0">{link.icon}</span>
             <span
-              className={`whitespace-nowrap transition-all duration-200 ${
-                isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
-              }`}
+              className={`whitespace-nowrap transition-all duration-200 ${isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
+                }`}
             >
               {link.label}
             </span>
@@ -164,9 +164,8 @@ const Sidebar = () => {
               </span>
             </div>
             <div
-              className={`overflow-hidden transition-all duration-200 ${
-                isExpanded ? "opacity-100 w-auto" : "opacity-0 w-0 absolute"
-              }`}
+              className={`overflow-hidden transition-all duration-200 ${isExpanded ? "opacity-100 w-auto" : "opacity-0 w-0 absolute"
+                }`}
             >
               <p className="text-sm font-medium text-white truncate max-w-35">
                 {user.name}
@@ -193,9 +192,8 @@ const Sidebar = () => {
             <Moon size={20} className="shrink-0 text-blue-400" />
           )}
           <span
-            className={`whitespace-nowrap transition-all duration-200 ${
-              isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
-            }`}
+            className={`whitespace-nowrap transition-all duration-200 ${isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
+              }`}
           >
             {isDark ? "Light Mode" : "Dark Mode"}
           </span>
@@ -215,9 +213,8 @@ const Sidebar = () => {
         >
           <LogOut size={20} className="shrink-0" />
           <span
-            className={`whitespace-nowrap transition-all duration-200 ${
-              isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
-            }`}
+            className={`whitespace-nowrap transition-all duration-200 ${isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
+              }`}
           >
             Log out
           </span>

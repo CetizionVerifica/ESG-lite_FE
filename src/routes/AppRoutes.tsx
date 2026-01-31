@@ -23,6 +23,7 @@ import ProductPage from "../pages/ProductPage";
 import ProductionDataPage from "../pages/ProductionDataPage";
 import UploadPage from "../pages/UploadPage";
 import UserEmissionsPage from "../pages/UserEmissionsPage";
+import MasterDataPage from "../pages/MasterDataPage";
 
 const routes = [
   {
@@ -50,15 +51,15 @@ const routes = [
         element: <Layout />,
         children: [
           {
-            path: "superadmin", // Keep original
+            path: "superadmin",
             element: <SuperAdminPage />,
           },
           {
-            path: "admin/dashboard", // Alias for SuperAdmin
+            path: "admin/dashboard",
             element: <SuperAdminPage />,
           },
           {
-            path: "company/dashboard", // Alias for ManagerDashboard
+            path: "company/dashboard",
             element: <ManagerDashboard />,
           },
           {
@@ -96,6 +97,10 @@ const routes = [
           {
             path: "column-config",
             element: <ColumnConfig />,
+          },
+          {
+            path: "master-data",
+            element: <MasterDataPage />,
           },
           {
             path: "units",

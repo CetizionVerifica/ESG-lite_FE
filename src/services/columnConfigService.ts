@@ -39,7 +39,7 @@ export const getUserColumnConfigsBySiteAndCategory = async (
 
 export const createColumnConfig = async (data: {
   config_name: string;
-  site_id: number;
+  site_id?: number;
   category_id: number;
   column_ids?: number[];
 }) => {

@@ -4,6 +4,7 @@ import Modal from "../components/Modal";
 import { getSites } from "../services/siteService";
 import { getColumns } from "../services/columnService";
 import { createColumnConfig } from "../services/columnConfigService";
+import { getCategories } from "../services/categoryService"; // Import getCategories
 import ColumnConfigList from "../components/ColumnConfigList";
 
 interface Category {
@@ -26,6 +27,7 @@ interface Column {
 
 const ColumnConfig = () => {
   const [sites, setSites] = useState<Site[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]); // Store all categories
   const [columns, setColumns] = useState<Column[]>([]);
   const [selectedSite, setSelectedSite] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -37,20 +39,30 @@ const ColumnConfig = () => {
   const [formSite, setFormSite] = useState<number | null>(null);
   const [formCategory, setFormCategory] = useState<number | null>(null);
   const [formColumns, setFormColumns] = useState<number[]>([]);
+  const [isGlobal, setIsGlobal] = useState(false); // Global flag
 
   const [_formState, formAction] = useActionState(
     async (_prevData: any, data: FormData) => {
       try {
         const config_name = data.get("config_name") as string;
 
-        if (!config_name || !formSite || !formCategory) {
-          console.error("Config name, site and category are required");
-          return { error: "Config name, site and category are required" };
+        // Validation: If not global, site is required.
+        // If global, site is optional (null).
+        if (!config_name || (!isGlobal && !formSite) || !formCategory) {
+          console.error("Config name, category (and site if not global) are required");
+          return { error: "Config name and category are required. Site is required for non-global configs." };
         }
 
         await createColumnConfig({
           config_name,
-          site_id: formSite,
+          // Placeholder to fix lint - will check service file next turn.
+          // Actually I can just cast to `any` for `site_id` temporarily or use `undefined as any` if strict.
+          // But better to check.
+          // I will view the file `src/services/columnConfigService.ts` in next step.
+          // For now, I'll return empty to cancel this tool call and use view_file.
+          // Wait, I cannot return empty.
+          // I will just cast to `any` for now to fix the build, then fix the service type.
+          site_id: isGlobal ? undefined : (formSite || undefined),
           category_id: formCategory,
           column_ids: formColumns.length > 0 ? formColumns : undefined,
         });
@@ -71,6 +83,7 @@ const ColumnConfig = () => {
     setFormSite(null);
     setFormCategory(null);
     setFormColumns([]);
+    setIsGlobal(false);
   };
 
   useEffect(() => {
@@ -80,12 +93,14 @@ const ColumnConfig = () => {
   const handleLoadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [sitesData, columnsData] = await Promise.all([
+      const [sitesData, columnsData, categoriesData] = await Promise.all([
         getSites(),
         getColumns(),
+        getCategories(), // Fetch all categories
       ]);
       setSites(sitesData);
       setColumns(columnsData);
+      setAllCategories(categoriesData);
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -98,19 +113,27 @@ const ColumnConfig = () => {
     label: site.name,
   }));
 
-  // Get categories for the selected site (filter dropdown)
+  // Get categories for the selected filter site
   const selectedSiteData = sites.find((site) => site.site_id === selectedSite);
+  // If no site selected in filter, show ALL categories? Or valid strategy?
+  // Let's stick to current behavior: Filter needs site first.
   const categoryOptions: DropdownOption[] = (selectedSiteData?.categories || []).map((category) => ({
     id: category.category_id,
     label: category.category_name,
   }));
 
-  // Get categories for the form site (modal form)
-  const formSiteData = sites.find((site) => site.site_id === formSite);
-  const formCategoryOptions: DropdownOption[] = (formSiteData?.categories || []).map((category) => ({
-    id: category.category_id,
-    label: category.category_name,
-  }));
+  // NOTE: If we want to see Global configs in the list, we might need a "Global" option in the Site Filter.
+  // We can add a fake Site option { id: -1, label: "Global Templates" }?
+  // For now, let's just focus on Creation.
+
+  // Get categories for the form
+  // If Global, use allCategories. If not global, use formSite's categories.
+  const formCategoryOptions: DropdownOption[] = isGlobal
+    ? allCategories.map((c) => ({ id: c.category_id, label: c.category_name }))
+    : (sites.find((s) => s.site_id === formSite)?.categories || []).map((c) => ({
+      id: c.category_id,
+      label: c.category_name,
+    }));
 
   const handleColumnToggle = (columnId: number) => {
     setFormColumns((prev) =>
@@ -151,28 +174,48 @@ const ColumnConfig = () => {
               className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
             />
           </div>
+
+          {/* Global Checkbox */}
+          <div className="mb-4 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="isGlobal"
+              checked={isGlobal}
+              onChange={(e) => {
+                setIsGlobal(e.target.checked);
+                setFormSite(null);
+                setFormCategory(null); // Reset category as list changes
+              }}
+              className="rounded"
+            />
+            <label htmlFor="isGlobal" className="text-sm font-medium cursor-pointer">
+              Set as Global / Default Template (for new companies)
+            </label>
+          </div>
+
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Site *</label>
+            <label className="block text-sm font-medium mb-1">Site {isGlobal ? "(Disabled)" : "*"}</label>
             <Dropdown
               options={siteOptions}
-              placeholder="Select Site"
+              placeholder={isGlobal ? "Global Config (No Site)" : "Select Site"}
               value={formSite}
               onChange={(option) => {
                 setFormSite(option?.id as number);
                 setFormCategory(null);
               }}
               searchable={true}
+              disabled={isGlobal}
             />
           </div>
           <div className="mb-4">
             <label className="block text-sm font-medium mb-1">Category *</label>
             <Dropdown
               options={formCategoryOptions}
-              placeholder={formSite ? "Select Category" : "Select a site first"}
+              placeholder={isGlobal || formSite ? "Select Category" : "Select a site first"}
               value={formCategory}
               onChange={(option) => setFormCategory(option?.id as number)}
               searchable={true}
-              disabled={!formSite}
+              disabled={!isGlobal && !formSite}
             />
           </div>
           <div className="mb-4">
