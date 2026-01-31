@@ -30,7 +30,7 @@ const routes = [
     element: <Login />,
   },
   {
-    path: "/admin/login",
+    path: "/superadmin/login",
     element: <AdminLogin />,
   },
   {
