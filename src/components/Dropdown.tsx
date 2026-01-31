@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useTheme } from "../context/ThemeContext";
 
 export interface DropdownOption {
   id: string | number;
@@ -37,6 +38,7 @@ const Dropdown = ({
   onMultipleChange,
   multipleValue = [],
 }: DropdownProps) => {
+  const { isDark } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -111,6 +113,54 @@ const Dropdown = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Theme-aware classes
+  const buttonBaseClass = "w-full border px-4 py-2 rounded text-left flex justify-between items-center transition min-h-[42px]";
+  const buttonClass = isDark
+    ? `${buttonBaseClass} ${
+        disabled
+          ? "bg-slate-700 text-slate-500 cursor-not-allowed border-slate-600"
+          : "bg-slate-800 border-slate-600 hover:border-blue-500 focus:outline-none focus:ring focus:ring-blue-500/30"
+      } ${isOpen ? "border-blue-500" : ""}`
+    : `${buttonBaseClass} ${
+        disabled
+          ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+          : "bg-white hover:border-blue-500 focus:outline-none focus:ring focus:ring-blue-300"
+      } ${isOpen ? "border-blue-500" : "border-gray-300"}`;
+
+  const menuClass = isDark
+    ? "absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg shadow-slate-900/50 z-50"
+    : "absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-50";
+
+  const searchInputClass = isDark
+    ? "w-full border border-slate-600 bg-slate-700 text-slate-200 px-3 py-2 rounded text-sm focus:outline-none focus:ring focus:ring-blue-500/30 placeholder-slate-400"
+    : "w-full border border-gray-300 px-3 py-2 rounded text-sm focus:outline-none focus:ring focus:ring-blue-300";
+
+  const getOptionClass = (isSelected: boolean) =>
+    isDark
+      ? `w-full text-left px-4 py-2 hover:bg-slate-700 transition flex items-center gap-2 ${
+          isSelected ? "bg-blue-600/30 text-blue-300 font-semibold" : "text-slate-200"
+        }`
+      : `w-full text-left px-4 py-2 hover:bg-blue-100 transition flex items-center gap-2 ${
+          isSelected ? "bg-blue-200 text-blue-900 font-semibold" : "text-gray-900"
+        }`;
+
+  const tagClass = isDark
+    ? "bg-blue-600/30 text-blue-300 px-2 py-1 rounded text-sm flex items-center gap-1"
+    : "bg-blue-200 text-blue-900 px-2 py-1 rounded text-sm flex items-center gap-1";
+
+  const tagRemoveClass = isDark
+    ? "text-blue-400 hover:text-blue-200 cursor-pointer font-bold"
+    : "text-blue-700 hover:text-blue-900 cursor-pointer font-bold";
+
+  const textClass = isDark ? "text-slate-200" : "text-gray-900";
+  const placeholderClass = isDark ? "text-slate-400" : "text-gray-500";
+  const clearClass = isDark
+    ? "text-slate-400 hover:text-slate-200 text-sm cursor-pointer pointer-events-auto"
+    : "text-gray-400 hover:text-gray-600 text-sm cursor-pointer pointer-events-auto";
+  const emptyClass = isDark ? "px-4 py-2 text-slate-500 text-sm" : "px-4 py-2 text-gray-500 text-sm";
+  const borderClass = isDark ? "border-b border-slate-700" : "border-b border-gray-200";
+  const iconClass = isDark ? "text-slate-400" : "text-gray-500";
+
   return (
     <div ref={dropdownRef} className={`relative w-full ${className}`}>
       {/* Dropdown Button */}
@@ -118,18 +168,14 @@ const Dropdown = ({
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className={`w-full border px-4 py-2 rounded text-left flex justify-between items-center transition min-h-10.5] ${
-          disabled
-            ? "bg-gray-100 text-gray-500 cursor-not-allowed"
-            : "bg-white hover:border-blue-500 focus:outline-none focus:ring focus:ring-blue-300"
-        } ${isOpen ? "border-blue-500" : "border-gray-300"}`}
+        className={buttonClass}
       >
         <div className="flex flex-wrap gap-2 flex-1">
           {multiple && selectedOptions.length > 0 ? (
             selectedOptions.map((opt) => (
               <span
                 key={String(opt[valueKey as keyof DropdownOption] ?? opt.id)}
-                className="bg-blue-200 text-blue-900 px-2 py-1 rounded text-sm flex items-center gap-1"
+                className={tagClass}
               >
                 {String(opt[labelKey as keyof DropdownOption])}
                 <div
@@ -145,25 +191,25 @@ const Dropdown = ({
                       handleSelect(opt);
                     }
                   }}
-                  className="text-blue-700 hover:text-blue-900 cursor-pointer font-bold"
+                  className={tagRemoveClass}
                 >
                   ✕
                 </div>
               </span>
             ))
           ) : !multiple && selectedOption ? (
-            <span className="text-gray-900">
+            <span className={textClass}>
               {String(selectedOption[labelKey as keyof DropdownOption])}
             </span>
           ) : (
-            <span className="text-gray-500">{placeholder}</span>
+            <span className={placeholderClass}>{placeholder}</span>
           )}
         </div>
         <div className="flex items-center gap-2 pointer-events-none ml-2">
           {clearable && (selectedOption || selectedOptions.length > 0) && (
             <div
               onClick={handleClear}
-              className="text-gray-400 hover:text-gray-600 text-sm cursor-pointer pointer-events-auto"
+              className={clearClass}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
@@ -176,9 +222,7 @@ const Dropdown = ({
             </div>
           )}
           <svg
-            className={`w-4 h-4 transition-transform shrink-0 ${
-              isOpen ? "rotate-180" : ""
-            }`}
+            className={`w-4 h-4 transition-transform shrink-0 ${isOpen ? "rotate-180" : ""} ${iconClass}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -195,16 +239,16 @@ const Dropdown = ({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-50">
+        <div className={menuClass}>
           {/* Search Input */}
           {searchable && (
-            <div className="p-2 border-b border-gray-200">
+            <div className={`p-2 ${borderClass}`}>
               <input
                 type="text"
                 placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full border border-gray-300 px-3 py-2 rounded text-sm focus:outline-none focus:ring focus:ring-blue-300"
+                className={searchInputClass}
                 onClick={(e) => e.stopPropagation()}
               />
             </div>
@@ -226,11 +270,7 @@ const Dropdown = ({
                     key={String(optValue)}
                     onClick={() => handleSelect(option)}
                     type="button"
-                    className={`w-full text-left px-4 py-2 hover:bg-blue-100 transition flex items-center gap-2 ${
-                      isSelected
-                        ? "bg-blue-200 text-blue-900 font-semibold"
-                        : "text-gray-900"
-                    }`}
+                    className={getOptionClass(isSelected || false)}
                   >
                     {multiple && (
                       <input
@@ -245,7 +285,7 @@ const Dropdown = ({
                 );
               })
             ) : (
-              <div className="px-4 py-2 text-gray-500 text-sm">
+              <div className={emptyClass}>
                 No options found
               </div>
             )}

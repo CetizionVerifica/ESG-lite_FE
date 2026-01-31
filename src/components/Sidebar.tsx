@@ -1,181 +1,232 @@
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
+import {
+  Globe,
+  Building2,
+  FolderTree,
+  MapPin,
+  Users,
+  Gauge,
+  Columns3,
+  Settings,
+  Scale,
+  Package,
+  Upload,
+  ClipboardEdit,
+  FileSpreadsheet,
+  Factory,
+  LayoutDashboard,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  Sun,
+  Moon,
+} from "lucide-react";
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+}
 
 const Sidebar = () => {
-  const { role, logout } = useAuth();
+  const { role, logout, user } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
-  const linkClass = "block px-4 py-2 rounded text-gray-700 hover:bg-gray-100";
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  const activeClass = "bg-blue-600 text-white hover:bg-blue-600";
+  // Get user initials for avatar
+  const getInitials = (name: string) => {
+    if (!name) return "U";
+    const parts = name.trim().split(" ");
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  const superadminLinks: NavItem[] = [
+    { to: "countries", label: "Countries", icon: <Globe size={20} /> },
+    { to: "companies", label: "Companies", icon: <Building2 size={20} /> },
+    { to: "categories", label: "Categories", icon: <FolderTree size={20} /> },
+    { to: "sites", label: "Sites", icon: <MapPin size={20} /> },
+    { to: "users", label: "Users", icon: <Users size={20} /> },
+    { to: "emission-factors", label: "Emission Factors", icon: <Gauge size={20} /> },
+    { to: "manage-columns", label: "Manage Columns", icon: <Columns3 size={20} /> },
+    { to: "column-config", label: "Column Config", icon: <Settings size={20} /> },
+    { to: "units", label: "Manage Units", icon: <Scale size={20} /> },
+    { to: "products", label: "Products", icon: <Package size={20} /> },
+    { to: "upload-data", label: "Upload Data", icon: <Upload size={20} /> },
+  ];
+
+  const userLinks: NavItem[] = [
+    { to: "data-entry", label: "Data Entry", icon: <ClipboardEdit size={20} /> },
+    { to: "my-emissions", label: "My Emissions", icon: <FileSpreadsheet size={20} /> },
+    { to: "production-data", label: "Production Data", icon: <Factory size={20} /> },
+  ];
+
+  const managerLinks: NavItem[] = [
+    { to: "manager-dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
+    { to: "data-manage", label: "Emissions Data", icon: <FileSpreadsheet size={20} /> },
+    { to: "manage-production-data", label: "Production Data", icon: <Factory size={20} /> },
+  ];
+
+  const getNavLinks = (): NavItem[] => {
+    switch (role) {
+      case "Superadmin":
+        return superadminLinks;
+      case "User":
+        return userLinks;
+      case "Manager":
+        return managerLinks;
+      default:
+        return [];
+    }
+  };
+
+  const navLinks = getNavLinks();
+
+  const getRoleTitle = () => {
+    switch (role) {
+      case "Superadmin":
+        return "Admin Panel";
+      case "Manager":
+        return "Manager";
+      case "User":
+        return "Dashboard";
+      default:
+        return "Menu";
+    }
+  };
 
   return (
-    <aside className="w-64 min-h-screen bg-white border-r">
-      {role === "Superadmin" && (
-        <div className="p-4 text-xl font-semibold border-b">
-          Super Admin Panel
+    <aside
+      className={`
+        ${isExpanded ? "w-64" : "w-16"}
+        min-h-screen bg-slate-900 text-slate-300
+        transition-all duration-300 ease-in-out
+        flex flex-col shadow-xl
+      `}
+      onMouseEnter={() => setIsExpanded(true)}
+      onMouseLeave={() => setIsExpanded(false)}
+    >
+      {/* Header */}
+      <div className="h-16 flex items-center justify-between px-4 border-b border-slate-700">
+        <div className={`flex items-center gap-3 overflow-hidden ${isExpanded ? "opacity-100" : "opacity-0"} transition-opacity duration-200`}>
+          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center shrink-0">
+            <span className="text-white font-bold text-sm">E</span>
+          </div>
+          <span className="font-semibold text-white whitespace-nowrap">{getRoleTitle()}</span>
         </div>
-      )}
+        {!isExpanded && (
+          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mx-auto">
+            <span className="text-white font-bold text-sm">E</span>
+          </div>
+        )}
+      </div>
 
-      {role === "Superadmin" && (
-        <nav className="p-4 space-y-1">
+      {/* Navigation */}
+      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto overflow-x-hidden">
+        {navLinks.map((link) => (
           <NavLink
-            to="countries"
+            key={link.to}
+            to={link.to}
             className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200
+              ${isActive
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                : "text-slate-400 hover:bg-slate-800 hover:text-white"
+              }`
             }
           >
-            Countries
+            <span className="shrink-0">{link.icon}</span>
+            <span
+              className={`whitespace-nowrap transition-all duration-200 ${
+                isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
+              }`}
+            >
+              {link.label}
+            </span>
           </NavLink>
+        ))}
+      </nav>
 
-          <NavLink
-            to="companies"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Companies
-          </NavLink>
-          <NavLink
-            to="categories"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Categories
-          </NavLink>
+      {/* Footer */}
+      <div className="p-2 border-t border-slate-700 space-y-1">
+        {/* User Profile */}
+        {user && (
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg">
+            <div className="w-8 h-8 bg-linear-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shrink-0">
+              <span className="text-white font-semibold text-xs">
+                {getInitials(user.name)}
+              </span>
+            </div>
+            <div
+              className={`overflow-hidden transition-all duration-200 ${
+                isExpanded ? "opacity-100 w-auto" : "opacity-0 w-0 absolute"
+              }`}
+            >
+              <p className="text-sm font-medium text-white truncate max-w-35">
+                {user.name}
+              </p>
+              <p className="text-xs text-slate-400 truncate max-w-35">
+                {user.email}
+              </p>
+            </div>
+          </div>
+        )}
 
-          <NavLink
-            to="sites"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
+        {/* Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          className={`
+            w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
+            text-slate-400 hover:bg-slate-800 hover:text-white
+            transition-all duration-200
+          `}
+        >
+          {isDark ? (
+            <Sun size={20} className="shrink-0 text-amber-400" />
+          ) : (
+            <Moon size={20} className="shrink-0 text-blue-400" />
+          )}
+          <span
+            className={`whitespace-nowrap transition-all duration-200 ${
+              isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
+            }`}
           >
-            Sites
-          </NavLink>
+            {isDark ? "Light Mode" : "Dark Mode"}
+          </span>
+        </button>
 
-          <NavLink
-            to="users"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Users
-          </NavLink>
-          <NavLink
-            to="emission-factors"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Emission Factors
-          </NavLink>
-          <NavLink
-            to="manage-columns"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Manage Columns
-          </NavLink>
-          <NavLink
-            to="column-config"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Column Config
-          </NavLink>
-          <NavLink
-            to="units"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Manage Units
-          </NavLink>
-          <NavLink
-            to="products"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Products
-          </NavLink>
-          <NavLink
-            to="upload-data"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Upload Data
-          </NavLink>
-        </nav>
-      )}
-      {role === "User" && (
-        <nav className="p-4 space-y-1">
-          <NavLink
-            to="data-entry"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Data Entry
-          </NavLink>
-          <NavLink
-            to="my-emissions"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            My Emissions
-          </NavLink>
-          <NavLink
-            to="production-data"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Production Data
-          </NavLink>
-        </nav>
-      )}
-      {role === "Manager" && (
-        <nav className="p-4 space-y-1">
-          <NavLink
-            to="manager-dashboard"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Dashboard
-          </NavLink>
-          <NavLink
-            to="data-manage"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Emissions Data
-          </NavLink>
-          <NavLink
-            to="manage-production-data"
-            className={({ isActive }) =>
-              isActive ? `${linkClass} ${activeClass}` : linkClass
-            }
-          >
-            Production Data
-          </NavLink>
-        </nav>
-      )}
-      <div>
+        {/* Logout */}
         <button
           onClick={() => {
             logout();
             navigate("/login");
           }}
+          className={`
+            w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
+            text-slate-400 hover:bg-red-500/10 hover:text-red-400
+            transition-all duration-200
+          `}
         >
-          Log out
+          <LogOut size={20} className="shrink-0" />
+          <span
+            className={`whitespace-nowrap transition-all duration-200 ${
+              isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
+            }`}
+          >
+            Log out
+          </span>
         </button>
+      </div>
+
+      {/* Expand indicator */}
+      <div className="absolute bottom-20 -right-3 bg-slate-800 rounded-full p-1 shadow-lg border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors">
+        {isExpanded ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
       </div>
     </aside>
   );

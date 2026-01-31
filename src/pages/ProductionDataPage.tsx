@@ -3,6 +3,7 @@ import Modal from "../components/Modal";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { Table, Column } from "../components/Table";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import { getProductsBySite, Product } from "../services/productService";
 import {
   getProductionDataBySite,
@@ -19,6 +20,7 @@ interface Site {
 
 const ProductionDataPage = () => {
   const { user } = useAuth();
+  const { isDark } = useTheme();
 
   // Get available sites from user (supports both single site and multiple sites)
   const availableSites: Site[] = useMemo(() => {
@@ -186,10 +188,35 @@ const ProductionDataPage = () => {
     { key: "notes", label: "Notes", editable: true, type: "text" },
   ];
 
+  // Theme classes
+  const containerClass = isDark
+    ? "p-6 bg-slate-900 min-h-screen text-slate-100"
+    : "p-6 bg-gray-50 min-h-screen text-gray-900";
+
+  const labelClass = isDark
+    ? "block text-sm font-medium mb-1 text-slate-300"
+    : "block text-sm font-medium mb-1 text-gray-700";
+
+  const inputClass = isDark
+    ? "w-full border border-slate-600 bg-slate-700 text-slate-200 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-500/30"
+    : "w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300";
+
+  const warningClass = isDark
+    ? "mb-4 p-4 bg-yellow-900/20 border border-yellow-700/30 rounded text-yellow-400"
+    : "mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800";
+
+  const emptyClass = isDark
+    ? "text-center text-slate-400"
+    : "text-center text-gray-500";
+
+  const cancelBtnClass = isDark
+    ? "mr-4 px-4 py-2 bg-slate-600 text-slate-200 rounded hover:bg-slate-500"
+    : "mr-4 px-4 py-2 bg-gray-300 rounded hover:bg-gray-400";
+
   if (!siteId) {
     return (
-      <div className="p-6">
-        <div className="text-center text-gray-500">
+      <div className={containerClass}>
+        <div className={emptyClass}>
           No site assigned. Please contact your administrator.
         </div>
       </div>
@@ -197,7 +224,7 @@ const ProductionDataPage = () => {
   }
 
   return (
-    <div className="p-6">
+    <div className={containerClass}>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">
           Production Data Entry {currentSite ? `- ${currentSite.name}` : ""}
@@ -214,7 +241,7 @@ const ProductionDataPage = () => {
       {/* Site Selector - only show when user has multiple sites */}
       {hasMultipleSites && (
         <div className="mb-6">
-          <label className="block text-sm font-medium mb-1">Select Site</label>
+          <label className={labelClass}>Select Site</label>
           <div className="w-64">
             <Dropdown
               options={siteOptions}
@@ -228,7 +255,7 @@ const ProductionDataPage = () => {
       )}
 
       {products.length === 0 && !loading && (
-        <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+        <div className={warningClass}>
           No products found for this site. Please contact your administrator to add products.
         </div>
       )}
@@ -240,10 +267,11 @@ const ProductionDataPage = () => {
           setModalOpen(false);
           setSelectedProduct(null);
         }}
+        isDark={isDark}
       >
         <form action={formAction}>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Product</label>
+            <label className={labelClass}>Product</label>
             <Dropdown
               options={productOptions}
               placeholder="Select Product"
@@ -253,51 +281,51 @@ const ProductionDataPage = () => {
             />
           </div>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Quantity</label>
+            <label className={labelClass}>Quantity</label>
             <input
               type="number"
               name="quantity"
               required
               step="0.0001"
               min="0"
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+              className={inputClass}
             />
           </div>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Unit</label>
+            <label className={labelClass}>Unit</label>
             <input
               type="text"
               name="unit"
               required
               defaultValue={selectedProductUnit}
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+              className={inputClass}
             />
           </div>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Start Date</label>
+            <label className={labelClass}>Start Date</label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               required
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+              className={inputClass}
             />
           </div>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">End Date</label>
+            <label className={labelClass}>End Date</label>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               required
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+              className={inputClass}
             />
           </div>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Notes (Optional)</label>
+            <label className={labelClass}>Notes (Optional)</label>
             <textarea
               name="notes"
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+              className={inputClass}
               rows={2}
             />
           </div>
@@ -308,7 +336,7 @@ const ProductionDataPage = () => {
                 setModalOpen(false);
                 setSelectedProduct(null);
               }}
-              className="mr-4 px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+              className={cancelBtnClass}
             >
               Cancel
             </button>
@@ -330,6 +358,7 @@ const ProductionDataPage = () => {
         onDelete={handleDelete}
         loading={loading}
         showActions={true}
+        isDark={isDark}
       />
     </div>
   );
