@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { EmissionData } from "../../../services/emissionService";
+import { EmissionIntensityData } from "../../../services/productionDataService";
 import { Site, KPIData, SiteEmissionsMap } from "../types";
 import { getMonthLabels } from "../utils/dateUtils";
 
@@ -16,6 +17,7 @@ interface UseChartOptionsProps {
   yoySelectedSite: number | null;
   selectedYear: number | null;
   isDark?: boolean;
+  intensityData?: EmissionIntensityData | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,9 +30,13 @@ interface ChartOptions {
   yearOverYearOptions: EChartsOption;
   monthlyTrendOptions: EChartsOption;
   savedEmissionsChartOptions: EChartsOption;
+  scope2ChartOptions: EChartsOption;
+  intensityTrendChartOptions: EChartsOption;
   hasCategoryData: boolean;
   hasMonthlyTrendData: boolean;
   hasSavedEmissionsData: boolean;
+  hasScope2Data: boolean;
+  hasIntensityData: boolean;
 }
 
 export function useChartOptions({
@@ -43,6 +49,7 @@ export function useChartOptions({
   yoySelectedSite,
   selectedYear,
   isDark = false,
+  intensityData,
 }: UseChartOptionsProps): ChartOptions {
   // Dark theme colors
   const textColor = isDark ? "#e2e8f0" : "#333";
@@ -589,6 +596,336 @@ export function useChartOptions({
     });
   }, [approvedEmissions]);
 
+  // Chart: Scope 2 (Purchased Electricity) Monthly Trend with Activity Data
+  const scope2ChartOptions = useMemo(() => {
+    // Filter approved emissions for Scope 2 only
+    const scope2Emissions = approvedEmissions.filter((e) => {
+      const categoryScope = e.category?.scope;
+      return categoryScope === "Scope 2";
+    });
+
+    const monthlyEmissions: { [key: string]: number } = {};
+    const monthlyActivity: { [key: string]: number } = {};
+    const months: string[] = [];
+    let activityUnit = "kWh"; // Default unit
+
+    if (selectedYear) {
+      for (let i = 0; i < 12; i++) {
+        const key = `${selectedYear}-${String(i + 1).padStart(2, "0")}`;
+        months.push(key);
+        monthlyEmissions[key] = 0;
+        monthlyActivity[key] = 0;
+      }
+    } else {
+      const today = new Date();
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        months.push(key);
+        monthlyEmissions[key] = 0;
+        monthlyActivity[key] = 0;
+      }
+    }
+
+    scope2Emissions.forEach((e) => {
+      const month = e.date_of_reporting.substring(0, 7);
+      if (monthlyEmissions[month] !== undefined) {
+        monthlyEmissions[month] += Number(e.total_emission) || 0;
+
+        // Extract activity data value from known keys
+        if (e.activity_data) {
+          const data = e.activity_data as Record<string, unknown>;
+          // Look for activity value in specific keys (in order of priority)
+          const activityKeys = ["activity_value", "activity", "Activity Data", "value", "quantity"];
+          let activityValue: number | null = null;
+
+          for (const key of activityKeys) {
+            if (data[key] !== undefined && data[key] !== null) {
+              const val = Number(data[key]);
+              if (!isNaN(val) && val > 0) {
+                activityValue = val;
+                break;
+              }
+            }
+          }
+
+          if (activityValue) {
+            monthlyActivity[month] += activityValue;
+          }
+        }
+
+        // Get activity unit if available
+        if (e.activity_data_unit) {
+          activityUnit = e.activity_data_unit;
+        }
+      }
+    });
+
+    const xAxisData = months.map((m) => {
+      const [year, month] = m.split("-");
+      const date = new Date(parseInt(year), parseInt(month) - 1);
+      return selectedYear
+        ? date.toLocaleDateString("en-US", { month: "short" })
+        : date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+    });
+
+    const emissionsData = months.map((m) => parseFloat(Number(monthlyEmissions[m]).toFixed(2)));
+    const activityData = months.map((m) => parseFloat(Number(monthlyActivity[m]).toFixed(2)));
+
+    return {
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: isDark ? "#334155" : "#fff",
+        borderColor: isDark ? "#475569" : "#ccc",
+        textStyle: { color: textColor },
+        axisPointer: {
+          type: "cross",
+        },
+        formatter: (params: { seriesName: string; name: string; value: number; marker: string; axisValue: string }[]) => {
+          let result = `${params[0]?.axisValue || ""}${selectedYear ? ` ${selectedYear}` : ""}<br/>`;
+          params.forEach((p) => {
+            if (p.seriesName === "Emissions") {
+              result += `${p.marker} ${p.seriesName}: <b>${p.value.toFixed(2)}</b> tCO2e<br/>`;
+            } else {
+              result += `${p.marker} ${p.seriesName}: <b>${p.value.toLocaleString()}</b> ${activityUnit}<br/>`;
+            }
+          });
+          return result;
+        },
+      },
+      legend: {
+        data: ["Emissions", "Consumption"],
+        bottom: 0,
+        textStyle: { color: textColor },
+      },
+      grid: {
+        left: "3%",
+        right: "4%",
+        bottom: "12%",
+        containLabel: true,
+      },
+      xAxis: {
+        type: "category",
+        data: xAxisData,
+        axisTick: {
+          alignWithLabel: true,
+        },
+        axisLabel: { color: textColor },
+        axisLine: { lineStyle: { color: axisLineColor } },
+      },
+      yAxis: [
+        {
+          type: "value",
+          name: "Emissions (tCO2e)",
+          position: "left",
+          nameTextStyle: { color: subTextColor },
+          axisLabel: {
+            formatter: "{value}",
+            color: textColor,
+          },
+          axisLine: { lineStyle: { color: "#22c55e" } },
+          splitLine: { lineStyle: { color: splitLineColor } },
+        },
+        {
+          type: "value",
+          name: `Consumption (${activityUnit})`,
+          position: "right",
+          nameTextStyle: { color: subTextColor },
+          axisLabel: {
+            formatter: "{value}",
+            color: textColor,
+          },
+          axisLine: { lineStyle: { color: "#3b82f6" } },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: "Emissions",
+          type: "bar",
+          yAxisIndex: 0,
+          barWidth: "40%",
+          data: emissionsData,
+          itemStyle: {
+            color: "#22c55e",
+            borderRadius: [4, 4, 0, 0],
+          },
+        },
+        {
+          name: "Consumption",
+          type: "line",
+          yAxisIndex: 1,
+          data: activityData,
+          smooth: true,
+          symbol: "circle",
+          symbolSize: 8,
+          itemStyle: {
+            color: "#3b82f6",
+          },
+          lineStyle: {
+            width: 2,
+          },
+        },
+      ],
+    };
+  }, [approvedEmissions, selectedYear, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
+
+  // Check if Scope 2 chart has data
+  const hasScope2Data = useMemo(() => {
+    return approvedEmissions.some((e) => e.category?.scope === "Scope 2");
+  }, [approvedEmissions]);
+
+  // Chart: Monthly Emission Intensity Trend (Line Chart with dual axis)
+  const intensityTrendChartOptions = useMemo(() => {
+    const monthlyData = intensityData?.monthlyData || [];
+
+    // Sort by month
+    const sortedData = [...monthlyData].sort((a, b) => a.month.localeCompare(b.month));
+
+    const xAxisData = sortedData.map((d) => {
+      const date = new Date(d.month);
+      return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+    });
+
+    const intensityValues = sortedData.map((d) => parseFloat(d.intensity.toFixed(4)));
+    const emissionsValues = sortedData.map((d) => parseFloat(d.emissions.toFixed(2)));
+    const productionValues = sortedData.map((d) => parseFloat(d.production.toFixed(2)));
+
+    // Get unit from intensityData
+    const unit = intensityData?.productionByUnit?.[0]?.unit || "unit";
+
+    return {
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: isDark ? "#334155" : "#fff",
+        borderColor: isDark ? "#475569" : "#ccc",
+        textStyle: { color: textColor },
+        axisPointer: {
+          type: "cross",
+        },
+        formatter: (params: { seriesName: string; name: string; value: number; marker: string }[]) => {
+          let result = `${params[0]?.name || ""}<br/>`;
+          params.forEach((p) => {
+            if (p.seriesName === "Intensity") {
+              result += `${p.marker} ${p.seriesName}: <b>${p.value.toFixed(4)}</b> tCO2e/${unit}<br/>`;
+            } else if (p.seriesName === "Emissions") {
+              result += `${p.marker} ${p.seriesName}: <b>${p.value.toFixed(2)}</b> tCO2e<br/>`;
+            } else if (p.seriesName === "Production") {
+              result += `${p.marker} ${p.seriesName}: <b>${p.value.toLocaleString()}</b> ${unit}<br/>`;
+            }
+          });
+          return result;
+        },
+      },
+      legend: {
+        data: ["Intensity", "Emissions", "Production"],
+        bottom: 0,
+        textStyle: { color: textColor },
+      },
+      grid: {
+        left: "3%",
+        right: "4%",
+        bottom: "15%",
+        containLabel: true,
+      },
+      xAxis: {
+        type: "category",
+        data: xAxisData,
+        boundaryGap: false,
+        axisLabel: { color: textColor },
+        axisLine: { lineStyle: { color: axisLineColor } },
+      },
+      yAxis: [
+        {
+          type: "value",
+          name: `Intensity (tCO2e/${unit})`,
+          position: "left",
+          nameTextStyle: { color: subTextColor },
+          axisLabel: {
+            formatter: (value: number) => value.toFixed(4),
+            color: textColor,
+          },
+          axisLine: { lineStyle: { color: "#8b5cf6" } },
+          splitLine: { lineStyle: { color: splitLineColor } },
+        },
+        {
+          type: "value",
+          name: "Emissions / Production",
+          position: "right",
+          nameTextStyle: { color: subTextColor },
+          axisLabel: {
+            formatter: "{value}",
+            color: textColor,
+          },
+          axisLine: { lineStyle: { color: "#3b82f6" } },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: "Intensity",
+          type: "line",
+          yAxisIndex: 0,
+          data: intensityValues,
+          smooth: true,
+          symbol: "circle",
+          symbolSize: 8,
+          itemStyle: {
+            color: "#8b5cf6",
+          },
+          lineStyle: {
+            width: 3,
+          },
+          areaStyle: {
+            color: {
+              type: "linear",
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: isDark ? "rgba(139, 92, 246, 0.3)" : "rgba(139, 92, 246, 0.2)" },
+                { offset: 1, color: "rgba(139, 92, 246, 0)" },
+              ],
+            },
+          },
+        },
+        {
+          name: "Emissions",
+          type: "bar",
+          yAxisIndex: 1,
+          data: emissionsValues,
+          barWidth: "30%",
+          itemStyle: {
+            color: isDark ? "rgba(59, 130, 246, 0.7)" : "rgba(59, 130, 246, 0.6)",
+            borderRadius: [4, 4, 0, 0],
+          },
+        },
+        {
+          name: "Production",
+          type: "line",
+          yAxisIndex: 1,
+          data: productionValues,
+          smooth: true,
+          symbol: "diamond",
+          symbolSize: 6,
+          itemStyle: {
+            color: "#10b981",
+          },
+          lineStyle: {
+            width: 2,
+            type: "dashed",
+          },
+        },
+      ],
+    };
+  }, [intensityData, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
+
+  // Check if intensity data has monthly data
+  const hasIntensityData = useMemo(() => {
+    return (intensityData?.monthlyData?.length || 0) > 0;
+  }, [intensityData]);
+
   return {
     categoryChartOptions,
     statusChartOptions,
@@ -596,8 +933,12 @@ export function useChartOptions({
     yearOverYearOptions,
     monthlyTrendOptions,
     savedEmissionsChartOptions,
+    scope2ChartOptions,
+    intensityTrendChartOptions,
     hasCategoryData,
     hasMonthlyTrendData,
     hasSavedEmissionsData,
+    hasScope2Data,
+    hasIntensityData,
   };
 }

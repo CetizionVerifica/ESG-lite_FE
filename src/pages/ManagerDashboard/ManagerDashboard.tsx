@@ -61,6 +61,16 @@ const ManagerDashboard = () => {
     availableSites,
   });
 
+  // Emission intensity data (must be before useChartOptions)
+  const {
+    intensityData,
+    loading: intensityLoading,
+  } = useEmissionIntensity({
+    selectedSites,
+    availableSites,
+    selectedYear,
+  });
+
   const {
     categoryChartOptions,
     statusChartOptions,
@@ -68,9 +78,13 @@ const ManagerDashboard = () => {
     yearOverYearOptions,
     monthlyTrendOptions,
     savedEmissionsChartOptions,
+    scope2ChartOptions,
+    intensityTrendChartOptions,
     hasCategoryData,
     hasMonthlyTrendData,
     hasSavedEmissionsData,
+    hasScope2Data,
+    hasIntensityData,
   } = useChartOptions({
     filteredEmissions,
     approvedEmissions,
@@ -84,16 +98,7 @@ const ManagerDashboard = () => {
     yoySelectedSite,
     selectedYear,
     isDark,
-  });
-
-  // Emission intensity data
-  const {
     intensityData,
-    loading: intensityLoading,
-  } = useEmissionIntensity({
-    selectedSites,
-    availableSites,
-    selectedYear,
   });
 
   // Get categories from all selected sites (union, deduplicated)
@@ -311,6 +316,36 @@ const ManagerDashboard = () => {
             ) : (
               <div className={emptyStateClass}>
                 No saved emissions data available
+              </div>
+            )}
+          </div>
+
+          {/* Scope 2 (Purchased Electricity) Chart */}
+          <div className={`${cardClass} mb-6`}>
+            <h3 className={chartTitleClass}>Scope 2 (Purchased Electricity)</h3>
+            <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              Monthly emissions (bars) and electricity consumption (line)
+            </p>
+            {hasScope2Data ? (
+              <ReactECharts option={scope2ChartOptions} style={{ height: "350px" }} />
+            ) : (
+              <div className={emptyStateClass}>
+                No Scope 2 emissions data available
+              </div>
+            )}
+          </div>
+
+          {/* Monthly Emission Intensity Trend Chart */}
+          <div className={`${cardClass} mb-6`}>
+            <h3 className={chartTitleClass}>Monthly Emission Intensity Trend</h3>
+            <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              Emission intensity (line), emissions (bars), and production (dashed line) over time
+            </p>
+            {hasIntensityData ? (
+              <ReactECharts option={intensityTrendChartOptions} style={{ height: "350px" }} />
+            ) : (
+              <div className={emptyStateClass}>
+                {intensityLoading ? "Loading intensity data..." : "No emission intensity data available. Add production data to calculate intensity."}
               </div>
             )}
           </div>
