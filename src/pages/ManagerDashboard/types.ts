@@ -3,7 +3,7 @@ import { EmissionData } from "../../services/emissionService";
 export interface Category {
   category_id: number;
   category_name: string;
-  scope: string;
+  scope: string | null;
 }
 
 export interface Site {
@@ -13,10 +13,12 @@ export interface Site {
 }
 
 export interface KPIData {
-  totalEmissions: number;
+  grossEmissions: number;
+  netEmissions: number;
   scope1Emissions: number;
   scope2Emissions: number;
   scope3Emissions: number;
+  savedEmissions: number;
   totalCount: number;
 }
 

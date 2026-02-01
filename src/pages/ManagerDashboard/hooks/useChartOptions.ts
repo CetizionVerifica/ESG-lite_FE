@@ -27,8 +27,10 @@ interface ChartOptions {
   siteComparisonOptions: EChartsOption;
   yearOverYearOptions: EChartsOption;
   monthlyTrendOptions: EChartsOption;
+  savedEmissionsChartOptions: EChartsOption;
   hasCategoryData: boolean;
   hasMonthlyTrendData: boolean;
+  hasSavedEmissionsData: boolean;
 }
 
 export function useChartOptions({
@@ -48,10 +50,15 @@ export function useChartOptions({
   const axisLineColor = isDark ? "#475569" : "#ccc";
   const splitLineColor = isDark ? "#334155" : "#eee";
   const bgColor = isDark ? "#1e293b" : "#fff";
-  // Chart: Emissions by Category (Pie Chart) - Only approved emissions
+  // Chart: Emissions by Category (Pie Chart) - Only scoped emissions (excludes null scope like Renewable Electricity)
   const categoryChartOptions = useMemo(() => {
     const categoryData: { [key: string]: number } = {};
     approvedEmissions.forEach((e) => {
+      // Exclude categories with null scope (like Renewable Electricity) from category chart
+      const categoryScope = e.category?.scope;
+      if (categoryScope === null || categoryScope === undefined) {
+        return; // Skip null-scope categories
+      }
       const catName = e.category?.category_name || "Unknown";
       const emissionValue = Number(e.total_emission) || 0;
       categoryData[catName] = (categoryData[catName] || 0) + emissionValue;
@@ -348,10 +355,140 @@ export function useChartOptions({
     };
   }, [approvedSitesEmissions, yoySelectedSite, selectedComparisonYears, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
 
-  // Chart: Monthly Emissions Trend (Bar Chart) - Only approved emissions (filtered by category/year)
+  // Chart: Monthly Emissions Trend (Bar Chart) - Shows NET emissions (gross - saved)
   const monthlyTrendOptions = useMemo(() => {
-    const monthlyData: { [key: string]: number } = {};
+    const monthlyGross: { [key: string]: number } = {};
+    const monthlySaved: { [key: string]: number } = {};
 
+    const months: string[] = [];
+
+    if (selectedYear) {
+      // When a year is selected, show all 12 months of that year
+      for (let i = 0; i < 12; i++) {
+        const key = `${selectedYear}-${String(i + 1).padStart(2, "0")}`;
+        months.push(key);
+        monthlyGross[key] = 0;
+        monthlySaved[key] = 0;
+      }
+    } else {
+      // When no year is selected, show the last 6 months
+      const today = new Date();
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        months.push(key);
+        monthlyGross[key] = 0;
+        monthlySaved[key] = 0;
+      }
+    }
+
+    // Calculate gross (scoped) and saved (null scope) emissions per month
+    approvedEmissions.forEach((e) => {
+      const month = e.date_of_reporting.substring(0, 7);
+      if (monthlyGross[month] !== undefined) {
+        const emissionValue = Number(e.total_emission) || 0;
+        const categoryScope = e.category?.scope;
+
+        if (categoryScope === null || categoryScope === undefined) {
+          // Null scope = saved emissions (to be discounted)
+          monthlySaved[month] += emissionValue;
+        } else {
+          // Scoped emissions (Scope 1, 2, 3)
+          monthlyGross[month] += emissionValue;
+        }
+      }
+    });
+
+    const xAxisData = months.map((m) => {
+      const [year, month] = m.split("-");
+      const date = new Date(parseInt(year), parseInt(month) - 1);
+      return selectedYear
+        ? date.toLocaleDateString("en-US", { month: "short" })
+        : date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+    });
+
+    // Net emissions = Gross - Saved
+    const netData = months.map((m) => parseFloat((monthlyGross[m] - monthlySaved[m]).toFixed(2)));
+
+    return {
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: isDark ? "#334155" : "#fff",
+        borderColor: isDark ? "#475569" : "#ccc",
+        textStyle: { color: textColor },
+        axisPointer: {
+          type: "shadow",
+        },
+        formatter: (params: { name: string; value: number; marker: string }[]) => {
+          const item = params[0];
+          const monthKey = months[xAxisData.indexOf(item.name)];
+          const gross = monthlyGross[monthKey] || 0;
+          const saved = monthlySaved[monthKey] || 0;
+          return `${item.name}${selectedYear ? ` ${selectedYear}` : ""}<br/>` +
+            `${item.marker} Net Emissions: <b>${item.value.toFixed(2)}</b> tCO2e<br/>` +
+            `<span style="color:#6b7280">Gross: ${gross.toFixed(2)} | Saved: ${saved.toFixed(2)}</span>`;
+        },
+      },
+      grid: {
+        left: "3%",
+        right: "4%",
+        bottom: "3%",
+        containLabel: true,
+      },
+      xAxis: {
+        type: "category",
+        data: xAxisData,
+        axisTick: {
+          alignWithLabel: true,
+        },
+        axisLabel: { color: textColor },
+        axisLine: { lineStyle: { color: axisLineColor } },
+      },
+      yAxis: {
+        type: "value",
+        name: "Net Emissions (tCO2e)",
+        nameTextStyle: { color: subTextColor },
+        axisLabel: {
+          formatter: "{value}",
+          color: textColor,
+        },
+        axisLine: { lineStyle: { color: axisLineColor } },
+        splitLine: { lineStyle: { color: splitLineColor } },
+      },
+      series: [
+        {
+          name: "Net Emissions",
+          type: "bar",
+          barWidth: "60%",
+          data: netData,
+          itemStyle: {
+            color: "#3b82f6",
+            borderRadius: [4, 4, 0, 0],
+          },
+        },
+      ],
+    };
+  }, [approvedEmissions, selectedYear, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
+
+  // Check if category chart has data
+  const hasCategoryData = useMemo(() => {
+    return (categoryChartOptions.series?.[0]?.data?.length || 0) > 0;
+  }, [categoryChartOptions]);
+
+  // Check if monthly trend chart has data
+  const hasMonthlyTrendData = useMemo(() => {
+    return filteredEmissions.length > 0;
+  }, [filteredEmissions]);
+
+  // Chart: Emissions Saved (Bar Chart) - For categories with null scope (e.g., Renewable Electricity)
+  const savedEmissionsChartOptions = useMemo(() => {
+    // Filter approved emissions for categories with null scope
+    const savedEmissions = approvedEmissions.filter((e) => {
+      const categoryScope = e.category?.scope;
+      return categoryScope === null || categoryScope === undefined;
+    });
+
+    const monthlyData: { [key: string]: number } = {};
     const months: string[] = [];
 
     if (selectedYear) {
@@ -372,8 +509,7 @@ export function useChartOptions({
       }
     }
 
-    // Use approvedEmissions which is already filtered by category and year
-    approvedEmissions.forEach((e) => {
+    savedEmissions.forEach((e) => {
       const month = e.date_of_reporting.substring(0, 7);
       if (monthlyData[month] !== undefined) {
         monthlyData[month] += Number(e.total_emission) || 0;
@@ -383,7 +519,6 @@ export function useChartOptions({
     const xAxisData = months.map((m) => {
       const [year, month] = m.split("-");
       const date = new Date(parseInt(year), parseInt(month) - 1);
-      // Show only month name when a specific year is selected, otherwise include year
       return selectedYear
         ? date.toLocaleDateString("en-US", { month: "short" })
         : date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
@@ -402,7 +537,7 @@ export function useChartOptions({
         },
         formatter: (params: { name: string; value: number; marker: string }[]) => {
           const item = params[0];
-          return `${item.name}${selectedYear ? ` ${selectedYear}` : ""}<br/>${item.marker} Emissions: <b>${item.value.toFixed(2)}</b> tCO2e`;
+          return `${item.name}${selectedYear ? ` ${selectedYear}` : ""}<br/>${item.marker} Saved: <b>${item.value.toFixed(2)}</b> tCO2e`;
         },
       },
       grid: {
@@ -422,7 +557,7 @@ export function useChartOptions({
       },
       yAxis: {
         type: "value",
-        name: "Emissions (tCO2e)",
+        name: "Saved (tCO2e)",
         nameTextStyle: { color: subTextColor },
         axisLabel: {
           formatter: "{value}",
@@ -433,12 +568,12 @@ export function useChartOptions({
       },
       series: [
         {
-          name: "Total Emissions",
+          name: "Emissions Saved",
           type: "bar",
           barWidth: "60%",
           data: seriesData,
           itemStyle: {
-            color: "#3b82f6",
+            color: "#10b981", // Green color to indicate positive/saved
             borderRadius: [4, 4, 0, 0],
           },
         },
@@ -446,15 +581,13 @@ export function useChartOptions({
     };
   }, [approvedEmissions, selectedYear, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
 
-  // Check if category chart has data
-  const hasCategoryData = useMemo(() => {
-    return (categoryChartOptions.series?.[0]?.data?.length || 0) > 0;
-  }, [categoryChartOptions]);
-
-  // Check if monthly trend chart has data
-  const hasMonthlyTrendData = useMemo(() => {
-    return filteredEmissions.length > 0;
-  }, [filteredEmissions]);
+  // Check if saved emissions chart has data
+  const hasSavedEmissionsData = useMemo(() => {
+    return approvedEmissions.some((e) => {
+      const categoryScope = e.category?.scope;
+      return categoryScope === null || categoryScope === undefined;
+    });
+  }, [approvedEmissions]);
 
   return {
     categoryChartOptions,
@@ -462,7 +595,9 @@ export function useChartOptions({
     siteComparisonOptions,
     yearOverYearOptions,
     monthlyTrendOptions,
+    savedEmissionsChartOptions,
     hasCategoryData,
     hasMonthlyTrendData,
+    hasSavedEmissionsData,
   };
 }

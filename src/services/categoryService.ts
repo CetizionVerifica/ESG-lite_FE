@@ -12,7 +12,7 @@ export const getCategoryById = async (id: string | number) => {
 
 export const createCategory = async (data: {
   category_name: string;
-  scope: string;
+  scope?: string | null;
 }) => {
   const response = await api.post("/admin/categories", data);
   return response.data;
@@ -22,7 +22,7 @@ export const updateCategory = async (
   id: string | number,
   data: {
     category_name?: string;
-    scope?: string;
+    scope?: string | null;
   }
 ) => {
   const response = await api.put(`/admin/categories/${id}`, data);

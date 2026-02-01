@@ -11,7 +11,7 @@ import {
 interface Category {
   category_id: number;
   category_name: string;
-  scope: string;
+  scope: string | null;
 }
 
 const CategoryPage = () => {
@@ -23,7 +23,9 @@ const CategoryPage = () => {
     async (_prevData: any, data: any) => {
       try {
         const category_name = data.get("category_name");
-        const scope = data.get("scope");
+        const scopeValue = data.get("scope");
+        // Pass null if scope is empty, otherwise use the trimmed value
+        const scope = scopeValue?.trim() || null;
 
         const newCategory = await createCategory({
           category_name,
@@ -135,11 +137,13 @@ const CategoryPage = () => {
             />
           </div>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Scope</label>
+            <label className="block text-sm font-medium mb-1">
+              Scope <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
             <input
               type="text"
               name="scope"
-              required
+              placeholder="e.g., Scope 1, Scope 2, Scope 3"
               className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
             />
           </div>

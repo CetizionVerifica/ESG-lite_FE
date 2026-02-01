@@ -8,7 +8,7 @@ import {
 import { Site } from "../types";
 
 interface UseEmissionIntensityProps {
-  selectedSite: number | null;
+  selectedSites: number[];
   availableSites: Site[];
   selectedYear?: number | null;
   startDate?: string;
@@ -23,7 +23,7 @@ interface UseEmissionIntensityReturn {
 }
 
 export function useEmissionIntensity({
-  selectedSite,
+  selectedSites,
   availableSites,
   selectedYear,
   startDate,
@@ -34,26 +34,72 @@ export function useEmissionIntensity({
   const [loading, setLoading] = useState(false);
 
   // Compute date range from selectedYear if startDate/endDate not provided
-  const computedStartDate = startDate || (selectedYear ? `${selectedYear}-01-01` : undefined);
-  const computedEndDate = endDate || (selectedYear ? `${selectedYear}-12-31` : undefined);
+  // When no year is selected, use a wide range to get all years data
+  const computedStartDate = startDate || (selectedYear ? `${selectedYear}-01-01` : "2000-01-01");
+  const computedEndDate = endDate || (selectedYear ? `${selectedYear}-12-31` : `${new Date().getFullYear()}-12-31`);
 
   const fetchIntensityData = useCallback(async () => {
-    if (!selectedSite) return;
+    if (selectedSites.length === 0) {
+      setIntensityData(null);
+      return;
+    }
 
     try {
       setLoading(true);
       const params = computedStartDate && computedEndDate
         ? { startDate: computedStartDate, endDate: computedEndDate }
         : undefined;
-      const data = await getEmissionIntensity(selectedSite, params);
-      setIntensityData(data);
+
+      if (selectedSites.length === 1) {
+        // Single site - use existing API
+        const data = await getEmissionIntensity(selectedSites[0], params);
+        setIntensityData(data);
+      } else {
+        // Multiple sites - fetch comparison data and aggregate
+        const compData = await getEmissionIntensityComparison(selectedSites, params);
+
+        // Filter for selected sites only
+        const selectedSiteData = compData.comparison.filter((site) =>
+          selectedSites.includes(site.siteId)
+        );
+
+        // Aggregate totals
+        const totalEmissions = selectedSiteData.reduce(
+          (sum, site) => sum + site.totalEmissions,
+          0
+        );
+        const totalProduction = selectedSiteData.reduce(
+          (sum, site) => sum + (site.totalProduction || 0),
+          0
+        );
+
+        // Calculate combined intensity
+        const combinedIntensity =
+          totalProduction > 0 ? totalEmissions / totalProduction : 0;
+
+        // Create aggregated data structure
+        const aggregatedData: EmissionIntensityData = {
+          totalEmissions,
+          productionByUnit: [
+            {
+              unit: "Combined",
+              totalProduction,
+              emissionIntensity: combinedIntensity,
+            },
+          ],
+          monthlyData: [],
+          dateRange: compData.dateRange,
+        };
+
+        setIntensityData(aggregatedData);
+      }
     } catch (error) {
       console.error("Error fetching emission intensity:", error);
       setIntensityData(null);
     } finally {
       setLoading(false);
     }
-  }, [selectedSite, computedStartDate, computedEndDate]);
+  }, [selectedSites, computedStartDate, computedEndDate]);
 
   const fetchComparisonData = useCallback(async () => {
     if (availableSites.length < 2) return;

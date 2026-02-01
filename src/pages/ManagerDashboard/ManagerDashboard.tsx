@@ -4,7 +4,7 @@ import Dropdown, { DropdownOption } from "../../components/Dropdown";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 
-import { Site } from "./types";
+import { Site, Category } from "./types";
 import { generateYearOptions } from "./utils/dateUtils";
 import { useEmissionsData } from "./hooks/useEmissionsData";
 import { useChartOptions } from "./hooks/useChartOptions";
@@ -26,8 +26,8 @@ const ManagerDashboard = () => {
   );
 
   // Filter state
-  const [selectedSite, setSelectedSite] = useState<number | null>(
-    availableSites.length > 0 ? availableSites[0].site_id : null
+  const [selectedSites, setSelectedSites] = useState<number[]>(
+    availableSites.length > 0 ? [availableSites[0].site_id] : []
   );
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -55,7 +55,7 @@ const ManagerDashboard = () => {
     kpis,
     pendingEmissions,
   } = useEmissionsData({
-    selectedSite,
+    selectedSites,
     selectedCategory,
     selectedYear,
     availableSites,
@@ -67,8 +67,10 @@ const ManagerDashboard = () => {
     siteComparisonOptions,
     yearOverYearOptions,
     monthlyTrendOptions,
+    savedEmissionsChartOptions,
     hasCategoryData,
     hasMonthlyTrendData,
+    hasSavedEmissionsData,
   } = useChartOptions({
     filteredEmissions,
     approvedEmissions,
@@ -89,14 +91,24 @@ const ManagerDashboard = () => {
     intensityData,
     loading: intensityLoading,
   } = useEmissionIntensity({
-    selectedSite,
+    selectedSites,
     availableSites,
     selectedYear,
   });
 
-  // Get current site and its categories
-  const currentSite = availableSites.find((s) => s.site_id === selectedSite);
-  const categories = currentSite?.categories || [];
+  // Get categories from all selected sites (union, deduplicated)
+  const categories = useMemo(() => {
+    const categoryMap = new Map<number, Category>();
+    selectedSites.forEach((siteId) => {
+      const site = availableSites.find((s) => s.site_id === siteId);
+      site?.categories?.forEach((cat) => {
+        if (!categoryMap.has(cat.category_id)) {
+          categoryMap.set(cat.category_id, cat);
+        }
+      });
+    });
+    return Array.from(categoryMap.values());
+  }, [selectedSites, availableSites]);
 
   // Generate dropdown options
   const siteOptions: DropdownOption[] = availableSites.map((site) => ({
@@ -111,10 +123,17 @@ const ManagerDashboard = () => {
 
   const yearOptions = generateYearOptions();
 
-  // Reset category when site changes
+  // Reset category when selected sites change if current category is not available
   useEffect(() => {
-    setSelectedCategory(null);
-  }, [selectedSite]);
+    if (selectedCategory) {
+      const categoryAvailable = categories.some(
+        (c) => c.category_id === selectedCategory
+      );
+      if (!categoryAvailable) {
+        setSelectedCategory(null);
+      }
+    }
+  }, [selectedSites, categories, selectedCategory]);
 
   // Theme classes
   const containerClass = isDark
@@ -159,10 +178,14 @@ const ManagerDashboard = () => {
           <label className={labelClass}>Site</label>
           <Dropdown
             options={siteOptions}
-            placeholder="Select Site"
-            value={selectedSite}
-            onChange={(option) => setSelectedSite(option?.id as number)}
+            placeholder="Select Sites"
+            multiple={true}
+            multipleValue={selectedSites}
+            onMultipleChange={(options) =>
+              setSelectedSites(options.map((o) => o.id as number))
+            }
             searchable={true}
+            clearable={true}
           />
         </div>
         <div>
@@ -187,17 +210,30 @@ const ManagerDashboard = () => {
         </div>
       </div>
 
-      {loading ? (
+      {selectedSites.length === 0 ? (
+        <div className={`${cardClass} text-center py-12`}>
+          <p className={isDark ? "text-slate-400" : "text-gray-500"}>
+            Please select at least one site to view data
+          </p>
+        </div>
+      ) : loading ? (
         <div className="flex justify-center items-center py-12">
           <div className={`animate-spin rounded-full h-8 w-8 border-b-2 ${isDark ? "border-blue-400" : "border-blue-600"}`}></div>
         </div>
       ) : (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 mb-6">
             <div className={cardClass}>
-              <div className={kpiLabelClass}>Total Emissions</div>
-              <div className={kpiValueClass}>{kpis.totalEmissions.toFixed(2)}</div>
+              <div className={kpiLabelClass}>Net Emissions</div>
+              <div className={kpiValueClass}>{kpis.netEmissions.toFixed(2)}</div>
+              <div className={kpiUnitClass}>tCO2e (after discount)</div>
+            </div>
+            <div className={cardClass}>
+              <div className={kpiLabelClass}>Gross Emissions</div>
+              <div className={`${kpiValueClass} ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+                {kpis.grossEmissions.toFixed(2)}
+              </div>
               <div className={kpiUnitClass}>tCO2e</div>
             </div>
             <EmissionIntensityCard data={intensityData} loading={intensityLoading} isDark={isDark} />
@@ -222,13 +258,23 @@ const ManagerDashboard = () => {
               </div>
               <div className={kpiUnitClass}>tCO2e</div>
             </div>
+            <div className={cardClass}>
+              <div className={kpiLabelClass}>Emissions Saved</div>
+              <div className={`${kpiValueClass} ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>
+                {kpis.savedEmissions.toFixed(2)}
+              </div>
+              <div className={kpiUnitClass}>tCO2e (discount)</div>
+            </div>
           </div>
 
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Monthly Trend */}
             <div className={cardClass}>
-              <h3 className={chartTitleClass}>Monthly Emissions Trend</h3>
+              <h3 className={chartTitleClass}>Monthly Net Emissions Trend</h3>
+              <p className={`text-xs mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                Net = Gross - Saved (Renewable Electricity discounted)
+              </p>
               {hasMonthlyTrendData ? (
                 <ReactECharts option={monthlyTrendOptions} style={{ height: "300px" }} />
               ) : (
@@ -241,6 +287,9 @@ const ManagerDashboard = () => {
             {/* Emissions by Category */}
             <div className={cardClass}>
               <h3 className={chartTitleClass}>Emissions by Category</h3>
+              <p className={`text-xs mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                Scoped emissions only (excludes Renewable Electricity)
+              </p>
               {hasCategoryData ? (
                 <ReactECharts option={categoryChartOptions} style={{ height: "300px" }} />
               ) : (
@@ -251,8 +300,23 @@ const ManagerDashboard = () => {
             </div>
           </div>
 
-          {/* Site Comparison Chart */}
-          {availableSites.length > 1 && (
+          {/* Emissions Saved Chart */}
+          <div className={`${cardClass} mb-6`}>
+            <h3 className={chartTitleClass}>Emissions Saved</h3>
+            <p className={`text-sm mb-4 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              Emissions from categories without scope (e.g., Renewable Electricity) - not counted in total emissions
+            </p>
+            {hasSavedEmissionsData ? (
+              <ReactECharts option={savedEmissionsChartOptions} style={{ height: "300px" }} />
+            ) : (
+              <div className={emptyStateClass}>
+                No saved emissions data available
+              </div>
+            )}
+          </div>
+
+          {/* Site Comparison Chart - only show when single site selected */}
+          {availableSites.length > 1 && selectedSites.length === 1 && (
             <div className={`${cardClass} mb-6`}>
               <div className="flex justify-between items-center mb-4">
                 <h3 className={chartTitleClass.replace(" mb-4", "")}>Site Comparison</h3>

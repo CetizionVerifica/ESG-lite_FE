@@ -3,7 +3,7 @@ import { getEmissionsBySite, EmissionData } from "../../../services/emissionServ
 import { Site, KPIData, SiteEmissionsMap } from "../types";
 
 interface UseEmissionsDataProps {
-  selectedSite: number | null;
+  selectedSites: number[];
   selectedCategory: number | null;
   selectedYear: number | null;
   availableSites?: Site[];
@@ -21,7 +21,7 @@ interface UseEmissionsDataReturn {
 }
 
 export function useEmissionsData({
-  selectedSite,
+  selectedSites,
   selectedCategory,
   selectedYear,
   availableSites,
@@ -30,24 +30,29 @@ export function useEmissionsData({
   const [allSitesEmissions, setAllSitesEmissions] = useState<SiteEmissionsMap>({});
   const [loading, setLoading] = useState(false);
 
-  // Fetch emissions for selected site
+  // Fetch emissions for all selected sites
   const fetchEmissions = useCallback(async () => {
-    if (!selectedSite) {
+    if (selectedSites.length === 0) {
       setEmissions([]);
       return;
     }
 
     try {
       setLoading(true);
-      const data = await getEmissionsBySite(selectedSite);
-      setEmissions(data);
+      // Fetch emissions for all selected sites in parallel
+      const allEmissionsPromises = selectedSites.map((siteId) =>
+        getEmissionsBySite(siteId)
+      );
+      const allEmissionsArrays = await Promise.all(allEmissionsPromises);
+      // Merge all emissions into a single array
+      setEmissions(allEmissionsArrays.flat());
     } catch (error) {
       console.error("Error fetching emissions:", error);
       setEmissions([]);
     } finally {
       setLoading(false);
     }
-  }, [selectedSite]);
+  }, [selectedSites]);
 
   useEffect(() => {
     fetchEmissions();
@@ -109,9 +114,9 @@ export function useEmissionsData({
     return result;
   }, [allSitesEmissions]);
 
-  // Create a mapping of category_id to scope
+  // Create a mapping of category_id to scope (including null for categories like Renewable Electricity)
   const categoryToScope = useMemo(() => {
-    const mapping: Record<number, string> = {};
+    const mapping: Record<number, string | null> = {};
     availableSites?.forEach((site) => {
       site.categories?.forEach((cat) => {
         mapping[cat.category_id] = cat.scope;
@@ -122,16 +127,11 @@ export function useEmissionsData({
 
   // Calculate KPIs
   const kpis = useMemo((): KPIData => {
-    // Total emissions only counts approved emissions
-    const totalEmissions = approvedEmissions.reduce(
-      (sum, e) => sum + (Number(e.total_emission) || 0),
-      0
-    );
-
     // Calculate scope emissions (from approved emissions only)
     let scope1Emissions = 0;
     let scope2Emissions = 0;
     let scope3Emissions = 0;
+    let savedEmissions = 0;
 
     approvedEmissions.forEach((e) => {
       const categoryId = e.category?.category_id;
@@ -144,14 +144,25 @@ export function useEmissionsData({
         scope2Emissions += emissionValue;
       } else if (scope === "Scope 3") {
         scope3Emissions += emissionValue;
+      } else if (scope === null) {
+        // Categories with null scope (e.g., Renewable Electricity) count as saved emissions
+        savedEmissions += emissionValue;
       }
     });
 
+    // Gross emissions = Scope 1 + Scope 2 + Scope 3
+    const grossEmissions = scope1Emissions + scope2Emissions + scope3Emissions;
+
+    // Net emissions = Gross - Saved (discounted by renewable electricity)
+    const netEmissions = grossEmissions - savedEmissions;
+
     return {
-      totalEmissions,
+      grossEmissions,
+      netEmissions,
       scope1Emissions,
       scope2Emissions,
       scope3Emissions,
+      savedEmissions,
       totalCount: filteredEmissions.length,
     };
   }, [filteredEmissions, approvedEmissions, categoryToScope]);

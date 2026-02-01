@@ -21,6 +21,7 @@ export interface EmissionData {
   category: {
     category_id: number;
     category_name: string;
+    scope?: string | null;
   };
   reviewed_by?: {
     user_id: number;
