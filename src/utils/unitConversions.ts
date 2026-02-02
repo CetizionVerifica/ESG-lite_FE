@@ -1,7 +1,7 @@
 // Unit conversion mappings
 export const unitConversions: Record<string, Record<string, number>> = {
   // Volume
-  litre: { gallon: 0.264172, ml: 1000, "cubic meter": 0.001 },
+  litre: { gallon: 0.264172, ml: 1000, "cubic meter": 0.001,"kilo litre":0.001,kl: 0.001 },
   gallon: { litre: 3.78541, ml: 3785.41, "cubic meter": 0.00378541 },
   ml: { litre: 0.001, gallon: 0.000264172 },
   "cubic meter": { litre: 1000, gallon: 264.172 },
