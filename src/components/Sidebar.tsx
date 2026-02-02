@@ -88,19 +88,6 @@ const Sidebar = () => {
 
   const navLinks = getNavLinks();
 
-  const getRoleTitle = () => {
-    switch (role) {
-      case "Superadmin":
-        return "Admin Panel";
-      case "Manager":
-        return "Manager";
-      case "User":
-        return "Dashboard";
-      default:
-        return "Menu";
-    }
-  };
-
   return (
     <aside
       className={`
@@ -115,15 +102,19 @@ const Sidebar = () => {
       {/* Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-slate-700">
         <div className={`flex items-center gap-3 overflow-hidden ${isExpanded ? "opacity-100" : "opacity-0"} transition-opacity duration-200`}>
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center shrink-0">
-            <span className="text-white font-bold text-sm">E</span>
-          </div>
-          <span className="font-semibold text-white whitespace-nowrap">{getRoleTitle()}</span>
+          <img
+            src="/logo.png"
+            alt="Logo"
+            className="w-20 h-20 rounded-lg object-contain shrink-0 mt-3"
+          />
+          <span className="font-semibold text-white whitespace-nowrap">ESG Lite</span>
         </div>
         {!isExpanded && (
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mx-auto">
-            <span className="text-white font-bold text-sm">E</span>
-          </div>
+          <img
+            src="/logo.png"
+            alt="Logo"
+            className="w-10 h-10 rounded-lg object-contain mx-auto"
+          />
         )}
       </div>
 
