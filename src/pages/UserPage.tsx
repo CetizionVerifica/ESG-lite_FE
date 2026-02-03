@@ -237,7 +237,7 @@ const UserPage = () => {
       label: "Password",
       editable: true,
       type: "text",
-      render: (value, row) => {
+      render: () => {
         return "••••••••";
       },
     },
