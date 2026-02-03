@@ -33,6 +33,16 @@ export interface EmissionData {
   };
 }
 
+export type ReportFrequency = "yearly" | "monthly";
+
+
+export interface ApprovedEmissionsReportPayload {
+  siteIds ?: number[];
+  categoryIds ?: number[];
+  frequency: ReportFrequency;
+  year: number;
+  month ?: number;
+}
 export const getEmissionsBySite = async (siteId: string | number) => {
   const response = await api.get("/user/emissions", {
     params: { siteId },
@@ -118,3 +128,9 @@ export const bulkDeleteEmissions = async (ids: number[]) => {
   const response = await api.delete("/user/emissions/bulk-delete", { data: { ids } });
   return response.data;
 };
+
+export const getApprovedEmissionsReport = async (
+  payload :  ApprovedEmissionsReportPayload) => {
+  const response = await api.post("/user/emissions/approved", payload);
+  return response.data;
+}

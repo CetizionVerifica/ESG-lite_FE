@@ -23,6 +23,7 @@ import ProductPage from "../pages/ProductPage";
 import ProductionDataPage from "../pages/ProductionDataPage";
 import UploadPage from "../pages/UploadPage";
 import UserEmissionsPage from "../pages/UserEmissionsPage";
+import EdeReports from "../pages/Reports/EdePreports";
 
 const routes = [
   {
@@ -112,6 +113,10 @@ const routes = [
           {
             path: "manager-dashboard",
             element: <ManagerDashboard />
+          },
+          {
+            path: "ede-reports",
+            element: <EdeReports />
           },
           {
             path: "products",
