@@ -77,7 +77,7 @@ const UserPage = () => {
         console.log(error);
       }
     },
-    null
+    null,
   );
 
   useEffect(() => {
@@ -105,7 +105,12 @@ const UserPage = () => {
           // Use sites array if available, otherwise convert single site
           return {
             ...user,
-            sites: user.sites && user.sites.length > 0 ? user.sites : user.site ? [user.site] : [],
+            sites:
+              user.sites && user.sites.length > 0
+                ? user.sites
+                : user.site
+                  ? [user.site]
+                  : [],
           };
         } else {
           // Admin/Superadmin: convert single site to sites array for consistent editing
@@ -145,15 +150,16 @@ const UserPage = () => {
 
       // Handle site update - convert site object to site_id (for backward compatibility)
       if (updates.site !== undefined) {
-        updateData.site_id = (updates.site as any)?.site_id ?? updates.site ?? null;
+        updateData.site_id =
+          (updates.site as any)?.site_id ?? updates.site ?? null;
         delete updateData.site;
       }
 
       await updateUser(row.user_id, updateData);
       setUsers((prev) =>
         prev.map((item) =>
-          item.user_id === row.user_id ? { ...item, ...updates } : item
-        )
+          item.user_id === row.user_id ? { ...item, ...updates } : item,
+        ),
       );
       handleLoadData();
     } catch (error) {
@@ -215,11 +221,24 @@ const UserPage = () => {
       options: siteOptions,
       render: (_value: any, row: User) => {
         // For Managers and Users, show multiple sites if available
-        if ((row.role === "Manager" || row.role === "User") && row.sites && row.sites.length > 0) {
+        if (
+          (row.role === "Manager" || row.role === "User") &&
+          row.sites &&
+          row.sites.length > 0
+        ) {
           return row.sites.map((s) => s.name).join(", ");
         }
         // Fallback to single site
         return row.site?.name || "N/A";
+      },
+    },
+    {
+      key: "password",
+      label: "Password",
+      editable: true,
+      type: "text",
+      render: () => {
+        return "••••••••";
       },
     },
   ];
