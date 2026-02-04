@@ -202,6 +202,7 @@ const EdeReportCharts: React.FC<Props> = ({
   }, [savedBySite, textColor, axisLineColor, splitLineColor]);
 
 
+
 const monthlyEmissionsOptions = useMemo(() => {
   const months = Array.from(new Set(monthlyBySite.map((r) => r.month))).sort();
   const sites = Array.from(new Set(monthlyBySite.map((r) => r.siteName))).sort();
@@ -218,7 +219,7 @@ const monthlyEmissionsOptions = useMemo(() => {
   }
 
   const series = sites.map((siteName, sIdx) => {
-    const color = typeof siteColor === "function" ? siteColor(siteName) : undefined;
+    const color = siteColor(siteName);
 
     return {
       name: siteName,
@@ -228,7 +229,7 @@ const monthlyEmissionsOptions = useMemo(() => {
       barWidth: 14,
       barMaxWidth: 18,
 
-      itemStyle: color ? { color, opacity: 0.9 } : { opacity: 0.9 },
+      itemStyle: { color, opacity: 0.9 },
       emphasis: { focus: "series" },
 
       label: {
@@ -306,8 +307,6 @@ const monthlyEmissionsOptions = useMemo(() => {
     series,
   };
 }, [monthlyBySite, textColor, axisLineColor, splitLineColor]);
-
-
 const intensityOptions = useMemo(() => {
   const months = Array.from(new Set(intensityMonthly.map((r) => r.month))).sort();
   const sites = Array.from(new Set(intensityMonthly.map((r) => r.siteName))).sort();
@@ -453,6 +452,7 @@ const intensityOptions = useMemo(() => {
     series,
   };
 }, [intensityMonthly, textColor, axisLineColor, splitLineColor]);
+
 
   const chartWrapClass = isDark ? "bg-slate-800 rounded-lg p-3" : "bg-white rounded-lg p-3";
 
