@@ -10,12 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.3.2",
     "@tailwindcss/postcss": "^4.1.18",
     "axios": "^1.13.2",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",
+    "html-to-image": "^1.11.13",
     "lucide-react": "^0.563.0",
     "postcss": "^8.5.6",
     "react": "^19.2.3",

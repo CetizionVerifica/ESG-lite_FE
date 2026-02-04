@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo} from "react";
 import Dropdown, { DropdownOption } from "../../components/Dropdown";
 import { generateYearOptions, getMonthLabels } from "../ManagerDashboard/utils/dateUtils";
 import { Site, Category } from "../ManagerDashboard/types";

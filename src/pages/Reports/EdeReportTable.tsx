@@ -37,16 +37,16 @@ const EdeReportTable: React.FC<Props> = ({ totals, bySite, isDark = false }) => 
     : "py-2 px-3 text-sm text-gray-800 border-b";
 
   const muted = isDark ? "text-slate-400" : "text-gray-500";
-  const overallRows = useMemo(() => {
-    if (!totals) return [];
-    const total = totals.total || 0;
+//   const overallRows = useMemo(() => {
+//     if (!totals) return [];
+//     const total = totals.total || 0;
 
-    return [
-      { label: "Scope 1", value: totals.scope1, pct: total ? (totals.scope1 / total) * 100 : 0 },
-      { label: "Scope 2", value: totals.scope2, pct: total ? (totals.scope2 / total) * 100 : 0 },
-      { label: "Scope 3", value: totals.scope3, pct: total ? (totals.scope3 / total) * 100 : 0 },
-    ].map((r) => ({ ...r, pct: Number(r.pct.toFixed(2)) }));
-  }, [totals]);
+//     return [
+//       { label: "Scope 1", value: totals.scope1, pct: total ? (totals.scope1 / total) * 100 : 0 },
+//       { label: "Scope 2", value: totals.scope2, pct: total ? (totals.scope2 / total) * 100 : 0 },
+//       { label: "Scope 3", value: totals.scope3, pct: total ? (totals.scope3 / total) * 100 : 0 },
+//     ].map((r) => ({ ...r, pct: Number(r.pct.toFixed(2)) }));
+//   }, [totals]);
 
   const footerTotals = useMemo(() => {
     const s1 = bySite.reduce((a, b) => a + (b.scope1 || 0), 0);
@@ -55,6 +55,7 @@ const EdeReportTable: React.FC<Props> = ({ totals, bySite, isDark = false }) => 
     const total = bySite.reduce((a, b) => a + (b.total || 0), 0);
     return { s1, s2, s3, total };
   }, [bySite]);
+  console.log("totals", totals)
 
  return (
     <div className="space-y-5">
