@@ -31,6 +31,7 @@ type RenewableKwhBySiteRow = { siteId: number; siteName: string; kwh: number; un
 
 type IntensityMonthlyRow = {
   month: string;
+  siteName: string;
   emissions: number;
   production: number;
   intensity: number;

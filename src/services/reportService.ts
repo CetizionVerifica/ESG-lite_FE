@@ -48,6 +48,7 @@ export interface RenewableKwhBySiteRow {
 }
 export interface IntensityMonthlyRow {
   month: string; // "YYYY-MM"
+  siteName: string;
   emissions: number;
   production: number;
   intensity: number;
