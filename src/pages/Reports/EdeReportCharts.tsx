@@ -35,6 +35,8 @@ const SITE_PALETTE = [
   "#06B6D4",
   "#84CC16",
   "#FB7185",
+  "#F97316",
+  "#8B5CF6",
 ];
 
 function siteColor(siteName: string) {
@@ -219,7 +221,7 @@ const monthlyEmissionsOptions = useMemo(() => {
   }
 
   const series = sites.map((siteName, sIdx) => {
-    const color = siteColor(siteName);
+const color = SITE_PALETTE[sIdx % SITE_PALETTE.length];
 
     return {
       name: siteName,
