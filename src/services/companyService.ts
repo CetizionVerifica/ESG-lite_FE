@@ -30,3 +30,10 @@ export const onboardCompany = async (data: any) => {
   const response = await api.post(`/admin/onboarding/company`, data);
   return response.data;
 };
+
+export const getCompanyNameBySites = async (siteIds: number[]) => {
+  const response = await api.post(`/user/companies/by-sites`, { siteIds });
+  console.log("response", response)
+  return response.data;
+};
+

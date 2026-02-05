@@ -36,9 +36,7 @@ export type ReportPdfImages = {
 };
 
 export type ReportPdfProps = {
-  title?: string;
-  subtitle?: string;
-
+  companyName: string;
   frequency: "yearly" | "monthly";
   year: number;
   month?: number | null;
@@ -61,8 +59,93 @@ const BORDER = "#E2E8F0";
 const HEADER_BG = "#F1F5F9";
 const PAGE_BG = "#FFFFFF";
 const SOFT_BG = "#F8FAFC";
+const DARK_BLUE = "#0F4C75";
+const LIGHT_BLUE = "#0EA5E9";
+const ACCENT_BLUE = "#E0F2FE";
 
 const styles = StyleSheet.create({
+  coverPage: {
+    backgroundColor: "#FFFFFF",
+    position: "relative",
+  },
+
+  coverTopLeft: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: 160,
+    height: 180,
+    backgroundColor: DARK_BLUE,
+  },
+
+  coverTopAccent: {
+    position: "absolute",
+    top: 0,
+    left: 160,
+    width: 100,
+    height: 100,
+    backgroundColor: LIGHT_BLUE,
+  },
+
+  coverBottomCircle: {
+  position: "absolute",
+  bottom: -140,
+  right: -140,
+  width: 420,
+  height: 420,
+  backgroundColor: ACCENT_BLUE,
+  borderRadius: 210, 
+},
+
+  coverContent: {
+    flex: 1,
+    paddingTop: 220,
+    paddingHorizontal: 70,
+    zIndex: 10,
+  },
+
+  coverMainTitle: {
+    fontSize: 38,
+    fontWeight: 700,
+    color: BRAND,
+    marginBottom: 0,
+    lineHeight: 1.2,
+  },
+
+  coverSubtitle: {
+    fontSize: 20,
+    fontWeight: 700,
+    color: BRAND,
+    marginBottom: 40,
+  },
+
+  coverDivider: {
+    width: 130,
+    height: 4,
+    backgroundColor: LIGHT_BLUE,
+    marginBottom: 60,
+  },
+
+  coverMetaSection: {
+    marginTop: 20,
+  },
+
+  coverMetaRow: {
+    marginBottom: 20,
+  },
+
+  coverMetaLabel: {
+    fontSize: 11,
+    color: MUTED,
+    marginBottom: 4,
+  },
+
+  coverMetaValue: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: BRAND,
+  },
+
   page: {
     paddingTop: 26,
     paddingBottom: 42,
@@ -188,17 +271,21 @@ function fmt2(n: number) {
   if (!Number.isFinite(v)) return "0.00";
   return v.toFixed(2);
 }
+
 function fmtPct(n: number) {
   const v = Number(n);
   if (!Number.isFinite(v)) return "0.00%";
   return `${v.toFixed(2)}%`;
 }
+
 function when(cond: boolean, style: any) {
   return cond ? [style] : [];
 }
+
 function uniqSorted(arr: string[]) {
   return Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b));
 }
+
 function chunk<T>(arr: T[], size: number) {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -337,8 +424,7 @@ function ChartSection({
 
 export default function ReportPdf(props: ReportPdfProps) {
   const {
-    title = "EDE Emissions Report",
-    subtitle = "Approved emissions + production data",
+    companyName,
     frequency,
     year,
     month,
@@ -353,12 +439,16 @@ export default function ReportPdf(props: ReportPdfProps) {
     images,
   } = props;
 
+  const title = "Emissions Data Entry Report";
+  const subtitle = "Approved emissions + production data";
   const frequencyText = frequency.toUpperCase();
 
   const periodText =
     frequency === "yearly"
-      ? `Reporting period: Year ${year}`
-      : `Reporting period: ${year}-${String(month || 1).padStart(2, "0")}`;
+      ? `${year}`
+      : `${new Date(year, (month || 1) - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })}`;
+
+  const currentDate = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   const totalsRows: (string | number)[][] = [
     ["Scope 1 (tCO2e)", fmt2(totals.scope1)],
@@ -390,6 +480,36 @@ export default function ReportPdf(props: ReportPdfProps) {
 
   return (
     <Document>
+      <Page size="A4" style={styles.coverPage}>
+        <View style={styles.coverTopLeft} />
+        <View style={styles.coverTopAccent} />
+        <View style={styles.coverBottomCircle} />
+
+        <View style={styles.coverContent}>
+          <Text style={styles.coverMainTitle}>EMISSION DATA ENTRY</Text>
+          <Text style={styles.coverSubtitle}>REPORT</Text>
+
+          <View style={styles.coverDivider} />
+
+          <View style={styles.coverMetaSection}>
+            <View style={styles.coverMetaRow}>
+              <Text style={styles.coverMetaLabel}>Reporting Period:</Text>
+              <Text style={styles.coverMetaValue}>{periodText}</Text>
+            </View>
+
+            <View style={styles.coverMetaRow}>
+              <Text style={styles.coverMetaLabel}>Date published:</Text>
+              <Text style={styles.coverMetaValue}>{currentDate}</Text>
+            </View>
+
+            <View style={styles.coverMetaRow}>
+              <Text style={styles.coverMetaLabel}>Prepared for:</Text>
+              <Text style={styles.coverMetaValue}>{companyName}</Text>
+            </View>
+          </View>
+        </View>
+      </Page>
+
       <Page size="A4" style={styles.page}>
         <View style={styles.headerCard}>
           <Text style={styles.title}>{title}</Text>
@@ -397,7 +517,7 @@ export default function ReportPdf(props: ReportPdfProps) {
 
           <View style={styles.metaRow}>
             <Text style={styles.metaLeft}>
-              {frequencyText} • {periodText}
+              {frequencyText} • Reporting period: {periodText}
             </Text>
             <Text style={styles.metaRight}>Generated Report</Text>
           </View>
@@ -473,7 +593,7 @@ export default function ReportPdf(props: ReportPdfProps) {
           <Text style={styles.subtitle}>Monthly totals and supplementary metrics</Text>
           <View style={styles.metaRow}>
             <Text style={styles.metaLeft}>
-              {frequencyText} • {periodText}
+              {frequencyText} • Reporting period: {periodText}
             </Text>
             <Text style={styles.metaRight}>Sites: {siteNamesText}</Text>
           </View>
@@ -565,7 +685,7 @@ export default function ReportPdf(props: ReportPdfProps) {
           <Text style={styles.subtitle}>Emissions analysis and trends</Text>
           <View style={styles.metaRow}>
             <Text style={styles.metaLeft}>
-              {frequencyText} • {periodText}
+              {frequencyText} • Reporting period: {periodText}
             </Text>
             <Text style={styles.metaRight}>Sites: {siteNamesText}</Text>
           </View>
@@ -592,7 +712,7 @@ export default function ReportPdf(props: ReportPdfProps) {
           <Text style={styles.subtitle}>Renewable energy metrics</Text>
           <View style={styles.metaRow}>
             <Text style={styles.metaLeft}>
-              {frequencyText} • {periodText}
+              {frequencyText} • Reporting period: {periodText}
             </Text>
             <Text style={styles.metaRight}>Sites: {siteNamesText}</Text>
           </View>
@@ -619,7 +739,7 @@ export default function ReportPdf(props: ReportPdfProps) {
           <Text style={styles.subtitle}>Intensity analysis</Text>
           <View style={styles.metaRow}>
             <Text style={styles.metaLeft}>
-              {frequencyText} • {periodText}
+              {frequencyText} • Reporting period: {periodText}
             </Text>
             <Text style={styles.metaRight}>Sites: {siteNamesText}</Text>
           </View>

@@ -9,6 +9,7 @@ import EdeReportCharts from "./EdeReportCharts";
 
 import { getEdeReport } from "../../services/reportService";
 import { downloadEdeReportPdf } from "./downloadPdf";
+import { getCompanyNameBySites } from "../../services/companyService";
 
 type Frequency = "yearly" | "monthly";
 
@@ -166,9 +167,14 @@ const EdeReports = () => {
     const categoriesText =
       selectedCategoryIds.length === 0 ? "All categories" : `${selectedCategoryIds.length} categories`;
 
+    const siteIds = reportData.bySite.map((site) => site.siteId);
+    
+    const companyData = await getCompanyNameBySites(siteIds);
+
     const reportProps = {
       title: "EDE Emissions Report",
       subtitle: "Approved emissions + production data",
+    companyName: companyData.companyName || "Company Name",
       frequency,
       year,
       month: frequency === "monthly" ? month : null,

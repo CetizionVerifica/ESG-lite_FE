@@ -34,7 +34,7 @@ export async function downloadEdeReportPdf(
     try {
       images[key] = await captureNodeAsPng(node);
     } catch (err) {
-      console.error(`Chart capture failed for ${key}:`, err);
+      //console.error(`Chart capture failed for ${key}:`, err);
     }
   }
 
