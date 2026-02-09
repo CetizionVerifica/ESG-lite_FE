@@ -71,7 +71,8 @@ const Sidebar = () => {
     { to: "manager-dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
     { to: "data-manage", label: "Emissions Data", icon: <FileSpreadsheet size={20} /> },
     { to: "manage-production-data", label: "Production Data", icon: <Factory size={20} /> },
-    { to : "ede-reports", label: "EDE Reports", icon: <FolderTree size={20} /> },
+    { to : "ede-reports", label: "EDE Report", icon: <FolderTree size={20} /> },
+    { to : "ghg-reports", label : "GHG Report", icon : <FolderTree size={20} />}
   ];
 
   const getNavLinks = (): NavItem[] => {
