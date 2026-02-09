@@ -22,6 +22,12 @@ import { UnitSelector, EmissionPreview, ValidationError, DocumentUploadModal } f
 import {
   Category,
   ColumnEntity,
+  ColumnConfig,
+  ColumnDependencies,
+  DependentOptionsMap,
+  EmissionCategoryMapping,
+  ColumnOptionsMap,
+  DropdownOptionValue,
   EmissionFactor,
   EmissionRow,
   EmissionStatus,
@@ -67,6 +73,12 @@ const UserDataEntryPage = () => {
   const [units, setUnits] = useState<UnitData[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Dependent dropdown configuration state
+  const [columnOptions, setColumnOptions] = useState<ColumnOptionsMap>({});
+  const [columnDependencies, setColumnDependencies] = useState<ColumnDependencies>({});
+  const [dependentOptions, setDependentOptions] = useState<DependentOptionsMap>({});
+  const [emissionCategoryMapping, setEmissionCategoryMapping] = useState<EmissionCategoryMapping>({});
+
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalRows, setModalRows] = useState<ModalRow[]>([]);
@@ -86,11 +98,27 @@ const UserDataEntryPage = () => {
     ? parseInt(selectedDate.substring(0, 4)) - 1
     : undefined;
 
+  // Compute select column names (columns that are dropdowns, not numeric activity data)
+  const selectColumnNames = useMemo(() => {
+    const names = new Set<string>();
+    // Add columns with configured options
+    dynamicColumns.forEach(col => {
+      if (columnOptions[col.pk_id.toString()]?.length > 0) {
+        names.add(col.column_name);
+      }
+    });
+    // Add parent columns (from columnDependencies values)
+    Object.values(columnDependencies).forEach(parentName => names.add(parentName));
+    // Add child columns (from columnDependencies keys)
+    Object.keys(columnDependencies).forEach(childName => names.add(childName));
+    return Array.from(names);
+  }, [dynamicColumns, columnOptions, columnDependencies]);
+
   // ---------------------------------------------------------------------------
   // Hooks
   // ---------------------------------------------------------------------------
   const { getExpectedUnit, calculateEmission } =
-    useEmissionCalculation(emissionFactors, targetYear);
+    useEmissionCalculation(emissionFactors, targetYear, dynamicColumns, selectColumnNames);
 
   // ---------------------------------------------------------------------------
   // Derived Data (continued)
@@ -153,8 +181,12 @@ const UserDataEntryPage = () => {
         getUserUnitsBySiteAndCategory(siteId, selectedCategory),
       ]);
 
-      const config = configs[0];
+      const config = configs[0] as ColumnConfig | undefined;
       setDynamicColumns(config?.columns || []);
+      setColumnOptions(config?.column_options || {});
+      setColumnDependencies(config?.column_dependencies || {});
+      setDependentOptions(config?.dependent_options || {});
+      setEmissionCategoryMapping(config?.emission_category_mapping || {});
       setEmissions(flattenEmissions(emissionsData));
       setEmissionFactors(factors);
       setUnits(unitsData);
@@ -169,6 +201,198 @@ const UserDataEntryPage = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // ---------------------------------------------------------------------------
+  // Dependent Dropdown Helpers
+  // ---------------------------------------------------------------------------
+
+  // Check if a column is a parent column (has dependents)
+  const isParentColumn = (columnName: string): boolean => {
+    return Object.values(columnDependencies).includes(columnName);
+  };
+
+  // Check if a column is a dependent column
+  const isDependentColumn = (columnName: string): boolean => {
+    return columnName in columnDependencies;
+  };
+
+  // Get the parent column name for a dependent column
+  const getParentColumnName = (columnName: string): string | null => {
+    return columnDependencies[columnName] || null;
+  };
+
+  // Get dropdown options for a column
+  const getColumnDropdownOptions = (
+    columnName: string,
+    columnId: number,
+    parentValue?: string
+  ): DropdownOptionValue[] => {
+    // If it's a dependent column and we have a parent value, use dependent_options
+    if (isDependentColumn(columnName) && parentValue) {
+      // The parentValue is the stored ID, but dependent_options is keyed by label
+      // We need to convert the parent ID to its label first
+      const parentColName = getParentColumnName(columnName);
+      let parentLabel = parentValue;
+
+      if (parentColName) {
+        const parentColEntity = dynamicColumns.find(col => col.column_name === parentColName);
+        if (parentColEntity) {
+          const parentOptions = columnOptions[parentColEntity.pk_id.toString()];
+          if (parentOptions) {
+            const parentOption = parentOptions.find(opt => String(opt.id) === parentValue);
+            if (parentOption) {
+              parentLabel = parentOption.label;
+            }
+          }
+        }
+      }
+
+      // First try exact match
+      let depOptions = dependentOptions[columnName]?.[parentLabel];
+
+      // If no exact match, try case-insensitive lookup
+      if (!depOptions || depOptions.length === 0) {
+        const childDeps = dependentOptions[columnName];
+        if (childDeps) {
+          const parentLabelLower = parentLabel.toLowerCase();
+          for (const [key, options] of Object.entries(childDeps)) {
+            if (key.toLowerCase() === parentLabelLower) {
+              depOptions = options;
+              break;
+            }
+          }
+        }
+      }
+
+      if (depOptions && depOptions.length > 0) {
+        return depOptions;
+      }
+    }
+
+    // If it's a parent column, use column_options (by column id)
+    if (isParentColumn(columnName)) {
+      const options = columnOptions[columnId.toString()];
+      if (options && options.length > 0) {
+        return options;
+      }
+    }
+
+    // Fallback to column_options by column id for any select column
+    const options = columnOptions[columnId.toString()];
+    if (options && options.length > 0) {
+      return options;
+    }
+
+    return [];
+  };
+
+  // Helper to get the label for a stored option ID
+  const getOptionLabel = (columnName: string, columnId: number, storedValue: string, parentValue?: string): string => {
+    // For dependent columns, check dependentOptions first
+    if (isDependentColumn(columnName) && parentValue) {
+      // First try exact match
+      let depOptions = dependentOptions[columnName]?.[parentValue];
+
+      // If no exact match, try case-insensitive lookup
+      if (!depOptions) {
+        const childDeps = dependentOptions[columnName];
+        if (childDeps) {
+          const parentValueLower = parentValue.toLowerCase();
+          for (const [key, options] of Object.entries(childDeps)) {
+            if (key.toLowerCase() === parentValueLower) {
+              depOptions = options;
+              break;
+            }
+          }
+        }
+      }
+
+      if (depOptions) {
+        const option = depOptions.find(opt => String(opt.id) === storedValue);
+        if (option) return option.label;
+      }
+    }
+
+    // Check column_options
+    const options = columnOptions[columnId.toString()];
+    if (options) {
+      const option = options.find(opt => String(opt.id) === storedValue);
+      if (option) return option.label;
+    }
+
+    // Fallback to stored value if no label found
+    return storedValue;
+  };
+
+  // Determine emission category from mapping based on row values
+  const getAutoEmissionCategory = (row: ModalRow): string | null => {
+    if (Object.keys(emissionCategoryMapping).length === 0) {
+      return null;
+    }
+
+    // Build the mapping key from dependent column values
+    // Find all parent-child pairs and build the key
+    const keyParts: string[] = [];
+
+    // Get parent columns first (sorted for consistency)
+    const parentColumns = [...new Set(Object.values(columnDependencies))].sort();
+
+    for (const parentCol of parentColumns) {
+      const parentValue = row[parentCol];
+      if (!parentValue) return null;
+
+      // Find the column entity to get the pk_id
+      const parentColEntity = dynamicColumns.find(col => col.column_name === parentCol);
+      const parentLabel = parentColEntity
+        ? getOptionLabel(parentCol, parentColEntity.pk_id, String(parentValue))
+        : String(parentValue);
+
+      keyParts.push(parentLabel);
+
+      // Find the child column for this parent
+      const childCol = Object.keys(columnDependencies).find(
+        (child) => columnDependencies[child] === parentCol
+      );
+
+      if (childCol) {
+        const childValue = row[childCol];
+        if (!childValue) return null;
+
+        // Find the column entity to get the pk_id
+        const childColEntity = dynamicColumns.find(col => col.column_name === childCol);
+        const childLabel = childColEntity
+          ? getOptionLabel(childCol, childColEntity.pk_id, String(childValue), parentLabel)
+          : String(childValue);
+
+        keyParts.push(childLabel);
+      }
+    }
+
+    const mappingKey = keyParts.join("|");
+
+    // First try exact match
+    if (emissionCategoryMapping[mappingKey]) {
+      return emissionCategoryMapping[mappingKey];
+    }
+
+    // If no exact match, try case-insensitive lookup
+    const mappingKeyLower = mappingKey.toLowerCase();
+    for (const [key, value] of Object.entries(emissionCategoryMapping)) {
+      if (key.toLowerCase() === mappingKeyLower) {
+        return value;
+      }
+    }
+
+    return null;
+  };
+
+  // Check if a column should show as a select dropdown
+  const isSelectColumn = (column: ColumnEntity): boolean => {
+    const hasColumnOptions = columnOptions[column.pk_id.toString()]?.length > 0;
+    const isParent = isParentColumn(column.column_name);
+    const isDependent = isDependentColumn(column.column_name);
+    return column.column_type === "select" || hasColumnOptions || isParent || isDependent;
+  };
 
   // ---------------------------------------------------------------------------
   // Modal Handlers
@@ -202,9 +426,33 @@ const UserDataEntryPage = () => {
     value: string,
   ) => {
     setModalRows((prev) =>
-      prev.map((row) =>
-        row.id === rowId ? { ...row, [columnName]: value } : row,
-      ),
+      prev.map((row) => {
+        if (row.id !== rowId) return row;
+
+        const updatedRow = { ...row, [columnName]: value };
+
+        // If this is a parent column, clear dependent column values
+        if (isParentColumn(columnName)) {
+          // Find all columns that depend on this parent
+          Object.keys(columnDependencies).forEach((childCol) => {
+            if (columnDependencies[childCol] === columnName) {
+              updatedRow[childCol] = "";
+            }
+          });
+        }
+
+        // Check if we should auto-set the emission_category
+        const autoCategory = getAutoEmissionCategory(updatedRow);
+        if (autoCategory) {
+          updatedRow.emission_category = autoCategory;
+        } else if (isParentColumn(columnName) || isDependentColumn(columnName)) {
+          // Clear emission_category when a mapped column changes but no valid mapping exists yet
+          // This ensures the old value doesn't persist when user changes dropdown selections
+          updatedRow.emission_category = "";
+        }
+
+        return updatedRow;
+      }),
     );
   };
 
@@ -377,14 +625,35 @@ const UserDataEntryPage = () => {
       editable: false,
       type: "text" as const,
     },
-    ...filteredColumns.map((col) => ({
-      key: col.column_name as keyof EmissionRow,
-      label: col.column_name,
-      editable: true,
-      type: (col.column_type === "number" ? "number" : "text") as
-        | "number"
-        | "text",
-    })),
+    ...filteredColumns.map((col) => {
+      const isDropdown = isSelectColumn(col);
+      return {
+        key: col.column_name as keyof EmissionRow,
+        label: col.column_name,
+        editable: true,
+        type: (col.column_type === "number" ? "number" : "text") as
+          | "number"
+          | "text",
+        // For dropdown columns, render the label instead of the stored ID
+        ...(isDropdown && {
+          render: (value: string, row: EmissionRow) => {
+            if (!value) return "";
+            // For dependent columns, we need the parent value to look up the correct label
+            const parentColName = getParentColumnName(col.column_name);
+            const parentValue = parentColName ? row[parentColName] as string : undefined;
+            // Convert parent ID to label if needed
+            let parentLabel = parentValue;
+            if (parentValue && parentColName) {
+              const parentColEntity = dynamicColumns.find(c => c.column_name === parentColName);
+              if (parentColEntity) {
+                parentLabel = getOptionLabel(parentColName, parentColEntity.pk_id, parentValue);
+              }
+            }
+            return getOptionLabel(col.column_name, col.pk_id, String(value), parentLabel);
+          },
+        }),
+      };
+    }),
     {
       key: "activity_data_unit" as keyof EmissionRow,
       label: "Activity Unit",
@@ -430,6 +699,10 @@ const UserDataEntryPage = () => {
   // ---------------------------------------------------------------------------
   const resetDataState = () => {
     setDynamicColumns([]);
+    setColumnOptions({});
+    setColumnDependencies({});
+    setDependentOptions({});
+    setEmissionCategoryMapping({});
     setEmissions([]);
     setEmissionFactors([]);
     setUnits([]);
@@ -531,50 +804,109 @@ const UserDataEntryPage = () => {
                 <tr key={row.id} className="hover:bg-gray-50">
                   {/* Emission Category Select */}
                   <td className="border border-gray-300 px-2 py-2">
-                    <select
-                      value={row.emission_category || ""}
-                      onChange={(e) =>
-                        handleModalRowChange(
-                          row.id,
-                          "emission_category",
-                          e.target.value,
-                        )
-                      }
-                      className="w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
-                    >
-                      <option value="">Select Category</option>
-                      {emissionFactors.map((factor) => (
-                        <option
-                          key={factor.emission_factor_id}
-                          value={factor.emission_category_name}
-                        >
-                          {factor.emission_category_name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-
-                  {/* Dynamic Columns */}
-                  {filteredColumns.map((col) => (
-                    <td
-                      key={col.pk_id}
-                      className="border border-gray-300 px-2 py-2"
-                    >
-                      <input
-                        type={col.column_type === "number" ? "number" : "text"}
-                        value={row[col.column_name] || ""}
+                    {Object.keys(emissionCategoryMapping).length > 0 ? (
+                      // Auto-mapped mode: show read-only field with auto-determined value
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={row.emission_category || ""}
+                          readOnly
+                          className={`w-full border px-2 py-1 rounded ${
+                            row.emission_category
+                              ? "border-green-400 bg-green-50 text-green-800"
+                              : "border-gray-300 bg-gray-100 text-gray-500"
+                          }`}
+                          placeholder="Auto-determined from selections"
+                        />
+                        {row.emission_category && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-green-600">
+                            Auto
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      // Manual mode: show dropdown for selection
+                      <select
+                        value={row.emission_category || ""}
                         onChange={(e) =>
                           handleModalRowChange(
                             row.id,
-                            col.column_name,
+                            "emission_category",
                             e.target.value,
                           )
                         }
                         className="w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
-                        placeholder={col.column_name}
-                      />
-                    </td>
-                  ))}
+                      >
+                        <option value="">Select Category</option>
+                        {emissionFactors.map((factor) => (
+                          <option
+                            key={factor.emission_factor_id}
+                            value={factor.emission_category_name}
+                          >
+                            {factor.emission_category_name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </td>
+
+                  {/* Dynamic Columns */}
+                  {filteredColumns.map((col) => {
+                    const parentColName = getParentColumnName(col.column_name);
+                    const parentValue = parentColName ? row[parentColName] : undefined;
+                    const options = getColumnDropdownOptions(col.column_name, col.pk_id, parentValue);
+                    const showAsSelect = isSelectColumn(col) && options.length > 0;
+                    const isDisabledDependent = isDependentColumn(col.column_name) && !parentValue;
+
+                    return (
+                      <td
+                        key={col.pk_id}
+                        className="border border-gray-300 px-2 py-2"
+                      >
+                        {showAsSelect ? (
+                          <select
+                            value={row[col.column_name] || ""}
+                            onChange={(e) =>
+                              handleModalRowChange(
+                                row.id,
+                                col.column_name,
+                                e.target.value,
+                              )
+                            }
+                            disabled={isDisabledDependent}
+                            className={`w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300 ${
+                              isDisabledDependent ? "bg-gray-100 cursor-not-allowed" : ""
+                            }`}
+                          >
+                            <option value="">
+                              {isDisabledDependent
+                                ? `Select ${parentColName} first`
+                                : `Select ${col.column_name}`}
+                            </option>
+                            {options.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type={col.column_type === "number" ? "number" : "text"}
+                            value={row[col.column_name] || ""}
+                            onChange={(e) =>
+                              handleModalRowChange(
+                                row.id,
+                                col.column_name,
+                                e.target.value,
+                              )
+                            }
+                            className="w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                            placeholder={col.column_name}
+                          />
+                        )}
+                      </td>
+                    );
+                  })}
 
                   {/* Unit Selector */}
                   <td className="border border-gray-300 px-2 py-2">

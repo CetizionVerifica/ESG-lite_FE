@@ -5,8 +5,10 @@ import {
   getColumnConfigsBySiteAndCategory,
   deleteColumnConfig,
   updateColumnConfig,
-  updateColumnOptions,
   ColumnOptionsMap,
+  ColumnDependencies,
+  DependentOptionsMap,
+  EmissionCategoryMapping,
 } from "../services/columnConfigService";
 import { getColumns, DropdownOptionValue } from "../services/columnService";
 import { Table, Column } from "./Table";
@@ -38,6 +40,9 @@ interface ColumnConfigEntity {
   category: Category;
   columns: ColumnEntity[];
   column_options?: ColumnOptionsMap;
+  column_dependencies?: ColumnDependencies;
+  dependent_options?: DependentOptionsMap;
+  emission_category_mapping?: EmissionCategoryMapping;
 }
 
 interface ColumnConfigListProps {
@@ -63,6 +68,14 @@ const ColumnConfigList = ({
   const [editingOptions, setEditingOptions] = useState<DropdownOptionValue[]>([]);
   const [newOptionId, setNewOptionId] = useState("");
   const [newOptionLabel, setNewOptionLabel] = useState("");
+
+  // Modal state for dependent dropdown configuration
+  const [dependencyModalOpen, setDependencyModalOpen] = useState(false);
+  const [editingDependencies, setEditingDependencies] = useState<ColumnDependencies>({});
+  const [editingDependentOptions, setEditingDependentOptions] = useState<DependentOptionsMap>({});
+  const [editingEmissionMapping, setEditingEmissionMapping] = useState<EmissionCategoryMapping>({});
+  const [newMappingKey, setNewMappingKey] = useState("");
+  const [newMappingValue, setNewMappingValue] = useState("");
 
   const loadData = useCallback(async () => {
     try {
@@ -192,15 +205,20 @@ const ColumnConfigList = ({
     if (!selectedConfig || !selectedColumn) return;
 
     try {
-      await updateColumnOptions(selectedConfig.pk_id, selectedColumn.pk_id, editingOptions);
+      // Build the updated column_options object
+      const updatedColumnOptions = { ...(selectedConfig.column_options || {}) };
+      updatedColumnOptions[selectedColumn.pk_id.toString()] = editingOptions;
+
+      // Use updateColumnConfig to save the entire column_options object
+      await updateColumnConfig(selectedConfig.pk_id, {
+        column_options: updatedColumnOptions,
+      });
 
       // Update local state
       setColumnConfigs((prev) =>
         prev.map((item) => {
           if (item.pk_id === selectedConfig.pk_id) {
-            const updatedOptions = { ...(item.column_options || {}) };
-            updatedOptions[selectedColumn.pk_id.toString()] = editingOptions;
-            return { ...item, column_options: updatedOptions };
+            return { ...item, column_options: updatedColumnOptions };
           }
           return item;
         })
@@ -214,9 +232,134 @@ const ColumnConfigList = ({
     }
   };
 
-  // Get select-type columns from a config
-  const getSelectColumns = (config: ColumnConfigEntity) => {
-    return config.columns.filter((col) => col.column_type === "select");
+  // Get all columns for flexible configuration (allow adding dropdown options to any column)
+  // This enables admins to configure dropdowns for any column in a site-specific config
+  const getAllConfigurableColumns = (config: ColumnConfigEntity) => {
+    return config.columns;
+  };
+
+  // Open dependency configuration modal
+  const openDependencyModal = (config: ColumnConfigEntity) => {
+    setSelectedConfig(config);
+    setEditingDependencies(config.column_dependencies || {});
+    setEditingDependentOptions(config.dependent_options || {});
+    setEditingEmissionMapping(config.emission_category_mapping || {});
+    setNewMappingKey("");
+    setNewMappingValue("");
+    setDependencyModalOpen(true);
+  };
+
+  // Save dependency configuration
+  const handleSaveDependencies = async () => {
+    if (!selectedConfig) return;
+
+    try {
+      await updateColumnConfig(selectedConfig.pk_id, {
+        column_dependencies: editingDependencies,
+        dependent_options: editingDependentOptions,
+        emission_category_mapping: editingEmissionMapping,
+      });
+
+      // Update local state
+      setColumnConfigs((prev) =>
+        prev.map((item) => {
+          if (item.pk_id === selectedConfig.pk_id) {
+            return {
+              ...item,
+              column_dependencies: editingDependencies,
+              dependent_options: editingDependentOptions,
+              emission_category_mapping: editingEmissionMapping,
+            };
+          }
+          return item;
+        })
+      );
+
+      setDependencyModalOpen(false);
+      setSelectedConfig(null);
+    } catch (error) {
+      console.error("Error saving dependency configuration:", error);
+    }
+  };
+
+  // Add a column dependency
+  const handleAddDependency = (childCol: string, parentCol: string) => {
+    if (!childCol || !parentCol || childCol === parentCol) return;
+    setEditingDependencies((prev) => ({ ...prev, [childCol]: parentCol }));
+  };
+
+  // Remove a column dependency
+  const handleRemoveDependency = (childCol: string) => {
+    setEditingDependencies((prev) => {
+      const updated = { ...prev };
+      delete updated[childCol];
+      return updated;
+    });
+    // Also remove dependent options for this child
+    setEditingDependentOptions((prev) => {
+      const updated = { ...prev };
+      delete updated[childCol];
+      return updated;
+    });
+  };
+
+  // Add dependent options for a child column based on parent value
+  const handleAddDependentOption = (
+    childCol: string,
+    parentValue: string,
+    optionId: string,
+    optionLabel: string
+  ) => {
+    if (!childCol || !parentValue || !optionId || !optionLabel) return;
+    setEditingDependentOptions((prev) => {
+      const updated = { ...prev };
+      if (!updated[childCol]) updated[childCol] = {};
+      if (!updated[childCol][parentValue]) updated[childCol][parentValue] = [];
+      // Check for duplicate
+      if (updated[childCol][parentValue].some((o) => String(o.id) === optionId)) return prev;
+      updated[childCol][parentValue] = [
+        ...updated[childCol][parentValue],
+        { id: optionId, label: optionLabel },
+      ];
+      return updated;
+    });
+  };
+
+  // Remove a dependent option
+  const handleRemoveDependentOption = (childCol: string, parentValue: string, optionIndex: number) => {
+    setEditingDependentOptions((prev) => {
+      const updated = { ...prev };
+      if (updated[childCol]?.[parentValue]) {
+        updated[childCol][parentValue] = updated[childCol][parentValue].filter((_, i) => i !== optionIndex);
+        if (updated[childCol][parentValue].length === 0) {
+          delete updated[childCol][parentValue];
+        }
+        if (Object.keys(updated[childCol]).length === 0) {
+          delete updated[childCol];
+        }
+      }
+      return updated;
+    });
+  };
+
+  // Add emission category mapping
+  const handleAddMapping = () => {
+    if (!newMappingKey.trim() || !newMappingValue.trim()) return;
+    setEditingEmissionMapping((prev) => ({
+      ...prev,
+      [newMappingKey.trim()]: newMappingValue.trim(),
+    }));
+    setNewMappingKey("");
+    setNewMappingValue("");
+  };
+
+  // Remove emission category mapping
+  const handleRemoveMapping = (key: string) => {
+    setEditingEmissionMapping((prev) => {
+      const updated = { ...prev };
+      delete updated[key];
+      return updated;
+    });
   };
 
   // Theme classes
@@ -281,14 +424,15 @@ const ColumnConfigList = ({
       label: "Dropdown Options",
       editable: false,
       render: (_value, row) => {
-        const selectColumns = getSelectColumns(row);
-        if (selectColumns.length === 0) {
-          return <span className={isDark ? "text-slate-500" : "text-gray-400"}>No select columns</span>;
+        const configurableColumns = getAllConfigurableColumns(row);
+        if (configurableColumns.length === 0) {
+          return <span className={isDark ? "text-slate-500" : "text-gray-400"}>No columns</span>;
         }
         return (
           <div className="flex flex-wrap gap-1">
-            {selectColumns.map((col) => {
+            {configurableColumns.map((col: ColumnEntity) => {
               const optionsCount = row.column_options?.[col.pk_id.toString()]?.length || 0;
+              const hasOptions = optionsCount > 0;
               return (
                 <button
                   key={col.pk_id}
@@ -297,17 +441,52 @@ const ColumnConfigList = ({
                     openOptionsModal(row, col);
                   }}
                   className={`text-xs px-2 py-1 rounded ${
-                    isDark
-                      ? "bg-slate-700 text-blue-400 hover:bg-slate-600"
-                      : "bg-gray-100 text-blue-600 hover:bg-gray-200"
+                    hasOptions
+                      ? isDark
+                        ? "bg-green-800 text-green-200 hover:bg-green-700"
+                        : "bg-green-100 text-green-700 hover:bg-green-200"
+                      : isDark
+                        ? "bg-slate-700 text-slate-400 hover:bg-slate-600"
+                        : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                   }`}
-                  title={`Edit options for ${col.column_name}`}
+                  title={hasOptions ? `Edit ${optionsCount} options for ${col.column_name}` : `Add options for ${col.column_name}`}
                 >
                   {col.column_name}: {optionsCount}
                 </button>
               );
             })}
           </div>
+        );
+      },
+    },
+    {
+      key: "emission_category_mapping",
+      label: "Dependencies",
+      editable: false,
+      render: (_value, row) => {
+        const depCount = Object.keys(row.column_dependencies || {}).length;
+        const mappingCount = Object.keys(row.emission_category_mapping || {}).length;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              openDependencyModal(row);
+            }}
+            className={`text-xs px-2 py-1 rounded ${
+              depCount > 0 || mappingCount > 0
+                ? isDark
+                  ? "bg-green-800 text-green-200 hover:bg-green-700"
+                  : "bg-green-100 text-green-700 hover:bg-green-200"
+                : isDark
+                  ? "bg-slate-700 text-slate-400 hover:bg-slate-600"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+            title="Configure dependent dropdowns and emission mappings"
+          >
+            {depCount > 0 || mappingCount > 0
+              ? `${depCount} deps, ${mappingCount} mappings`
+              : "Configure"}
+          </button>
         );
       },
     },
@@ -450,6 +629,283 @@ const ColumnConfigList = ({
               className={buttonPrimaryClass}
             >
               Save Options
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Dependency Configuration Modal */}
+      <Modal
+        isOpen={dependencyModalOpen}
+        onClose={() => {
+          setDependencyModalOpen(false);
+          setSelectedConfig(null);
+        }}
+        title={`Dependent Dropdowns & Mappings (${selectedConfig?.site?.name || ""} - ${selectedConfig?.category?.category_name || ""})`}
+        isDark={isDark}
+      >
+        <div className="space-y-6 max-h-[70vh] overflow-y-auto">
+          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+            Configure dependent dropdowns where one column&apos;s options depend on another column&apos;s selection,
+            and map combinations to emission categories.
+          </p>
+
+          {/* Section 1: Column Dependencies */}
+          <div className={`p-4 rounded-md ${isDark ? "bg-slate-700" : "bg-gray-50"}`}>
+            <h3 className={`font-medium mb-3 ${isDark ? "text-slate-200" : "text-gray-700"}`}>
+              1. Column Dependencies
+            </h3>
+            <p className={`text-xs mb-3 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              Define which column depends on which (e.g., &quot;Disposal Method&quot; depends on &quot;Material&quot;)
+            </p>
+
+            {/* Current Dependencies */}
+            {Object.keys(editingDependencies).length > 0 && (
+              <div className="mb-3 space-y-2">
+                {Object.entries(editingDependencies).map(([child, parent]) => (
+                  <div key={child} className={`flex items-center justify-between p-2 rounded ${isDark ? "bg-slate-600" : "bg-white border"}`}>
+                    <span className={`text-sm ${isDark ? "text-slate-200" : "text-gray-700"}`}>
+                      <strong>{child}</strong> depends on <strong>{parent}</strong>
+                    </span>
+                    <button
+                      onClick={() => handleRemoveDependency(child)}
+                      className={buttonDangerClass}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add Dependency */}
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                id="dep-child"
+                className={inputClass}
+                defaultValue=""
+              >
+                <option value="">Child Column...</option>
+                {selectedConfig?.columns.map((col) => (
+                  <option key={col.pk_id} value={col.column_name}>{col.column_name}</option>
+                ))}
+              </select>
+              <select
+                id="dep-parent"
+                className={inputClass}
+                defaultValue=""
+              >
+                <option value="">Parent Column...</option>
+                {selectedConfig?.columns.map((col) => (
+                  <option key={col.pk_id} value={col.column_name}>{col.column_name}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={() => {
+                const childEl = document.getElementById("dep-child") as HTMLSelectElement;
+                const parentEl = document.getElementById("dep-parent") as HTMLSelectElement;
+                if (childEl && parentEl) {
+                  handleAddDependency(childEl.value, parentEl.value);
+                  childEl.value = "";
+                  parentEl.value = "";
+                }
+              }}
+              className={`mt-2 ${buttonPrimaryClass}`}
+            >
+              Add Dependency
+            </button>
+          </div>
+
+          {/* Section 2: Dependent Options */}
+          <div className={`p-4 rounded-md ${isDark ? "bg-slate-700" : "bg-gray-50"}`}>
+            <h3 className={`font-medium mb-3 ${isDark ? "text-slate-200" : "text-gray-700"}`}>
+              2. Dependent Options
+            </h3>
+            <p className={`text-xs mb-3 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              Define options for child columns based on parent selection (e.g., when Material=&quot;Paper&quot;, show these Disposal Methods)
+            </p>
+
+            {/* Current Dependent Options */}
+            {Object.keys(editingDependentOptions).length > 0 && (
+              <div className="mb-3 space-y-3">
+                {Object.entries(editingDependentOptions).map(([childCol, parentOptions]) => (
+                  <div key={childCol} className={`p-2 rounded ${isDark ? "bg-slate-600" : "bg-white border"}`}>
+                    <div className={`font-medium text-sm mb-2 ${isDark ? "text-slate-200" : "text-gray-700"}`}>
+                      {childCol} options:
+                    </div>
+                    {Object.entries(parentOptions).map(([parentVal, options]) => (
+                      <div key={parentVal} className="ml-2 mb-2">
+                        <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                          When parent = &quot;{parentVal}&quot;:
+                        </span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {options.map((opt, idx) => (
+                            <span
+                              key={idx}
+                              className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? "bg-slate-500" : "bg-gray-200"}`}
+                            >
+                              {opt.label}
+                              <button
+                                onClick={() => handleRemoveDependentOption(childCol, parentVal, idx)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                &times;
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add Dependent Option */}
+            {Object.keys(editingDependencies).length > 0 && (
+              <div className="grid grid-cols-4 gap-2">
+                <select id="depopt-child" className={inputClass} defaultValue="">
+                  <option value="">Child Col</option>
+                  {Object.keys(editingDependencies).map((child) => (
+                    <option key={child} value={child}>{child}</option>
+                  ))}
+                </select>
+                <input
+                  id="depopt-parent-val"
+                  type="text"
+                  placeholder="Parent Value"
+                  className={inputClass}
+                />
+                <input
+                  id="depopt-id"
+                  type="text"
+                  placeholder="Option ID"
+                  className={inputClass}
+                />
+                <input
+                  id="depopt-label"
+                  type="text"
+                  placeholder="Option Label"
+                  className={inputClass}
+                />
+              </div>
+            )}
+            {Object.keys(editingDependencies).length > 0 && (
+              <button
+                onClick={() => {
+                  const childEl = document.getElementById("depopt-child") as HTMLSelectElement;
+                  const parentValEl = document.getElementById("depopt-parent-val") as HTMLInputElement;
+                  const idEl = document.getElementById("depopt-id") as HTMLInputElement;
+                  const labelEl = document.getElementById("depopt-label") as HTMLInputElement;
+                  if (childEl && parentValEl && idEl && labelEl) {
+                    handleAddDependentOption(childEl.value, parentValEl.value, idEl.value, labelEl.value);
+                    idEl.value = "";
+                    labelEl.value = "";
+                  }
+                }}
+                className={`mt-2 ${buttonPrimaryClass}`}
+              >
+                Add Option
+              </button>
+            )}
+            {Object.keys(editingDependencies).length === 0 && (
+              <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                Add column dependencies first.
+              </p>
+            )}
+          </div>
+
+          {/* Section 3: Emission Category Mapping */}
+          <div className={`p-4 rounded-md ${isDark ? "bg-slate-700" : "bg-gray-50"}`}>
+            <h3 className={`font-medium mb-3 ${isDark ? "text-slate-200" : "text-gray-700"}`}>
+              3. Emission Category Mapping
+            </h3>
+            <p className={`text-xs mb-3 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              Map column value combinations to emission category names. Key format: &quot;parentValue|childValue&quot;
+            </p>
+
+            {/* Current Mappings */}
+            {Object.keys(editingEmissionMapping).length > 0 && (
+              <div className={`mb-3 border rounded-md max-h-40 overflow-y-auto ${isDark ? "border-slate-600" : "border-gray-300"}`}>
+                <table className="w-full">
+                  <thead className={isDark ? "bg-slate-600" : "bg-gray-100"}>
+                    <tr>
+                      <th className={`px-3 py-2 text-left text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                        Key (parent|child)
+                      </th>
+                      <th className={`px-3 py-2 text-left text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                        Emission Category
+                      </th>
+                      <th className="px-3 py-2 w-12"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(editingEmissionMapping).map(([key, value]) => (
+                      <tr key={key} className={isDark ? "border-t border-slate-600" : "border-t border-gray-200"}>
+                        <td className={`px-3 py-2 text-xs ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          {key}
+                        </td>
+                        <td className={`px-3 py-2 text-xs ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                          {value}
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => handleRemoveMapping(key)}
+                            className={buttonDangerClass}
+                          >
+                            &times;
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Add Mapping */}
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={newMappingKey}
+                onChange={(e) => setNewMappingKey(e.target.value)}
+                placeholder="e.g., paper|recycled"
+                className={inputClass}
+              />
+              <input
+                type="text"
+                value={newMappingValue}
+                onChange={(e) => setNewMappingValue(e.target.value)}
+                placeholder="e.g., Paper - Recycled"
+                className={inputClass}
+              />
+            </div>
+            <button
+              onClick={handleAddMapping}
+              disabled={!newMappingKey.trim() || !newMappingValue.trim()}
+              className={`mt-2 ${buttonPrimaryClass}`}
+            >
+              Add Mapping
+            </button>
+          </div>
+
+          {/* Actions */}
+          <div className={`flex justify-end gap-3 pt-4 border-t ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+            <button
+              onClick={() => {
+                setDependencyModalOpen(false);
+                setSelectedConfig(null);
+              }}
+              className={buttonSecondaryClass}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveDependencies}
+              className={buttonPrimaryClass}
+            >
+              Save Configuration
             </button>
           </div>
         </div>

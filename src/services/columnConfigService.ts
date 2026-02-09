@@ -6,6 +6,23 @@ export interface ColumnOptionsMap {
   [columnId: string]: DropdownOptionValue[];
 }
 
+// Maps child column name to parent column name
+export interface ColumnDependencies {
+  [childColumnName: string]: string;
+}
+
+// Options for dependent columns based on parent value
+export interface DependentOptionsMap {
+  [childColumnName: string]: {
+    [parentValue: string]: DropdownOptionValue[];
+  };
+}
+
+// Maps column value combinations to emission_category_name
+export interface EmissionCategoryMapping {
+  [key: string]: string;
+}
+
 export interface ColumnConfigData {
   pk_id?: number;
   config_name: string;
@@ -13,6 +30,9 @@ export interface ColumnConfigData {
   category_id: number;
   column_ids?: number[];
   column_options?: ColumnOptionsMap;
+  column_dependencies?: ColumnDependencies;
+  dependent_options?: DependentOptionsMap;
+  emission_category_mapping?: EmissionCategoryMapping;
 }
 
 export const getColumnConfigs = async () => {
@@ -58,6 +78,9 @@ export const createColumnConfig = async (data: {
   category_id: number;
   column_ids?: number[];
   column_options?: ColumnOptionsMap;
+  column_dependencies?: ColumnDependencies;
+  dependent_options?: DependentOptionsMap;
+  emission_category_mapping?: EmissionCategoryMapping;
 }) => {
   const response = await api.post("/admin/column-configs", data);
   return response.data;
@@ -71,6 +94,9 @@ export const updateColumnConfig = async (
     category_id?: number;
     column_ids?: number[];
     column_options?: ColumnOptionsMap;
+    column_dependencies?: ColumnDependencies;
+    dependent_options?: DependentOptionsMap;
+    emission_category_mapping?: EmissionCategoryMapping;
   }
 ) => {
   const response = await api.put(`/admin/column-configs/${id}`, data);
