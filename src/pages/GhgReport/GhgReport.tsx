@@ -14,6 +14,7 @@ import {
   type GhgReportDetailsResponse,
   type YearType,
 } from "../../services/ghgreportService";
+import GhgSiteCategoriesTable from "./GhgSiteCategoriesTable";
 
 const GhgReport = () => {
   const { user } = useAuth();
@@ -137,6 +138,7 @@ const GhgReport = () => {
         ) : tablesData ? (
           <div className="space-y-8">
             <GhgReportTables data={tablesData} isDark={isDark} />
+              <GhgSiteCategoriesTable data={tablesData} isDark={isDark} />
             {detailsData ? (
               <GhgReportDetailsTables data={detailsData} isDark={isDark} />
             ) : (

@@ -68,7 +68,7 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
       a.fuelType.localeCompare(b.fuelType);
 
     s1.sort(sortFn);
-    s2.sort((a, b) => a.siteName.localeCompare(b.siteName));
+    s2.sort((a, b) => a.siteName.localeCompare(b.siteName) || a.fuelType.localeCompare(b.fuelType));
     s3.sort(sortFn);
 
     return { s1, s2, s3 };
@@ -80,14 +80,7 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
   const sub = isDark ? "text-slate-300" : "text-gray-600";
   const rowHover = isDark ? "hover:bg-slate-700/40" : "hover:bg-gray-50";
 
-  // Scope 1 & 3 table (Category + Location + FuelType)
-  const ScopeDetailedTable = ({
-    title,
-    rows,
-  }: {
-    title: string;
-    rows: GhgDetailsRow[];
-  }) => (
+  const ScopeDetailedTable = ({ title, rows }: { title: string; rows: GhgDetailsRow[] }) => (
     <TableCard isDark={isDark} title={title}>
       {rows.length === 0 ? (
         <div className={`text-sm ${sub}`}>No data available.</div>
@@ -105,7 +98,6 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
                 <th className={`border ${border} px-3 py-2 text-left text-sm`} rowSpan={2}>
                   Fuel Type
                 </th>
-
                 <th className={`border ${border} px-3 py-2 text-center text-sm`} colSpan={2}>
                   {compLabel}
                 </th>
@@ -113,7 +105,6 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
                   {selectedLabel}
                 </th>
               </tr>
-
               <tr className={headerBg}>
                 <th className={`border ${border} px-3 py-2 text-right text-sm`}>Consumption</th>
                 <th className={`border ${border} px-3 py-2 text-right text-sm`}>Emissions (tCO₂e)</th>
@@ -121,21 +112,20 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
                 <th className={`border ${border} px-3 py-2 text-right text-sm`}>Emissions (tCO₂e)</th>
               </tr>
             </thead>
-
             <tbody className={text}>
               {rows.map((r, idx) => {
-                const compCons = `${fmt(r.compare.consumption)}${r.compare.unit ? ` ${r.compare.unit}` : ""}`;
-                const selCons = `${fmt(r.selected.consumption)}${r.selected.unit ? ` ${r.selected.unit}` : ""}`;
+                const compUnit = r.compare.unit || r.selected.unit || "";
+                const selUnit = r.selected.unit || r.compare.unit || "";
+                const compCons = `${fmt(r.compare.consumption)}${compUnit ? ` ${compUnit}` : ""}`;
+                const selCons = `${fmt(r.selected.consumption)}${selUnit ? ` ${selUnit}` : ""}`;
 
                 return (
                   <tr key={`${r.scope}-${r.categoryId}-${r.siteId}-${r.fuelType}-${idx}`} className={rowHover}>
                     <td className={`border ${border} px-3 py-2 text-sm`}>{r.categoryName}</td>
                     <td className={`border ${border} px-3 py-2 text-sm`}>{r.siteName}</td>
                     <td className={`border ${border} px-3 py-2 text-sm`}>{r.fuelType}</td>
-
                     <td className={`border ${border} px-3 py-2 text-right text-sm`}>{compCons}</td>
                     <td className={`border ${border} px-3 py-2 text-right text-sm`}>{fmt(r.compare.emissions)}</td>
-
                     <td className={`border ${border} px-3 py-2 text-right text-sm`}>{selCons}</td>
                     <td className={`border ${border} px-3 py-2 text-right text-sm font-semibold`}>
                       {fmt(r.selected.emissions)}
@@ -150,7 +140,6 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
     </TableCard>
   );
 
-  // Scope 2 table (Location only)
   const Scope2Table = ({ rows }: { rows: GhgDetailsRow[] }) => (
     <TableCard isDark={isDark} title={`Table: Scope 2 Emissions for ${compLabel} & ${selectedLabel}`}>
       {rows.length === 0 ? (
@@ -177,19 +166,18 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
                 <th className={`border ${border} px-3 py-2 text-right text-sm`}>Emissions (tCO₂e)</th>
               </tr>
             </thead>
-
             <tbody className={text}>
               {rows.map((r, idx) => {
-                const compCons = `${fmt(r.compare.consumption)}${r.compare.unit ? ` ${r.compare.unit}` : ""}`;
-                const selCons = `${fmt(r.selected.consumption)}${r.selected.unit ? ` ${r.selected.unit}` : ""}`;
+                const compUnit = r.compare.unit || r.selected.unit || "";
+                const selUnit = r.selected.unit || r.compare.unit || "";
+                const compCons = `${fmt(r.compare.consumption)}${compUnit ? ` ${compUnit}` : ""}`;
+                const selCons = `${fmt(r.selected.consumption)}${selUnit ? ` ${selUnit}` : ""}`;
 
                 return (
-                  <tr key={`${r.siteId}-${idx}`} className={rowHover}>
+                  <tr key={`${r.siteId}-${r.fuelType}-${idx}`} className={rowHover}>
                     <td className={`border ${border} px-3 py-2 text-sm`}>{r.siteName}</td>
-
                     <td className={`border ${border} px-3 py-2 text-right text-sm`}>{compCons}</td>
                     <td className={`border ${border} px-3 py-2 text-right text-sm`}>{fmt(r.compare.emissions)}</td>
-
                     <td className={`border ${border} px-3 py-2 text-right text-sm`}>{selCons}</td>
                     <td className={`border ${border} px-3 py-2 text-right text-sm font-semibold`}>
                       {fmt(r.selected.emissions)}
@@ -210,9 +198,7 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
         title={`Direct GHG Emissions: Scope 1 — for ${compLabel} & ${selectedLabel}`}
         rows={rowsByScope.s1}
       />
-
       <Scope2Table rows={rowsByScope.s2} />
-
       <ScopeDetailedTable
         title={`Indirect GHG Emissions: Scope 3 — for ${compLabel} & ${selectedLabel}`}
         rows={rowsByScope.s3}
