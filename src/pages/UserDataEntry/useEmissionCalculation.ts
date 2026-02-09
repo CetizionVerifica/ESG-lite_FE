@@ -1,8 +1,13 @@
 import { useCallback } from "react";
 import { getConversionFactor, unitsMatchExact } from "../../utils/unitConversions";
-import { EmissionFactor, ModalRow, EmissionCalculationResult } from "./types";
+import { EmissionFactor, ModalRow, EmissionCalculationResult, ColumnEntity } from "./types";
 
-export const useEmissionCalculation = (emissionFactors: EmissionFactor[], targetYear?: number) => {
+export const useEmissionCalculation = (
+  emissionFactors: EmissionFactor[],
+  targetYear?: number,
+  columns?: ColumnEntity[],
+  selectColumnNames?: string[]
+) => {
   const getExpectedUnit = useCallback(
     (emissionCategory: string): string | null => {
       // Filter by year if targetYear is provided
@@ -27,8 +32,26 @@ export const useEmissionCalculation = (emissionFactors: EmissionFactor[], target
   );
 
   const findActivityValue = useCallback((row: ModalRow): number | null => {
+    // Build a set of column names to skip (select/dropdown columns)
+    const skipColumns = new Set<string>(["id", "emission_category", "activity_data_unit"]);
+
+    // Add select-type columns to skip list (they contain dropdown IDs, not activity data)
+    if (selectColumnNames) {
+      selectColumnNames.forEach(name => skipColumns.add(name));
+    }
+
+    // Also skip columns that have column_type "select" based on columns prop
+    if (columns) {
+      columns.forEach(col => {
+        if (col.column_type === "select") {
+          skipColumns.add(col.column_name);
+        }
+      });
+    }
+
+    // Find the first numeric value from non-dropdown columns
     for (const [key, value] of Object.entries(row)) {
-      if (key !== "id" && key !== "emission_category" && key !== "activity_data_unit") {
+      if (!skipColumns.has(key)) {
         const numVal = parseFloat(value as string);
         if (!isNaN(numVal) && numVal > 0) {
           return numVal;
@@ -36,7 +59,7 @@ export const useEmissionCalculation = (emissionFactors: EmissionFactor[], target
       }
     }
     return null;
-  }, []);
+  }, [columns, selectColumnNames]);
 
   const calculateEmission = useCallback(
     (row: ModalRow): EmissionCalculationResult => {
