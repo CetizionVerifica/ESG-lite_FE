@@ -4,16 +4,27 @@ export interface Category {
   scope: string;
 }
 
+export interface DropdownOptionValue {
+  id: string | number;
+  label: string;
+}
+
+export interface ColumnOptionsMap {
+  [columnId: string]: DropdownOptionValue[];
+}
+
 export interface ColumnEntity {
   pk_id: number;
   column_name: string;
   column_type: string;
+  dropdown_options?: DropdownOptionValue[] | null;
 }
 
 export interface ColumnConfig {
   pk_id: number;
   config_name: string;
   columns: ColumnEntity[];
+  column_options?: ColumnOptionsMap;
 }
 
 export interface EmissionFactor {

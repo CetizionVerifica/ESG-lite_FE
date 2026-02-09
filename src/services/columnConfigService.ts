@@ -1,4 +1,19 @@
 import api from "../api/axios";
+import { DropdownOptionValue } from "./columnService";
+
+// Interface for column options map (column_id as string key -> options array)
+export interface ColumnOptionsMap {
+  [columnId: string]: DropdownOptionValue[];
+}
+
+export interface ColumnConfigData {
+  pk_id?: number;
+  config_name: string;
+  site_id: number;
+  category_id: number;
+  column_ids?: number[];
+  column_options?: ColumnOptionsMap;
+}
 
 export const getColumnConfigs = async () => {
   const response = await api.get("/admin/column-configs");
@@ -42,6 +57,7 @@ export const createColumnConfig = async (data: {
   site_id: number;
   category_id: number;
   column_ids?: number[];
+  column_options?: ColumnOptionsMap;
 }) => {
   const response = await api.post("/admin/column-configs", data);
   return response.data;
@@ -54,6 +70,7 @@ export const updateColumnConfig = async (
     site_id?: number;
     category_id?: number;
     column_ids?: number[];
+    column_options?: ColumnOptionsMap;
   }
 ) => {
   const response = await api.put(`/admin/column-configs/${id}`, data);
@@ -79,6 +96,27 @@ export const removeColumnsFromConfig = async (
 ) => {
   const response = await api.delete(`/admin/column-configs/${id}/columns`, {
     data: { column_ids },
+  });
+  return response.data;
+};
+
+// Get dropdown options for a specific column within a config
+export const getColumnOptions = async (
+  configId: string | number,
+  columnId: string | number
+) => {
+  const response = await api.get(`/admin/column-configs/${configId}/column/${columnId}/options`);
+  return response.data;
+};
+
+// Update dropdown options for a specific column within a config
+export const updateColumnOptions = async (
+  configId: string | number,
+  columnId: string | number,
+  options: DropdownOptionValue[]
+) => {
+  const response = await api.put(`/admin/column-configs/${configId}/column/${columnId}/options`, {
+    options,
   });
   return response.data;
 };

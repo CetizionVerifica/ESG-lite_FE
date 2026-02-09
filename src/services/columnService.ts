@@ -1,5 +1,18 @@
 import api from "../api/axios";
 
+// Interface for dropdown option values
+export interface DropdownOptionValue {
+  id: string | number;
+  label: string;
+}
+
+export interface ColumnData {
+  pk_id?: number;
+  column_name: string;
+  column_type: string;
+  dropdown_options?: DropdownOptionValue[] | null;
+}
+
 export const getColumns = async () => {
   const response = await api.get("/admin/columns");
   return response.data;
@@ -13,6 +26,7 @@ export const getColumnById = async (id: string | number) => {
 export const createColumn = async (data: {
   column_name: string;
   column_type: string;
+  dropdown_options?: DropdownOptionValue[] | null;
 }) => {
   const response = await api.post("/admin/columns", data);
   return response.data;
@@ -23,6 +37,7 @@ export const updateColumn = async (
   data: {
     column_name?: string;
     column_type?: string;
+    dropdown_options?: DropdownOptionValue[] | null;
   }
 ) => {
   const response = await api.put(`/admin/columns/${id}`, data);
@@ -42,6 +57,7 @@ export const getColumnsByType = async (type: string) => {
 export const bulkCreateColumns = async (columns: Array<{
   column_name: string;
   column_type: string;
+  dropdown_options?: DropdownOptionValue[] | null;
 }>) => {
   const response = await api.post("/admin/columns/bulk", { columns });
   return response.data;

@@ -153,7 +153,8 @@ const UserDataEntryPage = () => {
         getUserUnitsBySiteAndCategory(siteId, selectedCategory),
       ]);
 
-      setDynamicColumns(configs[0]?.columns || []);
+      const config = configs[0];
+      setDynamicColumns(config?.columns || []);
       setEmissions(flattenEmissions(emissionsData));
       setEmissionFactors(factors);
       setUnits(unitsData);
