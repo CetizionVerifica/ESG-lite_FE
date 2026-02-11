@@ -156,13 +156,14 @@ const EmissionFactorPage = () => {
           const rowNum = index + 2; // Excel row (1-indexed + header)
 
           // Try different column name variations
-          const year = row.year || row.Year || row.YEAR;
-          const factor_value = row.factor_value || row["Factor Value"] || row.factor || row.Factor || row.FACTOR_VALUE;
+          // Use nullish coalescing (??) instead of || to allow 0 values
+          const year = row.year ?? row.Year ?? row.YEAR;
+          const factor_value = row.factor_value ?? row["Factor Value"] ?? row.factor ?? row.Factor ?? row.FACTOR_VALUE;
           const denominator_unit = row.denominator_unit || row["Denominator Unit"] || row.unit || row.Unit;
           const source = row.source || row.Source || row.SOURCE;
           const emission_category_name = row.emission_category_name || row["Emission Category"] || row.emission_category || row["Emission Category Name"];
 
-          if (!year || factor_value === undefined || factor_value === null) {
+          if (year === undefined || year === null || factor_value === undefined || factor_value === null) {
             errors.push(`Row ${rowNum}: Missing required field (year or factor_value)`);
             return;
           }
