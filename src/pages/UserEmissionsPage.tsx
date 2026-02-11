@@ -4,6 +4,12 @@ import { useAuth } from "../context/AuthContext";
 import { getEmissionsBySite, EmissionData, EmissionStatus } from "../services/emissionService";
 import DocumentViewerModal from "../components/DocumentViewerModal";
 import { getDocumentsByEmission, EmissionDocument } from "../services/documentService";
+import {
+  getUserColumnConfigsBySiteAndCategory,
+  ColumnOptionsMap,
+  DependentOptionsMap,
+  ColumnDependencies,
+} from "../services/columnConfigService";
 
 interface Category {
   category_id: number;
@@ -93,6 +99,13 @@ const UserEmissionsPage = () => {
   const [selectedDocument, setSelectedDocument] = useState<EmissionDocument | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
 
+  // Column config state for ID-to-label conversion
+  const [columnOptionsMap, setColumnOptionsMap] = useState<Record<number, ColumnOptionsMap>>({});
+  const [dependentOptionsMap, setDependentOptionsMap] = useState<Record<number, DependentOptionsMap>>({});
+  const [columnDependenciesMap, setColumnDependenciesMap] = useState<Record<number, ColumnDependencies>>({});
+  // Store columns per category to map column names to IDs
+  const [columnsMap, setColumnsMap] = useState<Record<number, { pk_id: number; column_name: string }[]>>({});
+
   // Get current site and its categories
   const currentSite = availableSites.find((s) => s.site_id === selectedSite);
   const categories: Category[] = currentSite?.categories || [];
@@ -122,6 +135,153 @@ const UserEmissionsPage = () => {
   useEffect(() => {
     setSelectedCategory(null);
   }, [selectedSite]);
+
+  // Fetch column configs for all categories when site changes
+  useEffect(() => {
+    const fetchColumnConfigs = async () => {
+      if (!siteId || categories.length === 0) return;
+
+      const newColumnOptions: Record<number, ColumnOptionsMap> = {};
+      const newDependentOptions: Record<number, DependentOptionsMap> = {};
+      const newColumnDependencies: Record<number, ColumnDependencies> = {};
+      const newColumnsMap: Record<number, { pk_id: number; column_name: string }[]> = {};
+
+      for (const category of categories) {
+        try {
+          const configs = await getUserColumnConfigsBySiteAndCategory(siteId, category.category_id);
+          if (configs && configs.length > 0) {
+            const config = configs[0];
+            if (config.column_options) {
+              newColumnOptions[category.category_id] = config.column_options;
+            }
+            if (config.dependent_options) {
+              newDependentOptions[category.category_id] = config.dependent_options;
+            }
+            if (config.column_dependencies) {
+              newColumnDependencies[category.category_id] = config.column_dependencies;
+            }
+            // Store columns for name-to-ID mapping
+            if (config.columns && Array.isArray(config.columns)) {
+              newColumnsMap[category.category_id] = config.columns.map((col: { pk_id: number; column_name: string }) => ({
+                pk_id: col.pk_id,
+                column_name: col.column_name,
+              }));
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching column config for category ${category.category_id}:`, error);
+        }
+      }
+
+      setColumnOptionsMap(newColumnOptions);
+      setDependentOptionsMap(newDependentOptions);
+      setColumnDependenciesMap(newColumnDependencies);
+      setColumnsMap(newColumnsMap);
+    };
+
+    fetchColumnConfigs();
+  }, [siteId, categories]);
+
+  // Helper to get column ID from column name
+  const getColumnId = useCallback(
+    (columnName: string, categoryId: number): string | null => {
+      const columns = columnsMap[categoryId];
+      if (!columns) return null;
+      // Case-insensitive column name lookup
+      const col = columns.find(
+        (c) => c.column_name.toLowerCase() === columnName.toLowerCase()
+      );
+      return col ? col.pk_id.toString() : null;
+    },
+    [columnsMap]
+  );
+
+  // Helper function to get label for a dropdown value
+  const getOptionLabel = useCallback(
+    (columnName: string, value: string, categoryId: number, activityData: Record<string, unknown>): string => {
+      if (!value) return "";
+
+      const columnOptions = columnOptionsMap[categoryId];
+      const dependentOptions = dependentOptionsMap[categoryId];
+      const columnDependencies = columnDependenciesMap[categoryId];
+
+      // Check if this is a dependent column
+      const parentColumnName = columnDependencies?.[columnName];
+
+      if (parentColumnName && dependentOptions?.[columnName]) {
+        // Get parent value and find its label first
+        const parentValue = activityData[parentColumnName] as string;
+        if (parentValue) {
+          // Find parent label for case-insensitive lookup
+          let parentLabel = parentValue;
+          // Get parent column ID for options lookup
+          const parentColumnId = getColumnId(parentColumnName, categoryId);
+          if (parentColumnId) {
+            const parentOptions = columnOptions?.[parentColumnId];
+            if (parentOptions) {
+              const parentOption = parentOptions.find(
+                (opt) => String(opt.id) === String(parentValue) ||
+                         opt.label.toLowerCase() === String(parentValue).toLowerCase()
+              );
+              if (parentOption) {
+                parentLabel = parentOption.label;
+              }
+            }
+          }
+
+          // Look up dependent options using parent label (case-insensitive)
+          const depOptionsForParent = dependentOptions[columnName];
+          const matchingKey = Object.keys(depOptionsForParent || {}).find(
+            (key) => key.toLowerCase() === parentLabel.toLowerCase()
+          );
+
+          if (matchingKey) {
+            const options = depOptionsForParent[matchingKey];
+            const option = options?.find(
+              (opt) => String(opt.id) === String(value) ||
+                       opt.label.toLowerCase() === String(value).toLowerCase()
+            );
+            if (option) {
+              return option.label;
+            }
+          }
+        }
+      }
+
+      // Check in regular column options using column ID
+      const columnId = getColumnId(columnName, categoryId);
+      if (columnId) {
+        const options = columnOptions?.[columnId];
+        if (options) {
+          const option = options.find(
+            (opt) => String(opt.id) === String(value) ||
+                     opt.label.toLowerCase() === String(value).toLowerCase()
+          );
+          if (option) {
+            return option.label;
+          }
+        }
+      }
+
+      // Return original value if no label found
+      return value;
+    },
+    [columnOptionsMap, dependentOptionsMap, columnDependenciesMap, getColumnId]
+  );
+
+  // Format activity data with labels instead of IDs
+  const formatActivityData = useCallback(
+    (activityData: Record<string, unknown>, categoryId: number): { key: string; displayValue: string }[] => {
+      if (!activityData) return [];
+
+      return Object.entries(activityData).map(([key, value]) => {
+        const stringValue = String(value);
+        const displayValue = getOptionLabel(key, stringValue, categoryId, activityData);
+        return { key, displayValue };
+      });
+    },
+    [getOptionLabel]
+  );
 
   // Fetch all emissions for the user's site
   const fetchEmissions = useCallback(async () => {
@@ -394,9 +554,12 @@ const UserEmissionsPage = () => {
                   </td>
                   <td className="border border-gray-300 px-4 py-3">
                     <div className="max-w-xs">
-                      {Object.entries(emission.activity_data || {}).map(([key, value]) => (
+                      {formatActivityData(
+                        emission.activity_data || {},
+                        emission.category?.category_id || 0
+                      ).map(({ key, displayValue }) => (
                         <div key={key} className="text-sm">
-                          <span className="font-medium">{key}:</span> {String(value)}
+                          <span className="font-medium">{key}:</span> {displayValue}
                         </div>
                       ))}
                     </div>
