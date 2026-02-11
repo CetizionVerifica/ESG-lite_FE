@@ -330,42 +330,41 @@ const UserDataEntryPage = () => {
       return null;
     }
 
-    // Build the mapping key from dependent column values
-    // Find all parent-child pairs and build the key
+    // Find "terminal" child columns - columns that are children but NOT parents of anything else
+    // These are the columns that directly determine the emission category
+    const allChildCols = Object.keys(columnDependencies);
+    const allParentCols = new Set(Object.values(columnDependencies));
+    const terminalChildCols = allChildCols.filter(child => !allParentCols.has(child));
+
+    // If no terminal children, fall back to all child columns
+    const childColsToUse = terminalChildCols.length > 0 ? terminalChildCols : allChildCols;
+
+    // Build the mapping key from terminal parent-child pairs only
     const keyParts: string[] = [];
 
-    // Get parent columns first (sorted for consistency)
-    const parentColumns = [...new Set(Object.values(columnDependencies))].sort();
+    for (const childCol of childColsToUse.sort()) {
+      const parentCol = columnDependencies[childCol];
+      if (!parentCol) continue;
 
-    for (const parentCol of parentColumns) {
       const parentValue = row[parentCol];
       if (!parentValue) return null;
 
-      // Find the column entity to get the pk_id
+      const childValue = row[childCol];
+      if (!childValue) return null;
+
+      // Get labels for both parent and child
       const parentColEntity = dynamicColumns.find(col => col.column_name === parentCol);
       const parentLabel = parentColEntity
         ? getOptionLabel(parentCol, parentColEntity.pk_id, String(parentValue))
         : String(parentValue);
 
+      const childColEntity = dynamicColumns.find(col => col.column_name === childCol);
+      const childLabel = childColEntity
+        ? getOptionLabel(childCol, childColEntity.pk_id, String(childValue), parentLabel)
+        : String(childValue);
+
       keyParts.push(parentLabel);
-
-      // Find the child column for this parent
-      const childCol = Object.keys(columnDependencies).find(
-        (child) => columnDependencies[child] === parentCol
-      );
-
-      if (childCol) {
-        const childValue = row[childCol];
-        if (!childValue) return null;
-
-        // Find the column entity to get the pk_id
-        const childColEntity = dynamicColumns.find(col => col.column_name === childCol);
-        const childLabel = childColEntity
-          ? getOptionLabel(childCol, childColEntity.pk_id, String(childValue), parentLabel)
-          : String(childValue);
-
-        keyParts.push(childLabel);
-      }
+      keyParts.push(childLabel);
     }
 
     const mappingKey = keyParts.join("|");
