@@ -54,7 +54,7 @@ export type GhgReportTablesResponse = {
 
 export const getGhgReportTables = async (payload: GhgReportTablesRequest) => {
   const { data } = await api.post<GhgReportTablesResponse>("/user/ghg/tables", payload);
-  console.log("data", data)
+ // console.log("data", data)
   return data;
 };
 
@@ -92,5 +92,6 @@ export type GhgReportDetailsResponse = {
 
 export const getGhgReportDetails = async (payload: GhgReportDetailsRequest) => {
   const { data } = await api.post<GhgReportDetailsResponse>("/user/ghg/details", payload);
+  console.log("data", data)
   return data;
 };
