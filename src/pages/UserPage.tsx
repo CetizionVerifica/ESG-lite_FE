@@ -154,6 +154,7 @@ const UserPage = () => {
           (updates.site as any)?.site_id ?? updates.site ?? null;
         delete updateData.site;
       }
+      console.log("updatedata", updateData)
 
       await updateUser(row.user_id, updateData);
       setUsers((prev) =>

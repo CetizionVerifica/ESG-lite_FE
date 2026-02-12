@@ -34,6 +34,7 @@ export const updateUser = async (
   }
 ) => {
   const response = await api.put(`/admin/users/${id}`, data);
+  
   return response.data;
 };
 

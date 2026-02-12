@@ -13,7 +13,7 @@ export const getSiteById = async (id: string | number) => {
 export const createSite = async (data: {
   name: string;
   address: string;
-  contaxxct_person: string;
+  contact_person: string;
   company_id: number;
   country_id: number;
   category_ids?: (string | number)[];
