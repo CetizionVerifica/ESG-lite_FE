@@ -362,6 +362,36 @@ const ColumnConfigList = ({
     });
   };
 
+  // Generate all possible mapping combinations from dependent options
+  const generateMappingsFromDependencies = () => {
+    const newMappings: EmissionCategoryMapping = { ...editingEmissionMapping };
+
+    // For each dependent column's options, create mapping entries
+    Object.entries(editingDependentOptions).forEach(([_childCol, parentOptions]) => {
+      // parentOptions is { parentValue: [options] }
+      Object.entries(parentOptions).forEach(([parentValue, childOptions]) => {
+        childOptions.forEach((childOption) => {
+          const key = `${parentValue}|${childOption.label}`;
+          // Only add if not already exists
+          if (!newMappings[key]) {
+            // Auto-generate emission category name as "Parent - Child"
+            newMappings[key] = `${parentValue} - ${childOption.label}`;
+          }
+        });
+      });
+    });
+
+    setEditingEmissionMapping(newMappings);
+  };
+
+  // Update a specific mapping value
+  const handleUpdateMappingValue = (key: string, value: string) => {
+    setEditingEmissionMapping((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
   // Theme classes
   const inputClass = isDark
     ? "w-full px-3 py-2 border border-slate-600 rounded-md bg-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -822,20 +852,34 @@ const ColumnConfigList = ({
               3. Emission Category Mapping
             </h3>
             <p className={`text-xs mb-3 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-              Map column value combinations to emission category names. Key format: &quot;parentValue|childValue&quot;
+              Map column value combinations to emission category names. Click &quot;Generate from Dependencies&quot; to auto-create all combinations.
             </p>
 
-            {/* Current Mappings */}
+            {/* Generate Button */}
+            <button
+              onClick={generateMappingsFromDependencies}
+              disabled={Object.keys(editingDependentOptions).length === 0}
+              className={`mb-3 ${isDark ? "px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50" : "px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:opacity-50"}`}
+            >
+              Generate from Dependencies
+            </button>
+            {Object.keys(editingDependentOptions).length === 0 && (
+              <p className={`text-xs mb-3 ${isDark ? "text-yellow-400" : "text-yellow-600"}`}>
+                Configure dependent options in Section 2 first to enable auto-generation.
+              </p>
+            )}
+
+            {/* Current Mappings - Editable */}
             {Object.keys(editingEmissionMapping).length > 0 && (
-              <div className={`mb-3 border rounded-md max-h-40 overflow-y-auto ${isDark ? "border-slate-600" : "border-gray-300"}`}>
+              <div className={`mb-3 border rounded-md max-h-60 overflow-y-auto ${isDark ? "border-slate-600" : "border-gray-300"}`}>
                 <table className="w-full">
-                  <thead className={isDark ? "bg-slate-600" : "bg-gray-100"}>
+                  <thead className={`sticky top-0 ${isDark ? "bg-slate-600" : "bg-gray-100"}`}>
                     <tr>
                       <th className={`px-3 py-2 text-left text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>
-                        Key (parent|child)
+                        Value Combination (Parent|Child)
                       </th>
                       <th className={`px-3 py-2 text-left text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>
-                        Emission Category
+                        Emission Category Name
                       </th>
                       <th className="px-3 py-2 w-12"></th>
                     </tr>
@@ -843,11 +887,17 @@ const ColumnConfigList = ({
                   <tbody>
                     {Object.entries(editingEmissionMapping).map(([key, value]) => (
                       <tr key={key} className={isDark ? "border-t border-slate-600" : "border-t border-gray-200"}>
-                        <td className={`px-3 py-2 text-xs ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        <td className={`px-3 py-2 text-xs font-medium ${isDark ? "text-slate-300" : "text-gray-700"}`}>
                           {key}
                         </td>
-                        <td className={`px-3 py-2 text-xs ${isDark ? "text-slate-300" : "text-gray-700"}`}>
-                          {value}
+                        <td className="px-3 py-1">
+                          <input
+                            type="text"
+                            value={value}
+                            onChange={(e) => handleUpdateMappingValue(key, e.target.value)}
+                            placeholder="Enter emission category name"
+                            className={`w-full px-2 py-1 text-xs border rounded ${isDark ? "border-slate-500 bg-slate-600 text-slate-100" : "border-gray-300 bg-white text-gray-900"}`}
+                          />
                         </td>
                         <td className="px-3 py-2">
                           <button
@@ -864,30 +914,33 @@ const ColumnConfigList = ({
               </div>
             )}
 
-            {/* Add Mapping */}
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={newMappingKey}
-                onChange={(e) => setNewMappingKey(e.target.value)}
-                placeholder="e.g., paper|recycled"
-                className={inputClass}
-              />
-              <input
-                type="text"
-                value={newMappingValue}
-                onChange={(e) => setNewMappingValue(e.target.value)}
-                placeholder="e.g., Paper - Recycled"
-                className={inputClass}
-              />
-            </div>
-            <button
-              onClick={handleAddMapping}
-              disabled={!newMappingKey.trim() || !newMappingValue.trim()}
-              className={`mt-2 ${buttonPrimaryClass}`}
-            >
-              Add Mapping
-            </button>
+            {/* Manual Add Mapping */}
+            <details className={`mt-3 ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+              <summary className="cursor-pointer text-xs hover:underline">Add mapping manually</summary>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <input
+                  type="text"
+                  value={newMappingKey}
+                  onChange={(e) => setNewMappingKey(e.target.value)}
+                  placeholder="e.g., Paper|Recycled"
+                  className={inputClass}
+                />
+                <input
+                  type="text"
+                  value={newMappingValue}
+                  onChange={(e) => setNewMappingValue(e.target.value)}
+                  placeholder="e.g., Paper - Recycled"
+                  className={inputClass}
+                />
+              </div>
+              <button
+                onClick={handleAddMapping}
+                disabled={!newMappingKey.trim() || !newMappingValue.trim()}
+                className={`mt-2 ${buttonPrimaryClass}`}
+              >
+                Add Mapping
+              </button>
+            </details>
           </div>
 
           {/* Actions */}

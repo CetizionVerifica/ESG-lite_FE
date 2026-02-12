@@ -206,19 +206,53 @@ const UserDataEntryPage = () => {
   // Dependent Dropdown Helpers
   // ---------------------------------------------------------------------------
 
-  // Check if a column is a parent column (has dependents)
+  // Check if a column is a parent column (has dependents) - case-insensitive
   const isParentColumn = (columnName: string): boolean => {
-    return Object.values(columnDependencies).includes(columnName);
+    const columnNameLower = columnName.toLowerCase();
+    return Object.values(columnDependencies).some(
+      parent => parent.toLowerCase() === columnNameLower
+    );
   };
 
-  // Check if a column is a dependent column
+  // Check if a column is a dependent column - case-insensitive
   const isDependentColumn = (columnName: string): boolean => {
-    return columnName in columnDependencies;
+    const columnNameLower = columnName.toLowerCase();
+    return Object.keys(columnDependencies).some(
+      child => child.toLowerCase() === columnNameLower
+    );
   };
 
-  // Get the parent column name for a dependent column
+  // Get the parent column name for a dependent column - case-insensitive
   const getParentColumnName = (columnName: string): string | null => {
-    return columnDependencies[columnName] || null;
+    // First try exact match
+    if (columnName in columnDependencies) {
+      return columnDependencies[columnName];
+    }
+    // Try case-insensitive match
+    const columnNameLower = columnName.toLowerCase();
+    for (const [child, parent] of Object.entries(columnDependencies)) {
+      if (child.toLowerCase() === columnNameLower) {
+        return parent;
+      }
+    }
+    return null;
+  };
+
+  // Helper to get a value from row with case-insensitive key lookup
+  // This handles potential case mismatches between column_dependencies and actual column names
+  const getRowValue = (row: ModalRow | EmissionRow, key: string): string | undefined => {
+    // First try exact match
+    if (key in row) {
+      return row[key] as string | undefined;
+    }
+    // Try case-insensitive match
+    const keyLower = key.toLowerCase();
+    for (const rowKey of Object.keys(row)) {
+      if (rowKey.toLowerCase() === keyLower) {
+        return row[rowKey] as string | undefined;
+      }
+    }
+    return undefined;
   };
 
   // Get dropdown options for a column
@@ -229,31 +263,77 @@ const UserDataEntryPage = () => {
   ): DropdownOptionValue[] => {
     // If it's a dependent column and we have a parent value, use dependent_options
     if (isDependentColumn(columnName) && parentValue) {
-      // The parentValue is the stored ID, but dependent_options is keyed by label
-      // We need to convert the parent ID to its label first
-      const parentColName = getParentColumnName(columnName);
-      let parentLabel = parentValue;
-
-      if (parentColName) {
-        const parentColEntity = dynamicColumns.find(col => col.column_name === parentColName);
-        if (parentColEntity) {
-          const parentOptions = columnOptions[parentColEntity.pk_id.toString()];
-          if (parentOptions) {
-            const parentOption = parentOptions.find(opt => String(opt.id) === parentValue);
-            if (parentOption) {
-              parentLabel = parentOption.label;
-            }
+      // First, find the dependent options for this column (case-insensitive lookup)
+      const columnNameLower = columnName.toLowerCase();
+      let childDeps = dependentOptions[columnName];
+      if (!childDeps) {
+        for (const [key, value] of Object.entries(dependentOptions)) {
+          if (key.toLowerCase() === columnNameLower) {
+            childDeps = value;
+            break;
           }
         }
       }
 
-      // First try exact match
-      let depOptions = dependentOptions[columnName]?.[parentLabel];
+      if (childDeps) {
+        // The parentValue is the stored ID, but dependent_options is keyed by label
+        // We need to convert the parent ID to its label
+        const parentColName = getParentColumnName(columnName);
+        let parentLabel = parentValue;
 
-      // If no exact match, try case-insensitive lookup
-      if (!depOptions || depOptions.length === 0) {
-        const childDeps = dependentOptions[columnName];
-        if (childDeps) {
+        // Try to convert parent ID to label
+        if (parentColName) {
+          // IMPORTANT: If the parent column is ALSO a dependent column, we need to look up
+          // its label from dependentOptions (using grandparent value), not columnOptions!
+          const grandparentColName = getParentColumnName(parentColName);
+
+          if (grandparentColName && isDependentColumn(parentColName)) {
+            // Parent is also dependent - look up in dependentOptions
+            // Search through all grandparent values to find which one contains our parentValue
+            const parentDepOptions = dependentOptions[parentColName];
+            if (parentDepOptions) {
+              // Search through all grandparent values to find which one contains our parentValue
+              for (const [_gpValue, options] of Object.entries(parentDepOptions)) {
+                const matchingOpt = options.find(opt => String(opt.id) === parentValue);
+                if (matchingOpt) {
+                  parentLabel = matchingOpt.label;
+                  break;
+                }
+              }
+            }
+          }
+
+          // Fallback to columnOptions if not found in dependentOptions
+          if (parentLabel === parentValue) {
+            const parentColNameLower = parentColName.toLowerCase();
+            const parentColEntity = dynamicColumns.find(
+              col => col.column_name.toLowerCase() === parentColNameLower
+            );
+            if (parentColEntity) {
+              const parentOptions = columnOptions[parentColEntity.pk_id.toString()];
+              if (parentOptions) {
+                let parentOption = parentOptions.find(opt => String(opt.id) === parentValue);
+                if (!parentOption) {
+                  const parentValueLower = parentValue.toLowerCase();
+                  parentOption = parentOptions.find(
+                    opt => opt.label.toLowerCase() === parentValueLower ||
+                           String(opt.id).toLowerCase() === parentValueLower
+                  );
+                }
+                if (parentOption) {
+                  parentLabel = parentOption.label;
+                }
+              }
+            }
+          }
+        }
+
+        // Try multiple lookup strategies:
+        // 1. Exact match with converted label
+        let depOptions = childDeps[parentLabel];
+
+        // 2. Case-insensitive match with converted label
+        if (!depOptions || depOptions.length === 0) {
           const parentLabelLower = parentLabel.toLowerCase();
           for (const [key, options] of Object.entries(childDeps)) {
             if (key.toLowerCase() === parentLabelLower) {
@@ -262,10 +342,26 @@ const UserDataEntryPage = () => {
             }
           }
         }
-      }
 
-      if (depOptions && depOptions.length > 0) {
-        return depOptions;
+        // 3. Try with raw parentValue (in case dependent_options is keyed by ID)
+        if (!depOptions || depOptions.length === 0) {
+          depOptions = childDeps[parentValue];
+        }
+
+        // 4. Case-insensitive match with raw parentValue
+        if (!depOptions || depOptions.length === 0) {
+          const parentValueLower = parentValue.toLowerCase();
+          for (const [key, options] of Object.entries(childDeps)) {
+            if (key.toLowerCase() === parentValueLower) {
+              depOptions = options;
+              break;
+            }
+          }
+        }
+
+        if (depOptions && depOptions.length > 0) {
+          return depOptions;
+        }
       }
     }
 
@@ -286,37 +382,102 @@ const UserDataEntryPage = () => {
     return [];
   };
 
+  // Helper to find label by searching through ALL parent values in dependentOptions
+  // This is needed for columns that are both parent AND dependent (like Material)
+  const findLabelInDependentOptions = (columnName: string, storedValue: string): string | null => {
+    const columnNameLower = columnName.toLowerCase();
+    let depOptionsForColumn = dependentOptions[columnName];
+    if (!depOptionsForColumn) {
+      for (const [key, value] of Object.entries(dependentOptions)) {
+        if (key.toLowerCase() === columnNameLower) {
+          depOptionsForColumn = value;
+          break;
+        }
+      }
+    }
+
+    if (depOptionsForColumn) {
+      // Search through ALL parent values to find the matching option
+      for (const [_parentVal, options] of Object.entries(depOptionsForColumn)) {
+        const option = options.find(opt => String(opt.id) === storedValue);
+        if (option) {
+          return option.label;
+        }
+        // Also try case-insensitive match
+        const storedValueLower = storedValue.toLowerCase();
+        const optionCI = options.find(
+          opt => String(opt.id).toLowerCase() === storedValueLower ||
+                 opt.label.toLowerCase() === storedValueLower
+        );
+        if (optionCI) {
+          return optionCI.label;
+        }
+      }
+    }
+    return null;
+  };
+
   // Helper to get the label for a stored option ID
   const getOptionLabel = (columnName: string, columnId: number, storedValue: string, parentValue?: string): string => {
-    // For dependent columns, check dependentOptions first
-    if (isDependentColumn(columnName) && parentValue) {
-      // First try exact match
-      let depOptions = dependentOptions[columnName]?.[parentValue];
-
-      // If no exact match, try case-insensitive lookup
-      if (!depOptions) {
-        const childDeps = dependentOptions[columnName];
-        if (childDeps) {
-          const parentValueLower = parentValue.toLowerCase();
-          for (const [key, options] of Object.entries(childDeps)) {
-            if (key.toLowerCase() === parentValueLower) {
-              depOptions = options;
-              break;
-            }
+    // For dependent columns, first try with specific parent value if provided
+    if (isDependentColumn(columnName)) {
+      // Case-insensitive lookup for column name in dependentOptions
+      const columnNameLower = columnName.toLowerCase();
+      let depOptionsForColumn = dependentOptions[columnName];
+      if (!depOptionsForColumn) {
+        for (const [key, value] of Object.entries(dependentOptions)) {
+          if (key.toLowerCase() === columnNameLower) {
+            depOptionsForColumn = value;
+            break;
           }
         }
       }
 
-      if (depOptions) {
-        const option = depOptions.find(opt => String(opt.id) === storedValue);
-        if (option) return option.label;
+      if (depOptionsForColumn) {
+        // If we have a specific parent value, try that first
+        if (parentValue) {
+          let depOptions = depOptionsForColumn[parentValue];
+          if (!depOptions) {
+            const parentValueLower = parentValue.toLowerCase();
+            for (const [key, options] of Object.entries(depOptionsForColumn)) {
+              if (key.toLowerCase() === parentValueLower) {
+                depOptions = options;
+                break;
+              }
+            }
+          }
+          if (depOptions) {
+            let option = depOptions.find(opt => String(opt.id) === storedValue);
+            if (!option) {
+              const storedValueLower = storedValue.toLowerCase();
+              option = depOptions.find(
+                opt => String(opt.id).toLowerCase() === storedValueLower ||
+                       opt.label.toLowerCase() === storedValueLower
+              );
+            }
+            if (option) return option.label;
+          }
+        }
+
+        // If no parent value or not found, search through ALL parent values
+        const foundLabel = findLabelInDependentOptions(columnName, storedValue);
+        if (foundLabel) return foundLabel;
       }
     }
 
     // Check column_options
     const options = columnOptions[columnId.toString()];
     if (options) {
-      const option = options.find(opt => String(opt.id) === storedValue);
+      // Try exact match first
+      let option = options.find(opt => String(opt.id) === storedValue);
+      // If not found, try case-insensitive or label match
+      if (!option) {
+        const storedValueLower = storedValue.toLowerCase();
+        option = options.find(
+          opt => String(opt.id).toLowerCase() === storedValueLower ||
+                 opt.label.toLowerCase() === storedValueLower
+        );
+      }
       if (option) return option.label;
     }
 
@@ -346,19 +507,26 @@ const UserDataEntryPage = () => {
       const parentCol = columnDependencies[childCol];
       if (!parentCol) continue;
 
-      const parentValue = row[parentCol];
+      // Use case-insensitive lookup to handle potential key mismatches
+      const parentValue = getRowValue(row, parentCol);
       if (!parentValue) return null;
 
-      const childValue = row[childCol];
+      const childValue = getRowValue(row, childCol);
       if (!childValue) return null;
 
-      // Get labels for both parent and child
-      const parentColEntity = dynamicColumns.find(col => col.column_name === parentCol);
+      // Get labels for both parent and child (case-insensitive column lookup)
+      const parentColLower = parentCol.toLowerCase();
+      const parentColEntity = dynamicColumns.find(
+        col => col.column_name.toLowerCase() === parentColLower
+      );
       const parentLabel = parentColEntity
         ? getOptionLabel(parentCol, parentColEntity.pk_id, String(parentValue))
         : String(parentValue);
 
-      const childColEntity = dynamicColumns.find(col => col.column_name === childCol);
+      const childColLower = childCol.toLowerCase();
+      const childColEntity = dynamicColumns.find(
+        col => col.column_name.toLowerCase() === childColLower
+      );
       const childLabel = childColEntity
         ? getOptionLabel(childCol, childColEntity.pk_id, String(childValue), parentLabel)
         : String(childValue);
@@ -432,10 +600,18 @@ const UserDataEntryPage = () => {
 
         // If this is a parent column, clear dependent column values
         if (isParentColumn(columnName)) {
-          // Find all columns that depend on this parent
+          // Find all columns that depend on this parent (case-insensitive comparison)
+          const columnNameLower = columnName.toLowerCase();
           Object.keys(columnDependencies).forEach((childCol) => {
-            if (columnDependencies[childCol] === columnName) {
-              updatedRow[childCol] = "";
+            const parentInDeps = columnDependencies[childCol];
+            if (parentInDeps.toLowerCase() === columnNameLower) {
+              // Find the actual key in the row (case-insensitive)
+              const actualChildKey = Object.keys(updatedRow).find(
+                k => k.toLowerCase() === childCol.toLowerCase()
+              );
+              if (actualChildKey) {
+                updatedRow[actualChildKey] = "";
+              }
             }
           });
         }
@@ -639,7 +815,8 @@ const UserDataEntryPage = () => {
             if (!value) return "";
             // For dependent columns, we need the parent value to look up the correct label
             const parentColName = getParentColumnName(col.column_name);
-            const parentValue = parentColName ? row[parentColName] as string : undefined;
+            // Use case-insensitive lookup to handle potential key mismatches
+            const parentValue = parentColName ? getRowValue(row, parentColName) : undefined;
             // Convert parent ID to label if needed
             let parentLabel = parentValue;
             if (parentValue && parentColName) {
@@ -852,7 +1029,8 @@ const UserDataEntryPage = () => {
                   {/* Dynamic Columns */}
                   {filteredColumns.map((col) => {
                     const parentColName = getParentColumnName(col.column_name);
-                    const parentValue = parentColName ? row[parentColName] : undefined;
+                    // Use case-insensitive lookup to handle potential key mismatches
+                    const parentValue = parentColName ? getRowValue(row, parentColName) : undefined;
                     const options = getColumnDropdownOptions(col.column_name, col.pk_id, parentValue);
                     const showAsSelect = isSelectColumn(col) && options.length > 0;
                     const isDisabledDependent = isDependentColumn(col.column_name) && !parentValue;
