@@ -15,6 +15,7 @@ import {
   type YearType,
 } from "../../services/ghgreportService";
 import GhgSiteCategoriesTable from "./GhgSiteCategoriesTable";
+import GhgReportCharts from "./GhgReportCharts";
 
 const GhgReport = () => {
   const { user } = useAuth();
@@ -144,6 +145,9 @@ const GhgReport = () => {
             ) : (
               <div className="text-sm text-gray-500">No detailed data available.</div>
             )}
+            {tablesData && detailsData ? (
+  <GhgReportCharts tablesData={tablesData} detailsData={detailsData} isDark={isDark} />
+) : null}
           </div>
         ) : (
           <div className="text-sm text-gray-500">No data available.</div>

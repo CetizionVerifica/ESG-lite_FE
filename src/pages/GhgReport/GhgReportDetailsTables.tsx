@@ -97,7 +97,7 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
                   Location
                 </th>
                 <th rowSpan={2} className={`border ${border} px-3 py-2 text-left text-sm`}>
-                  Fuel Type
+                  Emission Category
                 </th>
                 <th colSpan={3} className={`border ${border} px-3 py-2 text-center text-sm`}>
                   {compLabel}
