@@ -10,6 +10,7 @@ import EdeReportCharts from "./EdeReportCharts";
 import { getEdeReport } from "../../services/reportService";
 import { downloadEdeReportPdf } from "./downloadPdf";
 import { getCompanyNameBySites } from "../../services/companyService";
+import { getSites } from "../../services/siteService";
 
 type Frequency = "yearly" | "monthly";
 
@@ -64,9 +65,13 @@ const EdeReports = () => {
   const sites: Site[] = (user as any)?.sites || [];
   const singleSite: Site | null = (user as any)?.site || null;
 
-  const availableSites = useMemo(() => {
-    return sites.length > 0 ? sites : singleSite ? [singleSite] : [];
-  }, [sites, singleSite]);
+  // const availableSites = useMemo(() => {
+  //   return sites.length > 0 ? sites : singleSite ? [singleSite] : [];
+  // }, [sites, singleSite]);
+
+  const [availableSites, setAvailableSites] = useState<Site[]>(
+  sites.length > 0 ? sites : singleSite ? [singleSite] : []
+);
 
   const now = new Date();
 
@@ -79,12 +84,22 @@ const EdeReports = () => {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
 
+  
   useEffect(() => {
     if (availableSites.length > 0 && selectedSites.length === 0) {
       setSelectedSites([availableSites[0].site_id]);
     }
   }, [availableSites, selectedSites.length]);
 
+  useEffect(() => {
+  if ((user as any)?.role === "Superadmin") {
+    getSites().then((allSites) => {
+      setAvailableSites(allSites);
+    });
+  }
+}, [user]);
+
+  
   const titleLine = useMemo(() => {
     const sitesText =
       selectedSites.length === 0

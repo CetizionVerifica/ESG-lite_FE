@@ -59,6 +59,8 @@ const Sidebar = () => {
     { to: "units", label: "Manage Units", icon: <Scale size={20} /> },
     { to: "products", label: "Products", icon: <Package size={20} /> },
     { to: "upload-data", label: "Upload Data", icon: <Upload size={20} /> },
+    { to : "ede-reports", label: "EDE Reports", icon: <FolderTree size={20} /> },
+
   ];
 
   const userLinks: NavItem[] = [
