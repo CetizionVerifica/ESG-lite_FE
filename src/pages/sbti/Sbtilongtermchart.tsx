@@ -323,10 +323,10 @@ export default function SbtiLongTermChart({ data, isDark }: Props) {
     : "bg-amber-50 border border-amber-200 text-amber-800";
 
   const stats = [
-    { label: "Base Emissions",    value: fmtNum(data.baseEmissions, 2),   unit: "tCO₂e", sub: `${data.baseYear} baseline`,    color: "text-blue-500",    icon: "📊" },
-    { label: "Net-Zero Target",   value: fmtNum(data.targetEmissions, 2), unit: "tCO₂e", sub: "10% of base by 2050",           color: "text-emerald-500", icon: "🎯" },
-    { label: "Annual Rate",       value: `${fmtNum(data.annualRate, 2)}%`, unit: "/ yr",  sub: "compounding reduction",        color: "text-violet-500",  icon: "📉" },
-    { label: "Years to Net-Zero", value: String(data.years),               unit: "years", sub: `${data.baseYear} → 2050`,      color: "text-amber-500",   icon: "⏳" },
+    { label: "Base Emissions",    value: fmtNum(data.baseEmissions, 2),   unit: "tCO₂e", sub: `${data.baseYear} baseline`,    color: "text-blue-500" },
+    { label: "Net-Zero Target",   value: fmtNum(data.targetEmissions, 2), unit: "tCO₂e", sub: "10% of base by 2050",           color: "text-emerald-500"},
+    { label: "Annual Rate",       value: `${fmtNum(data.annualRate, 2)}%`, unit: "/ yr",  sub: "compounding reduction",        color: "text-violet-500" },
+    { label: "Years to Net-Zero", value: String(data.years),               unit: "years", sub: `${data.baseYear} → 2050`,      color: "text-amber-500" },
   ];
 
   return (
@@ -349,7 +349,7 @@ export default function SbtiLongTermChart({ data, isDark }: Props) {
           <div key={s.label} className={statCard}>
             <div className="flex items-center justify-between mb-2">
               <p className={`text-xs ${mutedText}`}>{s.label}</p>
-              <span className="text-base">{s.icon}</span>
+              {/* <span className="text-base">{s.icon}</span> */}
             </div>
             <p className={`text-xl font-bold leading-tight ${s.color}`}>
               {s.value}
