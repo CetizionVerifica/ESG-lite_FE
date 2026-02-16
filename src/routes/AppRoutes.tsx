@@ -24,6 +24,7 @@ import ProductionDataPage from "../pages/ProductionDataPage";
 import UploadPage from "../pages/UploadPage";
 import UserEmissionsPage from "../pages/UserEmissionsPage";
 import EdeReports from "../pages/Reports/EdePreports";
+import SbtiMain from "../pages/sbti/SbtiMain";
 
 const routes = [
   {
@@ -117,6 +118,10 @@ const routes = [
           {
             path: "ede-reports",
             element: <EdeReports />
+          },
+          {
+            path : "sbti-commitment",
+            element : <SbtiMain/>
           },
           {
             path: "products",
