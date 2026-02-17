@@ -1,558 +1,3 @@
-// import React, { useMemo } from "react";
-// import ReactECharts from "echarts-for-react";
-// import type { GhgReportTablesResponse, GhgReportDetailsResponse } from "../../services/ghgreportService";
-
-// function formatPeriodLabel(
-//   yearType: "CY" | "FY",
-//   year: number,
-//   ranges?: Record<string, { startDate: string; endDate: string }>
-// ) {
-//   if (!ranges || !ranges[String(year)]) return `${yearType} ${year}`;
-//   const { startDate, endDate } = ranges[String(year)];
-//   const fmtMY = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", year: "numeric" });
-//   return yearType === "FY"
-//     ? `FY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`
-//     : `CY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`;
-// }
-
-// function num(v: any) {
-//   const n = Number(v);
-//   return Number.isFinite(n) ? n : 0;
-// }
-
-// function r2(n: number) {
-//   return Number((n || 0).toFixed(2));
-// }
-
-// const Card = ({
-//   title,
-//   subtitle,
-//   children,
-//   isDark,
-// }: {
-//   title: string;
-//   subtitle?: string;
-//   children: React.ReactNode;
-//   isDark?: boolean;
-// }) => {
-//   const card = isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200";
-//   const titleCls = isDark ? "text-slate-100" : "text-gray-900";
-//   const subCls = isDark ? "text-slate-300" : "text-gray-600";
-//   return (
-//     <div className={`rounded-lg border shadow-sm ${card}`}>
-//       <div className="px-4 py-3 border-b border-inherit">
-//         <div className={`font-semibold ${titleCls}`}>{title}</div>
-//         {subtitle ? <div className={`text-xs mt-1 ${subCls}`}>{subtitle}</div> : null}
-//       </div>
-//       <div className="p-4">{children}</div>
-//     </div>
-//   );
-// };
-
-// type Props = {
-//   tablesData: GhgReportTablesResponse;
-//   detailsData: GhgReportDetailsResponse;
-//   isDark?: boolean;
-// };
-
-// type GroupKeyMode = "CATEGORY_FUEL" | "CATEGORY_ONLY";
-
-// function buildGroupedBarOption(args: {
-//   rows: any[];
-//   scopeTitle: string;
-//   selectedLabel: string;
-//   isDark?: boolean;
-//   groupKeyMode: GroupKeyMode;
-//   compactHeight?: boolean;
-// }) {
-//   const { rows, scopeTitle, selectedLabel, isDark, groupKeyMode, compactHeight } = args;
-
-//   const textColor = isDark ? "#e2e8f0" : "#111827";
-//   const axisColor = isDark ? "#94a3b8" : "#6b7280";
-//   const gridLine = isDark ? "rgba(148,163,184,0.25)" : "rgba(107,114,128,0.25)";
-
-//   // Professional color palette with good contrast
-//   const colorPalette = [
-//     "#3b82f6", // blue
-//     "#10b981", // emerald
-//     "#8b5cf6", // violet
-//     "#f59e0b", // amber
-//     "#ec4899", // pink
-//     "#14b8a6", // teal
-//     "#f97316", // orange
-//     "#6366f1", // indigo
-//     "#06b6d4", // cyan
-//     "#84cc16", // lime
-//   ];
-
-//   const siteSet = new Set<string>();
-//   rows.forEach((r) => siteSet.add(String(r.siteName || "")));
-//   const sites = Array.from(siteSet).filter(Boolean).sort((a, b) => a.localeCompare(b));
-
-//   const keyOf = (r: any) => {
-//     const cat = String(r.categoryName || "");
-//     const fuel = String(r.fuelType || "");
-//     if (groupKeyMode === "CATEGORY_ONLY") return cat || "Unknown Category";
-//     const left = cat || "Unknown Category";
-//     const right = fuel && fuel !== "Unknown" ? fuel : "Unknown";
-//     return `${left} • ${right}`;
-//   };
-
-//   const keySet = new Set<string>();
-//   rows.forEach((r) => keySet.add(keyOf(r)));
-//   const keys = Array.from(keySet).filter(Boolean).sort((a, b) => a.localeCompare(b));
-
-//   // Build matrices for both emissions and consumption
-//   const emissionsMatrix = new Map<string, Map<string, number>>();
-//   const consumptionMatrix = new Map<string, Map<string, { value: number; unit: string }>>();
-  
-//   for (const k of keys) {
-//     emissionsMatrix.set(k, new Map());
-//     consumptionMatrix.set(k, new Map());
-//   }
-  
-//   // DEV: log first row to confirm exact field paths — remove after confirming unit field name
-//   if (rows.length > 0) {
-//     console.warn("[GhgReportCharts] First detail row shape:", JSON.stringify(rows[0], null, 2));
-//   }
-
-//   for (const r of rows) {
-//     const k = keyOf(r);
-//     const s = String(r.siteName || "");
-//     const e = r2(num(r.selected?.emissions));
-//     const consumption = r2(num(r.selected?.consumption));
-
-//     // Try every possible location the unit might live on the row object
-//     const unit = String(
-//       r.selected?.consumptionUnit ||
-//       r.selected?.unit ||
-//       r.consumptionUnit ||
-//       r.unit ||
-//       r.selected?.activityUnit ||
-//       r.activityUnit ||
-//       ""
-//     );
-
-//     if (!k || !s) continue;
-
-//     if (!emissionsMatrix.has(k)) emissionsMatrix.set(k, new Map());
-//     if (!consumptionMatrix.has(k)) consumptionMatrix.set(k, new Map());
-
-//     emissionsMatrix.get(k)!.set(s, (emissionsMatrix.get(k)!.get(s) || 0) + e);
-
-//     const existing = consumptionMatrix.get(k)!.get(s);
-//     if (existing) {
-//       consumptionMatrix.get(k)!.set(s, {
-//         value: existing.value + consumption,
-//         unit: existing.unit || unit
-//       });
-//     } else {
-//       consumptionMatrix.get(k)!.set(s, { value: consumption, unit });
-//     }
-//   }
-
-//   const series = sites.map((site, index) => ({
-//     name: site,
-//     type: "bar" as const,
-//     barWidth: 16,
-//     barGap: "30%",
-//     itemStyle: {
-//       borderRadius: [4, 4, 0, 0],
-//       color: colorPalette[index % colorPalette.length],
-//       shadowColor: isDark ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.12)",
-//       shadowBlur: 6,
-//       shadowOffsetY: 3,
-//     },
-//     emphasis: {
-//       focus: "series" as const,
-//       itemStyle: {
-//         shadowBlur: 10,
-//         shadowOffsetY: 4,
-//         brightness: 1.15,
-//       }
-//     },
-//     label: {
-//       show: true,
-//       position: "top" as const,
-//       color: textColor,
-//       fontSize: 11,
-//       fontWeight: 600,
-//       distance: 5,
-//       formatter: (p: any) => p.value > 0 ? `${p.value}` : "",
-//     },
-//     data: keys.map((k) => r2(emissionsMatrix.get(k)?.get(site) || 0)),
-//   }));
-
-//   const showZoom = keys.length > 8;
-
-//   return {
-//     backgroundColor: "transparent",
-//     color: colorPalette,
-//     tooltip: {
-//       trigger: "axis",
-//       axisPointer: { 
-//         type: "shadow",
-//         shadowStyle: {
-//           color: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"
-//         }
-//       },
-//       backgroundColor: isDark ? "rgba(15,23,42,0.96)" : "rgba(255,255,255,0.96)",
-//       borderColor: isDark ? "#475569" : "#e5e7eb",
-//       borderWidth: 1,
-//       padding: [12, 16],
-//       textStyle: {
-//         color: textColor,
-//         fontSize: 13,
-//       },
-//       formatter: (params: any) => {
-//         // Use dataIndex to get the EXACT key (axis label may be truncated)
-//         const dataIndex = params?.[0]?.dataIndex ?? 0;
-//         const exactKey = keys[dataIndex] ?? params?.[0]?.name ?? "";
-
-//         // Header with category name
-//         let html = `<div style="font-weight: 700; font-size: 14px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid ${isDark ? '#334155' : '#e5e7eb'}; color: ${isDark ? '#f1f5f9' : '#0f172a'};">${exactKey}</div>`;
-
-//         // Table header
-//         html += `<table style="width: 100%; border-collapse: collapse; min-width: 320px;">`;
-//         html += `<thead><tr style="border-bottom: 1px solid ${isDark ? '#334155' : '#e5e7eb'};">`;
-//         html += `<th style="text-align: left; padding: 4px 8px 4px 0; font-size: 11px; font-weight: 600; color: ${isDark ? '#94a3b8' : '#64748b'};">SITE</th>`;
-//         html += `<th style="text-align: right; padding: 4px 8px; font-size: 11px; font-weight: 600; color: ${isDark ? '#94a3b8' : '#64748b'};">EMISSIONS</th>`;
-//         html += `<th style="text-align: right; padding: 4px 0 4px 8px; font-size: 11px; font-weight: 600; color: ${isDark ? '#94a3b8' : '#64748b'};">CONSUMPTION</th>`;
-//         html += `</tr></thead>`;
-//         html += `<tbody>`;
-
-//         // Data rows
-//         for (const p of params || []) {
-//           if (!p.value || p.value === 0) continue;
-
-//           // Look up consumption using the EXACT key and site name
-//           const consumption = consumptionMatrix.get(exactKey)?.get(p.seriesName);
-//           const hasConsumption = consumption && consumption.value > 0;
-
-//           html += `<tr style="border-bottom: 1px solid ${isDark ? 'rgba(51,65,85,0.5)' : 'rgba(229,231,235,0.5)'};">`;
-
-//           // Site name with color indicator
-//           html += `<td style="padding: 6px 8px 6px 0;">`;
-//           html += `<span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: ${p.color}; margin-right: 8px; vertical-align: middle;"></span>`;
-//           html += `<span style="font-weight: 500; color: ${isDark ? '#e2e8f0' : '#1e293b'};">${p.seriesName}</span>`;
-//           html += `</td>`;
-
-//           // Emissions value
-//           html += `<td style="text-align: right; padding: 6px 8px; font-weight: 700; color: ${isDark ? '#f1f5f9' : '#0f172a'}; font-size: 13px;">`;
-//           html += `${p.value} <span style="font-weight: 400; color: ${isDark ? '#94a3b8' : '#64748b'}; font-size: 11px;">tCO₂e</span>`;
-//           html += `</td>`;
-
-//           // Consumption value — value + unit badge always together
-//           html += `<td style="text-align: right; padding: 6px 0 6px 8px; white-space: nowrap;">`;
-//           if (hasConsumption) {
-//             html += `<span style="font-weight: 600; color: ${isDark ? '#cbd5e1' : '#334155'}; font-size: 13px;">${r2(consumption!.value)}</span>`;
-//             if (consumption!.unit) {
-//               html += ` <span style="display: inline-block; background: ${isDark ? '#1e3a5f' : '#dbeafe'}; color: ${isDark ? '#93c5fd' : '#1d4ed8'}; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; vertical-align: middle;">${consumption!.unit}</span>`;
-//             }
-//           } else {
-//             html += `<span style="color: ${isDark ? '#475569' : '#94a3b8'}; font-size: 11px;">—</span>`;
-//           }
-//           html += `</td>`;
-
-//           html += `</tr>`;
-//         }
-
-//         html += `</tbody></table>`;
-
-//         // Total row if multiple sites
-//         if (params && params.filter((p: any) => p.value > 0).length > 1) {
-//           const totalEmissions = params.reduce((sum: number, p: any) => sum + (p.value || 0), 0);
-//           let totalConsumption = 0;
-//           let totalUnit = "";
-
-//           params.forEach((p: any) => {
-//             const consumption = consumptionMatrix.get(exactKey)?.get(p.seriesName);
-//             if (consumption && consumption.value > 0) {
-//               totalConsumption += consumption.value;
-//               if (!totalUnit) totalUnit = consumption.unit;
-//             }
-//           });
-
-//           html += `<div style="margin-top: 10px; padding-top: 8px; border-top: 2px solid ${isDark ? '#475569' : '#cbd5e1'}; display: flex; justify-content: space-between; align-items: center;">`;
-//           html += `<span style="font-weight: 700; color: ${isDark ? '#f1f5f9' : '#0f172a'};">TOTAL</span>`;
-//           html += `<span style="font-weight: 700; color: ${isDark ? '#f1f5f9' : '#0f172a'}; white-space: nowrap;">${r2(totalEmissions)} tCO₂e`;
-//           if (totalConsumption > 0) {
-//             html += ` <span style="color: ${isDark ? '#94a3b8' : '#64748b'}; font-weight: 500;">| ${r2(totalConsumption)}</span>`;
-//             // if (totalUnit) {
-//             //   html += ` <span style="display: inline-block; background: ${isDark ? '#1e3a5f' : '#dbeafe'}; color: ${isDark ? '#93c5fd' : '#1d4ed8'}; font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; vertical-align: middle;">${totalUnit}</span>`;
-//             // }
-//           }
-//           html += `</span>`;
-//           html += `</div>`;
-//         }
-
-//         return html;
-//       },
-//     },
-//     legend: {
-//       type: "scroll",
-//       top: 0,
-//       textStyle: { 
-//         color: axisColor,
-//         fontSize: 12,
-//         fontWeight: 500,
-//       },
-//       itemGap: 20,
-//       itemWidth: 20,
-//       itemHeight: 14,
-//     },
-//     grid: {
-//       left: 50,
-//       right: 20,
-//       top: compactHeight ? 48 : 56,
-//       bottom: showZoom ? 85 : 70,
-//       containLabel: true,
-//     },
-//     xAxis: {
-//       type: "category",
-//       data: keys,
-//       axisLabel: {
-//         color: axisColor,
-//         interval: 0,
-//         rotate: keys.length > 6 ? 30 : 0,
-//         width: 140,
-//         overflow: "truncate",
-//         fontSize: 11,
-//         fontWeight: 500,
-//       },
-//       axisTick: { show: false },
-//       axisLine: { 
-//         lineStyle: { 
-//           color: gridLine,
-//           width: 1.5,
-//         } 
-//       },
-//     },
-//     yAxis: {
-//       type: "value",
-//       name: "Emissions (tCO₂e)",
-//       nameTextStyle: { 
-//         color: axisColor,
-//         fontSize: 12,
-//         fontWeight: 600,
-//         padding: [0, 0, 0, 0],
-//       },
-//       axisLabel: { 
-//         color: axisColor,
-//         fontSize: 11,
-//         fontWeight: 500,
-//       },
-//       splitLine: { 
-//         lineStyle: { 
-//           color: gridLine,
-//           type: "dashed" as const,
-//           width: 1,
-//         } 
-//       },
-//     },
-//     dataZoom: showZoom
-//       ? [
-//           { 
-//             type: "slider", 
-//             height: 22, 
-//             bottom: 40,
-//             handleStyle: {
-//               color: isDark ? "#64748b" : "#94a3b8",
-//               borderColor: isDark ? "#475569" : "#cbd5e1",
-//             },
-//             dataBackground: {
-//               lineStyle: {
-//                 color: isDark ? "#475569" : "#cbd5e1",
-//               },
-//               areaStyle: {
-//                 color: isDark ? "#334155" : "#e2e8f0",
-//               }
-//             },
-//             selectedDataBackground: {
-//               lineStyle: {
-//                 color: isDark ? "#64748b" : "#94a3b8",
-//               },
-//               areaStyle: {
-//                 color: isDark ? "#475569" : "#cbd5e1",
-//               }
-//             },
-//             borderColor: isDark ? "#475569" : "#cbd5e1",
-//             textStyle: {
-//               color: axisColor,
-//             }
-//           },
-//           { type: "inside" },
-//         ]
-//       : undefined,
-//     series,
-//   };
-// }
-
-// const GhgReportCharts = ({ tablesData, detailsData, isDark }: Props) => {
-//   const compareYear = tablesData.filters.compareYear;
-//   const selectedYear = tablesData.filters.year;
-
-//   const compareLabel = formatPeriodLabel(tablesData.filters.yearType, compareYear, tablesData.ranges);
-//   const selectedLabel = formatPeriodLabel(tablesData.filters.yearType, selectedYear, tablesData.ranges);
-
-//   const textColor = isDark ? "#e2e8f0" : "#111827";
-//   const axisColor = isDark ? "#94a3b8" : "#6b7280";
-
-//   const scopeTwoDonutsOption = useMemo(() => {
-//     const t = tablesData.tables.table1_emissionsByScope_twoYears;
-
-//     const scopeVals = (year: number) => {
-//       const get = (name: string) => num(t.find((r: any) => r.scope === name)?.values?.[String(year)]?.emissions);
-//       return [
-//         { name: "Scope 1", value: r2(get("Scope 1")) },
-//         { name: "Scope 2", value: r2(get("Scope 2")) },
-//         { name: "Scope 3", value: r2(get("Scope 3")) },
-//       ];
-//     };
-
-//     return {
-//       backgroundColor: "transparent",
-//       tooltip: {
-//         trigger: "item",
-//         formatter: (p: any) => `${p.name}: ${p.value} tCO₂e (${p.percent}%)`,
-//       },
-//       legend: { bottom: 0, textStyle: { color: axisColor } },
-//       title: [
-//         { text: compareLabel, left: "25%", top: 6, textAlign: "center", textStyle: { color: textColor, fontSize: 12 } },
-//         { text: selectedLabel, left: "75%", top: 6, textAlign: "center", textStyle: { color: textColor, fontSize: 12 } },
-//       ],
-//       series: [
-//         {
-//           type: "pie",
-//           radius: ["45%", "70%"],
-//           center: ["25%", "52%"],
-//           label: { color: textColor },
-//           data: scopeVals(compareYear),
-//         },
-//         {
-//           type: "pie",
-//           radius: ["45%", "70%"],
-//           center: ["75%", "52%"],
-//           label: { color: textColor },
-//           data: scopeVals(selectedYear),
-//         },
-//       ],
-//     };
-//   }, [tablesData, compareYear, selectedYear, compareLabel, selectedLabel, textColor, axisColor]);
-
-//   const categoryPieOption = useMemo(() => {
-//     const selectedOverview = tablesData.tables.table_overviewByLocations_selectedYear.rows;
-
-//     const byCategory = selectedOverview
-//       .map((r: any) => ({ name: String(r.category || "Unknown"), value: r2(num(r.total)) }))
-//       .sort((a, b) => b.value - a.value);
-
-//     const TOP = 6;
-//     const top = byCategory.slice(0, TOP);
-//     const rest = byCategory.slice(TOP);
-//     const otherSum = rest.reduce((acc, x) => acc + x.value, 0);
-//     const finalData = otherSum > 0 ? [...top, { name: "Other", value: r2(otherSum) }] : top;
-
-//     return {
-//       backgroundColor: "transparent",
-//       tooltip: { trigger: "item", formatter: (p: any) => `${p.name}: ${p.value} tCO₂e (${p.percent}%)` },
-//       legend: { type: "scroll", bottom: 0, textStyle: { color: axisColor } },
-//       series: [
-//         {
-//           name: "Selected Year Categories",
-//           type: "pie",
-//           radius: ["45%", "72%"],
-//           center: ["50%", "48%"],
-//           label: { color: textColor },
-//           data: finalData,
-//         },
-//       ],
-//     };
-//   }, [tablesData, axisColor, textColor]);
-
-//   const scope1Option = useMemo(() => {
-//     const rows = detailsData.rows.filter((r: any) => r.scope === "Scope 1");
-//     return buildGroupedBarOption({
-//       rows,
-//       scopeTitle: "Direct GHG Emissions — Scope 1 (Details)",
-//       selectedLabel,
-//       isDark,
-//       groupKeyMode: "CATEGORY_FUEL",
-//       compactHeight: true,
-//     });
-//   }, [detailsData, selectedLabel, isDark]);
-
-//   const scope2Option = useMemo(() => {
-//     const rows = detailsData.rows.filter((r: any) => r.scope === "Scope 2");
-//     return buildGroupedBarOption({
-//       rows,
-//       scopeTitle: "Indirect GHG Emissions — Scope 2 (Details)",
-//       selectedLabel,
-//       isDark,
-//       groupKeyMode: "CATEGORY_ONLY",
-//       compactHeight: true,
-//     });
-//   }, [detailsData, selectedLabel, isDark]);
-
-//   const scope3Option = useMemo(() => {
-//     const rows = detailsData.rows.filter((r: any) => r.scope === "Scope 3");
-//     return buildGroupedBarOption({
-//       rows,
-//       scopeTitle: "Indirect GHG Emissions — Scope 3 (Details)",
-//       selectedLabel,
-//       isDark,
-//       groupKeyMode: "CATEGORY_FUEL",
-//       compactHeight: true,
-//     });
-//   }, [detailsData, selectedLabel, isDark]);
-
-//   return (
-//     <div className="space-y-8">
-//       <Card
-//         isDark={isDark}
-//         title={`Chart (Table 1): Emissions by Scope — ${compareLabel} vs ${selectedLabel}`}
-//         subtitle="Source: Table 1 (Emissions by Scope)."
-//       >
-//         <ReactECharts option={scopeTwoDonutsOption} style={{ height: 340 }} />
-//       </Card>
-
-//       <Card
-//         isDark={isDark}
-//         title={`Chart (Overview Table): Total Emissions by Category — ${selectedLabel}`}
-//         subtitle="Source: Overview by Locations (Selected Year)."
-//       >
-//         <ReactECharts option={categoryPieOption} style={{ height: 400 }} />
-//       </Card>
-
-//       <Card
-//         isDark={isDark}
-//         title={`Chart (Details Table): Direct GHG Emissions — Scope 1 — ${selectedLabel}`}
-//         subtitle="Bars show emissions. Hover to see detailed breakdown including consumption values and units."
-//       >
-//         <ReactECharts option={scope1Option} style={{ height: 380 }} />
-//       </Card>
-
-//       <Card
-//         isDark={isDark}
-//         title={`Chart (Details Table): Indirect GHG Emissions — Scope 2 — ${selectedLabel}`}
-//         subtitle="Bars show emissions. Hover to see detailed breakdown including consumption values and units."
-//       >
-//         <ReactECharts option={scope2Option} style={{ height: 360 }} />
-//       </Card>
-
-//       <Card
-//         isDark={isDark}
-//         title={`Chart (Details Table): Indirect GHG Emissions — Scope 3 — ${selectedLabel}`}
-//         subtitle="Bars show emissions. Hover to see detailed breakdown including consumption values and units."
-//       >
-//         <ReactECharts option={scope3Option} style={{ height: 380 }} />
-//       </Card>
-//     </div>
-//   );
-// };
-
-// export default GhgReportCharts;
-
 import React, { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import type { GhgReportTablesResponse, GhgReportDetailsResponse } from "../../services/ghgreportService";
@@ -611,246 +56,258 @@ type Props = {
   isDark?: boolean;
 };
 
-type GroupKeyMode = "CATEGORY_FUEL" | "CATEGORY_ONLY";
+const EXCLUDED_CATEGORIES = ["Renewable Electricity"];
 
-function buildGroupedBarOption(args: {
+function buildScopePercentBarOption(args: {
   rows: any[];
-  scopeTitle: string;
+  compareRows: any[];
+  scopeLabel: string;
+  compareLabel: string;
   selectedLabel: string;
   isDark?: boolean;
-  groupKeyMode: GroupKeyMode;
-  compactHeight?: boolean;
 }) {
-  const { rows, scopeTitle, selectedLabel, isDark, groupKeyMode, compactHeight } = args;
-  const textColor = isDark ? "#e2e8f0" : "#111827";
-  const axisColor = isDark ? "#94a3b8" : "#6b7280";
-  const gridLine = isDark ? "rgba(148,163,184,0.25)" : "rgba(107,114,128,0.25)";
+  const { rows, compareRows, scopeLabel, compareLabel, selectedLabel, isDark } = args;
+  const axisColor = isDark ? "#94a3b8" : "#52525b";
+  const labelColor = isDark ? "#e2e8f0" : "#18181b";
+  const gridLine = isDark ? "rgba(148,163,184,0.12)" : "rgba(0,0,0,0.06)";
+  const bgStripe = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.018)";
 
-  const colorPalette = [
-    "#3b82f6",
-    "#10b981",
-    "#8b5cf6",
-    "#f59e0b",
-    "#ec4899",
-    "#14b8a6",
-    "#f97316",
-    "#6366f1",
-    "#06b6d4",
-    "#84cc16",
-  ];
-
-  const siteSet = new Set<string>();
-  rows.forEach((r) => siteSet.add(String(r.siteName || "")));
-  const sites = Array.from(siteSet).filter(Boolean).sort((a, b) => a.localeCompare(b));
-
-  const keyOf = (r: any) => {
-    const cat = String(r.categoryName || "");
-    const fuel = String(r.fuelType || "");
-    if (groupKeyMode === "CATEGORY_ONLY") return cat || "Unknown Category";
-    const left = cat || "Unknown Category";
-    const right = fuel && fuel !== "Unknown" ? fuel : "Unknown";
-    return `${left} • ${right}`;
+  const COMPARE_COLOR = {
+    type: "linear" as const, x: 0, y: 0, x2: 1, y2: 0,
+    colorStops: [
+      { offset: 0, color: "#0f2a5c" },
+      { offset: 0.5, color: "#1a56a8" },
+      { offset: 1, color: "#5fa8e8" },
+    ],
+  };
+  const SELECTED_COLOR = {
+    type: "linear" as const, x: 0, y: 0, x2: 1, y2: 0,
+    colorStops: [
+      { offset: 0, color: "#166534" },
+      { offset: 0.5, color: "#16a34a" },
+      { offset: 1, color: "#86efac" },
+    ],
   };
 
-  const keySet = new Set<string>();
-  rows.forEach((r) => keySet.add(keyOf(r)));
-  const keys = Array.from(keySet).filter(Boolean).sort((a, b) => a.localeCompare(b));
-
-  const emissionsMatrix = new Map<string, Map<string, number>>();
-  const consumptionMatrix = new Map<string, Map<string, { value: number; unit: string }>>();
-
-  for (const k of keys) {
-    emissionsMatrix.set(k, new Map());
-    consumptionMatrix.set(k, new Map());
-  }
-
-  if (rows.length > 0) {
-    console.warn("[GhgReportCharts] First detail row shape:", JSON.stringify(rows[0], null, 2));
-  }
-
-  for (const r of rows) {
-    const k = keyOf(r);
-    const s = String(r.siteName || "");
-    const e = r2(num(r.selected?.emissions));
-    const consumption = r2(num(r.selected?.consumption));
-    const unit = String(
-      r.selected?.consumptionUnit ||
-        r.selected?.unit ||
-        r.consumptionUnit ||
-        r.unit ||
-        r.selected?.activityUnit ||
-        r.activityUnit ||
-        ""
-    );
-    if (!k || !s) continue;
-    if (!emissionsMatrix.has(k)) emissionsMatrix.set(k, new Map());
-    if (!consumptionMatrix.has(k)) consumptionMatrix.set(k, new Map());
-    emissionsMatrix.get(k)!.set(s, (emissionsMatrix.get(k)!.get(s) || 0) + e);
-    const existing = consumptionMatrix.get(k)!.get(s);
-    if (existing) {
-      consumptionMatrix.get(k)!.set(s, { value: existing.value + consumption, unit: existing.unit || unit });
-    } else {
-      consumptionMatrix.get(k)!.set(s, { value: consumption, unit });
+  const sumByCategory = (sourceRows: any[]) => {
+    const m = new Map<string, number>();
+    for (const r of sourceRows) {
+      const cat = String(r.categoryName || "");
+      if (!cat || EXCLUDED_CATEGORIES.includes(cat)) continue;
+      m.set(cat, (m.get(cat) || 0) + r2(num(r.selected?.emissions)));
     }
-  }
+    return m;
+  };
 
-  const series = sites.map((site, index) => ({
-    name: site,
-    type: "bar" as const,
-    barWidth: 16,
-    barGap: "30%",
-    itemStyle: {
-      borderRadius: [4, 4, 0, 0],
-      color: colorPalette[index % colorPalette.length],
-      shadowColor: isDark ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.12)",
-      shadowBlur: 6,
-      shadowOffsetY: 3,
-    },
-    emphasis: {
-      focus: "series" as const,
-      itemStyle: {
-        shadowBlur: 10,
-        shadowOffsetY: 4,
-        brightness: 1.15,
-      },
-    },
-    label: {
-      show: true,
-      position: "top" as const,
-      color: textColor,
-      fontSize: 11,
-      fontWeight: 600,
-      distance: 5,
-      formatter: (p: any) => (p.value > 0 ? `${p.value}` : ""),
-    },
-    data: keys.map((k) => r2(emissionsMatrix.get(k)?.get(site) || 0)),
-  }));
+  const selectedMap = sumByCategory(rows);
+  const compareMap = sumByCategory(compareRows);
 
-  const showZoom = keys.length > 8;
+  const allCats = Array.from(
+    new Set([...selectedMap.keys(), ...compareMap.keys()])
+  ).sort((a, b) => a.localeCompare(b));
+
+  const selectedTotal = Array.from(selectedMap.values()).reduce((a, b) => a + b, 0);
+  const compareTotal = Array.from(compareMap.values()).reduce((a, b) => a + b, 0);
+
+  const comparePcts = allCats.map((cat) => {
+    const raw = compareMap.get(cat) || 0;
+    return compareTotal > 0 && raw > 0 ? r2((raw / compareTotal) * 100) : 0;
+  });
+  const selectedPcts = allCats.map((cat) => {
+    const raw = selectedMap.get(cat) || 0;
+    return selectedTotal > 0 && raw > 0 ? r2((raw / selectedTotal) * 100) : 0;
+  });
+
+  const compareAbsolute = allCats.map((cat) => r2(compareMap.get(cat) || 0));
+  const selectedAbsolute = allCats.map((cat) => r2(selectedMap.get(cat) || 0));
+
+  const compareName = compareLabel.split(" (")[0];
+  const selectedName = selectedLabel.split(" (")[0];
+
+  const rowH = 52;
+  const barHeight = Math.max(allCats.length * rowH * 2, 160);
+
+  const stripeMarkAreas = allCats
+    .filter((_, i) => i % 2 === 0)
+    .map((cat) => [
+      { yAxis: cat, itemStyle: { color: bgStripe } },
+      { yAxis: cat },
+    ]);
 
   return {
     backgroundColor: "transparent",
-    color: colorPalette,
     tooltip: {
       trigger: "axis",
-      axisPointer: {
-        type: "shadow",
-        shadowStyle: { color: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)" },
-      },
-      backgroundColor: isDark ? "rgba(15,23,42,0.96)" : "rgba(255,255,255,0.96)",
-      borderColor: isDark ? "#475569" : "#e5e7eb",
+      axisPointer: { type: "none" },
+      backgroundColor: isDark ? "rgba(9,14,28,0.97)" : "rgba(255,255,255,0.98)",
+      borderColor: isDark ? "#334155" : "#e4e4e7",
       borderWidth: 1,
-      padding: [12, 16],
-      textStyle: { color: textColor, fontSize: 13 },
+      padding: [14, 18],
+      textStyle: { color: labelColor, fontSize: 13 },
+      extraCssText: `box-shadow: 0 8px 32px rgba(0,0,0,${isDark ? "0.5" : "0.12"}); border-radius: 10px;`,
       formatter: (params: any) => {
-        const dataIndex = params?.[0]?.dataIndex ?? 0;
-        const exactKey = keys[dataIndex] ?? params?.[0]?.name ?? "";
-        let html = `<div style="font-weight:700;margin-bottom:8px;font-size:13px">${exactKey}</div>`;
-        html += `<table style="border-collapse:collapse;width:100%">`;
-        html += `<tr style="font-size:11px;opacity:0.7"><th style="text-align:left;padding:2px 8px 4px 0">SITE</th><th style="text-align:right;padding:2px 8px">EMISSIONS</th><th style="text-align:right;padding:2px 0">CONSUMPTION</th></tr>`;
-        for (const p of params || []) {
-          if (!p.value || p.value === 0) continue;
-          const consumption = consumptionMatrix.get(exactKey)?.get(p.seriesName);
-          const hasConsumption = consumption && consumption.value > 0;
-          html += `<tr>`;
-          html += `<td style="padding:3px 8px 3px 0;font-size:12px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${p.color};margin-right:6px"></span>${p.seriesName}</td>`;
-          html += `<td style="text-align:right;padding:3px 8px;font-size:12px;font-weight:600">${p.value} tCO₂e</td>`;
-          html += `<td style="text-align:right;padding:3px 0;font-size:12px">`;
-          if (hasConsumption) {
-            html += `${r2(consumption!.value)}`;
-            if (consumption!.unit) html += ` <span style="font-size:10px;opacity:0.7">${consumption!.unit}</span>`;
-          } else {
-            html += `—`;
-          }
-          html += `</td></tr>`;
-        }
-        if (params && params.filter((p: any) => p.value > 0).length > 1) {
-          const totalEmissions = params.reduce((sum: number, p: any) => sum + (p.value || 0), 0);
-          let totalConsumption = 0;
-          let totalUnit = "";
-          params.forEach((p: any) => {
-            const consumption = consumptionMatrix.get(exactKey)?.get(p.seriesName);
-            if (consumption && consumption.value > 0) {
-              totalConsumption += consumption.value;
-              if (!totalUnit) totalUnit = consumption.unit;
-            }
-          });
-          html += `<tr style="border-top:1px solid rgba(128,128,128,0.3);margin-top:4px"><td style="padding:4px 8px 0 0;font-size:11px;font-weight:700">TOTAL</td><td style="text-align:right;padding:4px 8px 0;font-size:12px;font-weight:700">${r2(totalEmissions)} tCO₂e</td>`;
-          if (totalConsumption > 0) {
-            html += `<td style="text-align:right;padding:4px 0 0;font-size:12px;font-weight:700">${r2(totalConsumption)}</td>`;
-          } else {
-            html += `<td></td>`;
-          }
-          html += `</tr>`;
-        }
-        html += `</table>`;
-        return html;
+        const idx = params?.[0]?.dataIndex ?? 0;
+        const cat = allCats[idx] ?? "";
+        const compareVal = comparePcts[idx];
+        const selectedVal = selectedPcts[idx];
+        const compareAbs = compareAbsolute[idx];
+        const selectedAbs = selectedAbsolute[idx];
+        const accentC = isDark ? "#5fa8e8" : "#1a56a8";
+        const accentS = isDark ? "#86efac" : "#16a34a";
+        const mutedC = isDark ? "#64748b" : "#a1a1aa";
+        return `
+          <div style="min-width:260px">
+            <div style="font-size:13px;font-weight:700;color:${labelColor};margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid ${isDark ? "#1e293b" : "#f4f4f5"}">${cat}</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${accentC}"></span>
+                  <span style="font-size:12px;color:${mutedC}">${compareName}</span>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:8px">
+                  <span style="font-size:15px;font-weight:700;color:${labelColor}">${compareVal}%</span>
+                  <span style="font-size:11px;color:${mutedC}">${compareAbs} tCO₂e</span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${accentS}"></span>
+                  <span style="font-size:12px;color:${mutedC}">${selectedName}</span>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:8px">
+                  <span style="font-size:15px;font-weight:700;color:${labelColor}">${selectedVal}%</span>
+                  <span style="font-size:11px;color:${mutedC}">${selectedAbs} tCO₂e</span>
+                </div>
+              </div>
+            </div>
+          </div>`;
       },
     },
     legend: {
-      type: "scroll",
-      top: 0,
-      textStyle: { color: axisColor, fontSize: 12, fontWeight: 500 },
-      itemGap: 20,
-      itemWidth: 20,
+      bottom: 4,
+      left: "center",
+      itemWidth: 14,
       itemHeight: 14,
+      borderRadius: 3,
+      itemGap: 28,
+      textStyle: { color: axisColor, fontSize: 12, fontWeight: 500 },
+      data: [
+        { name: compareName, icon: "roundRect", itemStyle: { color: isDark ? "#5fa8e8" : "#1a56a8" } },
+        { name: selectedName, icon: "roundRect", itemStyle: { color: isDark ? "#86efac" : "#16a34a" } },
+      ],
     },
     grid: {
-      left: 50,
-      right: 20,
-      top: compactHeight ? 48 : 56,
-      bottom: showZoom ? 85 : 70,
+      left: 16,
+      right: 72,
+      top: 12,
+      bottom: 48,
       containLabel: true,
     },
     xAxis: {
-      type: "category",
-      data: keys,
+      type: "value",
+      min: 0,
+      max: 100,
+      splitNumber: 5,
       axisLabel: {
         color: axisColor,
-        interval: 0,
-        rotate: keys.length > 6 ? 30 : 0,
-        width: 140,
-        overflow: "truncate",
         fontSize: 11,
-        fontWeight: 500,
+        formatter: (v: number) => `${v}%`,
       },
+      axisLine: { show: false },
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: gridLine, width: 1.5 } },
+      splitLine: {
+        lineStyle: {
+          color: gridLine,
+          type: "solid" as const,
+          width: 1,
+        },
+      },
     },
     yAxis: {
-      type: "value",
-      name: "Emissions (tCO₂e)",
-      nameTextStyle: { color: axisColor, fontSize: 12, fontWeight: 600 },
-      axisLabel: { color: axisColor, fontSize: 11, fontWeight: 500 },
-      splitLine: { lineStyle: { color: gridLine, type: "dashed" as const, width: 1 } },
+      type: "category",
+      data: allCats,
+      inverse: false,
+      axisLabel: {
+        color: labelColor,
+        fontSize: 12,
+        fontWeight: 600,
+        width: 190,
+        overflow: "truncate",
+        lineHeight: 18,
+        padding: [0, 12, 0, 0],
+      },
+      axisTick: { show: false },
+      axisLine: { show: false },
+      splitLine: { show: false },
     },
-    dataZoom: showZoom
-      ? [
-          {
-            type: "slider",
-            height: 22,
-            bottom: 40,
-            handleStyle: {
-              color: isDark ? "#64748b" : "#94a3b8",
-              borderColor: isDark ? "#475569" : "#cbd5e1",
-            },
-            dataBackground: {
-              lineStyle: { color: isDark ? "#475569" : "#cbd5e1" },
-              areaStyle: { color: isDark ? "#334155" : "#e2e8f0" },
-            },
-            selectedDataBackground: {
-              lineStyle: { color: isDark ? "#64748b" : "#94a3b8" },
-              areaStyle: { color: isDark ? "#475569" : "#cbd5e1" },
-            },
-            borderColor: isDark ? "#475569" : "#cbd5e1",
-            textStyle: { color: axisColor },
+    series: [
+      {
+        name: compareName,
+        type: "bar" as const,
+        barWidth: 18,
+        barCategoryGap: "40%",
+        barGap: "20%",
+        itemStyle: {
+          color: COMPARE_COLOR,
+          borderRadius: [0, 5, 5, 0],
+        },
+        emphasis: {
+          focus: "series" as const,
+          itemStyle: {
+            shadowBlur: 12,
+            shadowColor: "rgba(26,86,168,0.4)",
+            shadowOffsetX: 3,
           },
-          { type: "inside" },
-        ]
-      : undefined,
-    series,
+        },
+        label: {
+          show: true,
+          position: "right" as const,
+          distance: 6,
+          color: isDark ? "#93c5fd" : "#1a56a8",
+          fontSize: 11,
+          fontWeight: 700,
+          formatter: (p: any) => (p.value > 0 ? `${p.value}%` : ""),
+        },
+        markArea: {
+          silent: true,
+          data: stripeMarkAreas,
+        },
+        data: comparePcts,
+      },
+      {
+        name: selectedName,
+        type: "bar" as const,
+        barWidth: 18,
+        barCategoryGap: "40%",
+        barGap: "20%",
+        itemStyle: {
+          color: SELECTED_COLOR,
+          borderRadius: [0, 5, 5, 0],
+        },
+        emphasis: {
+          focus: "series" as const,
+          itemStyle: {
+            shadowBlur: 12,
+            shadowColor: "rgba(22,163,74,0.4)",
+            shadowOffsetX: 3,
+          },
+        },
+        label: {
+          show: true,
+          position: "right" as const,
+          distance: 6,
+          color: isDark ? "#86efac" : "#166534",
+          fontSize: 11,
+          fontWeight: 700,
+          formatter: (p: any) => (p.value > 0 ? `${p.value}%` : ""),
+        },
+        data: selectedPcts,
+      },
+    ],
+    _barHeight: barHeight,
   };
 }
+
 
 const GhgReportCharts = ({ tablesData, detailsData, isDark }: Props) => {
   const compareYear = tablesData.filters.compareYear;
@@ -1018,181 +475,226 @@ const GhgReportCharts = ({ tablesData, detailsData, isDark }: Props) => {
   }, [tablesData, compareYear, selectedYear, compareLabel, selectedLabel, textColor, axisColor, gridLine, isDark]);
 
   const categoryBarOption = useMemo(() => {
-    const rows = tablesData.tables.table_overviewByLocations_selectedYear.rows;
+    const allRows = detailsData.rows.filter(
+      (r: any) => !EXCLUDED_CATEGORIES.includes(String(r.categoryName || ""))
+    );
 
-    const siteSet = new Set<string>();
-    rows.forEach((r: any) => {
-      Object.keys(r.sites || {}).forEach((s) => siteSet.add(s));
+    const catSet = new Set<string>();
+    allRows.forEach((r: any) => {
+      if (r.categoryName) catSet.add(String(r.categoryName));
     });
-    const sites = Array.from(siteSet).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    const categories = Array.from(catSet).filter(Boolean).sort((a, b) => a.localeCompare(b));
 
-    const categories = Array.from(
-      new Set(rows.map((r: any) => String(r.category || "Unknown")))
-    ).filter(Boolean);
-
-    const categoryMatrix = new Map<string, Map<string, number>>();
-    for (const cat of categories) categoryMatrix.set(cat, new Map());
-
-    for (const r of rows) {
-      const cat = String(r.category || "Unknown");
-      if (!categoryMatrix.has(cat)) categoryMatrix.set(cat, new Map());
-      for (const [site, val] of Object.entries(r.sites || {})) {
-        const prev = categoryMatrix.get(cat)!.get(site) || 0;
-        categoryMatrix.get(cat)!.set(site, prev + r2(num(val)));
-      }
+    const selectedByCat = new Map<string, number>();
+    const compareByCat = new Map<string, number>();
+    for (const r of allRows) {
+      const cat = String(r.categoryName || "");
+      if (!cat) continue;
+      selectedByCat.set(cat, (selectedByCat.get(cat) || 0) + r2(num(r.selected?.emissions)));
+      compareByCat.set(cat, (compareByCat.get(cat) || 0) + r2(num(r.compare?.emissions)));
     }
 
-    const colorPalette = [
-      "#3b82f6",
-      "#10b981",
-      "#8b5cf6",
-      "#f59e0b",
-      "#ec4899",
-      "#14b8a6",
-      "#f97316",
-      "#6366f1",
-    ];
+    const compareName = compareLabel.split(" (")[0];
+    const selectedName = selectedLabel.split(" (")[0];
 
-    const series = sites.map((site, i) => ({
-      name: site,
-      type: "bar" as const,
-      barMaxWidth: 40,
-      barGap: "20%",
-      itemStyle: {
-        borderRadius: [4, 4, 0, 0],
-        color: colorPalette[i % colorPalette.length],
-      },
-      emphasis: { focus: "series" as const },
-      label: {
-        show: true,
-        position: "top" as const,
-        color: isDark ? "#e2e8f0" : "#111827",
-        fontSize: 11,
-        fontWeight: 600,
-        formatter: (p: any) => (p.value > 0 ? `${p.value}` : ""),
-      },
-      data: categories.map((cat) => r2(categoryMatrix.get(cat)?.get(site) || 0)),
-    }));
+    const gridLineColor = isDark ? "rgba(148,163,184,0.12)" : "rgba(0,0,0,0.06)";
+    const labelCol = isDark ? "#e2e8f0" : "#18181b";
+    const axisCol = isDark ? "#94a3b8" : "#52525b";
+    const mutedCol = isDark ? "#64748b" : "#a1a1aa";
 
-    const totalBySite = new Map<string, number>();
-    sites.forEach((site) => {
-      const t = categories.reduce((sum, cat) => sum + (categoryMatrix.get(cat)?.get(site) || 0), 0);
-      totalBySite.set(site, r2(t));
-    });
+    const COMPARE_GRADIENT = {
+      type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1,
+      colorStops: [
+        { offset: 0, color: "#0f2a5c" },
+        { offset: 0.5, color: "#1a56a8" },
+        { offset: 1, color: "#5fa8e8" },
+      ],
+    };
+    const SELECTED_GRADIENT = {
+      type: "linear" as const, x: 0, y: 0, x2: 0, y2: 1,
+      colorStops: [
+        { offset: 0, color: "#166534" },
+        { offset: 0.5, color: "#16a34a" },
+        { offset: 1, color: "#86efac" },
+      ],
+    };
+
+    const compareData = categories.map((c) => r2(compareByCat.get(c) || 0));
+    const selectedData = categories.map((c) => r2(selectedByCat.get(c) || 0));
 
     return {
       backgroundColor: "transparent",
-      color: colorPalette,
       tooltip: {
         trigger: "axis",
         axisPointer: { type: "shadow" },
-        backgroundColor: isDark ? "rgba(15,23,42,0.96)" : "rgba(255,255,255,0.96)",
-        borderColor: isDark ? "#475569" : "#e5e7eb",
+        backgroundColor: isDark ? "rgba(9,14,28,0.97)" : "rgba(255,255,255,0.98)",
+        borderColor: isDark ? "#334155" : "#e4e4e7",
         borderWidth: 1,
-        padding: [12, 16],
-        textStyle: { color: isDark ? "#e2e8f0" : "#111827", fontSize: 13 },
+        padding: [14, 18],
+        textStyle: { color: labelCol, fontSize: 13 },
+        extraCssText: `box-shadow:0 8px 32px rgba(0,0,0,${isDark ? "0.5" : "0.12"});border-radius:10px;`,
         formatter: (params: any) => {
-          const cat = params?.[0]?.name ?? "";
-          let html = `<div style="font-weight:700;margin-bottom:8px;font-size:13px">${cat}</div>`;
-          html += `<table style="border-collapse:collapse;min-width:220px">`;
-          html += `<tr style="font-size:11px;opacity:0.65"><th style="text-align:left;padding:2px 12px 4px 0">SITE</th><th style="text-align:right;padding:2px 0 4px">EMISSIONS (tCO₂e)</th></tr>`;
-          let total = 0;
-          for (const p of params || []) {
-            if (p.value === 0) continue;
-            total += p.value;
-            html += `<tr>
-              <td style="padding:3px 12px 3px 0;font-size:12px">
-                <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${p.color};margin-right:6px;vertical-align:middle"></span>${p.seriesName}
-              </td>
-              <td style="text-align:right;padding:3px 0;font-size:12px;font-weight:600">${p.value}</td>
-            </tr>`;
-          }
-          if (params.filter((p: any) => p.value > 0).length > 1) {
-            html += `<tr style="border-top:1px solid rgba(128,128,128,0.3)">
-              <td style="padding:4px 12px 0 0;font-size:11px;font-weight:700">TOTAL</td>
-              <td style="text-align:right;padding:4px 0 0;font-size:12px;font-weight:700">${r2(total)}</td>
-            </tr>`;
-          }
-          html += `</table>`;
-          return html;
+          const idx = params?.[0]?.dataIndex ?? 0;
+          const cat = categories[idx] ?? params?.[0]?.name ?? "";
+          const cmpVal = compareData[idx];
+          const selVal = selectedData[idx];
+          const accentC = isDark ? "#5fa8e8" : "#1a56a8";
+          const accentS = isDark ? "#86efac" : "#16a34a";
+          return `
+            <div style="min-width:240px">
+              <div style="font-size:13px;font-weight:700;color:${labelCol};margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid ${isDark ? "#1e293b" : "#f4f4f5"}">${cat}</div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${accentC}"></span>
+                    <span style="font-size:12px;color:${mutedCol}">${compareName}</span>
+                  </div>
+                  <span style="font-size:15px;font-weight:700;color:${labelCol}">${cmpVal} <span style="font-size:11px;font-weight:400;color:${mutedCol}">tCO₂e</span></span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${accentS}"></span>
+                    <span style="font-size:12px;color:${mutedCol}">${selectedName}</span>
+                  </div>
+                  <span style="font-size:15px;font-weight:700;color:${labelCol}">${selVal} <span style="font-size:11px;font-weight:400;color:${mutedCol}">tCO₂e</span></span>
+                </div>
+              </div>
+            </div>`;
         },
       },
       legend: {
-        type: "scroll",
-        bottom: 0,
-        itemWidth: 16,
+        bottom: 4,
+        left: "center",
+        itemWidth: 14,
         itemHeight: 14,
-        itemGap: 20,
-        textStyle: { color: axisColor, fontSize: 12, fontWeight: 500 },
+        borderRadius: 3,
+        itemGap: 28,
+        textStyle: { color: axisCol, fontSize: 12, fontWeight: 500 },
+        data: [
+          { name: compareName, icon: "roundRect", itemStyle: { color: isDark ? "#5fa8e8" : "#1a56a8" } },
+          { name: selectedName, icon: "roundRect", itemStyle: { color: isDark ? "#86efac" : "#16a34a" } },
+        ],
       },
-      grid: { left: 20, right: 20, top: 16, bottom: 52, containLabel: true },
+      grid: { left: 16, right: 16, top: 12, bottom: 52, containLabel: true },
       xAxis: {
         type: "category",
         data: categories,
         axisLabel: {
-          color: axisColor,
+          color: axisCol,
           fontSize: 11,
           fontWeight: 500,
           interval: 0,
-          rotate: categories.length > 4 ? 20 : 0,
+          rotate: categories.length > 4 ? 18 : 0,
           overflow: "truncate",
-          width: 160,
+          width: 150,
         },
         axisTick: { show: false },
-        axisLine: { lineStyle: { color: isDark ? "rgba(148,163,184,0.25)" : "rgba(107,114,128,0.25)", width: 1.5 } },
+        axisLine: { lineStyle: { color: gridLineColor, width: 1.5 } },
       },
       yAxis: {
         type: "value",
         name: "tCO₂e",
-        nameTextStyle: { color: axisColor, fontSize: 12, fontWeight: 600 },
-        axisLabel: { color: axisColor, fontSize: 11 },
-        splitLine: {
-          lineStyle: {
-            color: isDark ? "rgba(148,163,184,0.25)" : "rgba(107,114,128,0.25)",
-            type: "dashed" as const,
-            width: 1,
-          },
-        },
+        nameTextStyle: { color: axisCol, fontSize: 11, fontWeight: 600, padding: [0, 0, 0, 0] },
+        axisLabel: { color: axisCol, fontSize: 11 },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: gridLineColor, type: "solid" as const, width: 1 } },
       },
-      series,
+      series: [
+        {
+          name: compareName,
+          type: "bar" as const,
+          barMaxWidth: 36,
+          barGap: "20%",
+          itemStyle: { color: COMPARE_GRADIENT, borderRadius: [4, 4, 0, 0] },
+          emphasis: {
+            focus: "series" as const,
+            itemStyle: { shadowBlur: 12, shadowColor: "rgba(26,86,168,0.4)", shadowOffsetY: -3 },
+          },
+          label: {
+            show: true,
+            position: "top" as const,
+            distance: 5,
+            color: isDark ? "#93c5fd" : "#1a56a8",
+            fontSize: 11,
+            fontWeight: 700,
+            formatter: (p: any) => (p.value > 0 ? `${p.value}` : ""),
+          },
+          data: compareData,
+        },
+        {
+          name: selectedName,
+          type: "bar" as const,
+          barMaxWidth: 36,
+          barGap: "20%",
+          itemStyle: { color: SELECTED_GRADIENT, borderRadius: [4, 4, 0, 0] },
+          emphasis: {
+            focus: "series" as const,
+            itemStyle: { shadowBlur: 12, shadowColor: "rgba(22,163,74,0.4)", shadowOffsetY: -3 },
+          },
+          label: {
+            show: true,
+            position: "top" as const,
+            distance: 5,
+            color: isDark ? "#86efac" : "#166534",
+            fontSize: 11,
+            fontWeight: 700,
+            formatter: (p: any) => (p.value > 0 ? `${p.value}` : ""),
+          },
+          data: selectedData,
+        },
+      ],
     };
-  }, [tablesData, axisColor, isDark]);
+  }, [detailsData, compareLabel, selectedLabel, axisColor, isDark]);
+
 
   const scope1Option = useMemo(() => {
     const rows = detailsData.rows.filter((r: any) => r.scope === "Scope 1");
-    return buildGroupedBarOption({
+    const compareRows = rows.map((r: any) => ({
+      ...r,
+      selected: { emissions: num(r.compare?.emissions) },
+    }));
+    return buildScopePercentBarOption({
       rows,
-      scopeTitle: "Direct GHG Emissions — Scope 1 (Details)",
+      compareRows,
+      scopeLabel: "Scope 1",
+      compareLabel,
       selectedLabel,
       isDark,
-      groupKeyMode: "CATEGORY_FUEL",
-      compactHeight: true,
     });
-  }, [detailsData, selectedLabel, isDark]);
+  }, [detailsData, compareLabel, selectedLabel, isDark]);
 
   const scope2Option = useMemo(() => {
     const rows = detailsData.rows.filter((r: any) => r.scope === "Scope 2");
-    return buildGroupedBarOption({
+    const compareRows = rows.map((r: any) => ({
+      ...r,
+      selected: { emissions: num(r.compare?.emissions) },
+    }));
+    return buildScopePercentBarOption({
       rows,
-      scopeTitle: "Indirect GHG Emissions — Scope 2 (Details)",
+      compareRows,
+      scopeLabel: "Scope 2",
+      compareLabel,
       selectedLabel,
       isDark,
-      groupKeyMode: "CATEGORY_ONLY",
-      compactHeight: true,
     });
-  }, [detailsData, selectedLabel, isDark]);
+  }, [detailsData, compareLabel, selectedLabel, isDark]);
 
   const scope3Option = useMemo(() => {
     const rows = detailsData.rows.filter((r: any) => r.scope === "Scope 3");
-    return buildGroupedBarOption({
+    const compareRows = rows.map((r: any) => ({
+      ...r,
+      selected: { emissions: num(r.compare?.emissions) },
+    }));
+    return buildScopePercentBarOption({
       rows,
-      scopeTitle: "Indirect GHG Emissions — Scope 3 (Details)",
+      compareRows,
+      scopeLabel: "Scope 3",
+      compareLabel,
       selectedLabel,
       isDark,
-      groupKeyMode: "CATEGORY_FUEL",
-      compactHeight: true,
     });
-  }, [detailsData, selectedLabel, isDark]);
+  }, [detailsData, compareLabel, selectedLabel, isDark]);
 
   return (
     <div className="grid grid-cols-1 gap-4">
@@ -1205,35 +707,35 @@ const GhgReportCharts = ({ tablesData, detailsData, isDark }: Props) => {
       </Card>
 
       <Card
-        title={`Emissions by Category — ${selectedLabel}`}
-        subtitle="Overview by category for the selected year."
+        title={`Emissions by Category — ${compareLabel.split(" (")[0]} vs ${selectedLabel.split(" (")[0]}`}
+        subtitle={`${compareLabel} vs ${selectedLabel}`}
         isDark={isDark}
       >
         <ReactECharts option={categoryBarOption} style={{ height: 320 }} notMerge />
       </Card>
 
       <Card
-        title={`Direct GHG Emissions — Scope 1 (Details)`}
-        subtitle={`${selectedLabel} — by Category & Fuel Type`}
+        title={`Scope 1 Emissions by Category (%) — ${compareLabel.split(" (")[0]} vs ${selectedLabel.split(" (")[0]}`}
+        subtitle={`${selectedLabel} — Direct GHG Emissions`}
         isDark={isDark}
       >
-        <ReactECharts option={scope1Option} style={{ height: 340 }} notMerge />
+        <ReactECharts option={scope1Option} style={{ height: (scope1Option as any)._barHeight + 60 }} notMerge />
       </Card>
 
       <Card
-        title={`Indirect GHG Emissions — Scope 2 (Details)`}
-        subtitle={`${selectedLabel} — by Category`}
+        title={`Scope 2 Emissions by Category (%) — ${compareLabel.split(" (")[0]} vs ${selectedLabel.split(" (")[0]}`}
+        subtitle={`${selectedLabel} — Indirect GHG Emissions`}
         isDark={isDark}
       >
-        <ReactECharts option={scope2Option} style={{ height: 340 }} notMerge />
+        <ReactECharts option={scope2Option} style={{ height: (scope2Option as any)._barHeight + 60 }} notMerge />
       </Card>
 
       <Card
-        title={`Indirect GHG Emissions — Scope 3 (Details)`}
-        subtitle={`${selectedLabel} — by Category & Fuel Type`}
+        title={`Scope 3 Emissions by Category (%) — ${compareLabel.split(" (")[0]} vs ${selectedLabel.split(" (")[0]}`}
+        subtitle={`${selectedLabel} — Indirect GHG Emissions`}
         isDark={isDark}
       >
-        <ReactECharts option={scope3Option} style={{ height: 340 }} notMerge />
+        <ReactECharts option={scope3Option} style={{ height: (scope3Option as any)._barHeight + 60 }} notMerge />
       </Card>
     </div>
   );
