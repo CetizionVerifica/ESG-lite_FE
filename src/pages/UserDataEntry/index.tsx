@@ -33,6 +33,7 @@ import {
   EmissionStatus,
   ModalRow,
 } from "./types";
+import BulkUploadModal from "../BulkUpload";
 
 interface Site {
   site_id: number;
@@ -72,6 +73,8 @@ const UserDataEntryPage = () => {
   const [emissionFactors, setEmissionFactors] = useState<EmissionFactor[]>([]);
   const [units, setUnits] = useState<UnitData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+
 
   // Dependent dropdown configuration state
   const [columnOptions, setColumnOptions] = useState<ColumnOptionsMap>({});
@@ -932,16 +935,27 @@ const UserDataEntryPage = () => {
 
       {/* Add Entry Button */}
       {selectedCategory && selectedDate && dynamicColumns.length > 0 && (
-        <div className="mb-6">
+        <div className="mb-6 flex gap-3">
           <button
             onClick={openModal}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Add New Entries
           </button>
+           <button
+      onClick={() => setBulkUploadOpen(true)}
+      className="px-4 py-2 bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 flex items-center gap-2"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+      </svg>
+      Bulk Upload
+    </button>
         </div>
       )}
 
+  
       {/* Entry Modal */}
       <Modal
         isOpen={modalOpen}
@@ -1158,6 +1172,26 @@ const UserDataEntryPage = () => {
           </div>
         </div>
       </Modal>
+
+    {selectedCategory && selectedDate && siteId && (
+  <BulkUploadModal
+    isOpen={bulkUploadOpen}
+    onClose={() => setBulkUploadOpen(false)}
+    dynamicColumns={dynamicColumns}
+    emissionFactors={emissionFactors}
+    units={units}
+    siteId={siteId}
+    categoryId={selectedCategory}
+    selectedDate={selectedDate}
+    getExpectedUnit={getExpectedUnit}
+    calculateEmission={calculateEmission}
+    getAutoEmissionCategory={getAutoEmissionCategory}
+    onImportComplete={(newEmissions) => {
+      setEmissions((prev) => [...newEmissions, ...prev]);
+    }}
+  />
+)}
+
 
       {/* Emissions Table */}
       {selectedCategory && selectedDate && (

@@ -95,6 +95,7 @@ export const useEmissionCalculation = (
       if (conversionFactor) {
         const convertedValue = activityValue * conversionFactor;
         const emission = Math.round(((convertedValue * factor.factor_value) / 1000) * 100) / 100;
+        
         return { value: emission, status: "converted" };
       }
 
