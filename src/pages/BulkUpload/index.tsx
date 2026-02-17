@@ -1,12 +1,12 @@
+
+
 import Modal from "../../components/Modal";
-import { BulkUploadModalProps } from "../UserDataEntry/types";
-import { ColumnMappingStage } from "./ColumnMappingStage";
 import { FileUploadStage } from "./FileUploadStage";
+import { ColumnMappingStage } from "./ColumnMappingStage";
 import { ReviewStage } from "./ReviewStage";
 import { useBulkUpload } from "./UseBulkUpload";
+import { BulkUploadModalProps } from "../UserDataEntry/types";
 
-
-// Stage label config
 const STAGES = [
   { key: "upload",  label: "Upload File" },
   { key: "mapping", label: "Map Columns" },
@@ -23,6 +23,8 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
     columnMappings,
     reviewRows,
     selectedRowIds,
+    selectedCategories,
+    uniqueCategories,
     importing,
     importProgress,
     importError,
@@ -41,6 +43,8 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
     handleImport,
     handleReset,
     setStage,
+    toggleCategory,
+    toggleAllCategories,
   } = useBulkUpload(props);
 
   const handleClose = () => {
@@ -59,7 +63,6 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
       className="max-w-3xl! max-h-[90vh]!"
     >
       <div className="flex flex-col gap-5">
-        {/* Stage Progress Indicator */}
         <div className="flex items-center gap-0">
           {STAGES.map((s, idx) => {
             const isCompleted = idx < currentStageIndex;
@@ -68,7 +71,6 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
 
             return (
               <div key={s.key} className="flex items-center flex-1">
-                {/* Step */}
                 <div className="flex flex-col items-center gap-1">
                   <div
                     className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
@@ -97,7 +99,6 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
                   </span>
                 </div>
 
-                {/* Connector */}
                 {!isLast && (
                   <div
                     className={`flex-1 h-0.5 mx-2 mb-4 transition-all
@@ -109,10 +110,8 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
           })}
         </div>
 
-        {/* Divider */}
         <div className="border-t border-gray-100" />
 
-        {/* Stage Content */}
         <div className="min-h-75">
           {stage === "upload" && (
             <FileUploadStage
@@ -125,11 +124,15 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
             <ColumnMappingStage
               totalRows={totalRows}
               uniqueCategoryCount={uniqueCategoryCount}
+              uniqueCategories={uniqueCategories}
+              selectedCategories={selectedCategories}
               uploadedHeaders={uploadedHeaders}
               columnMappings={columnMappings}
               uploadedRows={uploadedRows}
               onUpdateMapping={updateMapping}
               onToggleSkip={toggleSkip}
+              onToggleCategory={toggleCategory}
+              onToggleAllCategories={toggleAllCategories}
               onBack={handleReset}
               onProceed={proceedToReview}
             />

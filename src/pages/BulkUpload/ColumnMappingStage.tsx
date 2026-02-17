@@ -1,14 +1,19 @@
-import { ColumnMappingEntry } from "../UserDataEntry/types";
 
+import { useState } from "react";
+import { ColumnMappingEntry } from "../UserDataEntry/types";
 
 interface ColumnMappingStageProps {
   totalRows: number;
   uniqueCategoryCount: number | null;
+  uniqueCategories: string[];
+  selectedCategories: Set<string>;
   uploadedHeaders: string[];
   columnMappings: ColumnMappingEntry[];
   uploadedRows: Record<string, string>[];
   onUpdateMapping: (requiredField: string, mappedTo: string) => void;
   onToggleSkip: (requiredField: string) => void;
+  onToggleCategory: (category: string) => void;
+  onToggleAllCategories: (categories: string[]) => void;
   onBack: () => void;
   onProceed: () => void;
 }
@@ -16,20 +21,44 @@ interface ColumnMappingStageProps {
 export function ColumnMappingStage({
   totalRows,
   uniqueCategoryCount,
+  uniqueCategories,
+  selectedCategories,
   uploadedHeaders,
   columnMappings,
   uploadedRows,
   onUpdateMapping,
   onToggleSkip,
+  onToggleCategory,
+  onToggleAllCategories,
   onBack,
   onProceed,
 }: ColumnMappingStageProps) {
-  // Check if all required fields are mapped or skipped
+  const [categoryListOpen, setCategoryListOpen] = useState(true);
+
   const requiredMapped = columnMappings
     .filter((m) => m.isRequired)
     .every((m) => m.mappedTo || m.skipped);
 
   const mappedCount = columnMappings.filter((m) => m.mappedTo && !m.skipped).length;
+
+  const categoryMapped = columnMappings.find(
+    (m) => m.requiredField === "emission_category" && m.mappedTo && !m.skipped
+  );
+
+  const allSelected = uniqueCategories.length > 0 && selectedCategories.size === uniqueCategories.length;
+  const noneSelected = selectedCategories.size === 0;
+  const someSelected = !allSelected && !noneSelected;
+
+  // Rows that will be included based on selected categories
+  const includedRowCount = selectedCategories.size === 0
+    ? totalRows
+    : (() => {
+        const catMapping = columnMappings.find((m) => m.requiredField === "emission_category");
+        if (!catMapping || !catMapping.mappedTo) return totalRows;
+        return uploadedRows.filter((r) =>
+          selectedCategories.has(r[catMapping.mappedTo]?.trim())
+        ).length;
+      })();
 
   return (
     <div className="flex flex-col gap-4">
@@ -70,6 +99,94 @@ export function ColumnMappingStage({
           color="green"
         />
       </div>
+
+      {/* Category Filter — only show when category column is mapped */}
+      {categoryMapped && uniqueCategories.length > 0 && (
+        <div className="border border-purple-200 rounded-lg overflow-hidden">
+          {/* Header */}
+          <button
+            onClick={() => setCategoryListOpen((prev) => !prev)}
+            className="w-full flex items-center justify-between px-4 py-2.5 bg-purple-50 hover:bg-purple-100 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+              </svg>
+              <span className="text-sm font-semibold text-purple-700">
+                Filter Categories
+              </span>
+              <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                {selectedCategories.size} / {uniqueCategories.length} selected
+              </span>
+              {selectedCategories.size > 0 && selectedCategories.size < uniqueCategories.length && (
+                <span className="text-xs text-purple-500">
+                  → {includedRowCount} rows included
+                </span>
+              )}
+            </div>
+            <svg
+              className={`w-4 h-4 text-purple-400 transition-transform ${categoryListOpen ? "rotate-180" : ""}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {/* Category List */}
+          {categoryListOpen && (
+            <div className="bg-white">
+              {/* Select All row */}
+              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 bg-gray-50">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someSelected;
+                  }}
+                  onChange={() => onToggleAllCategories(uniqueCategories)}
+                  className="w-4 h-4 rounded border-gray-300 text-purple-600 cursor-pointer"
+                />
+                <span className="text-sm font-semibold text-gray-700">
+                  Select All
+                </span>
+                {someSelected && (
+                  <span className="text-xs text-gray-400 ml-auto">
+                    {selectedCategories.size} of {uniqueCategories.length}
+                  </span>
+                )}
+              </div>
+
+              {/* Individual categories */}
+              <div className="max-h-48 overflow-y-auto divide-y divide-gray-50">
+                {uniqueCategories.map((category) => {
+                  const isChecked = selectedCategories.has(category);
+                  return (
+                    <label
+                      key={category}
+                      className={`flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors
+                        ${isChecked ? "bg-white hover:bg-purple-50" : "bg-gray-50 hover:bg-gray-100"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => onToggleCategory(category)}
+                        className="w-4 h-4 rounded border-gray-300 text-purple-600 cursor-pointer"
+                      />
+                      <span className={`text-sm font-mono ${isChecked ? "text-gray-800" : "text-gray-400 line-through"}`}>
+                        {category}
+                      </span>
+                      {!isChecked && (
+                        <span className="ml-auto text-xs text-gray-400 italic">excluded</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Mapping Table */}
       <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -182,12 +299,14 @@ export function ColumnMappingStage({
           className="px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
         >
           Preview Import →
+          {selectedCategories.size > 0 && selectedCategories.size < uniqueCategories.length && (
+            <span className="ml-1.5 text-xs opacity-80">({includedRowCount} rows)</span>
+          )}
         </button>
       </div>
     </div>
   );
 }
-
 
 interface SummaryCardProps {
   label: string;
@@ -198,24 +317,9 @@ interface SummaryCardProps {
 }
 
 const colorMap = {
-  blue: {
-    bg: "bg-blue-50",
-    border: "border-blue-100",
-    icon: "text-blue-500",
-    value: "text-blue-700",
-  },
-  purple: {
-    bg: "bg-purple-50",
-    border: "border-purple-100",
-    icon: "text-purple-500",
-    value: "text-purple-700",
-  },
-  green: {
-    bg: "bg-green-50",
-    border: "border-green-100",
-    icon: "text-green-500",
-    value: "text-green-700",
-  },
+  blue: { bg: "bg-blue-50", border: "border-blue-100", icon: "text-blue-500", value: "text-blue-700" },
+  purple: { bg: "bg-purple-50", border: "border-purple-100", icon: "text-purple-500", value: "text-purple-700" },
+  green: { bg: "bg-green-50", border: "border-green-100", icon: "text-green-500", value: "text-green-700" },
 };
 
 function SummaryCard({ label, value, subtext, icon, color }: SummaryCardProps) {

@@ -26,6 +26,7 @@ export function useBulkUpload({
   const [columnMappings, setColumnMappings] = useState<ColumnMappingEntry[]>([]);
   const [reviewRows, setReviewRows] = useState<BulkReviewRow[]>([]);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<number>>(new Set());
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [importError, setImportError] = useState<string | null>(null);
@@ -33,19 +34,49 @@ export function useBulkUpload({
 
   const totalRows = uploadedRows.length;
 
-  const uniqueCategoryCount = useMemo(() => {
+  // All unique category values from the uploaded file based on mapped column
+  const uniqueCategories = useMemo(() => {
     const catMapping = columnMappings.find((m) => m.requiredField === "emission_category");
-    if (!catMapping || !catMapping.mappedTo) return null;
+    if (!catMapping || !catMapping.mappedTo) return [];
     const values = new Set(
       uploadedRows
         .map((r) => r[catMapping.mappedTo]?.trim())
         .filter(Boolean)
     );
-    return values.size;
+    return Array.from(values).sort();
   }, [columnMappings, uploadedRows]);
+
+  // Count only selected categories
+  const uniqueCategoryCount = selectedCategories.size > 0
+    ? selectedCategories.size
+    : uniqueCategories.length > 0
+      ? uniqueCategories.length
+      : null;
 
   const validRows = reviewRows.filter((r) => r.isValid);
   const errorRows = reviewRows.filter((r) => !r.isValid);
+
+  // Category toggle handlers
+  const toggleCategory = useCallback((category: string) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }, []);
+
+  const toggleAllCategories = useCallback((categories: string[]) => {
+    setSelectedCategories((prev) => {
+      if (prev.size === categories.length) return new Set();
+      return new Set(categories);
+    });
+  }, []);
+
+  // When uniqueCategories changes (new file / new mapping), auto-select all
+  const initCategories = useCallback((categories: string[]) => {
+    setSelectedCategories(new Set(categories));
+  }, []);
 
   const buildRequiredFields = useCallback((): ColumnMappingEntry[] => {
     const fields: ColumnMappingEntry[] = [
@@ -59,8 +90,8 @@ export function useBulkUpload({
     ];
 
     dynamicColumns
-      .filter((col) => col.column_name.toLowerCase() !== "emission_category")
-      .forEach((col) => {
+      .filter((col : any) => col.column_name.toLowerCase() !== "emission_category")
+      .forEach((col : any) => {
         fields.push({
           requiredField: col.column_name,
           label: col.column_name,
@@ -118,6 +149,7 @@ export function useBulkUpload({
           setUploadedHeaders(headers);
           setUploadedRows(json);
           setColumnMappings(autoMapped);
+          setSelectedCategories(new Set());
           setStage("mapping");
         } catch {
           setParseError("Failed to parse file. Please upload a valid .xlsx or .csv file.");
@@ -134,6 +166,10 @@ export function useBulkUpload({
         m.requiredField === requiredField ? { ...m, mappedTo, skipped: false } : m
       )
     );
+    // Reset selected categories when category column mapping changes
+    if (requiredField === "emission_category") {
+      setSelectedCategories(new Set());
+    }
   }, []);
 
   const toggleSkip = useCallback((requiredField: string) => {
@@ -147,7 +183,17 @@ export function useBulkUpload({
   }, []);
 
   const buildReviewRows = useCallback((): BulkReviewRow[] => {
-    return uploadedRows.map((uploadedRow, idx) => {
+    const catMapping = columnMappings.find((m) => m.requiredField === "emission_category");
+
+    // Filter uploaded rows by selected categories if any are selected
+    const filteredRows = uploadedRows.filter((uploadedRow) => {
+      if (selectedCategories.size === 0) return true;
+      if (!catMapping || !catMapping.mappedTo) return true;
+      const rowCategory = uploadedRow[catMapping.mappedTo]?.trim();
+      return selectedCategories.has(rowCategory);
+    });
+
+    return filteredRows.map((uploadedRow, idx) => {
       const mappedData: Record<string, string> = {};
       columnMappings.forEach((mapping) => {
         if (!mapping.skipped && mapping.mappedTo) {
@@ -180,10 +226,18 @@ export function useBulkUpload({
         errorReason = "Missing activity unit";
       } else {
         const result = calculateEmission(modalRow);
-         if (result.value === null && result.status !== "ok") {
-    const activityValue = Object.entries(modalRow)
-      .find(([key]) => !["id", "emission_category", "activity_data_unit"].includes(key) && !isNaN(Number(modalRow[key])))?.[1];
-    if (activityValue === undefined || activityValue === "") {
+        // if (result.value === null) {
+        //   isValid = false;
+        //   errorReason = result.status;
+        // }
+         if (result.value === null) {
+    // Check if all numeric fields are 0 or empty — treat as valid with 0 emission
+    const hasActivityValue = Object.entries(mappedData).some(([key, val]) => {
+      if (["emission_category", "activity_data_unit"].includes(key)) return false;
+      const num = parseFloat(val);
+      return !isNaN(num) && num !== 0;
+    });
+    if (hasActivityValue) {
       isValid = false;
       errorReason = result.status;
     }
@@ -192,7 +246,7 @@ export function useBulkUpload({
 
     //  const emissionResult = emission_category ? calculateEmission(modalRow) : { value: null };
     const emissionResult = emission_category ? calculateEmission(modalRow) : { value: null };
-const emissionValue = emissionResult.value !== null ? emissionResult.value : 0;
+const emissionValue = emissionResult.value ?? 0;
 
       return {
         id: idx,
@@ -204,7 +258,7 @@ const emissionValue = emissionResult.value !== null ? emissionResult.value : 0;
         errorReason,
       };
     });
-  }, [uploadedRows, columnMappings, getAutoEmissionCategory, calculateEmission]);
+  }, [uploadedRows, columnMappings, selectedCategories, getAutoEmissionCategory, calculateEmission]);
 
   const proceedToReview = useCallback(() => {
     const rows = buildReviewRows();
@@ -263,7 +317,7 @@ const emissionValue = emissionResult.value !== null ? emissionResult.value : 0;
           })
         );
 
-        results.forEach((result) => {
+        results.forEach((result : any) => {
           const emission: EmissionData = result.emission;
           imported.push({
             ...emission.activity_data,
@@ -299,6 +353,7 @@ const emissionValue = emissionResult.value !== null ? emissionResult.value : 0;
     setColumnMappings([]);
     setReviewRows([]);
     setSelectedRowIds(new Set());
+    setSelectedCategories(new Set());
     setImporting(false);
     setImportProgress({ current: 0, total: 0 });
     setImportError(null);
@@ -312,6 +367,8 @@ const emissionValue = emissionResult.value !== null ? emissionResult.value : 0;
     columnMappings,
     reviewRows,
     selectedRowIds,
+    selectedCategories,
+    uniqueCategories,
     importing,
     importProgress,
     importError,
@@ -330,5 +387,8 @@ const emissionValue = emissionResult.value !== null ? emissionResult.value : 0;
     handleImport,
     handleReset,
     setStage,
+    toggleCategory,
+    toggleAllCategories,
+    initCategories,
   };
 }
