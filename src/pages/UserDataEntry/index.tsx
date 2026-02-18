@@ -1028,6 +1028,7 @@ const UserDataEntryPage = () => {
                     id,
                     date_of_reporting,
                     activity_data_unit,
+                    _ocrUnit: _,
                     ...activityData
                 } = row;
 
