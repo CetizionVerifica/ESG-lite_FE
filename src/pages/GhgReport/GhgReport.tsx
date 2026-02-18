@@ -15,7 +15,11 @@ import {
   type YearType,
 } from "../../services/ghgreportService";
 import GhgSiteCategoriesTable from "./GhgSiteCategoriesTable";
-import GhgReportCharts from "./GhgReportCharts";
+//import GhgReportCharts from "./GhgReportCharts";
+import GhgReportSummaryCharts from "./GhgReportSummaryCharts";
+import GhgReportDetailedCharts from "./GhgReportDetailedCharts";
+import GhgReportResultsChart from "./GhgReportResultsCharts";
+import GhgReportPdfExport from "./pdf/GhgPdf";
 
 const GhgReport = () => {
   const { user } = useAuth();
@@ -112,13 +116,18 @@ const GhgReport = () => {
         </div>
 
         {/* PDF next step */}
-        <button
+        {/* <button
           className="h-10 px-4 rounded text-white bg-gray-400 cursor-not-allowed"
           disabled
           title="Next step: charts + PDF generation"
         >
           Download PDF
-        </button>
+        </button> */}
+        <GhgReportPdfExport
+  siteIds={selectedSites}
+  tablesData={tablesData}
+  detailsData={detailsData}
+/>
       </div>
 
       <GhgReportFilters
@@ -138,16 +147,26 @@ const GhgReport = () => {
           <div className="text-sm text-gray-500">Loading report…</div>
         ) : tablesData ? (
           <div className="space-y-8">
+                          <GhgSiteCategoriesTable data={tablesData} isDark={isDark} />
             <GhgReportTables data={tablesData} isDark={isDark} />
-              <GhgSiteCategoriesTable data={tablesData} isDark={isDark} />
+            {tablesData && detailsData ? (
+        <GhgReportSummaryCharts tablesData={tablesData} detailsData={detailsData} isDark={isDark} />
+      ) : null}
             {detailsData ? (
               <GhgReportDetailsTables data={detailsData} isDark={isDark} />
             ) : (
               <div className="text-sm text-gray-500">No detailed data available.</div>
             )}
-            {tablesData && detailsData ? (
-  <GhgReportCharts tablesData={tablesData} detailsData={detailsData} isDark={isDark} />
+{tablesData && detailsData ? (
+        <GhgReportDetailedCharts tablesData={tablesData} detailsData={detailsData} isDark={isDark} />
+      ) : null}
+
+{tablesData && detailsData ? (
+  <GhgReportResultsChart tablesData={tablesData} detailsData={detailsData} isDark={isDark} />
 ) : null}
+            {/* {tablesData && detailsData ? (
+  <GhgReportCharts tablesData={tablesData} detailsData={detailsData} isDark={isDark} />
+) : null} */}
           </div>
         ) : (
           <div className="text-sm text-gray-500">No data available.</div>

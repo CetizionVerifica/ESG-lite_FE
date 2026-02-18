@@ -1,3 +1,5 @@
+import { UnitData } from "../../services/unitService";
+
 export interface Category {
   category_id: number;
   category_name: string;
@@ -86,4 +88,39 @@ export interface ModalRow {
 export interface EmissionCalculationResult {
   value: number | null;
   status: "ok" | "converted" | string;
+}
+
+export type UploadStage = "upload" | "mapping" | "review";
+
+export interface BulkReviewRow {
+  id: number;
+  mappedData: Record<string, string>;
+  emission_category: string | null;
+  activity_data_unit: string | null;
+  total_emission: number | null;
+  isValid: boolean;
+  errorReason: string | null;
+}
+
+export interface ColumnMappingEntry {
+  requiredField: string;
+  label: string;
+  mappedTo: string;
+  skipped: boolean;
+  isRequired: boolean;
+}
+
+export interface BulkUploadModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  dynamicColumns: ColumnEntity[];          
+  emissionFactors: EmissionFactor[];       
+  units: UnitData[];
+  siteId: number;
+  categoryId: number;
+  selectedDate: string;
+getExpectedUnit: (category: string) => string | null | undefined;
+  calculateEmission: (row: ModalRow) => EmissionCalculationResult;  
+  getAutoEmissionCategory: (row: ModalRow) => string | null;
+  onImportComplete: (newEmissions: EmissionRow[]) => void;          
 }

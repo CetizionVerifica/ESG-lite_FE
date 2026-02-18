@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import type { GhgReportTablesResponse, OverviewRow, Table1Row } from "../../services/ghgreportService";
+import type { GhgReportTablesResponse, OverviewRow} from "../../services/ghgreportService";
 
 function fmt(n: number) {
   return (Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -52,7 +52,6 @@ const TableCard = ({
 
 const OverviewTable = ({
   rows,
-  year,
   isDark,
 }: {
   rows: OverviewRow[];
@@ -81,7 +80,7 @@ const OverviewTable = ({
 
   return (
     <div className="overflow-auto">
-      <table className={`min-w-[900px] w-full border ${border}`}>
+      <table className={`min-w-225 w-full border ${border}`}>
         <thead>
           <tr className={headerBg}>
             <th className={`border ${border} px-3 py-2 text-left text-sm`}>Scope</th>
@@ -123,7 +122,7 @@ const OverviewTable = ({
 };
 
 const GhgReportTables = ({ data, isDark }: { data: GhgReportTablesResponse; isDark?: boolean }) => {
-  const table1 = data.tables.table1_emissionsByScope_twoYears;
+ // const table1 = data.tables.table1_emissionsByScope_twoYears;
 
   const compYear = data.filters.compareYear;
   const selectedYear = data.filters.year;
@@ -148,7 +147,7 @@ const GhgReportTables = ({ data, isDark }: { data: GhgReportTablesResponse; isDa
       {/* TABLE 1 */}
       <TableCard isDark={isDark} title={table1Title}>
         <div className="overflow-auto">
-          <table className={`min-w-[820px] w-full border ${border}`}>
+          <table className={`min-w-205 w-full border ${border}`}>
             <thead>
               <tr className={headerBg}>
                 <th className={`border ${border} px-3 py-2 text-left text-sm`}>Scope</th>

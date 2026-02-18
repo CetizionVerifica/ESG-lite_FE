@@ -87,7 +87,7 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
         <div className={`text-sm ${sub}`}>No data available.</div>
       ) : (
         <div className="overflow-auto">
-          <table className={`min-w-[1300px] w-full border ${border}`}>
+          <table className={`min-w-325 w-full border ${border}`}>
             <thead>
               <tr className={headerBg}>
                 <th rowSpan={2} className={`border ${border} px-3 py-2 text-left text-sm`}>

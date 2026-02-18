@@ -59,7 +59,7 @@ const Sidebar = () => {
     { to: "units", label: "Manage Units", icon: <Scale size={20} /> },
     { to: "products", label: "Products", icon: <Package size={20} /> },
     { to: "upload-data", label: "Upload Data", icon: <Upload size={20} /> },
-    { to : "ede-reports", label: "EDE Report", icon: <FolderTree size={20} /> },
+    { to : "ede-reports", label: "EDE Reports", icon: <FolderTree size={20} /> },
   ];
 
   const userLinks: NavItem[] = [
@@ -73,6 +73,7 @@ const Sidebar = () => {
     { to: "data-manage", label: "Emissions Data", icon: <FileSpreadsheet size={20} /> },
     { to: "manage-production-data", label: "Production Data", icon: <Factory size={20} /> },
     { to : "ede-reports", label: "EDE Report", icon: <FolderTree size={20} /> },
+    { to :"sbti-commitment", label : "SBTi Commitment", icon : <FolderTree size={20} />},
     { to : "ghg-reports", label : "GHG Report", icon : <FolderTree size={20} />}
   ];
 
