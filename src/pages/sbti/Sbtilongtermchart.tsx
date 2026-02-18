@@ -30,9 +30,21 @@ function DownloadButton({ onDownload, isDark }: { onDownload: () => void; isDark
 
 const MILESTONE_YEARS = [2030, 2035, 2040, 2045, 2050];
 
+const COLORS = {
+  scope1: "#3b82f6",
+  scope2: "#10b981",
+  scope3: "#f59e0b",
+  target: "#8b5cf6",
+  reached: "#16a34a",
+  notReached: "#dc2626",
+  baseYear: "#3b82f6",
+  noData: "#94a3b8",
+};
+
 export default function SbtiLongTermChart({ data, isDark }: Props) {
   const chart1Ref = useRef<any>(null);
   const chart2Ref = useRef<any>(null);
+  const chart3Ref = useRef<any>(null);
 
   const downloadChart = (ref: React.RefObject<any>, filename: string) => {
     const instance = ref.current?.getEchartsInstance?.();
@@ -54,16 +66,16 @@ export default function SbtiLongTermChart({ data, isDark }: Props) {
     tooltipBdr: isDark ? "#334155" : "#e2e8f0",
   }), [isDark]);
 
-  const years = useMemo(() => data.rows.map((r) => String(r.year)), [data.rows]);
+  const years = useMemo(() => (data.rows || []).map((r) => String(r.year)), [data.rows]);
 
   const milestones = useMemo(() =>
     MILESTONE_YEARS.filter((y) => y >= data.baseYear)
-      .map((y) => data.rows.find((r) => r.year === y))
+      .map((y) => (data.rows || []).find((r) => r.year === y))
       .filter(Boolean) as typeof data.rows,
   [data.rows, data.baseYear]);
 
   const reductionPct = useMemo(() =>
-    data.rows.map((r) =>
+    (data.rows || []).map((r) =>
       Number((((data.baseEmissions - r.targetEmission) / data.baseEmissions) * 100).toFixed(2))
     ),
   [data.rows, data.baseEmissions]);
@@ -311,6 +323,168 @@ export default function SbtiLongTermChart({ data, isDark }: Props) {
     };
   }, [isDark, T, xAxisBase, data, milestones]);
 
+  const actualVsTargetChart = useMemo(() => {
+    if (!data.actualVsTarget || data.actualVsTarget.length === 0) {
+      return null;
+    }
+
+    const actualYears = data.actualVsTarget!.map((r) => String(r.year));
+
+    // const statusColor = (status: string) => {
+    //   if (status === "Base Year") return COLORS.baseYear;
+    //   if (status === "Reached") return COLORS.reached;
+    //   if (status === "Not Reached") return COLORS.notReached;
+    //   return COLORS.noData;
+    // };
+
+    const actualSeries: any[] = [];
+
+    actualSeries.push({
+      name: "Actual Scope 1",
+      type: "bar",
+      stack: "actual",
+      barMaxWidth: 18,
+      data: data.actualVsTarget!.map((r) => r.actualScope1 ?? 0),
+      itemStyle: {
+        color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: COLORS.scope1 }, { offset: 1, color: isDark ? "#1e3a5f" : "#bfdbfe" }] },
+      },
+    });
+
+    actualSeries.push({
+      name: "Actual Scope 2",
+      type: "bar",
+      stack: "actual",
+      data: data.actualVsTarget!.map((r) => r.actualScope2 ?? 0),
+      itemStyle: {
+        color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: COLORS.scope2 }, { offset: 1, color: isDark ? "#064e3b" : "#a7f3d0" }] },
+        borderRadius: !data.scope3TargetRequired ? [4, 4, 0, 0] : [0, 0, 0, 0],
+      },
+    });
+
+    if (data.scope3TargetRequired) {
+      actualSeries.push({
+        name: "Actual Scope 3",
+        type: "bar",
+        stack: "actual",
+        data: data.actualVsTarget!.map((r) => r.actualScope3 ?? 0),
+        itemStyle: {
+          color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: COLORS.scope3 }, { offset: 1, color: isDark ? "#451a03" : "#fde68a" }] },
+          borderRadius: [4, 4, 0, 0],
+        },
+      });
+    }
+
+    actualSeries.push({
+      name: "Target",
+      type: "line",
+      smooth: 0.3,
+      symbol: "circle",
+      symbolSize: 5,
+      data: data.actualVsTarget!.map((r) => r.targetTotal),
+      lineStyle: { width: 2.5, color: COLORS.target, type: "dashed" },
+      itemStyle: { color: COLORS.target, borderColor: isDark ? "#0f172a" : "#fff", borderWidth: 1.5 },
+    });
+
+    return {
+      backgroundColor: "transparent",
+      animation: true,
+      grid: { left: 80, right: 48, top: 16, bottom: 48 },
+      tooltip: {
+  trigger: "axis",
+  backgroundColor: T.tooltipBg,
+  borderColor: T.tooltipBdr,
+  borderWidth: 1,
+  padding: [10, 14],
+  textStyle: { color: T.text, fontSize: 12, fontFamily: "inherit" },
+  formatter: (params: any[]) => {
+    const year = params[0]?.axisValue;
+    const row = data.actualVsTarget?.find((r) => String(r.year) === String(year));
+    if (!row) return "";
+
+    const statusColor = (status: string) => {
+      if (status === "Base Year") return COLORS.baseYear;
+      if (status === "Reached") return COLORS.reached;
+      if (status === "Not Reached") return COLORS.notReached;
+      return COLORS.noData;
+    };
+
+    let html = `<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:${T.text}">${year}</div>`;
+
+    if (row.status === "No Data") {
+      html += `<div style="color:${T.subtext}">No emission data available for this year</div>`;
+      html += `<div style="display:flex;justify-content:space-between;gap:24px;margin-top:6px">
+        <span style="color:${T.subtext}">Target</span>
+        <b style="color:${COLORS.target}">${fmtNum(row.targetTotal, 2)} tCO₂e</b>
+      </div>`;
+      html += `<div style="margin-top:6px;font-size:11px;font-weight:600;color:${statusColor(row.status)}">${row.status}</div>`;
+      return html;
+    }
+
+    // --- Actual scope breakdown (what you asked) ---
+    html += `<div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:3px">
+      <span>${params.find((p:any)=>p.seriesName==="Actual Scope 1")?.marker ?? ""} <span style="color:${T.subtext}">Actual Scope 1</span></span>
+      <b>${fmtNum(row.actualScope1 ?? 0, 2)} tCO₂e</b>
+    </div>`;
+
+    html += `<div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:3px">
+      <span>${params.find((p:any)=>p.seriesName==="Actual Scope 2")?.marker ?? ""} <span style="color:${T.subtext}">Actual Scope 2</span></span>
+      <b>${fmtNum(row.actualScope2 ?? 0, 2)} tCO₂e</b>
+    </div>`;
+
+    if (data.scope3TargetRequired) {
+      html += `<div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:3px">
+        <span>${params.find((p:any)=>p.seriesName==="Actual Scope 3")?.marker ?? ""} <span style="color:${T.subtext}">Actual Scope 3</span></span>
+        <b>${fmtNum(row.actualScope3 ?? 0, 2)} tCO₂e</b>
+      </div>`;
+    }
+
+    // --- Totals + target + variance ---
+    html += `<div style="display:flex;justify-content:space-between;gap:24px;margin-top:6px;padding-top:6px;border-top:1px solid ${T.tooltipBdr}">
+      <span style="color:${T.subtext}">Actual Total</span>
+      <b>${fmtNum(row.actualTotal ?? 0, 2)} tCO₂e</b>
+    </div>`;
+
+    html += `<div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:3px">
+      <span style="color:${T.subtext}">Target Total</span>
+      <b style="color:${COLORS.target}">${fmtNum(row.targetTotal, 2)} tCO₂e</b>
+    </div>`;
+
+    if (row.variance != null) {
+      const varColor = row.variance > 0 ? COLORS.notReached : COLORS.reached;
+      html += `<div style="display:flex;justify-content:space-between;gap:24px;margin-top:4px">
+        <span style="color:${T.subtext}">Variance</span>
+        <b style="color:${varColor}">
+          ${row.variance > 0 ? "+" : ""}${fmtNum(row.variance, 2)} tCO₂e
+          ${row.variancePct != null ? ` (${row.variancePct > 0 ? "+" : ""}${fmtNum(row.variancePct, 1)}%)` : ""}
+        </b>
+      </div>`;
+    }
+
+    html += `<div style="margin-top:6px;font-size:11px;font-weight:600;color:${statusColor(row.status)}">${row.status}</div>`;
+    return html;
+  },
+},
+      legend: { show: false },
+      xAxis: {
+        type: "category",
+        data: actualYears,
+        axisLabel: { color: T.axis, fontSize: 11, fontFamily: "inherit", interval: 0 },
+        axisLine: { lineStyle: { color: T.axisLine } },
+        axisTick: { show: false },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { color: T.axis, fontSize: 11, fontFamily: "inherit", formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v) },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: T.split } },
+        min: 0,
+      },
+      series: actualSeries,
+    };
+  }, [isDark, T, data]);
+
   const cardClass = isDark
     ? "bg-slate-800 border border-slate-700 rounded-xl p-5"
     : "bg-white border border-gray-200 rounded-xl p-5 shadow-sm";
@@ -323,10 +497,10 @@ export default function SbtiLongTermChart({ data, isDark }: Props) {
     : "bg-amber-50 border border-amber-200 text-amber-800";
 
   const stats = [
-    { label: "Base Emissions",    value: fmtNum(data.baseEmissions, 2),   unit: "tCO₂e", sub: `${data.baseYear} baseline`,    color: "text-blue-500" },
-    { label: "Net-Zero Target",   value: fmtNum(data.targetEmissions, 2), unit: "tCO₂e", sub: "10% of base by 2050",           color: "text-emerald-500"},
-    { label: "Annual Rate",       value: `${fmtNum(data.annualRate, 2)}%`, unit: "/ yr",  sub: "compounding reduction",        color: "text-violet-500" },
-    { label: "Years to Net-Zero", value: String(data.years),               unit: "years", sub: `${data.baseYear} → 2050`,      color: "text-amber-500" },
+    { label: "Base Emissions",    value: fmtNum(data.baseEmissions, 2),   unit: "tCO₂e", sub: `${data.baseYear} baseline`,    color: "text-blue-500",    icon: "📊" },
+    { label: "Net-Zero Target",   value: fmtNum(data.targetEmissions, 2), unit: "tCO₂e", sub: "10% of base by 2050",           color: "text-emerald-500", icon: "🎯" },
+    { label: "Annual Rate",       value: `${fmtNum(data.annualRate, 2)}%`, unit: "/ yr",  sub: "compounding reduction",        color: "text-violet-500",  icon: "📉" },
+    { label: "Years to Net-Zero", value: String(data.years),               unit: "years", sub: `${data.baseYear} → 2050`,      color: "text-amber-500",   icon: "⏳" },
   ];
 
   return (
@@ -349,7 +523,7 @@ export default function SbtiLongTermChart({ data, isDark }: Props) {
           <div key={s.label} className={statCard}>
             <div className="flex items-center justify-between mb-2">
               <p className={`text-xs ${mutedText}`}>{s.label}</p>
-              {/* <span className="text-base">{s.icon}</span> */}
+              <span className="text-base">{s.icon}</span>
             </div>
             <p className={`text-xl font-bold leading-tight ${s.color}`}>
               {s.value}
@@ -423,6 +597,39 @@ export default function SbtiLongTermChart({ data, isDark }: Props) {
         </div>
         <ReactECharts ref={chart2Ref} option={scopeChart} style={{ height: 400, width: "100%" }} />
       </div>
+
+      {data.actualVsTarget && data.actualVsTarget.length > 0 && (
+        <div className={cardClass}>
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <p className="text-sm font-semibold">Actual vs Target Performance</p>
+              <p className={`text-xs mt-0.5 ${mutedText}`}>Comparing actual emissions against long-term targets · Only years with data shown</p>
+            </div>
+            <DownloadButton onDownload={() => downloadChart(chart3Ref, "actual-vs-target-longterm")} isDark={isDark} />
+          </div>
+          <div className="flex items-center gap-4 mb-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "linear-gradient(to bottom, #3b82f6, #bfdbfe)" }} />
+              <span className={`text-xs ${mutedText}`}>Actual Scope 1</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "linear-gradient(to bottom, #10b981, #a7f3d0)" }} />
+              <span className={`text-xs ${mutedText}`}>Actual Scope 2</span>
+            </div>
+            {data.scope3TargetRequired && (
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "linear-gradient(to bottom, #f59e0b, #fde68a)" }} />
+                <span className={`text-xs ${mutedText}`}>Actual Scope 3</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-8 border-t-2 border-dashed border-purple-400" />
+              <span className={`text-xs ${mutedText}`}>Target</span>
+            </div>
+          </div>
+          <ReactECharts ref={chart3Ref} option={actualVsTargetChart} style={{ height: 400, width: "100%" }} />
+        </div>
+      )}
 
     </div>
   );

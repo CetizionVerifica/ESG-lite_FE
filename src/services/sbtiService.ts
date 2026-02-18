@@ -68,6 +68,7 @@ export const getNearTermTargetTables = async (payload: NearTermTablesRequest) =>
   return res.data as NearTermTargetResponse;
 };
 
+
 export interface LongTermChartRequest {
   siteIds: number[];
   baseYear: number;
@@ -84,6 +85,18 @@ export interface LongTermChartRow {
   reducedByPct: number | null;
 }
 
+export interface LongTermActualVsTargetRow {
+  year: number;
+  actualScope1: number | null;
+  actualScope2: number | null;
+  actualScope3: number | null;
+  actualTotal: number | null;
+  targetTotal: number;
+  variance: number | null;
+  variancePct: number | null;
+  status: "Base Year" | "Reached" | "Not Reached" | "No Data";
+}
+
 export interface LongTermChartResponse {
   heading: string;
   method: string;
@@ -98,9 +111,20 @@ export interface LongTermChartResponse {
   scope3TargetRequired: boolean;
   baseTotals: { scope1: number; scope2: number; scope3: number; total: number };
   rows: LongTermChartRow[];
+  actualVsTarget?: LongTermActualVsTargetRow[];
 }
 
 export const getLongTermTargetChart = async (payload: LongTermChartRequest) => {
   const res = await api.post("/user/targets/long-term-chart", payload);
+  console.log("long term data", res.data);
   return res.data as LongTermChartResponse;
 };
+
+
+
+
+
+
+
+
+
