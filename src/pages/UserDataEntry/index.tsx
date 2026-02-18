@@ -58,6 +58,9 @@ interface Site {
 // MAIN COMPONENT
 // ============================================================================
 
+const toColumnTitle = (name: string) =>
+    name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
 const EXTRACTION_STAGES = [
     "Uploading document...",
     "Extracting text from document...",
@@ -271,9 +274,9 @@ const UserDataEntryPage = () => {
         fetchData();
     }, [fetchData]);
 
-    // Proactively fetch emission factors and units as soon as site + category
-    // are selected, so the Invoice Review Modal dropdowns are populated even
-    // before the user picks a reporting date.
+    // Proactively fetch emission factors, units, and column configs as soon as
+    // site + category are selected, so the Invoice Review Modal dropdowns are
+    // populated even before the user picks a reporting date.
     useEffect(() => {
         if (!siteId || !selectedCategory || selectedDate) {
             // Skip: either missing required fields, or fetchData() will handle it
@@ -281,10 +284,19 @@ const UserDataEntryPage = () => {
         }
         const factorYear = new Date().getFullYear() - 1;
         Promise.all([
+            getUserColumnConfigsBySiteAndCategory(siteId, selectedCategory),
             getUserEmissionFactorsBySiteAndCategory(siteId, selectedCategory, factorYear),
             getUserUnitsBySiteAndCategory(siteId, selectedCategory),
         ])
-            .then(([factors, unitsData]) => {
+            .then(([configs, factors, unitsData]) => {
+                const config = configs[0] as ColumnConfig | undefined;
+                if (config) {
+                    setDynamicColumns(config.columns || []);
+                    setColumnOptions(config.column_options || {});
+                    setColumnDependencies(config.column_dependencies || {});
+                    setDependentOptions(config.dependent_options || {});
+                    setEmissionCategoryMapping(config.emission_category_mapping || {});
+                }
                 setEmissionFactors(factors);
                 setUnits(unitsData);
             })
@@ -1028,6 +1040,8 @@ const UserDataEntryPage = () => {
                     id,
                     date_of_reporting,
                     activity_data_unit,
+                    _ocrUnit: _,
+                    _vendorName: __,
                     ...activityData
                 } = row;
 
@@ -1113,7 +1127,12 @@ const UserDataEntryPage = () => {
                 }
 
                 const rows: ModalRow[] = response.emission.map((em, index) => {
+                    // Pre-seed all configured dynamic columns (e.g. Disposal Method,
+                    // Waste Type) so they appear in the review form for user input.
                     const row: ModalRow = { id: index + 1 };
+                    filteredColumns.forEach((col) => {
+                        row[col.column_name] = "";
+                    });
 
                     if (em.activity_data) {
                         Object.entries(em.activity_data).forEach(
@@ -1148,6 +1167,8 @@ const UserDataEntryPage = () => {
 
                     if (em.date_of_reporting)
                         row.date_of_reporting = em.date_of_reporting;
+
+                    row._vendorName = em.vendor_name ?? undefined;
 
                     return row;
                 });
@@ -1235,7 +1256,11 @@ const UserDataEntryPage = () => {
                 }
 
                 const rows: ModalRow[] = response.emission.map((em, index) => {
+                    // Pre-seed all configured dynamic columns so they appear in review form.
                     const row: ModalRow = { id: index + 1 };
+                    filteredColumns.forEach((col) => {
+                        row[col.column_name] = "";
+                    });
                     if (em.activity_data) {
                         Object.entries(em.activity_data).forEach(([key, value]) => {
                             row[key] = String(value);
@@ -1257,6 +1282,7 @@ const UserDataEntryPage = () => {
                         if (match) row.emission_category = match.emission_category_name;
                     }
                     if (em.date_of_reporting) row.date_of_reporting = em.date_of_reporting;
+                    row._vendorName = em.vendor_name ?? undefined;
                     return row;
                 });
 
@@ -1711,8 +1737,8 @@ const UserDataEntryPage = () => {
                                                         }`}>
                                                         <option value="">
                                                             {isDisabledDependent
-                                                                ? `Select ${parentColName} first`
-                                                                : `Select ${col.column_name}`}
+                                                                ? `Select ${toColumnTitle(parentColName!)} first`
+                                                                : `Select ${toColumnTitle(col.column_name)}`}
                                                         </option>
                                                         {options.map(
                                                             (option) => (
@@ -1935,7 +1961,7 @@ const UserDataEntryPage = () => {
                 isOpen={invoiceReviewOpen}
                 onClose={closeInvoiceReview}
                 title={`Review Extracted Invoice Data (${invoiceRows.length} invoice${invoiceRows.length !== 1 ? "s" : ""})`}
-                className={invoiceCloudinaryUrl ? "max-w-6xl! max-h-[90vh]!" : "max-w-3xl! max-h-[85vh]!"}>
+                className={invoiceCloudinaryUrl ? "max-w-7xl! max-h-[92vh]!" : "max-w-4xl! max-h-[88vh]!"}>
                 {/* Two-column layout when a PDF URL is available; single column otherwise */}
                 <div className={invoiceCloudinaryUrl ? "flex gap-4" : ""}>
                     {/* Left: embedded invoice document */}
@@ -1980,7 +2006,7 @@ const UserDataEntryPage = () => {
                         ))}
                     </div>
                 )}
-                <div className="space-y-4 overflow-y-auto max-h-[55vh] pr-1">
+                <div className="space-y-4 overflow-y-auto max-h-[65vh] pr-2">
                     {invoiceRows.map((row, index) => {
                         const {
                             id,
@@ -1988,39 +2014,99 @@ const UserDataEntryPage = () => {
                             activity_data_unit,
                             date_of_reporting,
                             _ocrUnit,
+                            _vendorName,
                             ...activityFields
                         } = row;
                         return (
                             <div
                                 key={id}
-                                className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                                    Invoice {index + 1}
-                                </p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {Object.entries(activityFields).map(
+                                className="border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
+                                {/* Card header */}
+                                <div className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200">
+                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-bold shrink-0">
+                                        {index + 1}
+                                    </span>
+                                    <span className="text-sm font-semibold text-gray-700">
+                                        {_vendorName ?? `Invoice ${index + 1}`}
+                                    </span>
+                                    {_vendorName && (
+                                        <span className="text-xs text-gray-400">
+                                            · Invoice {index + 1}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="p-5">
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                                    {filteredColumns.length > 0 ? filteredColumns.map((col) => {
+                                        const parentColName = getParentColumnName(col.column_name);
+                                        const parentValue = parentColName
+                                            ? (row[parentColName] as string | undefined)
+                                            : undefined;
+                                        const options = getColumnDropdownOptions(
+                                            col.column_name,
+                                            col.pk_id,
+                                            parentValue,
+                                        );
+                                        const showAsSelect = isSelectColumn(col) && options.length > 0;
+                                        const isDisabledDependent =
+                                            isDependentColumn(col.column_name) && !parentValue;
+                                        return (
+                                            <div key={col.pk_id}>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                    {toColumnTitle(col.column_name)}
+                                                </label>
+                                                {showAsSelect ? (
+                                                    <select
+                                                        value={(row[col.column_name] as string) || ""}
+                                                        onChange={(e) =>
+                                                            handleInvoiceRowChange(id, col.column_name, e.target.value)
+                                                        }
+                                                        disabled={isDisabledDependent}
+                                                        className={`w-full border border-gray-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${isDisabledDependent ? "bg-gray-100 cursor-not-allowed" : ""}`}>
+                                                        <option value="">
+                                                            {isDisabledDependent
+                                                                ? `Select ${toColumnTitle(parentColName!)} first`
+                                                                : `Select ${toColumnTitle(col.column_name)}`}
+                                                        </option>
+                                                        {options.map((opt) => (
+                                                            <option key={opt.id} value={opt.id}>
+                                                                {opt.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <input
+                                                        type={col.column_type === "number" ? "number" : "text"}
+                                                        value={(row[col.column_name] as string) || ""}
+                                                        onChange={(e) =>
+                                                            handleInvoiceRowChange(id, col.column_name, e.target.value)
+                                                        }
+                                                        className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                        placeholder={toColumnTitle(col.column_name)}
+                                                    />
+                                                )}
+                                            </div>
+                                        );
+                                    }) : Object.entries(activityFields).map(
                                         ([key, value]) => (
                                             <div key={key}>
-                                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                <label className="block text-xs font-medium text-gray-500 mb-1.5">
                                                     {key}
                                                 </label>
                                                 <input
                                                     type="text"
                                                     value={String(value ?? "")}
                                                     onChange={(e) =>
-                                                        handleInvoiceRowChange(
-                                                            id,
-                                                            key,
-                                                            e.target.value,
-                                                        )
+                                                        handleInvoiceRowChange(id, key, e.target.value)
                                                     }
-                                                    className="w-full border border-gray-300 px-2 py-1.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                    className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                                                 />
                                             </div>
                                         ),
                                     )}
+                                    <div className="col-span-2 border-t border-gray-100 my-1" />
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                                        <label className="block text-xs font-medium text-gray-500 mb-1.5">
                                             Emission Category
                                         </label>
                                         {emissionFactors.length > 0 ? (
@@ -2033,9 +2119,8 @@ const UserDataEntryPage = () => {
                                                         e.target.value,
                                                     )
                                                 }
-                                                className="w-full border border-emerald-400 bg-emerald-50 px-2 py-1.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400">
+                                                className="w-full border border-emerald-300 bg-emerald-50 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
                                                 <option value="">Select category</option>
-                                                {/* If OCR category doesn't match any factor, show it as an option */}
                                                 {emission_category &&
                                                     !emissionFactors.find(
                                                         (f) => f.emission_category_name === emission_category,
@@ -2063,12 +2148,12 @@ const UserDataEntryPage = () => {
                                                         e.target.value,
                                                     )
                                                 }
-                                                className="w-full border border-emerald-400 bg-emerald-50 px-2 py-1.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                                className="w-full border border-emerald-300 bg-emerald-50 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                                             />
                                         )}
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                                        <label className="block text-xs font-medium text-gray-500 mb-1.5">
                                             Activity Unit
                                         </label>
                                         {units.length > 0 ? (
@@ -2081,26 +2166,14 @@ const UserDataEntryPage = () => {
                                                         e.target.value,
                                                     )
                                                 }
-                                                className="w-full border border-gray-300 px-2 py-1.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
-                                                <option value="">
-                                                    Select unit
-                                                </option>
-                                                {/* If OCR unit doesn't match any configured unit, always keep it as a selectable option */}
+                                                className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                                <option value="">Select unit</option>
                                                 {_ocrUnit &&
-                                                    !units.find(
-                                                        (u) =>
-                                                            u.unit_name ===
-                                                            _ocrUnit,
-                                                    ) && (
-                                                        <option
-                                                            value={_ocrUnit}>
-                                                            {_ocrUnit}
-                                                        </option>
+                                                    !units.find((u) => u.unit_name === _ocrUnit) && (
+                                                        <option value={_ocrUnit}>{_ocrUnit}</option>
                                                     )}
                                                 {units.map((u) => (
-                                                    <option
-                                                        key={u.unit_id}
-                                                        value={u.unit_name}>
+                                                    <option key={u.unit_id} value={u.unit_name}>
                                                         {u.unit_name}
                                                     </option>
                                                 ))}
@@ -2116,12 +2189,12 @@ const UserDataEntryPage = () => {
                                                         e.target.value,
                                                     )
                                                 }
-                                                className="w-full border border-gray-300 px-2 py-1.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                                             />
                                         )}
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                                        <label className="block text-xs font-medium text-gray-500 mb-1.5">
                                             Date of Reporting
                                         </label>
                                         <input
@@ -2134,9 +2207,10 @@ const UserDataEntryPage = () => {
                                                     e.target.value,
                                                 )
                                             }
-                                            className="w-full border border-gray-300 px-2 py-1.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                                         />
                                     </div>
+                                </div>
                                 </div>
                             </div>
                         );
@@ -2150,19 +2224,19 @@ const UserDataEntryPage = () => {
                     />
                 )}
 
-                <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-200">
+                <div className="flex justify-end gap-3 mt-5 pt-4 border-t border-gray-200">
                     <button
                         onClick={closeInvoiceReview}
-                        className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">
+                        className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                         Cancel
                     </button>
                     <button
                         onClick={handleSaveInvoiceRows}
                         disabled={isSavingInvoice || invoiceRows.length === 0}
-                        className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-gray-400">
+                        className="px-5 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
                         {isSavingInvoice
                             ? "Saving..."
-                            : `Save All (${invoiceRows.length})`}
+                            : `Save ${invoiceRows.length} Invoice${invoiceRows.length !== 1 ? "s" : ""}`}
                     </button>
                 </div>
                     </div>{/* closes form wrapper */}
@@ -2373,15 +2447,43 @@ const UserDataEntryPage = () => {
 
             {/* Extraction loading overlay */}
             {(invoiceUploading || reusingInvoiceId !== null) && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[300px]">
-                        <div className="w-12 h-12 border-4 border-emerald-100 border-t-emerald-600 rounded-full animate-spin" />
-                        <p className="text-sm font-semibold text-gray-800 text-center">
-                            {EXTRACTION_STAGES[extractionStage]}
-                        </p>
-                        <p className="text-xs text-gray-400 text-center">
-                            This may take up to 30 seconds
-                        </p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl px-10 py-10 flex flex-col items-center gap-6 w-[400px] mx-4">
+                        {/* Spinner with icon centre */}
+                        <div className="relative flex items-center justify-center">
+                            <div className="w-16 h-16 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        {/* Stage text */}
+                        <div className="text-center space-y-1.5">
+                            <p className="text-base font-semibold text-gray-900 tracking-tight">
+                                {EXTRACTION_STAGES[extractionStage]}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                                AI-powered extraction · This may take up to 30 seconds
+                            </p>
+                        </div>
+
+                        {/* Progress pills */}
+                        <div className="flex items-center gap-1.5">
+                            {EXTRACTION_STAGES.map((_, i) => (
+                                <div
+                                    key={i}
+                                    className={`h-1.5 rounded-full transition-all duration-500 ${
+                                        i < extractionStage
+                                            ? "bg-emerald-500 w-6"
+                                            : i === extractionStage
+                                              ? "bg-emerald-400 w-8"
+                                              : "bg-gray-200 w-4"
+                                    }`}
+                                />
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}

@@ -83,6 +83,7 @@ export interface ModalRow {
     emission_category?: string;
     activity_data_unit?: string;
     _ocrUnit?: string;
+    _vendorName?: string;
     [key: string]: any;
 }
 

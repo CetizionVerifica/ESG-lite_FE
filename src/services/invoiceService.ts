@@ -57,6 +57,7 @@ export interface EmissionReady {
     date_of_reporting: string | null;
     total_emission: number;
     unit: string;
+    vendor_name?: string | null;
 }
 
 export interface ExtractionResponse {
