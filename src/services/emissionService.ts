@@ -44,6 +44,9 @@ export interface ApprovedEmissionsReportPayload {
   month ?: number;
 }
 
+
+
+
 export const getEmissionsBySite = async (siteId: string | number) => {
   const response = await api.get("/user/emissions", {
     params: { siteId },

@@ -25,6 +25,7 @@ import UploadPage from "../pages/UploadPage";
 import UserEmissionsPage from "../pages/UserEmissionsPage";
 import EdeReports from "../pages/Reports/EdePreports";
 import SbtiMain from "../pages/sbti/SbtiMain";
+import GhgReport from "../pages/GhgReport/GhgReport";
 
 const routes = [
   {
@@ -122,6 +123,10 @@ const routes = [
           {
             path : "sbti-commitment",
             element : <SbtiMain/>
+          },
+          {
+            path: "ghg-reports",
+            element: <GhgReport />
           },
           {
             path: "products",
