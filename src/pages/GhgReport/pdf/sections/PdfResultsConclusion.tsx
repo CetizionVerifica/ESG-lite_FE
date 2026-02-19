@@ -13,7 +13,7 @@ function FigureBlock({
   description,
   img,
   caption,
-  height = 420,
+  height = 360, 
 }: {
   title?: string;
   description?: string;
@@ -74,7 +74,6 @@ export default function PdfResultsConclusion({
   const selectedCat = topSelectedCategory || "the highest-ranked category";
   const compareCat = topCompareCategory || "the highest-ranked category";
 
-  // Simple interpretation helpers (safe + neutral wording)
   const sameTop = Boolean(topSelectedCategory && topCompareCategory) && selectedCat === compareCat;
 
   const topStatement = sameTop
@@ -88,8 +87,8 @@ export default function PdfResultsConclusion({
 
         <View style={s.card}>
           <Text style={s.p}>
-            This section summarizes the year-over-year distribution of emissions by category as a percentage of total emissions.
-            The intent is to highlight material drivers within the reporting boundary and provide a clear basis for prioritizing reduction actions.
+            This section summarizes the year-over-year distribution of emissions by category as a percentage of total emissions. The intent is to
+            highlight material drivers within the reporting boundary and provide a clear basis for prioritizing reduction actions.
           </Text>
 
           <View style={{ height: 8 }} />
@@ -102,13 +101,15 @@ export default function PdfResultsConclusion({
 
         <FigureBlock
           img={imgResultsPct}
-          height={420}
+          height={360}
           caption="Figure 6: Emissions by Category (%) (YoY Comparison)"
           title="Category Contribution to Total Emissions"
           description="The chart below compares category shares between the two reporting periods. Focus on the largest segments and any categories that show clear increases, as these typically represent the best opportunities for targeted interventions."
         />
 
-        <View style={s.cardTight}>
+        <View style={{ height: 6 }} />
+
+        <View style={s.cardTight} wrap={false}>
           <Text style={[s.p, { fontWeight: 700, marginBottom: 6 }]}>Key findings</Text>
 
           <Text style={s.p}>
@@ -126,8 +127,8 @@ export default function PdfResultsConclusion({
           <Text style={[s.p, { marginTop: 6 }]}>{`• ${topStatement}`}</Text>
 
           <Text style={[s.p, { marginTop: 6 }]}>
-            • Management focus should prioritize the top category and the next-highest contributors, as these typically drive the majority of
-            absolute emissions and deliver the greatest return for reduction planning.
+            • Management focus should prioritize the top category and the next-highest contributors, as these typically drive the majority of absolute
+            emissions and deliver the greatest return for reduction planning.
           </Text>
         </View>
 
@@ -154,7 +155,7 @@ export default function PdfResultsConclusion({
           </Text>
         </View>
 
-        <View style={s.cardTight}>
+        <View style={s.cardTight} wrap={false}>
           <Text style={[s.p, { fontWeight: 700, marginBottom: 6 }]}>Recommended actions</Text>
 
           <Text style={s.p}>• Prioritize reduction initiatives for the top contributing categories identified in the Results section.</Text>
@@ -165,7 +166,8 @@ export default function PdfResultsConclusion({
             • Improve audit readiness by standardizing data capture (owners, frequency, units), retaining evidence, and documenting assumptions.
           </Text>
           <Text style={[s.p, { marginTop: 4 }]}>
-            • Establish a repeatable review cadence (monthly/quarterly) to monitor performance and trigger investigations when variances exceed defined thresholds.
+            • Establish a repeatable review cadence (monthly/quarterly) to monitor performance and trigger investigations when variances exceed defined
+            thresholds.
           </Text>
         </View>
 
