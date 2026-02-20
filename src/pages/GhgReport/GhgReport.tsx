@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
-
+import { getSites } from "../../services/siteService";
 import { Site } from "../ManagerDashboard/types";
 import GhgReportFilters from "./GhgReportFilters";
 import GhgReportTables from "./GhgReportTables";
@@ -45,9 +45,13 @@ const GhgReport = () => {
   const sites: Site[] = (user as any)?.sites || [];
   const singleSite: Site | null = (user as any)?.site || null;
 
-  const availableSites = useMemo(() => {
-    return sites.length > 0 ? sites : singleSite ? [singleSite] : [];
-  }, [sites, singleSite]);
+  // const availableSites = useMemo(() => {
+  //   return sites.length > 0 ? sites : singleSite ? [singleSite] : [];
+  // }, [sites, singleSite]);
+
+  const [availableSites, setAvailableSites] = useState<Site[]>(
+  sites.length > 0 ? sites : singleSite ? [singleSite] : []
+);
 
   const now = new Date();
 
@@ -63,6 +67,21 @@ const GhgReport = () => {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+
+  useEffect(() => {
+  if ((user as any)?.role === "Superadmin") {
+    getSites()
+      .then((allSites) => {
+        setAvailableSites(allSites || []);
+      })
+      .catch((e) => {
+        console.error("Failed to load sites for Superadmin:", e);
+      });
+  } else {
+    setAvailableSites(sites.length > 0 ? sites : singleSite ? [singleSite] : []);
+  }
+}, [user, sites, singleSite]);
 
   // default site selected
   useEffect(() => {
