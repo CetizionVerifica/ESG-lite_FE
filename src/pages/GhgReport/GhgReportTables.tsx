@@ -8,25 +8,34 @@ function fmtPct(n: number) {
   return `${(Number(n) || 0).toFixed(2)}%`;
 }
 
-function formatPeriodLabel(
-  yearType: "CY" | "FY",
-  year: number,
-  ranges?: Record<string, { startDate: string; endDate: string }>
-) {
-  if (!ranges || !ranges[String(year)]) return `${yearType} ${year}`;
+// function formatPeriodLabel(
+//   yearType: "CY" | "FY",
+//   year: number,
+//   ranges?: Record<string, { startDate: string; endDate: string }>
+// ) {
+//   if (!ranges || !ranges[String(year)]) return `${yearType} ${year}`;
 
-  const { startDate, endDate } = ranges[String(year)];
+//   const { startDate, endDate } = ranges[String(year)];
 
-  const fmtMY = (iso: string) => {
-    const d = new Date(iso);
-    // Force "Mon YYYY" display in a stable way.
-    return d.toLocaleString("en-US", { month: "short", year: "numeric" });
-  };
+//   const fmtMY = (iso: string) => {
+//     const d = new Date(iso);
+//     // Force "Mon YYYY" display in a stable way.
+//     return d.toLocaleString("en-US", { month: "short", year: "numeric" });
+//   };
 
-  if (yearType === "FY") {
-    return `FY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`;
+//   if (yearType === "FY") {
+//     return `FY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`;
+//   }
+//   return `CY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`;
+// }
+
+function formatPeriodLabel(yearType: "CY" | "FY", year: number) {
+  if (yearType === "CY") {
+    return `CY ${year} (Jan ${year} – Dec ${year})`;
   }
-  return `CY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`;
+
+  const startYear = year - 1;
+  return `FY ${year} (Apr ${startYear} – Mar ${year})`;
 }
 
 const TableCard = ({
@@ -127,8 +136,8 @@ const GhgReportTables = ({ data, isDark }: { data: GhgReportTablesResponse; isDa
   const compYear = data.filters.compareYear;
   const selectedYear = data.filters.year;
 
-  const compLabel = formatPeriodLabel(data.filters.yearType, compYear, data.ranges);
-  const selectedLabel = formatPeriodLabel(data.filters.yearType, selectedYear, data.ranges);
+  const compLabel = formatPeriodLabel(data.filters.yearType, compYear);
+  const selectedLabel = formatPeriodLabel(data.filters.yearType, selectedYear);
 
   const headerBg = isDark ? "bg-slate-700 text-slate-100" : "bg-sky-100 text-gray-900";
   const border = isDark ? "border-slate-700" : "border-gray-200";
