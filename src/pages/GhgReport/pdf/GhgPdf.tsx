@@ -4,7 +4,17 @@ import { pdf } from "@react-pdf/renderer";
 import type { GhgReportTablesResponse, GhgReportDetailsResponse } from "../../../services/ghgreportService";
 import { getCompanyNameBySites } from "../../../services/companyService";
 import { GhgPdfHiddenCharts, type GhgPdfChartRefs } from "./GhgPdfHiddenCharts";
-import { buildGhgPdfDocument, type GhgPdfChartImages } from "./GhgPdfDocument";
+import { buildGhgPdfDocument, type GhgPdfChartImages, type TocMap, type TocKey } from "./GhgPdfDocument";
+
+import * as pdfjsLib from "pdfjs-dist";
+
+try {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.min.mjs",
+    import.meta.url
+  ).toString();
+} catch {
+}
 
 export default function GhgPdfExport({
   siteIds,
@@ -68,15 +78,51 @@ export default function GhgPdfExport({
     await new Promise((r) => setTimeout(r, 140));
   }
 
- async function capture(ref: React.RefObject<HTMLDivElement | null>, pixelRatio = 2) {
-  if (!ref.current) return "";
+  async function capture(ref: React.RefObject<HTMLDivElement | null>, pixelRatio = 2) {
+    if (!ref.current) return "";
+    return toPng(ref.current, {
+      pixelRatio,
+      cacheBust: true,
+      backgroundColor: "#ffffff",
+    });
+  }
 
-  return toPng(ref.current, {
-    pixelRatio,
-    cacheBust: true,
-    backgroundColor: "#ffffff",
-  });
-}
+  async function extractTocMapFromBlob(blob: Blob): Promise<TocMap> {
+    const ab = await blob.arrayBuffer();
+    const doc = await pdfjsLib.getDocument({ data: ab }).promise;
+
+    const TOC_PAGE = 2;
+
+    const sectionMarkers: Array<{ text: string; key: TocKey }> = [
+      { text: "This report presents greenhouse gas", key: "INTRO" },
+      { text: "This Executive Summary presents a high-level", key: "EXEC" },
+      { text: "Overview of emissions for all locations", key: "OVERVIEW" },
+      { text: "Carbon Accounting Objectives", key: "DETAILED" },
+      { text: "RESULTS", key: "RESULTS" },
+      { text: "This report provides a structured view", key: "CONCLUSION" },
+    ];
+
+    const tocMap: TocMap = {};
+
+    for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
+      if (pageNo === TOC_PAGE) continue;
+
+      const page = await doc.getPage(pageNo);
+      const textContent = await page.getTextContent();
+      const pageText = (textContent.items as any[])
+        .map((it: any) => String(it.str || ""))
+        .join(" ");
+
+      for (const { text, key } of sectionMarkers) {
+        if (tocMap[key]) continue;
+        if (pageText.includes(text)) {
+          tocMap[key] = pageNo;
+        }
+      }
+    }
+
+    return tocMap;
+  }
 
   async function onDownload() {
     if (!tablesData || !detailsData) return;
@@ -94,15 +140,29 @@ export default function GhgPdfExport({
         resultsPct: await capture(resultsPctRef, 2),
       };
 
-      const doc = buildGhgPdfDocument({
+      const draftDoc = buildGhgPdfDocument({
         companyName,
         tablesData,
         detailsData,
         images,
+        tocMap: undefined,
       });
 
-      const blob = await pdf(doc).toBlob();
-      const url = URL.createObjectURL(blob);
+      const draftBlob = await pdf(draftDoc).toBlob();
+
+      const tocMap = await extractTocMapFromBlob(draftBlob);
+
+      const finalDoc = buildGhgPdfDocument({
+        companyName,
+        tablesData,
+        detailsData,
+        images,
+        tocMap,
+      });
+
+      const finalBlob = await pdf(finalDoc).toBlob();
+
+      const url = URL.createObjectURL(finalBlob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `GHG_Report_${companyName}_${new Date().toISOString().slice(0, 10)}.pdf`;
@@ -117,7 +177,11 @@ export default function GhgPdfExport({
 
   if (!canGenerate) {
     return (
-      <button className="h-10 px-4 rounded text-white bg-gray-400 cursor-not-allowed" disabled title="Load report data to enable PDF">
+      <button
+        className="h-10 px-4 rounded text-white bg-gray-400 cursor-not-allowed"
+        disabled
+        title="Load report data to enable PDF"
+      >
         Download PDF
       </button>
     );
@@ -126,7 +190,9 @@ export default function GhgPdfExport({
   return (
     <>
       <button
-        className={`h-10 px-4 rounded text-white ${isGenerating ? "bg-gray-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"}`}
+        className={`h-10 px-4 rounded text-white ${
+          isGenerating ? "bg-gray-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
+        }`}
         disabled={isGenerating}
         onClick={onDownload}
       >

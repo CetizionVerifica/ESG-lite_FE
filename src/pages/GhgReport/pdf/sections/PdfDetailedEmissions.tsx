@@ -232,7 +232,11 @@ export default function PdfDetailedEmissions({
 
         <View style={s.footer} fixed>
           <Text style={s.footText}>{companyName}</Text>
-          <Text style={s.footText}>Detailed Emissions</Text>
+          {/* <Text style={s.footText}>Detailed Emissions</Text> */}
+            <Text
+    style={s.footText}
+    render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+  />
         </View>
       </Page>
 
@@ -257,7 +261,11 @@ export default function PdfDetailedEmissions({
 
         <View style={s.footer} fixed>
           <Text style={s.footText}>{companyName}</Text>
-          <Text style={s.footText}>Detailed Emissions</Text>
+            <Text
+    style={s.footText}
+    render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+  />
+          {/* <Text style={s.footText}>Detailed Emissions</Text> */}
         </View>
       </Page>
 
@@ -282,8 +290,13 @@ export default function PdfDetailedEmissions({
 
         <View style={s.footer} fixed>
           <Text style={s.footText}>{companyName}</Text>
-          <Text style={s.footText}>Detailed Emissions</Text>
+          {/* <Text style={s.footText}>Detailed Emissions</Text> */}
+           <Text
+    style={s.footText}
+    render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+  />
         </View>
+
       </Page>
     </>
   );

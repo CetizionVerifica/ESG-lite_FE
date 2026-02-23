@@ -1,7 +1,7 @@
 
-import { Document } from "@react-pdf/renderer";
+import { Document, Page, Text, View } from "@react-pdf/renderer";
 import type { GhgReportTablesResponse, GhgReportDetailsResponse } from "../../../services/ghgreportService";
-import { formatPeriodLabel, num, r2, EXCLUDED_CATEGORIES } from "./PdfShared";
+import { formatPeriodLabel, num, r2, EXCLUDED_CATEGORIES, pdfStyles as s } from "./PdfShared";
 
 import PdfCover from "./sections/PdfCover";
 import PdfIntroduction from "./sections/PdfIntroduction";
@@ -9,6 +9,9 @@ import PdfExecutiveSummary from "./sections/PdfExecutiveSummary";
 import PdfOverviewAllLocations from "./sections/PdfOverviewAllLocation";
 import PdfDetailedEmissions from "./sections/PdfDetailedEmissions";
 import PdfResultsConclusion from "./sections/PdfResultsConclusion";
+
+export type TocKey = "INTRO" | "EXEC" | "OVERVIEW" | "DETAILED" | "RESULTS" | "CONCLUSION";
+export type TocMap = Partial<Record<TocKey, number>>;
 
 function buildCategoryPctModel(detailsData: GhgReportDetailsResponse) {
   const rows = (detailsData.rows || []).filter(
@@ -62,19 +65,105 @@ export type GhgPdfChartImages = {
   resultsPct: string;
 };
 
+function GlobalFooter({ companyName }: { companyName: string }) {
+  return (
+    <View
+      fixed
+      style={{
+        position: "absolute",
+        bottom: 24,
+        left: 32,
+        right: 32,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        borderTopWidth: 1,
+        borderTopColor: "#E6E8EC",
+        paddingTop: 6,
+      }}
+    >
+      <Text
+        style={s.footText}
+        render={() => companyName}
+      />
+      <Text
+        style={s.footText}
+        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+      />
+    </View>
+  );
+}
+
+function PdfTableOfContents({
+  companyName,
+  reportingLine,
+  publishedLine,
+  tocMap,
+}: {
+  companyName: string;
+  reportingLine: string;
+  publishedLine: string;
+  tocMap?: TocMap;
+}) {
+  const items: Array<{ key: TocKey; title: string }> = [
+    { key: "INTRO", title: "Introduction" },
+    { key: "EXEC", title: "Executive Summary" },
+    { key: "OVERVIEW", title: "Overview — All Locations" },
+    { key: "DETAILED", title: "Detailed Emissions" },
+    { key: "RESULTS", title: "Results" },
+    { key: "CONCLUSION", title: "Conclusion" },
+  ];
+
+  const pageNo = (k: TocKey) => (tocMap?.[k] ? String(tocMap[k]) : "—");
+
+  return (
+    <Page size="A4" style={s.page}>
+      <Text style={s.h2}>Table of Contents</Text>
+
+      <View style={s.card}>
+        <Text style={s.p}>{companyName}</Text>
+        <Text style={s.p}>{reportingLine}</Text>
+        <Text style={s.p}>{publishedLine}</Text>
+      </View>
+
+      <View style={s.cardTight}>
+        {items.map((it) => (
+          <View
+            key={it.key}
+            style={{
+              flexDirection: "row",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              paddingVertical: 6,
+              borderBottomWidth: 1,
+              borderBottomColor: "#E6E8EC",
+            }}
+          >
+            <Text style={[s.p, { fontWeight: 700 }]}>{it.title}</Text>
+            <Text style={s.p}>{pageNo(it.key)}</Text>
+          </View>
+        ))}
+      </View>
+
+      <GlobalFooter companyName={companyName} />
+    </Page>
+  );
+}
+
 export function buildGhgPdfDocument(args: {
   companyName: string;
   tablesData: GhgReportTablesResponse;
   detailsData: GhgReportDetailsResponse;
   images: GhgPdfChartImages;
+  tocMap?: TocMap;
 }) {
-  const { companyName, tablesData, detailsData, images } = args;
+  const { companyName, tablesData, detailsData, images, tocMap } = args;
 
   const compareYear = tablesData.filters.compareYear;
   const selectedYear = tablesData.filters.year;
 
-  const compareLabel = formatPeriodLabel(tablesData.filters.yearType, compareYear, tablesData.ranges);
-  const selectedLabel = formatPeriodLabel(tablesData.filters.yearType, selectedYear, tablesData.ranges);
+  const compareLabel = formatPeriodLabel(tablesData.filters.yearType, compareYear);
+  const selectedLabel = formatPeriodLabel(tablesData.filters.yearType, selectedYear);
 
   const compareName = compareLabel.split(" (")[0];
   const selectedName = selectedLabel.split(" (")[0];
@@ -86,12 +175,32 @@ export function buildGhgPdfDocument(args: {
       ? `Reporting Period: FY ${compareYear} – FY ${selectedYear}`
       : `Reporting Period: ${compareYear} – ${selectedYear}`;
 
-  const publishedLine = `Date published: ${new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}`;
+  const publishedLine = `Date published: ${new Date().toLocaleString("en-US", {
+    month: "long",
+    year: "numeric",
+  })}`;
 
   return (
     <Document>
-      <PdfCover companyName={companyName} reportingLine={reportingLine} publishedLine={publishedLine} />
-      <PdfIntroduction companyName={companyName} compareLabel={compareLabel} selectedLabel={selectedLabel} />
+      <PdfCover
+        companyName={companyName}
+        reportingLine={reportingLine}
+        publishedLine={publishedLine}
+      />
+
+      <PdfTableOfContents
+        companyName={companyName}
+        reportingLine={reportingLine}
+        publishedLine={publishedLine}
+        tocMap={tocMap}
+      />
+
+      <PdfIntroduction
+        companyName={companyName}
+        compareLabel={compareLabel}
+        selectedLabel={selectedLabel}
+      />
+
       <PdfExecutiveSummary
         companyName={companyName}
         tablesData={tablesData}
@@ -100,7 +209,14 @@ export function buildGhgPdfDocument(args: {
         imgScopeComparison={images.scopeComparison}
         imgCategoryAbs={images.categoryAbs}
       />
-      <PdfOverviewAllLocations companyName={companyName} tablesData={tablesData} compareLabel={compareLabel} selectedLabel={selectedLabel} />
+
+      <PdfOverviewAllLocations
+        companyName={companyName}
+        tablesData={tablesData}
+        compareLabel={compareLabel}
+        selectedLabel={selectedLabel}
+      />
+
       <PdfDetailedEmissions
         companyName={companyName}
         detailsData={detailsData}
@@ -112,6 +228,7 @@ export function buildGhgPdfDocument(args: {
         imgScope2Pct={images.scope2Pct}
         imgScope3Pct={images.scope3Pct}
       />
+
       <PdfResultsConclusion
         companyName={companyName}
         compareName={compareName}
@@ -122,6 +239,8 @@ export function buildGhgPdfDocument(args: {
         topCompareCategory={model.topCompareCategory}
         topComparePct={model.topComparePct}
       />
+
+      {/* <GlobalFooter companyName={companyName} /> */}
     </Document>
   );
 }
