@@ -357,8 +357,8 @@ export const GhgPdfHiddenCharts = forwardRef(function GhgPdfHiddenCharts(
 ) {
   const compareYear = tablesData.filters.compareYear;
   const selectedYear = tablesData.filters.year;
-  const compareLabel = formatPeriodLabel(tablesData.filters.yearType, compareYear, tablesData.ranges);
-  const selectedLabel = formatPeriodLabel(tablesData.filters.yearType, selectedYear, tablesData.ranges);
+  const compareLabel = formatPeriodLabel(tablesData.filters.yearType, compareYear);
+  const selectedLabel = formatPeriodLabel(tablesData.filters.yearType, selectedYear);
 
   const compareName = compareLabel.split(" (")[0];
   const selectedName = selectedLabel.split(" (")[0];
