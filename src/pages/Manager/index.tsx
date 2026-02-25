@@ -176,7 +176,20 @@ const getColumnId = useCallback(
       const dependentOptions = dependentOptionsMap[categoryId];
       const columnDependencies = columnDependenciesMap[categoryId];
 
-      const parentColumnName = columnDependencies?.[columnName];
+    //  const parentColumnName = columnDependencies?.[columnName];
+
+    const findDepKey = (obj: ColumnDependencies, key: string) => {
+  if (!obj) return undefined;
+  if (obj[key] !== undefined) return key;
+  const lower = key.toLowerCase();
+  const toSnake = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+  const toCamel = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  return Object.keys(obj).find(k =>
+    k.toLowerCase() === lower || k === toSnake || k === toCamel
+  );
+};
+const depKey = findDepKey(columnDependencies, columnName);
+const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
       if (parentColumnName && dependentOptions?.[columnName]) {
         const parentValue = activityData[parentColumnName] as string;
