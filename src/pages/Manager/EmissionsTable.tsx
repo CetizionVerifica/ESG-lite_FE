@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect  } from "react";
 import { EmissionData, EmissionStatus } from "../../services/emissionService";
 import { getDocumentsByEmission, EmissionDocument } from "../../services/documentService";
 import DocumentViewerModal from "../../components/DocumentViewerModal";
@@ -67,6 +67,9 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
   const [viewerDocuments, setViewerDocuments] = useState<EmissionDocument[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<EmissionDocument | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 5;
 
   // Get pending and approved emissions
   const pendingEmissions = emissions.filter((e) => e.status === "pending");
@@ -232,6 +235,10 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     }));
   };
 
+  useEffect(() => {
+  setCurrentPage(1);
+}, [emissions]);
+
   // Theme classes
   const loadingClass = isDark ? "text-center py-8 text-slate-300" : "text-center py-8 text-gray-700";
   const emptyClass = isDark ? "text-center py-8 text-slate-400" : "text-center py-8 text-gray-500";
@@ -290,6 +297,12 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
   const showBulkApprove = onBulkApprove && pendingEmissions.length > 0;
   const showBulkDelete = onBulkDelete && approvedEmissions.length > 0;
   const showCheckboxColumn = showBulkApprove || showBulkDelete;
+
+  const totalPages = Math.ceil(emissions.length / rowsPerPage);
+const paginatedEmissions = emissions.slice(
+  (currentPage - 1) * rowsPerPage,
+  currentPage * rowsPerPage
+);
 
   return (
     <div>
@@ -410,7 +423,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
           </tr>
         </thead>
         <tbody>
-          {emissions.map((emission) => {
+          {paginatedEmissions.map((emission) => {
             const isLoading = actionLoadingId === emission.pk_id;
             const isRejecting = rejectingId === emission.pk_id;
             const isPending = emission.status === "pending";
@@ -553,6 +566,50 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
         </tbody>
         </table>
       </div>
+
+ {totalPages > 1 && (
+        <div className={`flex items-center justify-between px-4 py-3 border-t mt-2 ${isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-white"}`}>
+          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+            Showing{" "}
+            <span className="font-medium">{(currentPage - 1) * rowsPerPage + 1}</span>{" "}
+            to{" "}
+            <span className="font-medium">{Math.min(currentPage * rowsPerPage, emissions.length)}</span>{" "}
+            of{" "}
+            <span className="font-medium">{emissions.length}</span> entries
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1}
+              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}>«</button>
+            <button onClick={() => setCurrentPage((p) => p - 1)} disabled={currentPage === 1}
+              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}>‹</button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((page) => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
+              .reduce<(number | "...")[]>((acc, page, idx, arr) => {
+                if (idx > 0 && page - (arr[idx - 1] as number) > 1) acc.push("...");
+                acc.push(page);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === "..." ? (
+                  <span key={`ellipsis-${idx}`} className={`px-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>…</span>
+                ) : (
+                  <button key={item} onClick={() => setCurrentPage(item as number)}
+                    className={`px-3 py-1 text-sm rounded border transition-colors ${
+                      currentPage === item
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"
+                    }`}>{item}</button>
+                )
+              )}
+
+            <button onClick={() => setCurrentPage((p) => p + 1)} disabled={currentPage === totalPages}
+              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}>›</button>
+            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}
+              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}>»</button>
+          </div>
+        </div>
+      )}
 
       {/* Document Viewer Modal */}
       <DocumentViewerModal

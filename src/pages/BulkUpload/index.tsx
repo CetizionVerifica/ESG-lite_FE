@@ -25,6 +25,7 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
     selectedRowIds,
     selectedCategories,
     uniqueCategories,
+    categoryTypeWarning,
     importing,
     importProgress,
     importError,
@@ -111,7 +112,7 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
         </div>
 
         <div className="border-t border-gray-100" />
-
+      
         <div className="min-h-75">
           {stage === "upload" && (
             <FileUploadStage
@@ -119,6 +120,7 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
               parseError={parseError}
             />
           )}
+
 
           {stage === "mapping" && (
             <ColumnMappingStage
@@ -134,6 +136,7 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
               onToggleCategory={toggleCategory}
               onToggleAllCategories={toggleAllCategories}
               onBack={handleReset}
+              categoryTypeWarning={categoryTypeWarning}
               onProceed={proceedToReview}
             />
           )}
