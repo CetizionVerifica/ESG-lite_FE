@@ -10,6 +10,13 @@ export interface LineItem {
     amount: number | null;
 }
 
+export interface ActivityEntry {
+    activity_description: string | null;
+    total_quantity: number | null;
+    unit_of_measurement: string | null;
+    emission_category: string | null;
+}
+
 export interface InvoiceData {
     invoice_number: string | null;
     invoice_date: string | null;
@@ -20,6 +27,8 @@ export interface InvoiceData {
     currency: string | null;
     tax_amount: number | null;
     line_items: LineItem[];
+    activities: ActivityEntry[];
+    // Backward-compat computed fields (first activity's values)
     activity_description: string | null;
     total_quantity: number | null;
     unit_of_measurement: string | null;
@@ -50,6 +59,8 @@ export interface CategorySuggestion {
 }
 
 export interface EmissionReady {
+    invoice_index: number;
+    activity_index: number;
     site_id: number | null;
     category_id: number | null;
     activity_data: Record<string, string>;

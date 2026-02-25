@@ -1027,6 +1027,21 @@ const UserDataEntryPage = () => {
         );
     };
 
+    const handleAddInvoiceRow = () => {
+        setInvoiceRows((prev) => {
+            const nextId = prev.length > 0 ? Math.max(...prev.map((r) => r.id)) + 1 : 1;
+            const row: ModalRow = { id: nextId };
+            filteredColumns.forEach((col) => {
+                row[col.column_name] = "";
+            });
+            return [...prev, row];
+        });
+    };
+
+    const handleRemoveInvoiceRow = (rowId: number) => {
+        setInvoiceRows((prev) => prev.filter((r) => r.id !== rowId));
+    };
+
     const handleSaveInvoiceRows = async () => {
         if (!selectedCategory || !siteId || invoiceRows.length === 0) return;
 
@@ -1175,10 +1190,12 @@ const UserDataEntryPage = () => {
 
                 setInvoiceRows(rows);
                 setInvoiceCloudinaryUrl(response.cloudinary_url ?? null);
-                // Collect any failed validation checks as user-visible warnings
+                // Collect any failed validation checks as user-visible warnings.
+                // Skip per-activity category-match warnings — those are shown
+                // inline on each row's emission category dropdown instead.
                 const warnings = (response.validations ?? [])
                     .flat()
-                    .filter((v) => !v.ok && v.message)
+                    .filter((v) => !v.ok && v.message && v.check !== "activity_unit_defined")
                     .map((v) => v.message as string);
                 setInvoiceWarnings(warnings);
                 setInvoiceReviewOpen(true);
@@ -1288,10 +1305,11 @@ const UserDataEntryPage = () => {
 
                 setInvoiceRows(rows);
                 setInvoiceCloudinaryUrl(response.cloudinary_url ?? invoice.cloudinary_url);
-                // Collect any failed validation checks as user-visible warnings
+                // Collect any failed validation checks as user-visible warnings.
+                // Skip per-activity category-match warnings — shown inline instead.
                 const warnings = (response.validations ?? [])
                     .flat()
-                    .filter((v) => !v.ok && v.message)
+                    .filter((v) => !v.ok && v.message && v.check !== "activity_unit_defined")
                     .map((v) => v.message as string);
                 setInvoiceWarnings(warnings);
                 setInvoiceListOpen(false);
@@ -2034,6 +2052,15 @@ const UserDataEntryPage = () => {
                                             · Invoice {index + 1}
                                         </span>
                                     )}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveInvoiceRow(id)}
+                                        className="ml-auto text-gray-400 hover:text-red-500 transition-colors"
+                                        title="Remove entry">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                        </svg>
+                                    </button>
                                 </div>
                                 <div className="p-5">
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-4">
@@ -2109,48 +2136,57 @@ const UserDataEntryPage = () => {
                                         <label className="block text-xs font-medium text-gray-500 mb-1.5">
                                             Emission Category
                                         </label>
-                                        {emissionFactors.length > 0 ? (
-                                            <select
-                                                value={emission_category ?? ""}
-                                                onChange={(e) =>
-                                                    handleInvoiceRowChange(
-                                                        id,
-                                                        "emission_category",
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                className="w-full border border-emerald-300 bg-emerald-50 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
-                                                <option value="">Select category</option>
-                                                {emission_category &&
-                                                    !emissionFactors.find(
-                                                        (f) => f.emission_category_name === emission_category,
-                                                    ) && (
-                                                        <option value={emission_category}>
-                                                            {emission_category}
+                                        {(() => {
+                                            const isUnmatched = !!emission_category && emissionFactors.length > 0 && !emissionFactors.find((f) => f.emission_category_name === emission_category);
+                                            const isEmpty = !emission_category;
+                                            const needsAttention = isUnmatched || isEmpty;
+                                            return emissionFactors.length > 0 ? (
+                                                <>
+                                                <select
+                                                    value={emission_category ?? ""}
+                                                    onChange={(e) =>
+                                                        handleInvoiceRowChange(
+                                                            id,
+                                                            "emission_category",
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 ${needsAttention ? "border border-amber-400 bg-amber-50 focus:ring-amber-400" : "border border-emerald-300 bg-emerald-50 focus:ring-emerald-400"}`}>
+                                                    <option value="">Select category</option>
+                                                    {isUnmatched && (
+                                                        <option value={emission_category!}>
+                                                            {emission_category} (unmatched)
                                                         </option>
                                                     )}
-                                                {emissionFactors.map((factor) => (
-                                                    <option
-                                                        key={factor.emission_factor_id}
-                                                        value={factor.emission_category_name}>
-                                                        {factor.emission_category_name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <input
-                                                type="text"
-                                                value={emission_category ?? ""}
-                                                onChange={(e) =>
-                                                    handleInvoiceRowChange(
-                                                        id,
-                                                        "emission_category",
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                className="w-full border border-emerald-300 bg-emerald-50 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                                            />
-                                        )}
+                                                    {emissionFactors.map((factor) => (
+                                                        <option
+                                                            key={factor.emission_factor_id}
+                                                            value={factor.emission_category_name}>
+                                                            {factor.emission_category_name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {isUnmatched && (
+                                                    <p className="mt-1 text-xs text-amber-600">
+                                                        OCR detected &quot;{emission_category}&quot; — please select a matching category
+                                                    </p>
+                                                )}
+                                                </>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={emission_category ?? ""}
+                                                    onChange={(e) =>
+                                                        handleInvoiceRowChange(
+                                                            id,
+                                                            "emission_category",
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    className="w-full border border-emerald-300 bg-emerald-50 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                                />
+                                            );
+                                        })()}
                                     </div>
                                     <div>
                                         <label className="block text-xs font-medium text-gray-500 mb-1.5">
@@ -2215,6 +2251,12 @@ const UserDataEntryPage = () => {
                             </div>
                         );
                     })}
+                    <button
+                        type="button"
+                        onClick={handleAddInvoiceRow}
+                        className="w-full mt-2 py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-medium text-gray-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors">
+                        + Add Entry Manually
+                    </button>
                 </div>
 
                 {saveError && invoiceReviewOpen && (
