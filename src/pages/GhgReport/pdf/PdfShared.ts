@@ -1,17 +1,15 @@
 import { StyleSheet } from "@react-pdf/renderer";
 
-export function formatPeriodLabel(
-  yearType: "CY" | "FY",
-  year: number,
-  ranges?: Record<string, { startDate: string; endDate: string }>
-) {
-  if (!ranges || !ranges[String(year)]) return `${yearType} ${year}`;
-  const { startDate, endDate } = ranges[String(year)];
-  const fmtMY = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", year: "numeric" });
-  return yearType === "FY"
-    ? `FY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`
-    : `CY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`;
+
+export function formatPeriodLabel(yearType: "CY" | "FY", year: number) {
+  if (yearType === "CY") {
+    return `CY ${year} (Jan ${year} – Dec ${year})`;
+  }
+
+  const startYear = year - 1;
+  return `FY ${year} (Apr ${startYear} – Mar ${year})`;
 }
+
 
 export function num(v: any) {
   const n = Number(v);

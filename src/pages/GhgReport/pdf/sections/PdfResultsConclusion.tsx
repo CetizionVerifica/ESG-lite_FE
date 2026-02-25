@@ -134,7 +134,11 @@ export default function PdfResultsConclusion({
 
         <View style={s.footer} fixed>
           <Text style={s.footText}>{companyName}</Text>
-          <Text style={s.footText}>Results</Text>
+          {/* <Text style={s.footText}>Results</Text> */}
+            <Text
+    style={s.footText}
+    render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+  />
         </View>
       </Page>
 
@@ -173,7 +177,11 @@ export default function PdfResultsConclusion({
 
         <View style={s.footer} fixed>
           <Text style={s.footText}>{companyName}</Text>
-          <Text style={s.footText}>Conclusion</Text>
+          {/* <Text style={s.footText}>Conclusion</Text> */}
+           <Text
+    style={s.footText}
+    render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+  />
         </View>
       </Page>
     </>
