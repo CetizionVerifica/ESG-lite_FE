@@ -84,6 +84,12 @@ export interface ModalRow {
     activity_data_unit?: string;
     _ocrUnit?: string;
     _vendorName?: string;
+    _invoiceIndex?: number;
+    _activityDescription?: string;
+    _invoiceNumber?: string;
+    _invoiceDate?: string;
+    _totalAmount?: number;
+    _currency?: string;
     [key: string]: any;
 }
 
