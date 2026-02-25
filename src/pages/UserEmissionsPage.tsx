@@ -276,6 +276,30 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         }
       }
 
+     // Fallback: search through ALL parent values in dependentOptions for this category
+      const depOptionsForCategory = dependentOptionsMap[categoryId];
+      if (depOptionsForCategory) {
+        const columnNameLower = columnName.toLowerCase();
+        let depOptionsForColumn: { id: string | number; label: string }[] | undefined;
+
+        // Find the dependent options for this column (case-insensitive)
+        for (const [key, val] of Object.entries(depOptionsForCategory)) {
+          if (key.toLowerCase() === columnNameLower) {
+            depOptionsForColumn = Object.values(val).flat();
+            break;
+          }
+        }
+
+        if (depOptionsForColumn) {
+          const option = depOptionsForColumn.find(
+            (opt) =>
+              String(opt.id) === value ||
+              opt.label.toLowerCase() === value.toLowerCase()
+          );
+          if (option) return option.label;
+        }
+      }
+
       // Return original value if no label found
       return value;
     },

@@ -1966,7 +1966,7 @@ const UserDataEntryPage = () => {
                 <div className={invoiceCloudinaryUrl ? "flex gap-4" : ""}>
                     {/* Left: embedded invoice document */}
                     {invoiceCloudinaryUrl && (
-                        <div className="w-[45%] flex-shrink-0">
+                        <div className="w-[45%] shrink-0">
                             <p className="text-xs font-medium text-gray-500 mb-2">Invoice Document</p>
                             {/\.pdf(\?.*)?$/i.test(invoiceCloudinaryUrl) ? (
                                 <object
@@ -1974,7 +1974,7 @@ const UserDataEntryPage = () => {
                                     type="application/pdf"
                                     className="w-full rounded border"
                                     style={{ height: "580px" }}>
-                                    <div className="flex flex-col items-center justify-center h-[580px] bg-gray-50 rounded border text-center p-4">
+                                    <div className="flex flex-col items-center justify-center h-145 bg-gray-50 rounded border text-center p-4">
                                         <p className="text-sm text-gray-500 mb-3">PDF cannot be displayed inline.</p>
                                         <a
                                             href={invoiceCloudinaryUrl}
@@ -1989,7 +1989,7 @@ const UserDataEntryPage = () => {
                                 <img
                                     src={invoiceCloudinaryUrl}
                                     alt="Invoice"
-                                    className="w-full object-contain max-h-[580px] rounded border"
+                                    className="w-full object-contain max-h-145 rounded border"
                                 />
                             )}
                         </div>
@@ -2329,7 +2329,7 @@ const UserDataEntryPage = () => {
                                                 className="rounded"
                                             />
                                         </td>
-                                        <td className="py-2 pr-3 max-w-[220px]">
+                                        <td className="py-2 pr-3 max-w-55">
                                             <span
                                                 className="block truncate text-gray-800"
                                                 title={inv.file_name}>
@@ -2391,7 +2391,7 @@ const UserDataEntryPage = () => {
             {/* Full-screen invoice PDF preview popup (sits above the list modal) */}
             {previewInvoice && (
                 <div
-                    className="fixed inset-0 z-[60] flex flex-col bg-black/80 backdrop-blur-sm"
+                    className="fixed inset-0 z-60 flex flex-col bg-black/80 backdrop-blur-sm"
                     onClick={() => setPreviewInvoice(null)}>
                     {/* Header */}
                     <div
@@ -2448,7 +2448,7 @@ const UserDataEntryPage = () => {
             {/* Extraction loading overlay */}
             {(invoiceUploading || reusingInvoiceId !== null) && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl px-10 py-10 flex flex-col items-center gap-6 w-[400px] mx-4">
+                    <div className="bg-white rounded-2xl shadow-2xl px-10 py-10 flex flex-col items-center gap-6 w-100 mx-4">
                         {/* Spinner with icon centre */}
                         <div className="relative flex items-center justify-center">
                             <div className="w-16 h-16 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin" />
