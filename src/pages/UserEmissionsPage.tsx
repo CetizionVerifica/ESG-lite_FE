@@ -94,7 +94,7 @@ const UserEmissionsPage = () => {
   const [loading, setLoading] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 10;
+  const rowsPerPage = 5;
 
   // Document viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
