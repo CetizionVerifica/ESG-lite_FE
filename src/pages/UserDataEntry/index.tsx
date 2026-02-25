@@ -101,6 +101,8 @@ const UserDataEntryPage = () => {
     const [units, setUnits] = useState<UnitData[]>([]);
     const [loading, setLoading] = useState(false);
     const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+const rowsPerPage = 10;
 
     // Dependent dropdown configuration state
     const [columnOptions, setColumnOptions] = useState<ColumnOptionsMap>({});
@@ -269,6 +271,10 @@ const UserDataEntryPage = () => {
             setLoading(false);
         }
     }, [selectedCategory, selectedDate, siteId]);
+
+    useEffect(() => {
+  setCurrentPage(1);
+}, [emissions]);
 
     useEffect(() => {
         fetchData();
@@ -1454,6 +1460,13 @@ const UserDataEntryPage = () => {
     // ---------------------------------------------------------------------------
     // Render
     // ---------------------------------------------------------------------------
+
+    const totalPages = Math.ceil(emissions.length / rowsPerPage);
+const paginatedEmissions = emissions.slice(
+  (currentPage - 1) * rowsPerPage,
+  currentPage * rowsPerPage
+);
+
     return (
         <div className="p-6">
             <h1 className="text-2xl font-bold mb-6">
@@ -1826,6 +1839,7 @@ const UserDataEntryPage = () => {
                             ))}
                         </tbody>
                     </table>
+                    
                 </div>
 
                 {/* Error Display */}
@@ -1887,8 +1901,9 @@ const UserDataEntryPage = () => {
                     {loading ? (
                         <div className="text-center py-4">Loading data...</div>
                     ) : dynamicColumns.length > 0 ? (
+                        <>
                         <Table<EmissionRow>
-                            data={emissions}
+                            data={paginatedEmissions}
                             columns={tableColumns}
                             keyField="pk_id"
                             onEdit={handleEdit}
@@ -1948,6 +1963,80 @@ const UserDataEntryPage = () => {
                                 );
                             }}
                         />
+
+ {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white mt-2">
+                        <p className="text-sm text-gray-600">
+                            Showing{" "}
+                            <span className="font-medium">
+                                {(currentPage - 1) * rowsPerPage + 1}
+                            </span>{" "}
+                            to{" "}
+                            <span className="font-medium">
+                                {Math.min(currentPage * rowsPerPage, emissions.length)}
+                            </span>{" "}
+                            of{" "}
+                            <span className="font-medium">{emissions.length}</span> entries
+                        </p>
+
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setCurrentPage(1)}
+                                disabled={currentPage === 1}
+                                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >«</button>
+
+                            <button
+                                onClick={() => setCurrentPage((p) => p - 1)}
+                                disabled={currentPage === 1}
+                                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >‹</button>
+
+                            {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                .filter(
+                                    (page) =>
+                                        page === 1 ||
+                                        page === totalPages ||
+                                        Math.abs(page - currentPage) <= 2
+                                )
+                                .reduce<(number | "...")[]>((acc, page, idx, arr) => {
+                                    if (idx > 0 && page - (arr[idx - 1] as number) > 1)
+                                        acc.push("...");
+                                    acc.push(page);
+                                    return acc;
+                                }, [])
+                                .map((item, idx) =>
+                                    item === "..." ? (
+                                        <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">…</span>
+                                    ) : (
+                                        <button
+                                            key={item}
+                                            onClick={() => setCurrentPage(item as number)}
+                                            className={`px-3 py-1 text-sm rounded border transition-colors ${
+                                                currentPage === item
+                                                    ? "bg-blue-600 text-white border-blue-600"
+                                                    : "border-gray-300 hover:bg-gray-50 text-gray-700"
+                                            }`}
+                                        >{item}</button>
+                                    )
+                                )}
+
+                            <button
+                                onClick={() => setCurrentPage((p) => p + 1)}
+                                disabled={currentPage === totalPages}
+                                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >›</button>
+
+                            <button
+                                onClick={() => setCurrentPage(totalPages)}
+                                disabled={currentPage === totalPages}
+                                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >»</button>
+                        </div>
+                    </div>
+                )}
+
+</>
                     ) : (
                         <div className="text-center py-4 text-gray-500">
                             No columns configured for this category.

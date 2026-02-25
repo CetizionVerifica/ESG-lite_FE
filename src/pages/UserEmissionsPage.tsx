@@ -93,6 +93,9 @@ const UserEmissionsPage = () => {
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10;
+
   // Document viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerDocuments, setViewerDocuments] = useState<EmissionDocument[]>([]);
@@ -124,12 +127,18 @@ const UserEmissionsPage = () => {
   const yearOptions = generateYearOptions();
   const monthOptions = generateMonthOptions();
 
+  
+
   // Set initial site when availableSites becomes available
   useEffect(() => {
     if (availableSites.length > 0 && selectedSite === null) {
       setSelectedSite(availableSites[0].site_id);
     }
   }, [availableSites, selectedSite]);
+
+  useEffect(() => {
+  setCurrentPage(1);
+}, [selectedCategory, selectedYear, selectedMonth, selectedSite]);
 
   // Reset category when site changes
   useEffect(() => {
@@ -340,6 +349,8 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     fetchEmissions();
   }, [fetchEmissions]);
 
+  
+
   // Document viewer handlers
   const handleViewDocuments = async (emissionId: number) => {
     try {
@@ -456,6 +467,12 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       rejected: filteredEmissions.filter((e) => e.status === "rejected").length,
     };
   }, [filteredEmissions]);
+
+  const totalPages = Math.ceil(filteredEmissions.length / rowsPerPage);
+const paginatedEmissions = filteredEmissions.slice(
+  (currentPage - 1) * rowsPerPage,
+  currentPage * rowsPerPage
+);
 
   return (
     <div className="p-6">
@@ -584,7 +601,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
               </tr>
             </thead>
             <tbody>
-              {filteredEmissions.map((emission) => (
+              {paginatedEmissions.map((emission) => (
                 <tr key={emission.pk_id} className="hover:bg-gray-50">
                   <td className="border border-gray-300 px-4 py-3">
                     {emission.category?.category_name || "-"}
@@ -634,6 +651,77 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
               ))}
             </tbody>
           </table>
+           {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white mt-2">
+            <p className="text-sm text-gray-600">
+              Showing{" "}
+              <span className="font-medium">
+                {(currentPage - 1) * rowsPerPage + 1}
+              </span>{" "}
+              to{" "}
+              <span className="font-medium">
+                {Math.min(currentPage * rowsPerPage, filteredEmissions.length)}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium">{filteredEmissions.length}</span> entries
+            </p>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >«</button>
+
+              <button
+                onClick={() => setCurrentPage((p) => p - 1)}
+                disabled={currentPage === 1}
+                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >‹</button>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(
+                  (page) =>
+                    page === 1 ||
+                    page === totalPages ||
+                    Math.abs(page - currentPage) <= 2
+                )
+                .reduce<(number | "...")[]>((acc, page, idx, arr) => {
+                  if (idx > 0 && page - (arr[idx - 1] as number) > 1)
+                    acc.push("...");
+                  acc.push(page);
+                  return acc;
+                }, [])
+                .map((item, idx) =>
+                  item === "..." ? (
+                    <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">…</span>
+                  ) : (
+                    <button
+                      key={item}
+                      onClick={() => setCurrentPage(item as number)}
+                      className={`px-3 py-1 text-sm rounded border transition-colors ${
+                        currentPage === item
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "border-gray-300 hover:bg-gray-50 text-gray-700"
+                      }`}
+                    >{item}</button>
+                  )
+                )}
+
+              <button
+                onClick={() => setCurrentPage((p) => p + 1)}
+                disabled={currentPage === totalPages}
+                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >›</button>
+
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >»</button>
+            </div>
+          </div>
+        )}
         </div>
       )}
 
