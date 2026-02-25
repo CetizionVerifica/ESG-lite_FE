@@ -206,7 +206,20 @@ const UserEmissionsPage = () => {
       const columnDependencies = columnDependenciesMap[categoryId];
 
       // Check if this is a dependent column
-      const parentColumnName = columnDependencies?.[columnName];
+    //  const parentColumnName = columnDependencies?.[columnName];
+
+    const findDepKey = (obj: ColumnDependencies, key: string) => {
+  if (!obj) return undefined;
+  if (obj[key] !== undefined) return key;
+  const lower = key.toLowerCase();
+  const toSnake = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+  const toCamel = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  return Object.keys(obj).find(k =>
+    k.toLowerCase() === lower || k === toSnake || k === toCamel
+  );
+};
+const depKey = findDepKey(columnDependencies, columnName);
+const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
       if (parentColumnName && dependentOptions?.[columnName]) {
         // Get parent value and find its label first
@@ -260,6 +273,30 @@ const UserEmissionsPage = () => {
           if (option) {
             return option.label;
           }
+        }
+      }
+
+     // Fallback: search through ALL parent values in dependentOptions for this category
+      const depOptionsForCategory = dependentOptionsMap[categoryId];
+      if (depOptionsForCategory) {
+        const columnNameLower = columnName.toLowerCase();
+        let depOptionsForColumn: { id: string | number; label: string }[] | undefined;
+
+        // Find the dependent options for this column (case-insensitive)
+        for (const [key, val] of Object.entries(depOptionsForCategory)) {
+          if (key.toLowerCase() === columnNameLower) {
+            depOptionsForColumn = Object.values(val).flat();
+            break;
+          }
+        }
+
+        if (depOptionsForColumn) {
+          const option = depOptionsForColumn.find(
+            (opt) =>
+              String(opt.id) === value ||
+              opt.label.toLowerCase() === value.toLowerCase()
+          );
+          if (option) return option.label;
         }
       }
 

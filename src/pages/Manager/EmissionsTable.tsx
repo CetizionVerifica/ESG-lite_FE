@@ -11,6 +11,10 @@ interface EmissionsTableProps {
   onBulkApprove?: (ids: number[]) => Promise<void>;
   onBulkDelete?: (ids: number[]) => Promise<void>;
   isDark?: boolean;
+  formatActivityData?: (
+    activityData: Record<string, unknown>,
+    categoryId: number
+  ) => { key: string; displayValue: string }[];
 }
 
 function formatDate(dateString: string): string {
@@ -49,7 +53,7 @@ const StatusBadge = ({ status, isDark = false }: { status: EmissionStatus; isDar
   );
 };
 
-const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove, onBulkDelete, isDark = false }: EmissionsTableProps) => {
+const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove, onBulkDelete, isDark = false,formatActivityData }: EmissionsTableProps) => {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectComment, setRejectComment] = useState("");
@@ -209,6 +213,23 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
 
   const handleNavigateDocument = (doc: EmissionDocument) => {
     setSelectedDocument(doc);
+  };
+
+  const resolveActivityData = (
+    emission: EmissionData
+  ): { key: string; displayValue: string }[] => {
+    const activityData = emission.activity_data || {};
+    const categoryId = emission.category?.category_id || 0;
+
+    if (formatActivityData) {
+      return formatActivityData(activityData, categoryId);
+    }
+
+    // Fallback: display raw values
+    return Object.entries(activityData).map(([key, value]) => ({
+      key,
+      displayValue: String(value),
+    }));
   };
 
   // Theme classes
@@ -397,6 +418,8 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
 
             const isPendingSelected = selectedPendingIds.has(emission.pk_id);
             const isApprovedSelected = selectedApprovedIds.has(emission.pk_id);
+            const activityRows = resolveActivityData(emission);
+
 
             return (
               <tr key={emission.pk_id} className={getRowClass(isPendingSelected, isApprovedSelected)}>
@@ -427,7 +450,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                 <td className={tdClass}>
                   {emission.category?.category_name || "-"}
                 </td>
-                <td className={tdClass}>
+                {/* <td className={tdClass}>
                   <div className="max-w-xs">
                     {Object.entries(emission.activity_data || {}).map(([key, value]) => (
                       <div key={key} className="text-sm">
@@ -435,7 +458,16 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                       </div>
                     ))}
                   </div>
-                </td>
+                </td> */}
+                <td className={tdClass}>
+                    <div className="max-w-xs">
+                      {activityRows.map(({ key, displayValue }) => (
+                        <div key={key} className="text-sm">
+                          <span className="font-medium">{key}:</span> {displayValue}
+                        </div>
+                      ))}
+                    </div>
+                  </td>
                 <td className={tdClass}>
                   {emission.activity_data_unit || "-"}
                 </td>
