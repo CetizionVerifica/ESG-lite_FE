@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Dropdown, { DropdownOption } from "../../components/Dropdown";
 import { Table, Column } from "../../components/Table";
 import Modal from "../../components/Modal";
@@ -133,6 +133,8 @@ const rowsPerPage = 10;
     const [isSavingInvoice, setIsSavingInvoice] = useState(false);
     const [invoiceCloudinaryUrl, setInvoiceCloudinaryUrl] = useState<string | null>(null);
     const [invoiceWarnings, setInvoiceWarnings] = useState<string[]>([]);
+    const [collapsedInvoices, setCollapsedInvoices] = useState<Set<number>>(new Set());
+    const [confirmDeleteInvoice, setConfirmDeleteInvoice] = useState<number | null>(null);
     const [extractionStage, setExtractionStage] = useState(0);
 
     // Invoice library state
@@ -1018,7 +1020,18 @@ const rowsPerPage = 10;
         setInvoiceReviewOpen(false);
         setInvoiceCloudinaryUrl(null);
         setInvoiceWarnings([]);
+        setCollapsedInvoices(new Set());
+        setConfirmDeleteInvoice(null);
         setSaveError(null);
+    };
+
+    const toggleInvoiceCollapse = (invoiceIndex: number) => {
+        setCollapsedInvoices((prev) => {
+            const next = new Set(prev);
+            if (next.has(invoiceIndex)) next.delete(invoiceIndex);
+            else next.add(invoiceIndex);
+            return next;
+        });
     };
 
     const handleInvoiceRowChange = (
@@ -1031,6 +1044,64 @@ const rowsPerPage = 10;
                 row.id === rowId ? { ...row, [key]: value } : row,
             ),
         );
+    };
+
+    const handleAddInvoiceRow = () => {
+        setInvoiceRows((prev) => {
+            const nextId = prev.length > 0 ? Math.max(...prev.map((r) => r.id)) + 1 : 1;
+            const nextInvoiceIndex = prev.length > 0
+                ? Math.max(...prev.map((r) => r._invoiceIndex ?? 0)) + 1
+                : 0;
+            const row: ModalRow = { id: nextId, _invoiceIndex: nextInvoiceIndex };
+            if (filteredColumns.length > 0) {
+                filteredColumns.forEach((col) => { row[col.column_name] = ""; });
+            } else {
+                row["Activity Data"] = "";
+            }
+            return [...prev, row];
+        });
+    };
+
+    const handleAddItemToInvoice = (invoiceIndex: number) => {
+        setInvoiceRows((prev) => {
+            const nextId = prev.length > 0 ? Math.max(...prev.map((r) => r.id)) + 1 : 1;
+            // Copy shared fields (vendor, date) from the first row in this invoice group
+            const sibling = prev.find((r) => (r._invoiceIndex ?? 0) === invoiceIndex);
+            const row: ModalRow = { id: nextId, _invoiceIndex: invoiceIndex };
+            if (filteredColumns.length > 0) {
+                filteredColumns.forEach((col) => { row[col.column_name] = ""; });
+            } else {
+                row["Activity Data"] = "";
+            }
+            if (sibling) {
+                row._vendorName = sibling._vendorName;
+                row.date_of_reporting = sibling.date_of_reporting;
+            }
+            return [...prev, row];
+        });
+    };
+
+    const handleRemoveInvoiceRow = (rowId: number) => {
+        setInvoiceRows((prev) => prev.filter((r) => r.id !== rowId));
+    };
+
+    const handleRemoveInvoiceGroup = (invoiceIndex: number) => {
+        const count = invoiceRows.filter((r) => (r._invoiceIndex ?? 0) === invoiceIndex).length;
+        if (count > 1) {
+            setConfirmDeleteInvoice(invoiceIndex);
+            return;
+        }
+        doRemoveInvoiceGroup(invoiceIndex);
+    };
+
+    const doRemoveInvoiceGroup = (invoiceIndex: number) => {
+        setConfirmDeleteInvoice(null);
+        setCollapsedInvoices((prev) => {
+            const next = new Set(prev);
+            next.delete(invoiceIndex);
+            return next;
+        });
+        setInvoiceRows((prev) => prev.filter((r) => (r._invoiceIndex ?? 0) !== invoiceIndex));
     };
 
     const handleSaveInvoiceRows = async () => {
@@ -1048,6 +1119,12 @@ const rowsPerPage = 10;
                     activity_data_unit,
                     _ocrUnit: _,
                     _vendorName: __,
+                    _invoiceIndex: ___,
+                    _activityDescription: ____,
+                    _invoiceNumber: _____,
+                    _invoiceDate: ______,
+                    _totalAmount: _______,
+                    _currency: ________,
                     ...activityData
                 } = row;
 
@@ -1148,6 +1225,50 @@ const rowsPerPage = 10;
                         );
                     }
 
+                    // Convert OCR-returned labels to dropdown option IDs for
+                    // select columns. Process in dependency order (parents
+                    // before children) so dependent option lookups work.
+                    const selectCols = filteredColumns.filter(
+                        (c) => c.column_type === "select",
+                    );
+                    const resolved = new Set<string>();
+                    let convertChanged = true;
+                    while (convertChanged) {
+                        convertChanged = false;
+                        for (const col of selectCols) {
+                            if (resolved.has(col.column_name)) continue;
+                            const parentColName =
+                                columnDependencies[col.column_name];
+                            // Skip if parent not yet resolved
+                            if (parentColName && !resolved.has(parentColName))
+                                continue;
+
+                            const rawValue = row[col.column_name];
+                            if (rawValue && rawValue !== "") {
+                                const parentId = parentColName
+                                    ? String(row[parentColName] ?? "")
+                                    : undefined;
+                                const options = getColumnDropdownOptions(
+                                    col.column_name,
+                                    col.pk_id,
+                                    parentId,
+                                );
+                                const rawLower =
+                                    String(rawValue).toLowerCase();
+                                const match = options.find(
+                                    (opt) =>
+                                        opt.label.toLowerCase() === rawLower,
+                                );
+                                if (match) {
+                                    row[col.column_name] = String(match.id);
+                                }
+                            }
+
+                            resolved.add(col.column_name);
+                            convertChanged = true;
+                        }
+                    }
+
                     // Normalize OCR unit to exactly match a configured unit name
                     if (em.activity_data_unit) {
                         const ocrUnit = em.activity_data_unit;
@@ -1162,8 +1283,15 @@ const rowsPerPage = 10;
                         row._ocrUnit = ocrUnit;
                     }
 
-                    // Normalize OCR emission_category to match a configured factor name
-                    if (row.emission_category && availableFactors.length > 0) {
+                    // Auto-map emission_category from dropdown selections
+                    // (e.g., Waste Type "Sludge" + Disposal Method "Recover"
+                    // → "Sludge - Recover"). This overrides the OCR-returned
+                    // emission_category which may be inaccurate.
+                    const autoCategory = getAutoEmissionCategory(row);
+                    if (autoCategory) {
+                        row.emission_category = autoCategory;
+                    } else if (row.emission_category && availableFactors.length > 0) {
+                        // Fallback: normalize OCR emission_category to match a configured factor name
                         const ecLower = String(row.emission_category).toLowerCase();
                         const match = availableFactors.find(
                             (f) => f.emission_category_name.toLowerCase() === ecLower,
@@ -1175,16 +1303,29 @@ const rowsPerPage = 10;
                         row.date_of_reporting = em.date_of_reporting;
 
                     row._vendorName = em.vendor_name ?? undefined;
+                    row._invoiceIndex = em.invoice_index ?? 0;
+                    row._activityDescription = em.activity_data?.description ?? em.activity_data?.["Activity Data"] ?? undefined;
+
+                    // Carry invoice-level metadata from response.data
+                    const invoiceData = response.data?.[em.invoice_index ?? 0];
+                    if (invoiceData) {
+                        row._invoiceNumber = invoiceData.invoice_number ?? undefined;
+                        row._invoiceDate = invoiceData.invoice_date ?? undefined;
+                        row._totalAmount = invoiceData.total_amount ?? undefined;
+                        row._currency = invoiceData.currency ?? undefined;
+                    }
 
                     return row;
                 });
 
                 setInvoiceRows(rows);
                 setInvoiceCloudinaryUrl(response.cloudinary_url ?? null);
-                // Collect any failed validation checks as user-visible warnings
+                // Collect any failed validation checks as user-visible warnings.
+                // Skip per-activity category-match warnings — those are shown
+                // inline on each row's emission category dropdown instead.
                 const warnings = (response.validations ?? [])
                     .flat()
-                    .filter((v) => !v.ok && v.message)
+                    .filter((v) => !v.ok && v.message && v.check !== "activity_unit_defined")
                     .map((v) => v.message as string);
                 setInvoiceWarnings(warnings);
                 setInvoiceReviewOpen(true);
@@ -1289,15 +1430,26 @@ const rowsPerPage = 10;
                     }
                     if (em.date_of_reporting) row.date_of_reporting = em.date_of_reporting;
                     row._vendorName = em.vendor_name ?? undefined;
+                    row._invoiceIndex = em.invoice_index ?? 0;
+                    row._activityDescription = em.activity_data?.description ?? em.activity_data?.["Activity Data"] ?? undefined;
+
+                    const invoiceData = response.data?.[em.invoice_index ?? 0];
+                    if (invoiceData) {
+                        row._invoiceNumber = invoiceData.invoice_number ?? undefined;
+                        row._invoiceDate = invoiceData.invoice_date ?? undefined;
+                        row._totalAmount = invoiceData.total_amount ?? undefined;
+                        row._currency = invoiceData.currency ?? undefined;
+                    }
                     return row;
                 });
 
                 setInvoiceRows(rows);
                 setInvoiceCloudinaryUrl(response.cloudinary_url ?? invoice.cloudinary_url);
-                // Collect any failed validation checks as user-visible warnings
+                // Collect any failed validation checks as user-visible warnings.
+                // Skip per-activity category-match warnings — shown inline instead.
                 const warnings = (response.validations ?? [])
                     .flat()
-                    .filter((v) => !v.ok && v.message)
+                    .filter((v) => !v.ok && v.message && v.check !== "activity_unit_defined")
                     .map((v) => v.message as string);
                 setInvoiceWarnings(warnings);
                 setInvoiceListOpen(false);
@@ -2049,7 +2201,7 @@ const paginatedEmissions = emissions.slice(
             <Modal
                 isOpen={invoiceReviewOpen}
                 onClose={closeInvoiceReview}
-                title={`Review Extracted Invoice Data (${invoiceRows.length} invoice${invoiceRows.length !== 1 ? "s" : ""})`}
+                title={`Review Extracted Invoice Data (${new Set(invoiceRows.map((r) => r._invoiceIndex ?? 0)).size} invoice${new Set(invoiceRows.map((r) => r._invoiceIndex ?? 0)).size !== 1 ? "s" : ""}, ${invoiceRows.length} ${invoiceRows.length !== 1 ? "entries" : "entry"})`}
                 className={invoiceCloudinaryUrl ? "max-w-7xl! max-h-[92vh]!" : "max-w-4xl! max-h-[88vh]!"}>
                 {/* Two-column layout when a PDF URL is available; single column otherwise */}
                 <div className={invoiceCloudinaryUrl ? "flex gap-4" : ""}>
@@ -2096,36 +2248,166 @@ const paginatedEmissions = emissions.slice(
                     </div>
                 )}
                 <div className="space-y-4 overflow-y-auto max-h-[65vh] pr-2">
-                    {invoiceRows.map((row, index) => {
-                        const {
-                            id,
-                            emission_category,
-                            activity_data_unit,
-                            date_of_reporting,
-                            _ocrUnit,
-                            _vendorName,
-                            ...activityFields
-                        } = row;
-                        return (
-                            <div
-                                key={id}
-                                className="border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
-                                {/* Card header */}
-                                <div className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200">
-                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-bold shrink-0">
-                                        {index + 1}
-                                    </span>
-                                    <span className="text-sm font-semibold text-gray-700">
-                                        {_vendorName ?? `Invoice ${index + 1}`}
-                                    </span>
-                                    {_vendorName && (
-                                        <span className="text-xs text-gray-400">
-                                            · Invoice {index + 1}
-                                        </span>
-                                    )}
+                    {(() => {
+                        // Group rows by invoice_index so multi-activity invoices render under one card
+                        const grouped: { invoiceIndex: number; rows: ModalRow[] }[] = [];
+                        const indexMap = new Map<number, ModalRow[]>();
+                        for (const row of invoiceRows) {
+                            const idx = row._invoiceIndex ?? 0;
+                            if (!indexMap.has(idx)) {
+                                const arr: ModalRow[] = [];
+                                indexMap.set(idx, arr);
+                                grouped.push({ invoiceIndex: idx, rows: arr });
+                            }
+                            indexMap.get(idx)!.push(row);
+                        }
+
+                        if (grouped.length === 0) {
+                            return (
+                                <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                    </svg>
+                                    <p className="text-sm font-medium">No entries yet</p>
+                                    <p className="text-xs mt-1">Add an invoice or entry below to get started</p>
                                 </div>
-                                <div className="p-5">
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                            );
+                        }
+
+                        return grouped.map((group, groupIdx) => {
+                            const firstRow = group.rows[0];
+                            const vendorName = firstRow?._vendorName;
+                            const invoiceNumber = firstRow?._invoiceNumber;
+                            const invoiceDate = firstRow?._invoiceDate;
+                            const totalAmount = firstRow?._totalAmount;
+                            const currency = firstRow?._currency;
+                            const isMultiActivity = group.rows.length > 1;
+                            const isCollapsed = collapsedInvoices.has(group.invoiceIndex);
+
+                            return (
+                                <div
+                                    key={group.invoiceIndex}
+                                    className="border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
+                                    {/* Invoice-level header */}
+                                    <div
+                                        className="flex items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200 cursor-pointer select-none"
+                                        onClick={() => toggleInvoiceCollapse(group.invoiceIndex)}>
+                                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-bold shrink-0">
+                                            {groupIdx + 1}
+                                        </span>
+                                        <div className="flex flex-col min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-semibold text-gray-700 truncate">
+                                                    {vendorName ?? `Invoice ${groupIdx + 1}`}
+                                                </span>
+                                                {invoiceNumber && (
+                                                    <span className="text-xs text-gray-400 truncate">
+                                                        #{invoiceNumber}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                {invoiceDate && (
+                                                    <span className="text-xs text-gray-400">{invoiceDate}</span>
+                                                )}
+                                                {totalAmount != null && (
+                                                    <span className="text-xs text-gray-500 font-medium">
+                                                        {currency ?? ""} {totalAmount.toLocaleString()}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {isMultiActivity && (
+                                            <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">
+                                                {group.rows.length} items
+                                            </span>
+                                        )}
+                                        {/* Collapse chevron */}
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            className={`ml-auto h-4 w-4 text-gray-400 transition-transform shrink-0 ${isCollapsed ? "" : "rotate-180"}`}
+                                            viewBox="0 0 20 20"
+                                            fill="currentColor">
+                                            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                                        </svg>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleRemoveInvoiceGroup(group.invoiceIndex); }}
+                                            className="text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                                            title="Remove entire invoice">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                        </button>
+                                    </div>
+
+                                    {/* Inline delete confirmation popup */}
+                                    {confirmDeleteInvoice === group.invoiceIndex && (
+                                        <div className="flex items-center justify-between gap-3 px-5 py-3 bg-red-50 border-b border-red-200">
+                                            <p className="text-sm text-red-700">
+                                                Remove this invoice and all {group.rows.length} items?
+                                            </p>
+                                            <div className="flex gap-2 shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setConfirmDeleteInvoice(null)}
+                                                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => doRemoveInvoiceGroup(group.invoiceIndex)}
+                                                    className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Collapsible content */}
+                                    {!isCollapsed && (
+                                    <>
+                                    {/* Render each activity row within this invoice */}
+                                    {group.rows.map((row, actIdx) => {
+                                        const {
+                                            id,
+                                            emission_category,
+                                            activity_data_unit,
+                                            date_of_reporting,
+                                            _ocrUnit,
+                                            _vendorName: _vn,
+                                            _invoiceIndex: _ii,
+                                            _activityDescription,
+                                            _invoiceNumber: _in,
+                                            _invoiceDate: _id,
+                                            _totalAmount: _ta,
+                                            _currency: _cu,
+                                            ...activityFields
+                                        } = row;
+                                        return (
+                                            <div key={id} className={isMultiActivity ? "border-b border-gray-100 last:border-b-0" : ""}>
+                                                {/* Activity sub-header for multi-activity invoices */}
+                                                {isMultiActivity && (
+                                                    <div className="flex items-center gap-2 px-5 py-2 bg-gray-50/50 border-b border-gray-100">
+                                                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-600 text-xs font-medium shrink-0">
+                                                            {actIdx + 1}
+                                                        </span>
+                                                        <span className="text-xs font-medium text-gray-600">
+                                                            {_activityDescription || `Item ${actIdx + 1}`}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveInvoiceRow(id)}
+                                                            className="ml-auto text-gray-400 hover:text-red-500 transition-colors"
+                                                            title="Remove this item">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                <div className={isMultiActivity ? "px-5 py-4" : "p-5"}>
+                                                <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                                     {filteredColumns.length > 0 ? filteredColumns.map((col) => {
                                         const parentColName = getParentColumnName(col.column_name);
                                         const parentValue = parentColName
@@ -2198,48 +2480,61 @@ const paginatedEmissions = emissions.slice(
                                         <label className="block text-xs font-medium text-gray-500 mb-1.5">
                                             Emission Category
                                         </label>
-                                        {emissionFactors.length > 0 ? (
-                                            <select
-                                                value={emission_category ?? ""}
-                                                onChange={(e) =>
-                                                    handleInvoiceRowChange(
-                                                        id,
-                                                        "emission_category",
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                className="w-full border border-emerald-300 bg-emerald-50 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
-                                                <option value="">Select category</option>
-                                                {emission_category &&
-                                                    !emissionFactors.find(
-                                                        (f) => f.emission_category_name === emission_category,
-                                                    ) && (
-                                                        <option value={emission_category}>
-                                                            {emission_category}
-                                                        </option>
+                                        {(() => {
+                                            const isUnmatched = !!emission_category && emissionFactors.length > 0 && !emissionFactors.find((f) => f.emission_category_name === emission_category);
+                                            const needsAttention = isUnmatched || !emission_category;
+                                            return emissionFactors.length > 0 ? (
+                                                <div className="relative">
+                                                    <select
+                                                        value={emission_category ?? ""}
+                                                        onChange={(e) =>
+                                                            handleInvoiceRowChange(
+                                                                id,
+                                                                "emission_category",
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                        className={`w-full px-3 py-2 ${isUnmatched ? "pr-8" : ""} rounded-lg text-sm focus:outline-none focus:ring-2 ${needsAttention ? "border border-amber-400 bg-amber-50 focus:ring-amber-400" : "border border-emerald-300 bg-emerald-50 focus:ring-emerald-400"}`}>
+                                                        <option value="">Select category</option>
+                                                        {isUnmatched && (
+                                                            <option value={emission_category!}>
+                                                                {emission_category}
+                                                            </option>
+                                                        )}
+                                                        {emissionFactors.map((factor) => (
+                                                            <option
+                                                                key={factor.emission_factor_id}
+                                                                value={factor.emission_category_name}>
+                                                                {factor.emission_category_name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    {isUnmatched && (
+                                                        <div className="absolute right-7 top-1/2 -translate-y-1/2 group">
+                                                            <div className="w-4 h-4 rounded-full bg-amber-400 text-white text-[10px] font-bold flex items-center justify-center cursor-help">
+                                                                i
+                                                            </div>
+                                                            <div className="hidden group-hover:block absolute bottom-full right-0 mb-1 w-52 px-2.5 py-1.5 bg-gray-800 text-white text-xs rounded-md shadow-lg z-50 whitespace-normal">
+                                                                AI detected &ldquo;{emission_category}&rdquo; &mdash; please select a matching category from the list
+                                                            </div>
+                                                        </div>
                                                     )}
-                                                {emissionFactors.map((factor) => (
-                                                    <option
-                                                        key={factor.emission_factor_id}
-                                                        value={factor.emission_category_name}>
-                                                        {factor.emission_category_name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <input
-                                                type="text"
-                                                value={emission_category ?? ""}
-                                                onChange={(e) =>
-                                                    handleInvoiceRowChange(
-                                                        id,
-                                                        "emission_category",
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                className="w-full border border-emerald-300 bg-emerald-50 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                                            />
-                                        )}
+                                                </div>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={emission_category ?? ""}
+                                                    onChange={(e) =>
+                                                        handleInvoiceRowChange(
+                                                            id,
+                                                            "emission_category",
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    className="w-full border border-emerald-300 bg-emerald-50 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                                />
+                                            );
+                                        })()}
                                     </div>
                                     <div>
                                         <label className="block text-xs font-medium text-gray-500 mb-1.5">
@@ -2299,11 +2594,30 @@ const paginatedEmissions = emissions.slice(
                                             className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                                         />
                                     </div>
+                                                </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {/* Add item within this invoice */}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleAddItemToInvoice(group.invoiceIndex)}
+                                        className="w-full py-2 border-t border-dashed border-gray-200 text-xs font-medium text-gray-400 hover:text-emerald-600 hover:bg-emerald-50/50 transition-colors">
+                                        + Add Item to This Invoice
+                                    </button>
+                                    </>
+                                    )}
                                 </div>
-                                </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        });
+                    })()}
+                    <button
+                        type="button"
+                        onClick={handleAddInvoiceRow}
+                        className="w-full mt-2 py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-medium text-gray-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors">
+                        + Add New Invoice
+                    </button>
                 </div>
 
                 {saveError && invoiceReviewOpen && (
@@ -2325,7 +2639,7 @@ const paginatedEmissions = emissions.slice(
                         className="px-5 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
                         {isSavingInvoice
                             ? "Saving..."
-                            : `Save ${invoiceRows.length} Invoice${invoiceRows.length !== 1 ? "s" : ""}`}
+                            : `Save ${invoiceRows.length} ${invoiceRows.length !== 1 ? "Entries" : "Entry"}`}
                     </button>
                 </div>
                     </div>{/* closes form wrapper */}
