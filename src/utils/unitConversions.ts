@@ -22,6 +22,20 @@ export const unitConversions: Record<string, Record<string, number>> = {
   inr: { usd: 0.012 },
   usd: { inr: 83.5, eur: 0.92 },
   eur: { usd: 1.09 },
+  // Distance
+  m: { km: 0.001, mile: 0.000621371 },
+  km: { m: 1000, mile: 0.621371 },
+  mile: { km: 1.60934, m: 1609.34 },
+  mi: { km: 1.60934, m: 1609.34, mile: 1 },
+  miles: { km: 1.60934, m: 1609.34, mile: 1 },
+  meter: { km: 0.001, mile: 0.000621371, m: 1 },
+  meters: { km: 0.001, mile: 0.000621371, m: 1 },
+  metre: { km: 0.001, mile: 0.000621371, m: 1 },
+  metres: { km: 0.001, mile: 0.000621371, m: 1 },
+  kilometer: { m: 1000, mile: 0.621371, km: 1 },
+  kilometers: { m: 1000, mile: 0.621371, km: 1 },
+  kilometre: { m: 1000, mile: 0.621371, km: 1 },
+  kilometres: { m: 1000, mile: 0.621371, km: 1 },
 };
 
 export const canConvert = (fromUnit: string, toUnit: string): boolean => {

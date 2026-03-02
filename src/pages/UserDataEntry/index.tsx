@@ -24,6 +24,9 @@ import {
     ValidationError,
     DocumentUploadModal,
 } from "./components";
+import DistanceCalculatorModal from "./components/DistanceCalculatorModal";
+import { isDistanceUnit, parseCompositeUnit } from "../../utils/distanceUnits";
+import { MapPin } from "lucide-react";
 import {
     Category,
     ColumnEntity,
@@ -124,6 +127,13 @@ const rowsPerPage = 10;
     const [documentModalOpen, setDocumentModalOpen] = useState(false);
     const [selectedEmissionForDocs, setSelectedEmissionForDocs] =
         useState<EmissionRow | null>(null);
+
+    // Distance calculator modal state
+    const [distanceModalState, setDistanceModalState] = useState<{
+        open: boolean;
+        rowId: number;
+        colName: string;
+    } | null>(null);
 
     // Invoice upload state
     const [invoiceUploading, setInvoiceUploading] = useState(false);
@@ -761,6 +771,11 @@ const rowsPerPage = 10;
         );
     };
 
+    // The first numeric non-dropdown column is the primary activity data field
+    const firstNumericColId = filteredColumns.find(
+        (c) => c.column_type === "number" && !isSelectColumn(c),
+    )?.pk_id ?? null;
+
     // ---------------------------------------------------------------------------
     // Modal Handlers
     // ---------------------------------------------------------------------------
@@ -815,6 +830,27 @@ const rowsPerPage = 10;
                             }
                         }
                     });
+                }
+
+                // Auto-compute product for composite distance units (e.g. passenger.km)
+                if (
+                    columnName.endsWith("__multiplier") ||
+                    columnName.endsWith("__distance")
+                ) {
+                    const baseCol = columnName.replace(
+                        /__(?:multiplier|distance)$/,
+                        "",
+                    );
+                    const m = parseFloat(
+                        (updatedRow[`${baseCol}__multiplier`] as string) || "",
+                    );
+                    const d = parseFloat(
+                        (updatedRow[`${baseCol}__distance`] as string) || "",
+                    );
+                    updatedRow[baseCol] =
+                        !isNaN(m) && !isNaN(d) && m > 0 && d > 0
+                            ? (Math.round(m * d * 100) / 100).toString()
+                            : "";
                 }
 
                 // Check if we should auto-set the emission_category
@@ -912,6 +948,16 @@ const rowsPerPage = 10;
                     date_of_reporting: rowDate,
                     ...activityData
                 } = row;
+
+                // Strip composite-unit helper keys — backend only needs the computed product
+                for (const key of Object.keys(activityData)) {
+                    if (
+                        key.endsWith("__multiplier") ||
+                        key.endsWith("__distance")
+                    ) {
+                        delete activityData[key];
+                    }
+                }
 
                 const result = await createEmission({
                     site_id: siteId,
@@ -1921,32 +1967,121 @@ const paginatedEmissions = emissions.slice(
                                                             ),
                                                         )}
                                                     </select>
-                                                ) : (
-                                                    <input
-                                                        type={
-                                                            col.column_type ===
-                                                            "number"
-                                                                ? "number"
-                                                                : "text"
-                                                        }
-                                                        value={
-                                                            row[
-                                                                col.column_name
-                                                            ] || ""
-                                                        }
-                                                        onChange={(e) =>
-                                                            handleModalRowChange(
-                                                                row.id,
-                                                                col.column_name,
-                                                                e.target.value,
-                                                            )
-                                                        }
-                                                        className="w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
-                                                        placeholder={
-                                                            col.column_name
-                                                        }
-                                                    />
-                                                )}
+                                                ) : (() => {
+                                                    const composite =
+                                                        col.pk_id === firstNumericColId
+                                                            ? parseCompositeUnit(row.activity_data_unit)
+                                                            : null;
+                                                    const isDistCol =
+                                                        col.pk_id === firstNumericColId &&
+                                                        isDistanceUnit(row.activity_data_unit);
+
+                                                    if (composite && isDistCol) {
+                                                        // Composite unit — two inputs: multiplier × distance
+                                                        const mulKey = `${col.column_name}__multiplier`;
+                                                        const distKey = `${col.column_name}__distance`;
+                                                        const mulVal = parseFloat((row[mulKey] as string) || "");
+                                                        const distVal = parseFloat((row[distKey] as string) || "");
+                                                        const product =
+                                                            !isNaN(mulVal) && !isNaN(distVal) && mulVal > 0 && distVal > 0
+                                                                ? Math.round(mulVal * distVal * 100) / 100
+                                                                : null;
+
+                                                        return (
+                                                            <div className="space-y-1">
+                                                                <div className="flex items-center gap-1">
+                                                                    <input
+                                                                        type="number"
+                                                                        value={row[mulKey] || ""}
+                                                                        onChange={(e) =>
+                                                                            handleModalRowChange(
+                                                                                row.id,
+                                                                                mulKey,
+                                                                                e.target.value,
+                                                                            )
+                                                                        }
+                                                                        className="w-24 border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                                                                        placeholder={composite.multiplier}
+                                                                    />
+                                                                    <span className="text-gray-400 text-sm shrink-0">×</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={row[distKey] || ""}
+                                                                        onChange={(e) =>
+                                                                            handleModalRowChange(
+                                                                                row.id,
+                                                                                distKey,
+                                                                                e.target.value,
+                                                                            )
+                                                                        }
+                                                                        className="w-24 border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                                                                        placeholder={composite.distance}
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            setDistanceModalState({
+                                                                                open: true,
+                                                                                rowId: row.id,
+                                                                                colName: col.column_name,
+                                                                            })
+                                                                        }
+                                                                        className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 hover:text-blue-700 shrink-0 whitespace-nowrap transition-colors"
+                                                                        title="Calculate distance from map"
+                                                                    >
+                                                                        <MapPin size={12} />
+                                                                        Map
+                                                                    </button>
+                                                                </div>
+                                                                {product !== null && (
+                                                                    <div className="text-xs text-gray-500">
+                                                                        = {product.toLocaleString()} {row.activity_data_unit}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    // Plain unit — single input
+                                                    return (
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type={
+                                                                    col.column_type === "number"
+                                                                        ? "number"
+                                                                        : "text"
+                                                                }
+                                                                value={row[col.column_name] || ""}
+                                                                onChange={(e) =>
+                                                                    handleModalRowChange(
+                                                                        row.id,
+                                                                        col.column_name,
+                                                                        e.target.value,
+                                                                    )
+                                                                }
+                                                                className="w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                                                                placeholder={col.column_name}
+                                                            />
+                                                            {isDistCol && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setDistanceModalState({
+                                                                            open: true,
+                                                                            rowId: row.id,
+                                                                            colName: col.column_name,
+                                                                        })
+                                                                    }
+                                                                    className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 hover:text-blue-700 shrink-0 whitespace-nowrap transition-colors"
+                                                                    title="Calculate distance from map"
+                                                                >
+                                                                    <MapPin size={12} />
+                                                                    Map
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </td>
                                         );
                                     })}
@@ -2027,6 +2162,33 @@ const paginatedEmissions = emissions.slice(
                     </div>
                 </div>
             </Modal>
+
+            {/* Distance Calculator Modal */}
+            {distanceModalState && (
+                <DistanceCalculatorModal
+                    isOpen={distanceModalState.open}
+                    onClose={() => setDistanceModalState(null)}
+                    targetUnit={
+                        modalRows.find((r) => r.id === distanceModalState.rowId)
+                            ?.activity_data_unit || "km"
+                    }
+                    onDistanceCalculated={(distance) => {
+                        const unit = modalRows.find(
+                            (r) => r.id === distanceModalState.rowId,
+                        )?.activity_data_unit;
+                        const composite = parseCompositeUnit(unit);
+                        const targetCol = composite
+                            ? `${distanceModalState.colName}__distance`
+                            : distanceModalState.colName;
+                        handleModalRowChange(
+                            distanceModalState.rowId,
+                            targetCol,
+                            distance.toString(),
+                        );
+                        setDistanceModalState(null);
+                    }}
+                />
+            )}
 
             {selectedCategory && selectedDate && siteId && (
                 <BulkUploadModal

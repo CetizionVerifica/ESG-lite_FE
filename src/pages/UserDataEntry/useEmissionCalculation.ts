@@ -51,6 +51,8 @@ export const useEmissionCalculation = (
 
     // Find the first numeric value from non-dropdown columns
     for (const [key, value] of Object.entries(row)) {
+      // Skip composite-unit helper fields (e.g. quantity__multiplier, quantity__distance)
+      if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
       if (!skipColumns.has(key)) {
         const numVal = parseFloat(value as string);
         if (!isNaN(numVal) && numVal > 0) {
