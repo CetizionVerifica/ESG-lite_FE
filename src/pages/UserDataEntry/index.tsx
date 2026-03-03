@@ -102,6 +102,7 @@ const UserDataEntryPage = () => {
     const [loading, setLoading] = useState(false);
     const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
 const rowsPerPage = 10;
 
     // Dependent dropdown configuration state
@@ -2001,6 +2002,17 @@ const paginatedEmissions = emissions.slice(
                         onDismiss={() => setSaveError(null)}
                     />
                 )}
+                {successMsg && (
+  <div className="mb-4 flex items-start justify-between gap-3 bg-green-50 border border-green-200 rounded-lg p-3">
+    <p className="text-sm text-green-800">{successMsg}</p>
+    <button
+      className="text-green-700 hover:text-green-900 text-sm"
+      onClick={() => setSuccessMsg(null)}
+    >
+      ✕
+    </button>
+  </div>
+)}
 
                 {/* Modal Actions */}
                 <div className="flex justify-between mt-4">
@@ -2041,9 +2053,14 @@ const paginatedEmissions = emissions.slice(
                     getExpectedUnit={getExpectedUnit}
                     calculateEmission={calculateEmission}
                     getAutoEmissionCategory={getAutoEmissionCategory}
-                    onImportComplete={(newEmissions) => {
-                        setEmissions((prev) => [...newEmissions, ...prev]);
-                    }}
+                    // onImportComplete={(newEmissions) => {
+                    //     setEmissions((prev) => [...newEmissions, ...prev]);
+                    // }}
+                     onImportComplete={async () => {
+    setSuccessMsg("Saved successfully. Imported data is now available in the table.");
+    await fetchData();          
+    setCurrentPage(1);          
+  }}
                 />
             )}
 
