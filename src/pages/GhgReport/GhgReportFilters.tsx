@@ -175,6 +175,7 @@ const GhgReportFilters = ({
             <Label text="Sites" />
             <Hint text="Select one or more sites to include in the emissions report." />
             <Dropdown
+              key="sites-dropdown"         
               options={siteOptions}
               placeholder="Search and select sites…"
               multiple

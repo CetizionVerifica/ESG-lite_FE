@@ -4,7 +4,17 @@ import { pdf } from "@react-pdf/renderer";
 import type { GhgReportTablesResponse, GhgReportDetailsResponse } from "../../../services/ghgreportService";
 import { getCompanyNameBySites } from "../../../services/companyService";
 import { GhgPdfHiddenCharts, type GhgPdfChartRefs } from "./GhgPdfHiddenCharts";
-import { buildGhgPdfDocument, type GhgPdfChartImages } from "./GhgPdfDocument";
+import { buildGhgPdfDocument, type GhgPdfChartImages, type TocMap, type TocKey, type SubMap, type SubKey } from "./GhgPdfDocument";
+
+import * as pdfjsLib from "pdfjs-dist";
+
+try {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.min.mjs",
+    import.meta.url
+  ).toString();
+} catch {
+}
 
 export default function GhgPdfExport({
   siteIds,
@@ -26,14 +36,7 @@ export default function GhgPdfExport({
   const resultsPctRef = useRef<HTMLDivElement>(null);
 
   const refs: GhgPdfChartRefs = useMemo(
-    () => ({
-      scopeComparisonRef,
-      categoryAbsRef,
-      scope1Ref,
-      scope2Ref,
-      scope3Ref,
-      resultsPctRef,
-    }),
+    () => ({ scopeComparisonRef, categoryAbsRef, scope1Ref, scope2Ref, scope3Ref, resultsPctRef }),
     []
   );
 
@@ -44,21 +47,14 @@ export default function GhgPdfExport({
         if (!siteIds?.length) return;
         const cd: any = await getCompanyNameBySites(siteIds);
         const name =
-          cd?.companyName ||
-          cd?.name ||
-          cd?.company?.companyName ||
-          cd?.company?.name ||
-          cd?.data?.companyName ||
-          cd?.data?.name ||
-          "Company";
+          cd?.companyName || cd?.name || cd?.company?.companyName ||
+          cd?.company?.name || cd?.data?.companyName || cd?.data?.name || "Company";
         if (alive) setCompanyName(String(name));
       } catch {
         if (alive) setCompanyName("Company");
       }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [siteIds]);
 
   const canGenerate = !!tablesData && !!detailsData;
@@ -68,19 +64,87 @@ export default function GhgPdfExport({
     await new Promise((r) => setTimeout(r, 140));
   }
 
- async function capture(ref: React.RefObject<HTMLDivElement | null>, pixelRatio = 2) {
-  if (!ref.current) return "";
+  async function capture(ref: React.RefObject<HTMLDivElement | null>, pixelRatio = 2) {
+    if (!ref.current) return "";
+    return toPng(ref.current, { pixelRatio, cacheBust: true, backgroundColor: "#ffffff" });
+  }
 
-  return toPng(ref.current, {
-    pixelRatio,
-    cacheBust: true,
-    backgroundColor: "#ffffff",
-  });
-}
+  async function extractMapsFromBlob(blob: Blob): Promise<{ tocMap: TocMap; subMap: SubMap }> {
+    const ab = await blob.arrayBuffer();
+    const doc = await pdfjsLib.getDocument({ data: ab }).promise;
+
+    const TOC_PAGE = 2;
+
+    const sectionMarkers: Array<{ text: string; key: TocKey }> = [
+      { text: "This report presents greenhouse gas", key: "INTRO" },
+      { text: "This Executive Summary presents a high-level", key: "EXEC" },
+      { text: "Overview of emissions for all locations for", key: "OVERVIEW" },
+      { text: "Carbon Accounting Objectives", key: "DETAILED" },
+      { text: "RESULTS", key: "RESULTS" },
+      { text: "This report provides a structured view", key: "CONCLUSION" },
+    ];
+
+    const subMarkers: Array<{ text: string; key: SubKey }> = [
+      { text: "Scope Definitions", key: "INTRO_SCOPE_DEF" },
+      { text: "Notes on Data and Assumptions", key: "INTRO_NOTES" },
+      { text: "Emissions by Scope", key: "EXEC_SCOPE" },
+      { text: "Emissions by Category", key: "EXEC_CATEGORY" },
+      { text: "Overview of emissions for all locations for", key: "OVERVIEW_SCOPE1" },
+      { text: "Carbon Accounting Objectives", key: "DETAILED_OBJECTIVES" },
+      { text: "Direct GHG Emissions: Scope 1", key: "DETAILED_SCOPE1" },
+      { text: "Scope 1 Category Distribution", key: "DETAILED_SCOPE1_DIST" },
+      { text: "Indirect GHG Emissions: Scope 2", key: "DETAILED_SCOPE2" },
+      { text: "Scope 2 Category Distribution", key: "DETAILED_SCOPE2_DIST" },
+      { text: "Indirect GHG Emissions: Scope 3", key: "DETAILED_SCOPE3" },
+      { text: "Scope 3 Category Distribution", key: "DETAILED_SCOPE3_DIST" },
+      { text: "Category Contribution to Total Emissions", key: "RESULTS_CATEGORY" },
+      { text: "Key findings", key: "RESULTS_FINDINGS" },
+      { text: "Recommended actions", key: "CONCLUSION_ACTIONS" },
+    ];
+
+    const tocMap: TocMap = {};
+    const subMap: SubMap = {};
+
+    // Track overview pages separately since both use the same text
+    let overviewPagesFound = 0;
+
+    for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
+      if (pageNo === TOC_PAGE) continue;
+
+      const page = await doc.getPage(pageNo);
+      const textContent = await page.getTextContent();
+      const pageText = (textContent.items as any[])
+        .map((it: any) => String(it.str || ""))
+        .join(" ");
+
+      for (const { text, key } of sectionMarkers) {
+        if (tocMap[key]) continue;
+        if (pageText.includes(text)) tocMap[key] = pageNo;
+      }
+
+      // Handle overview subheadings: first occurrence = compare year, second = selected year
+      if (pageText.includes("Overview of emissions for all locations for")) {
+        overviewPagesFound++;
+        if (overviewPagesFound === 1 && !subMap["OVERVIEW_SCOPE1"]) {
+          subMap["OVERVIEW_SCOPE1"] = pageNo;
+        } else if (overviewPagesFound === 2 && !subMap["OVERVIEW_SCOPE2"]) {
+          subMap["OVERVIEW_SCOPE2"] = pageNo;
+        }
+      }
+
+      // All other subheadings
+      for (const { text, key } of subMarkers) {
+        // if (key === "OVERVIEW_SCOPE1" || key === "OVERVIEW_SCOPE2" || key === "OVERVIEW_SCOPE3") continue;
+        if (subMap[key]) continue;
+        if (pageText.includes(text)) subMap[key] = pageNo;
+      }
+    }
+
+    return { tocMap, subMap };
+  }
 
   async function onDownload() {
     if (!tablesData || !detailsData) return;
-
     try {
       setIsGenerating(true);
       await waitForPaint();
@@ -94,15 +158,21 @@ export default function GhgPdfExport({
         resultsPct: await capture(resultsPctRef, 2),
       };
 
-      const doc = buildGhgPdfDocument({
-        companyName,
-        tablesData,
-        detailsData,
-        images,
+      const draftDoc = buildGhgPdfDocument({
+        companyName, tablesData, detailsData, images,
+        tocMap: undefined, subMap: undefined,
       });
 
-      const blob = await pdf(doc).toBlob();
-      const url = URL.createObjectURL(blob);
+      const draftBlob = await pdf(draftDoc).toBlob();
+      const { tocMap, subMap } = await extractMapsFromBlob(draftBlob);
+
+      const finalDoc = buildGhgPdfDocument({
+        companyName, tablesData, detailsData, images, tocMap, subMap,
+      });
+
+      const finalBlob = await pdf(finalDoc).toBlob();
+
+      const url = URL.createObjectURL(finalBlob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `GHG_Report_${companyName}_${new Date().toISOString().slice(0, 10)}.pdf`;
@@ -132,7 +202,6 @@ export default function GhgPdfExport({
       >
         {isGenerating ? "Preparing PDF..." : "Download PDF"}
       </button>
-
       <GhgPdfHiddenCharts tablesData={tablesData} detailsData={detailsData} refs={refs} />
     </>
   );
