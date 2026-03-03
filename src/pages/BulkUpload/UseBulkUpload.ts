@@ -34,24 +34,46 @@ export function useBulkUpload({
 
   const totalRows = uploadedRows.length;
 
-  // All unique category values from the uploaded file based on mapped column
-  const uniqueCategories = useMemo(() => {
-    const catMapping = columnMappings.find((m) => m.requiredField === "emission_category");
-    if (!catMapping || !catMapping.mappedTo) return [];
-    const values = new Set(
-      uploadedRows
-        .map((r) => r[catMapping.mappedTo]?.trim())
-        .filter(Boolean)
-    );
-    return Array.from(values).sort();
-  }, [columnMappings, uploadedRows]);
+
+const uniqueCategories = useMemo(() => {
+  const catMapping = columnMappings.find((m) => m.requiredField === "emission_category");
+  if (!catMapping || !catMapping.mappedTo) return { categories: [], typeWarning: null };
+
+  const warnedColumns = new Set<string>();
+
+  const values = new Set(
+    uploadedRows
+      .map((r) => {
+        const val = r[catMapping.mappedTo];
+        if (val === null || val === undefined) return "";
+        if (typeof val !== "string") {
+          warnedColumns.add(catMapping.mappedTo);
+          return String(val).trim();
+        }
+        return val.trim();
+      })
+      .filter(Boolean)
+  );
+
+  // Check if values look like numbers (Excel serial dates or numeric data)
+  const allValues = Array.from(values);
+  const looksNumeric = allValues.length > 0 && allValues.every((v) => !isNaN(Number(v)));
+
+  const typeWarning = looksNumeric
+    ? `Column "${catMapping.mappedTo}" appears to contain numeric/date values, not category names. Please re-map the Emission Category field.`
+    : warnedColumns.size > 0
+    ? `Column "${[...warnedColumns].join('", "')}" contains non-text values. Category filtering may behave unexpectedly.`
+    : null;
+
+  return { categories: allValues.sort(), typeWarning };
+}, [columnMappings, uploadedRows]);
 
   // Count only selected categories
   const uniqueCategoryCount = selectedCategories.size > 0
-    ? selectedCategories.size
-    : uniqueCategories.length > 0
-      ? uniqueCategories.length
-      : null;
+  ? selectedCategories.size
+  : uniqueCategories.categories.length > 0
+    ? uniqueCategories.categories.length
+    : null;
 
   const validRows = reviewRows.filter((r) => r.isValid);
   const errorRows = reviewRows.filter((r) => !r.isValid);
@@ -97,7 +119,7 @@ export function useBulkUpload({
           label: col.column_name,
           mappedTo: "",
           skipped: false,
-          isRequired: false,
+          isRequired: true,
         });
       });
 
@@ -368,7 +390,8 @@ const emissionValue = emissionResult.value ?? 0;
     reviewRows,
     selectedRowIds,
     selectedCategories,
-    uniqueCategories,
+    uniqueCategories: uniqueCategories.categories,
+    categoryTypeWarning: uniqueCategories.typeWarning,
     importing,
     importProgress,
     importError,

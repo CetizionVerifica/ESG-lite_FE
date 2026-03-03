@@ -47,7 +47,11 @@ export default function PdfIntroduction({
 
       <View style={s.footer} fixed>
         <Text style={s.footText}>{companyName}</Text>
-        <Text style={s.footText}>Introduction</Text>
+        {/* <Text style={s.footText}>Introduction</Text> */}
+         <Text
+    style={s.footText}
+    render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+  />
       </View>
     </Page>
   );

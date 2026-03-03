@@ -5,20 +5,29 @@ function fmt(n: number) {
   return (Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
-function formatPeriodLabel(
-  yearType: "CY" | "FY",
-  year: number,
-  ranges?: Record<string, { startDate: string; endDate: string }>
-) {
-  if (!ranges || !ranges[String(year)]) return `${yearType} ${year}`;
-  const { startDate, endDate } = ranges[String(year)];
-  const fmtMY = (iso: string) =>
-    new Date(iso).toLocaleString("en-US", { month: "short", year: "numeric" });
-  return yearType === "FY"
-    ? `FY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`
-    : `CY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`;
-}
+// function formatPeriodLabel(
+//   yearType: "CY" | "FY",
+//   year: number,
+//   ranges?: Record<string, { startDate: string; endDate: string }>
+// ) {
+//   if (!ranges || !ranges[String(year)]) return `${yearType} ${year}`;
+//   const { startDate, endDate } = ranges[String(year)];
+//   const fmtMY = (iso: string) =>
+//     new Date(iso).toLocaleString("en-US", { month: "short", year: "numeric" });
+//   return yearType === "FY"
+//     ? `FY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`
+//     : `CY ${year} (${fmtMY(startDate)} – ${fmtMY(endDate)})`;
+// }
 
+
+function formatPeriodLabel(yearType: "CY" | "FY", year: number) {
+  if (yearType === "CY") {
+    return `CY ${year} (Jan ${year} – Dec ${year})`;
+  }
+
+  const startYear = year - 1;
+  return `FY ${year} (Apr ${startYear} – Mar ${year})`;
+}
 const TableCard = ({
   title,
   children,
@@ -49,8 +58,8 @@ const GhgReportDetailsTables = ({ data, isDark }: Props) => {
   const compYear = data.filters.compareYear;
   const selectedYear = data.filters.year;
 
-  const compLabel = formatPeriodLabel(data.filters.yearType, compYear, data.ranges);
-  const selectedLabel = formatPeriodLabel(data.filters.yearType, selectedYear, data.ranges);
+  const compLabel = formatPeriodLabel(data.filters.yearType, compYear);
+  const selectedLabel = formatPeriodLabel(data.filters.yearType, selectedYear);
 
   const rowsByScope = useMemo(() => {
     const s1: GhgDetailsRow[] = [];

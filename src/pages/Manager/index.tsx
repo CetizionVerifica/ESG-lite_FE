@@ -10,6 +10,14 @@ import {
   bulkDeleteEmissions,
   EmissionData,
 } from "../../services/emissionService";
+import {
+  getUserColumnConfigsBySiteAndCategory,
+  ColumnOptionsMap,
+  DependentOptionsMap,
+  ColumnDependencies,
+} from "../../services/columnConfigService";
+
+
 import EmissionsTable from "./EmissionsTable";
 
 interface Category {
@@ -66,11 +74,17 @@ const ManagerPage = () => {
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [columnOptionsMap, setColumnOptionsMap] = useState<Record<number, ColumnOptionsMap>>({});
+  const [dependentOptionsMap, setDependentOptionsMap] = useState<Record<number, DependentOptionsMap>>({});
+  const [columnDependenciesMap, setColumnDependenciesMap] = useState<Record<number, ColumnDependencies>>({});
+  const [columnsMap, setColumnsMap] = useState<Record<number, { pk_id: number; column_name: string }[]>>({});
+
   // Get the currently selected site object
   const currentSite = availableSites.find((s) => s.site_id === selectedSite);
 
   // Categories from the selected site
   const categories: Category[] = currentSite?.categories || [];
+    const siteId = selectedSite;
 
   const siteOptions: DropdownOption[] = availableSites.map((site) => ({
     id: site.site_id,
@@ -88,6 +102,194 @@ const ManagerPage = () => {
   useEffect(() => {
     setSelectedCategory(null);
   }, [selectedSite]);
+
+  useEffect(() => {
+    const fetchColumnConfigs = async () => {
+      if (!siteId || categories.length === 0) return;
+
+      const newColumnOptions: Record<number, ColumnOptionsMap> = {};
+      const newDependentOptions: Record<number, DependentOptionsMap> = {};
+      const newColumnDependencies: Record<number, ColumnDependencies> = {};
+      const newColumnsMap: Record<number, { pk_id: number; column_name: string }[]> = {};
+
+      for (const category of categories) {
+        try {
+          const configs = await getUserColumnConfigsBySiteAndCategory(siteId, category.category_id);
+          if (configs && configs.length > 0) {
+            const config = configs[0];
+            if (config.column_options) {
+              newColumnOptions[category.category_id] = config.column_options;
+            }
+            if (config.dependent_options) {
+              newDependentOptions[category.category_id] = config.dependent_options;
+            }
+            if (config.column_dependencies) {
+              newColumnDependencies[category.category_id] = config.column_dependencies;
+            }
+            if (config.columns && Array.isArray(config.columns)) {
+              newColumnsMap[category.category_id] = config.columns.map(
+                (col: { pk_id: number; column_name: string }) => ({
+                  pk_id: col.pk_id,
+                  column_name: col.column_name,
+                })
+              );
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching column config for category ${category.category_id}:`, error);
+        }
+      }
+
+      setColumnOptionsMap(newColumnOptions);
+      setDependentOptionsMap(newDependentOptions);
+      setColumnDependenciesMap(newColumnDependencies);
+      setColumnsMap(newColumnsMap);
+    };
+
+    fetchColumnConfigs();
+  }, [siteId, categories]);
+
+  
+  
+const getColumnId = useCallback(
+    (columnName: string, categoryId: number): string | null => {
+      const columns = columnsMap[categoryId];
+      if (!columns) return null;
+      const col = columns.find(
+        (c) => c.column_name.toLowerCase() === columnName.toLowerCase()
+      );
+      return col ? col.pk_id.toString() : null;
+    },
+    [columnsMap]
+  );
+
+  const getOptionLabel = useCallback(
+    (
+      columnName: string,
+      value: string,
+      categoryId: number,
+      activityData: Record<string, unknown>
+    ): string => {
+      if (!value) return "";
+
+      const columnOptions = columnOptionsMap[categoryId];
+      const dependentOptions = dependentOptionsMap[categoryId];
+      const columnDependencies = columnDependenciesMap[categoryId];
+
+    //  const parentColumnName = columnDependencies?.[columnName];
+
+    const findDepKey = (obj: ColumnDependencies, key: string) => {
+  if (!obj) return undefined;
+  if (obj[key] !== undefined) return key;
+  const lower = key.toLowerCase();
+  const toSnake = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+  const toCamel = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  return Object.keys(obj).find(k =>
+    k.toLowerCase() === lower || k === toSnake || k === toCamel
+  );
+};
+const depKey = findDepKey(columnDependencies, columnName);
+const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
+
+      if (parentColumnName && dependentOptions?.[columnName]) {
+        const parentValue = activityData[parentColumnName] as string;
+        if (parentValue) {
+          let parentLabel = parentValue;
+          const parentColumnId = getColumnId(parentColumnName, categoryId);
+          if (parentColumnId) {
+            const parentOptions = columnOptions?.[parentColumnId];
+            if (parentOptions) {
+              const parentOption = parentOptions.find(
+                (opt) =>
+                  String(opt.id) === String(parentValue) ||
+                  opt.label.toLowerCase() === String(parentValue).toLowerCase()
+              );
+              if (parentOption) {
+                parentLabel = parentOption.label;
+              }
+            }
+          }
+
+          const depOptionsForParent = dependentOptions[columnName];
+          const matchingKey = Object.keys(depOptionsForParent || {}).find(
+            (key) => key.toLowerCase() === parentLabel.toLowerCase()
+          );
+
+          if (matchingKey) {
+            const options = depOptionsForParent[matchingKey];
+            const option = options?.find(
+              (opt) =>
+                String(opt.id) === String(value) ||
+                opt.label.toLowerCase() === String(value).toLowerCase()
+            );
+            if (option) {
+              return option.label;
+            }
+          }
+        }
+      }
+
+      const columnId = getColumnId(columnName, categoryId);
+      if (columnId) {
+        const options = columnOptions?.[columnId];
+        if (options) {
+          const option = options.find(
+            (opt) =>
+              String(opt.id) === String(value) ||
+              opt.label.toLowerCase() === String(value).toLowerCase()
+          );
+          if (option) {
+            return option.label;
+          }
+        }
+      }
+
+      // Fallback: search through ALL parent values in dependentOptions for this category
+      const depOptionsForCategory = dependentOptionsMap[categoryId];
+      if (depOptionsForCategory) {
+        const columnNameLower = columnName.toLowerCase();
+        let depOptionsForColumn: { id: string | number; label: string }[] | undefined;
+
+        // Find the dependent options for this column (case-insensitive)
+        for (const [key, val] of Object.entries(depOptionsForCategory)) {
+          if (key.toLowerCase() === columnNameLower) {
+            depOptionsForColumn = Object.values(val).flat();
+            break;
+          }
+        }
+
+        if (depOptionsForColumn) {
+          const option = depOptionsForColumn.find(
+            (opt) =>
+              String(opt.id) === value ||
+              opt.label.toLowerCase() === value.toLowerCase()
+          );
+          if (option) return option.label;
+        }
+      }
+
+      // Return original value if no label found
+      return value;
+    },
+    [columnOptionsMap, dependentOptionsMap, columnDependenciesMap, getColumnId]
+  );
+
+  const formatActivityData = useCallback(
+    (
+      activityData: Record<string, unknown>,
+      categoryId: number
+    ): { key: string; displayValue: string }[] => {
+      if (!activityData) return [];
+
+      return Object.entries(activityData).map(([key, value]) => {
+        const stringValue = String(value);
+        const displayValue = getOptionLabel(key, stringValue, categoryId, activityData);
+        return { key, displayValue };
+      });
+    },
+    [getOptionLabel]
+  );
+
 
   // Fetch all emissions for the selected site
   const fetchEmissions = useCallback(async () => {
@@ -244,6 +446,7 @@ const ManagerPage = () => {
         onBulkApprove={handleBulkApprove}
         onBulkDelete={handleBulkDelete}
         isDark={isDark}
+        formatActivityData={formatActivityData}
       />
     </div>
   );
