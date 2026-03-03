@@ -56,18 +56,22 @@ const Sidebar = () => {
     { to: "emission-factors", label: "Emission Factors", icon: <Gauge size={20} /> },
     { to: "manage-columns", label: "Manage Columns", icon: <Columns3 size={20} /> },
     { to: "column-config", label: "Column Config", icon: <Settings size={20} /> },
-    { to: "units", label: "Manage Units", icon: <Scale size={20} /> },
+    { to: "master-data", label: "Master Data", icon: <FolderTree size={20} /> },
+    { to: "unit-master", label: "Global Units", icon: <Scale size={20} /> },
+    { to: "units", label: "Site Units", icon: <Scale size={20} /> },
     { to: "products", label: "Products", icon: <Package size={20} /> },
     { to: "upload-data", label: "Upload Data", icon: <Upload size={20} /> },
     { to : "ede-reports", label: "EDE Reports", icon: <FolderTree size={20} /> },
-        { to : "ghg-reports", label : "GHG Report", icon : <FolderTree size={20} />}
-
+    { to : "ghg-reports", label : "GHG Report", icon : <FolderTree size={20} />},
+    { to: "superadmin/all-data-entry", label: "All Data Entry", icon: <FileSpreadsheet size={20} /> },
   ];
 
   const userLinks: NavItem[] = [
     { to: "data-entry", label: "Data Entry", icon: <ClipboardEdit size={20} /> },
     { to: "my-emissions", label: "My Emissions", icon: <FileSpreadsheet size={20} /> },
     { to: "production-data", label: "Production Data", icon: <Factory size={20} /> },
+    { to :"sbti-commitment", label : "SBTi Commitment", icon : <FolderTree size={20} />},
+    { to: "all-data-entry", label: "All Data Entry", icon: <FileSpreadsheet size={20} /> },
   ];
 
   const managerLinks: NavItem[] = [
@@ -76,7 +80,15 @@ const Sidebar = () => {
     { to: "manage-production-data", label: "Production Data", icon: <Factory size={20} /> },
     { to : "ede-reports", label: "EDE Report", icon: <FolderTree size={20} /> },
     { to :"sbti-commitment", label : "SBTi Commitment", icon : <FolderTree size={20} />},
-    { to : "ghg-reports", label : "GHG Report", icon : <FolderTree size={20} />}
+    { to : "ghg-reports", label : "GHG Report", icon : <FolderTree size={20} />},
+    { to: "all-data-entry", label: "All Data Entry", icon: <FileSpreadsheet size={20} /> },
+  ];
+  const adminLinks: NavItem[] = [
+    { to: "manager-dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
+    { to: "data-manage", label: "Emissions Data", icon: <FileSpreadsheet size={20} /> },
+    { to: "manage-production-data", label: "Production Data", icon: <Factory size={20} /> },
+    { to: "ede-reports", label: "EDE Reports", icon: <FolderTree size={20} /> },
+    { to: "all-data-entry", label: "All Data Entry", icon: <FileSpreadsheet size={20} /> },
   ];
 
   const getNavLinks = (): NavItem[] => {
@@ -87,6 +99,8 @@ const Sidebar = () => {
         return userLinks;
       case "Manager":
         return managerLinks;
+      case "Admin":
+        return adminLinks;
       default:
         return [];
     }
@@ -140,9 +154,8 @@ const Sidebar = () => {
           >
             <span className="shrink-0">{link.icon}</span>
             <span
-              className={`whitespace-nowrap transition-all duration-200 ${
-                isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
-              }`}
+              className={`whitespace-nowrap transition-all duration-200 ${isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
+                }`}
             >
               {link.label}
             </span>
@@ -161,9 +174,8 @@ const Sidebar = () => {
               </span>
             </div>
             <div
-              className={`overflow-hidden transition-all duration-200 ${
-                isExpanded ? "opacity-100 w-auto" : "opacity-0 w-0 absolute"
-              }`}
+              className={`overflow-hidden transition-all duration-200 ${isExpanded ? "opacity-100 w-auto" : "opacity-0 w-0 absolute"
+                }`}
             >
               <p className="text-sm font-medium text-white truncate max-w-35">
                 {user.name}
@@ -190,9 +202,8 @@ const Sidebar = () => {
             <Moon size={20} className="shrink-0 text-blue-400" />
           )}
           <span
-            className={`whitespace-nowrap transition-all duration-200 ${
-              isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
-            }`}
+            className={`whitespace-nowrap transition-all duration-200 ${isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
+              }`}
           >
             {isDark ? "Light Mode" : "Dark Mode"}
           </span>
@@ -212,9 +223,8 @@ const Sidebar = () => {
         >
           <LogOut size={20} className="shrink-0" />
           <span
-            className={`whitespace-nowrap transition-all duration-200 ${
-              isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
-            }`}
+            className={`whitespace-nowrap transition-all duration-200 ${isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 absolute"
+              }`}
           >
             Log out
           </span>

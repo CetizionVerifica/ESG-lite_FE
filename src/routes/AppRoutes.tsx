@@ -26,6 +26,10 @@ import UserEmissionsPage from "../pages/UserEmissionsPage";
 import EdeReports from "../pages/Reports/EdePreports";
 import SbtiMain from "../pages/sbti/SbtiMain";
 import GhgReport from "../pages/GhgReport/GhgReport";
+import MasterDataPage from "../pages/MasterDataPage";
+import UnitMasterPage from "../pages/UnitMasterPage";
+import AllDataEntryPage from "../pages/AllDataEntryPage";
+import SuperAdminAllDataEntryPage from "../pages/SuperAdminAllDataEntryPage";
 
 const routes = [
   {
@@ -53,15 +57,15 @@ const routes = [
         element: <Layout />,
         children: [
           {
-            path: "superadmin", // Keep original
+            path: "superadmin",
             element: <SuperAdminPage />,
           },
           {
-            path: "admin/dashboard", // Alias for SuperAdmin
+            path: "admin/dashboard",
             element: <SuperAdminPage />,
           },
           {
-            path: "company/dashboard", // Alias for ManagerDashboard
+            path: "company/dashboard",
             element: <ManagerDashboard />,
           },
           {
@@ -101,8 +105,16 @@ const routes = [
             element: <ColumnConfig />,
           },
           {
+            path: "master-data",
+            element: <MasterDataPage />,
+          },
+          {
             path: "units",
             element: <UnitsPage />,
+          },
+          {
+            path: "unit-master",
+            element: <UnitMasterPage />,
           },
           {
             path: "data-entry",
@@ -147,6 +159,14 @@ const routes = [
           {
             path: "manage-production-data",
             element: <ManagerProductionDataPage />
+          },
+          {
+            path: "superadmin/all-data-entry",
+            element: <SuperAdminAllDataEntryPage />
+          },
+          {
+            path: "all-data-entry",
+            element: <AllDataEntryPage />
           }
         ],
       },

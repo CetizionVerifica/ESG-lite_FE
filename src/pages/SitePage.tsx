@@ -1,3 +1,4 @@
+
 import { useActionState, useState, useEffect, useCallback } from "react";
 import Modal from "../components/Modal";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
@@ -11,6 +12,7 @@ import {
 import { getCompanies } from "../services/companyService";
 import { getCountries } from "../services/countryService";
 import { getCategories } from "../services/categoryService";
+import MasterDataAssignmentModal from "../components/MasterDataAssignmentModal";
 
 interface Site {
   site_id: number;
@@ -43,6 +45,11 @@ interface Category {
 
 const SitePage = () => {
   const [modalOpen, setModalOpen] = useState(false);
+
+  // Assignment Modal State
+  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
+  const [selectedSiteForAssignment, setSelectedSiteForAssignment] = useState<Site | null>(null);
+
   const [sites, setSites] = useState<Site[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
@@ -66,7 +73,7 @@ const SitePage = () => {
           return;
         }
         console.log(selectedCategories);
-        
+
         const newSite = await createSite({
           name,
           address,
@@ -120,10 +127,10 @@ const SitePage = () => {
       if (updates.categories) {
         const categoryIds = Array.isArray(updates.categories)
           ? updates.categories.map((c: any) =>
-              typeof c === "number" || typeof c === "string"
-                ? c
-                : c.category_id || c.id
-            )
+            typeof c === "number" || typeof c === "string"
+              ? c
+              : c.category_id || c.id
+          )
           : [];
         await updateSite(row.site_id, {
           ...updates,
@@ -152,6 +159,11 @@ const SitePage = () => {
       console.error("Error deleting site:", error);
       throw error;
     }
+  };
+
+  const openAssignmentModal = (site: Site) => {
+    setSelectedSiteForAssignment(site);
+    setAssignmentModalOpen(true);
   };
 
   const companyOptions: DropdownOption[] = companies.map((company) => ({
@@ -332,6 +344,16 @@ const SitePage = () => {
         </form>
       </Modal>
 
+      {/* Assignment Modal */}
+      {selectedSiteForAssignment && (
+        <MasterDataAssignmentModal
+          isOpen={assignmentModalOpen}
+          onClose={() => setAssignmentModalOpen(false)}
+          siteId={selectedSiteForAssignment.site_id}
+          siteName={selectedSiteForAssignment.name}
+        />
+      )}
+
       <Table<Site>
         data={sites}
         columns={columns}
@@ -340,6 +362,19 @@ const SitePage = () => {
         onDelete={handleDelete}
         loading={loading}
         showActions={true}
+        renderActions={(row, { editButton, deleteButton }) => (
+          <div className="flex gap-2">
+            <button
+              onClick={() => openAssignmentModal(row)}
+              className="px-2 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 font-medium"
+              title="Assign Master Data"
+            >
+              Assign
+            </button>
+            {editButton}
+            {deleteButton}
+          </div>
+        )}
       />
     </div>
   );

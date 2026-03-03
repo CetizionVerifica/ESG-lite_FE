@@ -1,11 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { onboardCompany } from "../services/companyService";
+import { getCategories } from "../services/categoryService";
 
 const CompanyOnboardingPage = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [categories, setCategories] = useState<any[]>([]);
+    const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+
+    useEffect(() => {
+        fetchCategories();
+    }, []);
+
+    const fetchCategories = async () => {
+        try {
+            const data = await getCategories();
+            setCategories(data);
+        } catch (err) {
+            console.error("Failed to fetch categories", err);
+        }
+    };
 
     const [formData, setFormData] = useState({
         companyName: "",
@@ -31,13 +47,26 @@ const CompanyOnboardingPage = () => {
         }));
     };
 
+    const handleCategoryChange = (categoryId: number) => {
+        setSelectedCategoryIds((prev) => {
+            if (prev.includes(categoryId)) {
+                return prev.filter((id) => id !== categoryId);
+            } else {
+                return [...prev, categoryId];
+            }
+        });
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
 
         try {
-            await onboardCompany(formData);
+            await onboardCompany({
+                ...formData,
+                categoryIds: selectedCategoryIds
+            });
             navigate("/companies"); // Navigate back to company list
         } catch (err: any) {
             console.error("Onboarding error:", err);
@@ -216,6 +245,24 @@ const CompanyOnboardingPage = () => {
                             onChange={handleChange}
                             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                         />
+                    </div>
+
+                    {/* Categories Selection */}
+                    <div className="md:col-span-2 mt-4">
+                        <h2 className="text-xl font-semibold mb-4 border-b pb-2">Assign Categories</h2>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            {categories.map((category) => (
+                                <label key={category.category_id} className="flex items-center space-x-2 border p-2 rounded hover:bg-gray-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedCategoryIds.includes(category.category_id)}
+                                        onChange={() => handleCategoryChange(category.category_id)}
+                                        className="form-checkbox h-4 w-4 text-blue-600"
+                                    />
+                                    <span className="text-gray-700">{category.category_name}</span>
+                                </label>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Access Control */}
