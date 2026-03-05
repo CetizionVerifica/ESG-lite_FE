@@ -44,15 +44,17 @@ export function ReviewStage({
   const noneSelected = selectedCategories.size === 0;
   const someSelected = !allSelected && !noneSelected;
 
-  // ✅ detect if backend has added these preview fields
+  // detect if backend has added these preview fields
+  const hasGlobalCat = reviewRows.some((r) => r?.global_category_name !== undefined && r?.global_category_name !== null);
   const hasFactor = reviewRows.some((r) => r?.factor_value !== undefined && r?.factor_value !== null);
   const hasDenom = reviewRows.some((r) => r?.denominator_unit !== undefined && r?.denominator_unit !== null);
   const hasEmission = reviewRows.some((r) => r?.total_emission !== undefined && r?.total_emission !== null);
 
   // build final columns: mapped fields + computed fields
   const computedCols = [
+    hasGlobalCat ? { key: "global_category_name", label: "Global Category" } : null,
     hasFactor ? { key: "factor_value", label: "Emission Factor" } : null,
-    hasDenom ? { key: "denominator_unit", label: "Factor Unit" } : null,
+    hasDenom ? { key: "denominator_unit", label: "Denominator Unit" } : null,
     hasEmission ? { key: "total_emission", label: "Total Emission (tCO2e)" } : null,
   ].filter(Boolean) as Array<{ key: string; label: string }>;
 
