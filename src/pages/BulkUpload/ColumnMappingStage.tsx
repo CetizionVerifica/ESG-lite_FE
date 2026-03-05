@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { ColumnMappingEntry } from "../UserDataEntry/types";
 
@@ -9,15 +8,18 @@ interface ColumnMappingStageProps {
   selectedCategories: Set<string>;
   uploadedHeaders: string[];
   columnMappings: ColumnMappingEntry[];
-  uploadedRows: Record<string, string>[];
+  uploadedRows: Record<string, string>[]; // not used for counts here
   onUpdateMapping: (requiredField: string, mappedTo: string) => void;
   onToggleSkip: (requiredField: string) => void;
   onToggleCategory: (category: string) => void;
   onToggleAllCategories: (categories: string[]) => void;
   categoryTypeWarning: string | null;
-  resolvingMappings?: boolean;
   onBack: () => void;
   onProceed: () => void;
+
+  // ✅ NEW
+  loadingCategories?: boolean;
+  loadingPreview?: boolean;
 }
 
 export function ColumnMappingStage({
@@ -27,15 +29,15 @@ export function ColumnMappingStage({
   selectedCategories,
   uploadedHeaders,
   columnMappings,
-  uploadedRows,
   onUpdateMapping,
   onToggleSkip,
   onToggleCategory,
   onToggleAllCategories,
   categoryTypeWarning,
-  resolvingMappings,
   onBack,
   onProceed,
+  loadingCategories = false,
+  loadingPreview = false,
 }: ColumnMappingStageProps) {
   const [categoryListOpen, setCategoryListOpen] = useState(true);
 
@@ -49,20 +51,13 @@ export function ColumnMappingStage({
     (m) => m.requiredField === "emission_category" && m.mappedTo && !m.skipped
   );
 
-  const allSelected = uniqueCategories.length > 0 && selectedCategories.size === uniqueCategories.length;
-  const noneSelected = selectedCategories.size === 0;
-  const someSelected = !allSelected && !noneSelected;
+  const categoriesLoaded = uniqueCategories.length > 0;
 
-  // Rows that will be included based on selected categories
-  const includedRowCount = selectedCategories.size === 0
-    ? totalRows
-    : (() => {
-        const catMapping = columnMappings.find((m) => m.requiredField === "emission_category");
-        if (!catMapping || !catMapping.mappedTo) return totalRows;
-        return uploadedRows.filter((r) =>
-          selectedCategories.has(r[catMapping.mappedTo]?.trim())
-        ).length;
-      })();
+  const allSelected = categoriesLoaded && selectedCategories.size === uniqueCategories.length;
+  const noneSelected = selectedCategories.size === 0;
+  const someSelected = categoriesLoaded && !allSelected && !noneSelected;
+
+  const busy = loadingCategories || loadingPreview;
 
   return (
     <div className="flex flex-col gap-4">
@@ -70,7 +65,8 @@ export function ColumnMappingStage({
       <div className="grid grid-cols-3 gap-3">
         <SummaryCard
           label="Total Rows"
-          value={totalRows.toString()}
+          value={totalRows ? totalRows.toString() : "—"}
+          subtext={!totalRows ? "Load categories to compute" : undefined}
           icon={
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -104,31 +100,26 @@ export function ColumnMappingStage({
         />
       </div>
 
-      {/* Category Filter — only show when category column is mapped */}
-      {categoryMapped && uniqueCategories.length > 0 && (
+      {/* Category Filter */}
+      {categoryMapped && categoriesLoaded && (
         <div className="border border-purple-200 rounded-lg overflow-hidden">
-          {/* Header */}
           <button
             onClick={() => setCategoryListOpen((prev) => !prev)}
             className="w-full flex items-center justify-between px-4 py-2.5 bg-purple-50 hover:bg-purple-100 transition-colors"
+            type="button"
           >
             <div className="flex items-center gap-2">
               <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
               </svg>
-              <span className="text-sm font-semibold text-purple-700">
-                Filter Categories
-              </span>
+              <span className="text-sm font-semibold text-purple-700">Filter Categories</span>
+
               <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-medium">
                 {selectedCategories.size} / {uniqueCategories.length} selected
               </span>
-              {selectedCategories.size > 0 && selectedCategories.size < uniqueCategories.length && (
-                <span className="text-xs text-purple-500">
-                  → {includedRowCount} rows included
-                </span>
-              )}
             </div>
+
             <svg
               className={`w-4 h-4 text-purple-400 transition-transform ${categoryListOpen ? "rotate-180" : ""}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -137,10 +128,8 @@ export function ColumnMappingStage({
             </svg>
           </button>
 
-          {/* Category List */}
           {categoryListOpen && (
             <div className="bg-white">
-              {/* Select All row */}
               <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 bg-gray-50">
                 <input
                   type="checkbox"
@@ -151,9 +140,7 @@ export function ColumnMappingStage({
                   onChange={() => onToggleAllCategories(uniqueCategories)}
                   className="w-4 h-4 rounded border-gray-300 text-purple-600 cursor-pointer"
                 />
-                <span className="text-sm font-semibold text-gray-700">
-                  Select All
-                </span>
+                <span className="text-sm font-semibold text-gray-700">Select All</span>
                 {someSelected && (
                   <span className="text-xs text-gray-400 ml-auto">
                     {selectedCategories.size} of {uniqueCategories.length}
@@ -161,7 +148,6 @@ export function ColumnMappingStage({
                 )}
               </div>
 
-              {/* Individual categories */}
               <div className="max-h-48 overflow-y-auto divide-y divide-gray-50">
                 {uniqueCategories.map((category) => {
                   const isChecked = selectedCategories.has(category);
@@ -180,9 +166,7 @@ export function ColumnMappingStage({
                       <span className={`text-sm font-mono ${isChecked ? "text-gray-800" : "text-gray-400 line-through"}`}>
                         {category}
                       </span>
-                      {!isChecked && (
-                        <span className="ml-auto text-xs text-gray-400 italic">excluded</span>
-                      )}
+                      {!isChecked && <span className="ml-auto text-xs text-gray-400 italic">excluded</span>}
                     </label>
                   );
                 })}
@@ -210,30 +194,28 @@ export function ColumnMappingStage({
               {/* Required Field Label */}
               <div className="w-48 shrink-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-medium text-gray-700">
-                    {mapping.label}
-                  </span>
-                  {mapping.isRequired && (
-                    <span className="text-red-500 text-xs">*</span>
-                  )}
+                  <span className="text-sm font-medium text-gray-700">{mapping.label}</span>
+                  {mapping.isRequired && <span className="text-red-500 text-xs">*</span>}
                 </div>
-              
-                {mapping.mappedTo && !mapping.skipped && !(mapping.requiredField === "emission_category" && categoryTypeWarning) && (
-  <span className="text-xs text-green-600 flex items-center gap-1 mt-0.5">
-    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-      <path fillRule="evenodd"
-        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-        clipRule="evenodd" />
-    </svg>
-    Mapped
-  </span>
-)}
 
-{mapping.requiredField === "emission_category" && mapping.mappedTo && categoryTypeWarning && (
-  <span className="text-xs text-amber-600 flex items-center gap-1 mt-0.5">
-    ⚠️ Invalid column
-  </span>
-)}
+                {mapping.mappedTo && !mapping.skipped && !(mapping.requiredField === "emission_category" && categoryTypeWarning) && (
+                  <span className="text-xs text-green-600 flex items-center gap-1 mt-0.5">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    Mapped
+                  </span>
+                )}
+
+                {mapping.requiredField === "emission_category" && mapping.mappedTo && categoryTypeWarning && (
+                  <span className="text-xs text-amber-600 flex items-center gap-1 mt-0.5">
+                    ⚠️ Invalid column
+                  </span>
+                )}
               </div>
 
               {/* Arrow */}
@@ -249,7 +231,7 @@ export function ColumnMappingStage({
                 <select
                   value={mapping.mappedTo}
                   onChange={(e) => onUpdateMapping(mapping.requiredField, e.target.value)}
-                  disabled={mapping.skipped}
+                  disabled={mapping.skipped || busy}
                   className={`w-full text-sm border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500
                     ${mapping.skipped
                       ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
@@ -265,15 +247,6 @@ export function ColumnMappingStage({
                 </select>
               </div>
 
-              {/* Preview of first value */}
-              {mapping.mappedTo && !mapping.skipped && uploadedRows[0] && (
-                <div className="w-32 shrink-0 hidden lg:block">
-                  <span className="text-xs text-gray-400 italic truncate block" title={uploadedRows[0][mapping.mappedTo]}>
-                    e.g. "{String(uploadedRows[0][mapping.mappedTo] || "").substring(0, 18)}"
-                  </span>
-                </div>
-              )}
-
               {/* Skip Toggle */}
               {!mapping.isRequired && (
                 <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
@@ -281,6 +254,7 @@ export function ColumnMappingStage({
                     type="checkbox"
                     checked={mapping.skipped}
                     onChange={() => onToggleSkip(mapping.requiredField)}
+                    disabled={busy}
                     className="w-3.5 h-3.5 rounded border-gray-300 text-gray-500"
                   />
                   <span className="text-xs text-gray-500">Skip</span>
@@ -291,37 +265,54 @@ export function ColumnMappingStage({
         </div>
       </div>
 
-      {/* Required field note */}
       <p className="text-xs text-gray-400">
         <span className="text-red-500">*</span> Required fields must be mapped to proceed
       </p>
+
       {categoryTypeWarning && (
-  <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-800">
-    <span>⚠️</span>
-    <span>{categoryTypeWarning}</span>
-  </div>
-)}
+        <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-800">
+          <span>⚠️</span>
+          <span>{categoryTypeWarning}</span>
+        </div>
+      )}
 
       {/* Navigation */}
       <div className="flex justify-between pt-2">
         <button
           onClick={onBack}
-          className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          disabled={busy}
+          className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
+          type="button"
         >
           ← Back
         </button>
+
         <button
           onClick={onProceed}
-          disabled={!requiredMapped || !!categoryTypeWarning || resolvingMappings}
-          className="px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+          disabled={!requiredMapped || !!categoryTypeWarning || busy}
+          className="px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          type="button"
         >
-          {resolvingMappings ? "Resolving categories..." : "Preview Import →"}
-          {!resolvingMappings && selectedCategories.size > 0 && selectedCategories.size < uniqueCategories.length && (
-            <span className="ml-1.5 text-xs opacity-80">({includedRowCount} rows)</span>
+          {loadingCategories || loadingPreview ? (
+            <>
+              <Spinner />
+              <span>{loadingCategories ? "Loading categories..." : "Loading preview..."}</span>
+            </>
+          ) : (
+            <span>{categoriesLoaded ? "Preview Import →" : "Load Categories →"}</span>
           )}
         </button>
       </div>
     </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z" />
+    </svg>
   );
 }
 
