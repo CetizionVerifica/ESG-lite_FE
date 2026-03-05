@@ -19,7 +19,7 @@ export function useBulkUpload({
   dynamicColumns,
   siteId,
   categoryId,
-  companyId,
+  companyId: _companyId,
   selectedDate,
   getAutoEmissionCategory,
   // onImportComplete, // kept but not used inside handleImport anymore (BulkUploadModal will call it)
@@ -266,6 +266,7 @@ export function useBulkUpload({
           id: idx,
           mappedData,
           emission_category,
+          original_company_category: mappedData["emission_category"] || null,
           activity_data_unit,
           total_emission: 0,
           isValid,
