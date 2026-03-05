@@ -56,6 +56,7 @@ export interface ColumnConfig {
 export interface EmissionFactor {
     emission_factor_id: number;
     emission_category_name: string;
+    global_category_name?: string;
     factor_value: number;
     denominator_unit: string;
     year: number;
@@ -104,6 +105,7 @@ export interface BulkReviewRow {
     id: number;
     mappedData: Record<string, string>;
     emission_category: string | null;
+    original_company_category: string | null;
     activity_data_unit: string | null;
     total_emission: number | null;
     isValid: boolean;
@@ -126,9 +128,10 @@ export interface BulkUploadModalProps {
     units: UnitData[];
     siteId: number;
     categoryId: number;
+    companyId?: number;
     selectedDate: string;
     getExpectedUnit: (category: string) => string | null | undefined;
     calculateEmission: (row: ModalRow) => EmissionCalculationResult;
-    getAutoEmissionCategory: (row: ModalRow) => string | null;
+    getAutoEmissionCategory: (row: ModalRow) => { key: string; category: string } | null;
     onImportComplete: (newEmissions: EmissionRow[]) => void;
 }

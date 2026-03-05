@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -19,10 +19,9 @@ import {
   Factory,
   LayoutDashboard,
   LogOut,
-  ChevronLeft,
-  ChevronRight,
   Sun,
   Moon,
+  ArrowLeftRight,
 } from "lucide-react";
 
 interface NavItem {
@@ -36,6 +35,21 @@ const Sidebar = () => {
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [isExpanded, setIsExpanded] = useState(false);
+  const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    if (collapseTimer.current) {
+      clearTimeout(collapseTimer.current);
+      collapseTimer.current = null;
+    }
+    setIsExpanded(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    collapseTimer.current = setTimeout(() => {
+      setIsExpanded(false);
+    }, 200);
+  }, []);
 
   // Get user initials for avatar
   const getInitials = (name: string) => {
@@ -54,6 +68,7 @@ const Sidebar = () => {
     { to: "sites", label: "Sites", icon: <MapPin size={20} /> },
     { to: "users", label: "Users", icon: <Users size={20} /> },
     { to: "emission-factors", label: "Emission Factors", icon: <Gauge size={20} /> },
+    { to: "category-mappings", label: "Category Mappings", icon: <ArrowLeftRight size={20} /> },
     { to: "manage-columns", label: "Manage Columns", icon: <Columns3 size={20} /> },
     { to: "column-config", label: "Column Config", icon: <Settings size={20} /> },
     { to: "units", label: "Manage Units", icon: <Scale size={20} /> },
@@ -97,16 +112,17 @@ const Sidebar = () => {
   return (
     <aside
       className={`
-        ${isExpanded ? "w-64" : "w-16"}
-        min-h-screen bg-slate-900 text-slate-300
-        transition-all duration-300 ease-in-out
-        flex flex-col shadow-xl
+        fixed left-0 top-0 h-screen z-40
+        ${isExpanded ? "w-64 shadow-2xl" : "w-16"}
+        bg-slate-900 text-slate-300
+        transition-[width] duration-200 ease-out
+        flex flex-col
       `}
-      onMouseEnter={() => setIsExpanded(true)}
-      onMouseLeave={() => setIsExpanded(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-slate-700">
+      <div className="h-16 flex items-center justify-between px-4 border-b border-slate-700 shrink-0">
         <div className={`flex items-center gap-3 overflow-hidden ${isExpanded ? "opacity-100" : "opacity-0"} transition-opacity duration-200`}>
           <img
             src="/logo.png"
@@ -151,7 +167,7 @@ const Sidebar = () => {
       </nav>
 
       {/* Footer */}
-      <div className="p-2 border-t border-slate-700 space-y-1">
+      <div className="p-2 border-t border-slate-700 space-y-1 shrink-0">
         {/* User Profile */}
         {user && (
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg">
@@ -219,11 +235,6 @@ const Sidebar = () => {
             Log out
           </span>
         </button>
-      </div>
-
-      {/* Expand indicator */}
-      <div className="absolute bottom-20 -right-3 bg-slate-800 rounded-full p-1 shadow-lg border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors">
-        {isExpanded ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
       </div>
     </aside>
   );

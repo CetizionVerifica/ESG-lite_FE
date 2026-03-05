@@ -65,6 +65,17 @@ export const getUserEmissionFactorsBySiteAndCategory = async (
   return response.data;
 };
 
+// Get distinct emission_category_name values for a category (optionally filtered by site)
+export const getEmissionCategoryNames = async (
+  categoryId: number,
+  siteId?: number
+): Promise<string[]> => {
+  const params: Record<string, number> = { category_id: categoryId };
+  if (siteId) params.site_id = siteId;
+  const response = await api.get("/admin/emission-factors/category-names", { params });
+  return response.data;
+};
+
 // Bulk create emission factors
 export const bulkCreateEmissionFactors = async (factors: {
   site_id: number;
@@ -84,3 +95,4 @@ export const bulkDeleteEmissionFactors = async (ids: number[]) => {
   const response = await api.delete("/admin/emission-factors/bulk", { data: { ids } });
   return response.data;
 };
+

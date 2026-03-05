@@ -3,11 +3,9 @@ import Sidebar from "./Sidebar";
 
 const Layout = () => {
   return (
-    <div className="flex min-h-screen">
-      <div className="sticky top-0 h-screen">
-        <Sidebar />
-      </div>
-      <div className="flex-1 overflow-auto">
+    <div className="min-h-screen">
+      <Sidebar />
+      <div className="ml-16 min-h-screen">
         <Outlet />
       </div>
     </div>

@@ -5,6 +5,7 @@ import {
   getColumnConfigsBySiteAndCategory,
   deleteColumnConfig,
   updateColumnConfig,
+  previewAutoGenerateColumnConfig,
   ColumnOptionsMap,
   ColumnDependencies,
   DependentOptionsMap,
@@ -68,6 +69,27 @@ const ColumnConfigList = ({
   const [editingOptions, setEditingOptions] = useState<DropdownOptionValue[]>([]);
   const [newOptionId, setNewOptionId] = useState("");
   const [newOptionLabel, setNewOptionLabel] = useState("");
+
+  // Auto-fill state
+  const [autoFillingConfigId, setAutoFillingConfigId] = useState<number | null>(null);
+
+  // Auto-fill preview modal state
+  const [autoFillModalOpen, setAutoFillModalOpen] = useState(false);
+  const [autoFillConfig, setAutoFillConfig] = useState<ColumnConfigEntity | null>(null);
+  const [autoFillProposal, setAutoFillProposal] = useState<{
+    column_options: ColumnOptionsMap;
+    column_dependencies: ColumnDependencies;
+    dependent_options: DependentOptionsMap;
+    emission_category_mapping: EmissionCategoryMapping;
+    pattern: string;
+  } | null>(null);
+  const [autoFillSections, setAutoFillSections] = useState({
+    column_options: true,
+    column_dependencies: true,
+    dependent_options: true,
+    emission_category_mapping: true,
+  });
+  const [applyingAutoFill, setApplyingAutoFill] = useState(false);
 
   // Modal state for dependent dropdown configuration
   const [dependencyModalOpen, setDependencyModalOpen] = useState(false);
@@ -392,6 +414,152 @@ const ColumnConfigList = ({
     }));
   };
 
+  // Auto-fill: open preview modal with proposal data
+  const handleAutoFillPreview = async (config: ColumnConfigEntity) => {
+    if (!config.site?.site_id || !config.category?.category_id) return;
+    if (config.columns.length === 0) {
+      alert("Add columns to this config first before auto-filling.");
+      return;
+    }
+
+    setAutoFillingConfigId(config.pk_id);
+    try {
+      const proposal = await previewAutoGenerateColumnConfig(
+        config.site.site_id,
+        config.category.category_id
+      );
+
+      if (!proposal.configs || proposal.configs.length === 0) {
+        alert("No emission factors found for this site + category.");
+        return;
+      }
+
+      const group = proposal.configs[0];
+
+      // Match proposed columns to existing config columns by type + position.
+      // The generator creates: [select1, select2, ..., number] in order.
+      // The existing config may have the same structure with different names.
+      const proposedSelect = group.columns.filter(c => c.column_type === "select");
+      const existingSelect = config.columns.filter(c => c.column_type === "select");
+
+      // Build proposedName → { configName, pkId } mapping by matching position
+      const nameMap: Record<string, { configName: string; pkId: number }> = {};
+      for (let i = 0; i < proposedSelect.length && i < existingSelect.length; i++) {
+        nameMap[proposedSelect[i].column_name] = {
+          configName: existingSelect[i].column_name,
+          pkId: existingSelect[i].pk_id,
+        };
+      }
+      // Also map number columns
+      const proposedNumber = group.columns.filter(c => c.column_type === "number");
+      const existingNumber = config.columns.filter(c => c.column_type === "number");
+      for (let i = 0; i < proposedNumber.length && i < existingNumber.length; i++) {
+        nameMap[proposedNumber[i].column_name] = {
+          configName: existingNumber[i].column_name,
+          pkId: existingNumber[i].pk_id,
+        };
+      }
+
+      // Helper: remap a proposed column name to the config's column name
+      const remap = (name: string) => nameMap[name]?.configName || name;
+
+      // Remap column_options keys from proposed names to pk_ids
+      const remappedOptions: ColumnOptionsMap = {};
+      for (const [colName, opts] of Object.entries(group.column_options)) {
+        const mapped = nameMap[colName];
+        if (mapped) {
+          remappedOptions[mapped.pkId.toString()] = opts;
+        }
+      }
+
+      // Remap column_dependencies keys (child → parent) using config column names
+      const remappedDeps: ColumnDependencies = {};
+      for (const [child, parent] of Object.entries(group.column_dependencies)) {
+        remappedDeps[remap(child)] = remap(parent);
+      }
+
+      // Remap dependent_options keys using config column names
+      const remappedDepOpts: DependentOptionsMap = {};
+      for (const [childCol, parentOpts] of Object.entries(group.dependent_options)) {
+        remappedDepOpts[remap(childCol)] = parentOpts;
+      }
+
+      setAutoFillConfig(config);
+      setAutoFillProposal({
+        column_options: remappedOptions,
+        column_dependencies: remappedDeps,
+        dependent_options: remappedDepOpts,
+        emission_category_mapping: group.emission_category_mapping,
+        pattern: group.pattern,
+      });
+      // Pre-check all sections
+      setAutoFillSections({
+        column_options: true,
+        column_dependencies: true,
+        dependent_options: true,
+        emission_category_mapping: true,
+      });
+      setAutoFillModalOpen(true);
+    } catch (err: any) {
+      console.error("Auto-fill error:", err);
+      alert(
+        err?.response?.data?.message || err?.message || "Failed to auto-fill config"
+      );
+    } finally {
+      setAutoFillingConfigId(null);
+    }
+  };
+
+  // Auto-fill: apply only selected sections
+  const handleApplyAutoFill = async () => {
+    if (!autoFillConfig || !autoFillProposal) return;
+
+    setApplyingAutoFill(true);
+    try {
+      const updatePayload: any = {};
+      if (autoFillSections.column_options) {
+        updatePayload.column_options = autoFillProposal.column_options;
+      }
+      if (autoFillSections.column_dependencies) {
+        updatePayload.column_dependencies = autoFillProposal.column_dependencies;
+      }
+      if (autoFillSections.dependent_options) {
+        updatePayload.dependent_options = autoFillProposal.dependent_options;
+      }
+      if (autoFillSections.emission_category_mapping) {
+        updatePayload.emission_category_mapping = autoFillProposal.emission_category_mapping;
+      }
+
+      if (Object.keys(updatePayload).length === 0) {
+        alert("Select at least one section to apply.");
+        setApplyingAutoFill(false);
+        return;
+      }
+
+      await updateColumnConfig(autoFillConfig.pk_id, updatePayload);
+
+      // Update local state — only merge selected sections
+      setColumnConfigs((prev) =>
+        prev.map((item) =>
+          item.pk_id === autoFillConfig.pk_id
+            ? { ...item, ...updatePayload }
+            : item
+        )
+      );
+
+      setAutoFillModalOpen(false);
+      setAutoFillConfig(null);
+      setAutoFillProposal(null);
+    } catch (err: any) {
+      console.error("Auto-fill apply error:", err);
+      alert(
+        err?.response?.data?.message || err?.message || "Failed to apply auto-fill"
+      );
+    } finally {
+      setApplyingAutoFill(false);
+    }
+  };
+
   // Theme classes
   const inputClass = isDark
     ? "w-full px-3 py-2 border border-slate-600 rounded-md bg-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -516,6 +684,33 @@ const ColumnConfigList = ({
             {depCount > 0 || mappingCount > 0
               ? `${depCount} deps, ${mappingCount} mappings`
               : "Configure"}
+          </button>
+        );
+      },
+    },
+    {
+      key: "pk_id" as keyof ColumnConfigEntity,
+      label: "Auto-fill",
+      editable: false,
+      render: (_value, row) => {
+        const isLoading = autoFillingConfigId === row.pk_id;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAutoFillPreview(row);
+            }}
+            disabled={isLoading || row.columns.length === 0}
+            className={`text-xs px-2 py-1 rounded transition-colors ${
+              isLoading
+                ? "bg-purple-100 text-purple-500 cursor-wait"
+                : isDark
+                  ? "bg-purple-900 text-purple-300 hover:bg-purple-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                  : "bg-purple-100 text-purple-700 hover:bg-purple-200 disabled:opacity-40 disabled:cursor-not-allowed"
+            }`}
+            title={row.columns.length === 0 ? "Add columns first" : "Auto-fill options, dependencies & mappings from emission factors"}
+          >
+            {isLoading ? "Loading..." : "Auto-fill"}
           </button>
         );
       },
@@ -662,6 +857,211 @@ const ColumnConfigList = ({
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* Auto-fill Preview Modal */}
+      <Modal
+        isOpen={autoFillModalOpen}
+        onClose={() => {
+          setAutoFillModalOpen(false);
+          setAutoFillConfig(null);
+          setAutoFillProposal(null);
+        }}
+        title={`Auto-fill Preview — ${autoFillConfig?.site?.name || ""} / ${autoFillConfig?.category?.category_name || ""}`}
+        isDark={isDark}
+      >
+        {autoFillProposal && autoFillConfig && (
+          <div className="space-y-4">
+            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+              Pattern detected: <span className="font-semibold">{autoFillProposal.pattern}</span>.
+              Select which sections to apply:
+            </p>
+
+            {/* Section: Column Options */}
+            {(() => {
+              const currentCount = Object.values(autoFillConfig.column_options || {}).reduce((sum, opts) => sum + opts.length, 0);
+              const proposedCount = Object.values(autoFillProposal.column_options).reduce((sum, opts) => sum + opts.length, 0);
+              return (
+                <div className={`p-3 rounded-md border ${autoFillSections.column_options ? (isDark ? "border-blue-500 bg-slate-700" : "border-blue-400 bg-blue-50") : (isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-gray-50")}`}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoFillSections.column_options}
+                      onChange={(e) => setAutoFillSections(s => ({ ...s, column_options: e.target.checked }))}
+                      className="w-4 h-4"
+                    />
+                    <span className={`font-medium text-sm ${isDark ? "text-slate-200" : "text-gray-700"}`}>
+                      Column Options
+                    </span>
+                    <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      (current: {currentCount} options → proposed: {proposedCount} options)
+                    </span>
+                  </label>
+                  {autoFillSections.column_options && (
+                    <div className={`mt-2 ml-6 text-xs space-y-1 ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                      {Object.entries(autoFillProposal.column_options).map(([colId, opts]) => {
+                        const col = autoFillConfig.columns.find(c => c.pk_id.toString() === colId);
+                        return (
+                          <div key={colId}>
+                            <span className="font-medium">{col?.column_name || colId}:</span>{" "}
+                            {opts.map(o => o.label).join(", ")}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Section: Column Dependencies */}
+            {(() => {
+              const currentCount = Object.keys(autoFillConfig.column_dependencies || {}).length;
+              const proposedCount = Object.keys(autoFillProposal.column_dependencies).length;
+              return (
+                <div className={`p-3 rounded-md border ${autoFillSections.column_dependencies ? (isDark ? "border-blue-500 bg-slate-700" : "border-blue-400 bg-blue-50") : (isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-gray-50")}`}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoFillSections.column_dependencies}
+                      onChange={(e) => setAutoFillSections(s => ({ ...s, column_dependencies: e.target.checked }))}
+                      className="w-4 h-4"
+                    />
+                    <span className={`font-medium text-sm ${isDark ? "text-slate-200" : "text-gray-700"}`}>
+                      Column Dependencies
+                    </span>
+                    <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      (current: {currentCount} → proposed: {proposedCount})
+                    </span>
+                  </label>
+                  {autoFillSections.column_dependencies && proposedCount > 0 && (
+                    <div className={`mt-2 ml-6 text-xs space-y-1 ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                      {Object.entries(autoFillProposal.column_dependencies).map(([child, parent]) => (
+                        <div key={child}>
+                          <span className="font-medium">{child}</span> depends on <span className="font-medium">{parent}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Section: Dependent Options */}
+            {(() => {
+              const currentCount = Object.values(autoFillConfig.dependent_options || {}).reduce(
+                (sum, parentOpts) => sum + Object.values(parentOpts).reduce((s, opts) => s + opts.length, 0), 0
+              );
+              const proposedCount = Object.values(autoFillProposal.dependent_options).reduce(
+                (sum, parentOpts) => sum + Object.values(parentOpts).reduce((s, opts) => s + opts.length, 0), 0
+              );
+              return (
+                <div className={`p-3 rounded-md border ${autoFillSections.dependent_options ? (isDark ? "border-blue-500 bg-slate-700" : "border-blue-400 bg-blue-50") : (isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-gray-50")}`}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoFillSections.dependent_options}
+                      onChange={(e) => setAutoFillSections(s => ({ ...s, dependent_options: e.target.checked }))}
+                      className="w-4 h-4"
+                    />
+                    <span className={`font-medium text-sm ${isDark ? "text-slate-200" : "text-gray-700"}`}>
+                      Dependent Options
+                    </span>
+                    <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      (current: {currentCount} options → proposed: {proposedCount} options)
+                    </span>
+                  </label>
+                  {autoFillSections.dependent_options && Object.keys(autoFillProposal.dependent_options).length > 0 && (
+                    <div className={`mt-2 ml-6 text-xs max-h-32 overflow-y-auto space-y-1 ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                      {Object.entries(autoFillProposal.dependent_options).map(([childCol, parentOpts]) => (
+                        <div key={childCol}>
+                          <span className="font-medium">{childCol}:</span>{" "}
+                          {Object.entries(parentOpts).map(([parentVal, opts]) => (
+                            <span key={parentVal}>
+                              {parentVal} → [{opts.map(o => o.label).join(", ")}]{" "}
+                            </span>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Section: Emission Category Mapping */}
+            {(() => {
+              const currentCount = Object.keys(autoFillConfig.emission_category_mapping || {}).length;
+              const proposedCount = Object.keys(autoFillProposal.emission_category_mapping).length;
+              return (
+                <div className={`p-3 rounded-md border ${autoFillSections.emission_category_mapping ? (isDark ? "border-blue-500 bg-slate-700" : "border-blue-400 bg-blue-50") : (isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-gray-50")}`}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoFillSections.emission_category_mapping}
+                      onChange={(e) => setAutoFillSections(s => ({ ...s, emission_category_mapping: e.target.checked }))}
+                      className="w-4 h-4"
+                    />
+                    <span className={`font-medium text-sm ${isDark ? "text-slate-200" : "text-gray-700"}`}>
+                      Emission Category Mapping
+                    </span>
+                    <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                      (current: {currentCount} → proposed: {proposedCount} mappings)
+                    </span>
+                  </label>
+                  {autoFillSections.emission_category_mapping && proposedCount > 0 && (
+                    <div className={`mt-2 ml-6 max-h-40 overflow-y-auto ${isDark ? "border-slate-600" : "border-gray-300"}`}>
+                      <table className="w-full text-xs">
+                        <thead className={`sticky top-0 ${isDark ? "bg-slate-600" : "bg-gray-100"}`}>
+                          <tr>
+                            <th className={`px-2 py-1 text-left font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Key</th>
+                            <th className={`px-2 py-1 text-left font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Emission Category</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(autoFillProposal.emission_category_mapping).slice(0, 20).map(([key, val]) => (
+                            <tr key={key} className={isDark ? "border-t border-slate-600" : "border-t border-gray-200"}>
+                              <td className={`px-2 py-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{key}</td>
+                              <td className={`px-2 py-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{val}</td>
+                            </tr>
+                          ))}
+                          {Object.keys(autoFillProposal.emission_category_mapping).length > 20 && (
+                            <tr>
+                              <td colSpan={2} className={`px-2 py-1 italic ${isDark ? "text-slate-400" : "text-gray-400"}`}>
+                                ...and {Object.keys(autoFillProposal.emission_category_mapping).length - 20} more
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Actions */}
+            <div className={`flex justify-end gap-3 pt-4 border-t ${isDark ? "border-slate-600" : "border-gray-200"}`}>
+              <button
+                onClick={() => {
+                  setAutoFillModalOpen(false);
+                  setAutoFillConfig(null);
+                  setAutoFillProposal(null);
+                }}
+                className={buttonSecondaryClass}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyAutoFill}
+                disabled={applyingAutoFill || !Object.values(autoFillSections).some(Boolean)}
+                className={buttonPrimaryClass}
+              >
+                {applyingAutoFill ? "Applying..." : "Apply Selected"}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Dependency Configuration Modal */}

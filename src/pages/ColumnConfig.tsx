@@ -5,6 +5,7 @@ import { getSites } from "../services/siteService";
 import { getColumns } from "../services/columnService";
 import { createColumnConfig } from "../services/columnConfigService";
 import ColumnConfigList from "../components/ColumnConfigList";
+import AutoGenerateColumnConfigModal from "../components/AutoGenerateColumnConfigModal";
 
 interface Category {
   category_id: number;
@@ -31,6 +32,7 @@ const ColumnConfig = () => {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [autoGenModalOpen, setAutoGenModalOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Form state
@@ -124,12 +126,22 @@ const ColumnConfig = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Column Configurations</h1>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Add Column Config
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setAutoGenModalOpen(true)}
+            disabled={!selectedSite || !selectedCategory}
+            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            title={!selectedSite || !selectedCategory ? "Select a site and category first" : "Auto-generate from emission factors"}
+          >
+            Auto-Generate Config
+          </button>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Add Column Config
+          </button>
+        </div>
       </div>
 
       <Modal
@@ -253,6 +265,16 @@ const ColumnConfig = () => {
         siteId={selectedSite}
         categoryId={selectedCategory}
       />
+
+      {selectedSite && selectedCategory && (
+        <AutoGenerateColumnConfigModal
+          isOpen={autoGenModalOpen}
+          onClose={() => setAutoGenModalOpen(false)}
+          siteId={selectedSite}
+          categoryId={selectedCategory}
+          onSuccess={() => setRefreshTrigger((prev) => prev + 1)}
+        />
+      )}
     </div>
   );
 };

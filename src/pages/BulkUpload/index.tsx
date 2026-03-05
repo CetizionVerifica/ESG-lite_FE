@@ -1,5 +1,4 @@
-
-
+import { useState } from "react";
 import Modal from "../../components/Modal";
 import { FileUploadStage } from "./FileUploadStage";
 import { ColumnMappingStage } from "./ColumnMappingStage";
@@ -8,9 +7,9 @@ import { useBulkUpload } from "./UseBulkUpload";
 import { BulkUploadModalProps } from "../UserDataEntry/types";
 
 const STAGES = [
-  { key: "upload",  label: "Upload File" },
+  { key: "upload", label: "Upload File" },
   { key: "mapping", label: "Map Columns" },
-  { key: "review",  label: "Review & Import" },
+  { key: "review", label: "Review & Import" },
 ] as const;
 
 export function BulkUploadModal(props: BulkUploadModalProps) {
@@ -19,42 +18,96 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
   const {
     stage,
     uploadedHeaders,
-    uploadedRows,
+    uploadedRows, // preview rows (first 100)
     columnMappings,
-    reviewRows,
-    selectedRowIds,
-    selectedCategories,
+
     uniqueCategories,
-    categoryTypeWarning,
+    selectedCategories,
+    toggleCategory,
+    toggleAllCategories,
+
     importing,
     importProgress,
     importError,
     parseError,
+
+
     totalRows,
-    uniqueCategoryCount,
-    validRows,
-    errorRows,
+
+    // loading flags for slow backend
+    uploading,
+    loadingCategories,
+    loadingPreview,
+
     parseFile,
     updateMapping,
     toggleSkip,
     proceedToReview,
-    toggleRow,
-    selectAllValid,
-    deselectAll,
+    loadUniqueCategories,
     handleImport,
     handleReset,
     setStage,
-    toggleCategory,
-    toggleAllCategories,
   } = useBulkUpload(props);
 
+  // ✅ NEW: success message (shown inside modal)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
   const handleClose = () => {
-    if (importing) return;
+    // block close while requests are running
+    if (importing || uploading || loadingCategories || loadingPreview) return;
     handleReset();
+    setSuccessMsg(null);
     onClose();
   };
 
   const currentStageIndex = STAGES.findIndex((s) => s.key === stage);
+
+  // ✅ mapping stage: first load categories, then preview
+  const handleProceedFromMapping = async () => {
+    if (loadingCategories || loadingPreview) return;
+
+    // If categories not loaded yet, fetch them first and stay on mapping screen
+    if (!uniqueCategories.length) {
+      await loadUniqueCategories();
+      return;
+    }
+
+    // Categories already loaded & user selected => now preview
+    await proceedToReview();
+  };
+
+  // ✅ NEW: import wrapper (shows success + refresh parent)
+  const handleImportAndFinish = async () => {
+    setSuccessMsg(null);
+
+    try {
+      // IMPORTANT: handleImport() should throw on error.
+      // Optional: if your handleImport returns backend response, you can use it here.
+      const res: any = await handleImport();
+
+      const inserted = res?.inserted ?? res?.data?.inserted ?? null;
+
+      setSuccessMsg(
+        inserted !== null
+          ? `Saved successfully. Imported ${inserted} rows.`
+          : "Saved successfully."
+      );
+
+      // ✅ refresh parent table (UserDataEntryPage)
+      // If your parent expects an array of new emissions, pass it.
+      // If your parent simply refetches from DB, just call it without args.
+      await props.onImportComplete?.(res);
+
+      // ✅ close after short pause (so user sees message)
+      setTimeout(() => {
+        handleReset();
+        setSuccessMsg(null);
+        onClose();
+      }, 900);
+    } catch {
+      // importError is already handled inside hook; keep modal open
+    }
+  };
 
   return (
     <Modal
@@ -64,6 +117,7 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
       className="max-w-3xl! max-h-[90vh]!"
     >
       <div className="flex flex-col gap-5">
+        {/* Stage Stepper */}
         <div className="flex items-center gap-0">
           {STAGES.map((s, idx) => {
             const isCompleted = idx < currentStageIndex;
@@ -75,18 +129,21 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
                 <div className="flex flex-col items-center gap-1">
                   <div
                     className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
-                      ${isCompleted
-                        ? "bg-blue-600 border-blue-600 text-white"
-                        : isCurrent
+                      ${
+                        isCompleted
+                          ? "bg-blue-600 border-blue-600 text-white"
+                          : isCurrent
                           ? "bg-white border-blue-600 text-blue-600"
                           : "bg-white border-gray-300 text-gray-400"
                       }`}
                   >
                     {isCompleted ? (
                       <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd"
+                        <path
+                          fillRule="evenodd"
                           d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd" />
+                          clipRule="evenodd"
+                        />
                       </svg>
                     ) : (
                       idx + 1
@@ -94,7 +151,13 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
                   </div>
                   <span
                     className={`text-xs whitespace-nowrap font-medium
-                      ${isCurrent ? "text-blue-600" : isCompleted ? "text-blue-500" : "text-gray-400"}`}
+                      ${
+                        isCurrent
+                          ? "text-blue-600"
+                          : isCompleted
+                          ? "text-blue-500"
+                          : "text-gray-400"
+                      }`}
                   >
                     {s.label}
                   </span>
@@ -112,20 +175,36 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
         </div>
 
         <div className="border-t border-gray-100" />
-      
+
+        {/* ✅ Success banner (correct place) */}
+        {successMsg && (
+          <div className="mb-2 flex items-start justify-between gap-3 bg-green-50 border border-green-200 rounded-lg p-3">
+            <p className="text-sm text-green-800">{successMsg}</p>
+            <button
+              className="text-green-700 hover:text-green-900 text-sm"
+              onClick={() => setSuccessMsg(null)}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Stage Content */}
         <div className="min-h-75">
           {stage === "upload" && (
             <FileUploadStage
               onFileParsed={parseFile}
               parseError={parseError}
+              // NOTE: your FileUploadStage currently doesn't accept "processing" prop in the pasted code.
+              // If you added it, keep this line. If not, remove it.
+              processing={uploading as any}
             />
           )}
-
 
           {stage === "mapping" && (
             <ColumnMappingStage
               totalRows={totalRows}
-              uniqueCategoryCount={uniqueCategoryCount}
+              uniqueCategoryCount={uniqueCategories.length || null}
               uniqueCategories={uniqueCategories}
               selectedCategories={selectedCategories}
               uploadedHeaders={uploadedHeaders}
@@ -136,26 +215,28 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
               onToggleCategory={toggleCategory}
               onToggleAllCategories={toggleAllCategories}
               onBack={handleReset}
-              categoryTypeWarning={categoryTypeWarning}
-              onProceed={proceedToReview}
+              categoryTypeWarning={null}
+              onProceed={handleProceedFromMapping}
+              loadingCategories={loadingCategories}
+              loadingPreview={loadingPreview}
             />
           )}
 
           {stage === "review" && (
             <ReviewStage
-              reviewRows={reviewRows}
+              reviewRows={uploadedRows}
               columnMappings={columnMappings}
-              selectedRowIds={selectedRowIds}
-              validRows={validRows}
-              errorRows={errorRows}
               importing={importing}
               importProgress={importProgress}
               importError={importError}
-              onToggleRow={toggleRow}
-              onSelectAllValid={selectAllValid}
-              onDeselectAll={deselectAll}
+              uniqueCategories={uniqueCategories}
+              selectedCategories={selectedCategories}
+              onToggleCategory={toggleCategory}
+              onToggleAllCategories={toggleAllCategories}
+              totalRows={totalRows}
               onBack={() => setStage("mapping")}
-              onImport={handleImport}
+              // ✅ IMPORTANT: use wrapper, NOT handleImport
+              onImport={handleImportAndFinish}
             />
           )}
         </div>

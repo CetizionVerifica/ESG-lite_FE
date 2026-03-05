@@ -1,77 +1,137 @@
-import { BulkReviewRow, ColumnMappingEntry } from "../UserDataEntry/types";
+import { ColumnMappingEntry } from "../UserDataEntry/types";
 
 interface ReviewStageProps {
-  reviewRows: BulkReviewRow[];
+  reviewRows: Record<string, any>[]; 
   columnMappings: ColumnMappingEntry[];
-  selectedRowIds: Set<number>;
-  validRows: BulkReviewRow[];
-  errorRows: BulkReviewRow[];
   importing: boolean;
   importProgress: { current: number; total: number };
   importError: string | null;
-  onToggleRow: (id: number) => void;
-  onSelectAllValid: () => void;
-  onDeselectAll: () => void;
+
+  uniqueCategories: string[];
+  selectedCategories: Set<string>;
+  onToggleCategory: (cat: string) => void;
+  onToggleAllCategories: (cats: string[]) => void;
+
+  totalRows: number;
+
   onBack: () => void;
   onImport: () => void;
+}
+
+function fmtNumber(v: any, digits = 2) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
 export function ReviewStage({
   reviewRows,
   columnMappings,
-  selectedRowIds,
-  validRows,
-  errorRows,
   importing,
   importProgress,
   importError,
-  onToggleRow,
-  onSelectAllValid,
-  onDeselectAll,
+  uniqueCategories,
+  selectedCategories,
+  onToggleCategory,
+  onToggleAllCategories,
+  totalRows,
   onBack,
   onImport,
 }: ReviewStageProps) {
-  const selectedCount = selectedRowIds.size;
   const mappedFields = columnMappings.filter((m) => m.mappedTo && !m.skipped);
+
+  const allSelected = uniqueCategories.length > 0 && selectedCategories.size === uniqueCategories.length;
+  const noneSelected = selectedCategories.size === 0;
+  const someSelected = !allSelected && !noneSelected;
+
+  // detect if backend has added these preview fields
+  const hasGlobalCat = reviewRows.some((r) => r?.global_category_name !== undefined && r?.global_category_name !== null);
+  const hasFactor = reviewRows.some((r) => r?.factor_value !== undefined && r?.factor_value !== null);
+  const hasDenom = reviewRows.some((r) => r?.denominator_unit !== undefined && r?.denominator_unit !== null);
+  const hasEmission = reviewRows.some((r) => r?.total_emission !== undefined && r?.total_emission !== null);
+
+  // build final columns: mapped fields + computed fields
+  const computedCols = [
+    hasGlobalCat ? { key: "global_category_name", label: "Global Category" } : null,
+    hasFactor ? { key: "factor_value", label: "Emission Factor" } : null,
+    hasDenom ? { key: "denominator_unit", label: "Denominator Unit" } : null,
+    hasEmission ? { key: "total_emission", label: "Total Emission (tCO2e)" } : null,
+  ].filter(Boolean) as Array<{ key: string; label: string }>;
+
+  const colSpan = mappedFields.length + computedCols.length;
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Summary Bar */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500">Total</p>
-          <p className="text-2xl font-bold text-gray-700">{reviewRows.length}</p>
+      {/* Top info */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-gray-700">
+            <span className="font-semibold">Preview:</span>{" "}
+            showing first <span className="font-semibold">100</span> rows only.
+          </div>
+          <div className="text-sm text-gray-600">
+            Total rows in file: <span className="font-semibold">{totalRows}</span>
+          </div>
         </div>
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-          <p className="text-xs text-green-600">Valid</p>
-          <p className="text-2xl font-bold text-green-700">{validRows.length}</p>
-        </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-          <p className="text-xs text-red-500">Errors</p>
-          <p className="text-2xl font-bold text-red-700">{errorRows.length}</p>
-        </div>
+
+        {/* Small hint if computed values are missing */}
+        {!hasEmission && (
+          <div className="mt-2 text-xs text-amber-700">
+            Note: emission factor / total emission will appear here once the preview API returns them.
+          </div>
+        )}
       </div>
 
-      {/* Selection Controls */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-600">
-          <span className="font-semibold">{selectedCount}</span> row{selectedCount !== 1 ? "s" : ""} selected for import
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={onSelectAllValid}
-            className="text-xs px-3 py-1.5 border border-blue-300 text-blue-600 rounded-md hover:bg-blue-50 transition-colors"
-          >
-            Select all valid
-          </button>
-          <button
-            onClick={onDeselectAll}
-            className="text-xs px-3 py-1.5 border border-gray-300 text-gray-500 rounded-md hover:bg-gray-50 transition-colors"
-          >
-            Deselect all
-          </button>
+      {/* Category filter */}
+      {uniqueCategories.length > 0 && (
+        <div className="border border-purple-200 rounded-lg overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 bg-purple-50">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someSelected;
+              }}
+              onChange={() => onToggleAllCategories(uniqueCategories)}
+              className="w-4 h-4 rounded border-gray-300 text-purple-600 cursor-pointer"
+              disabled={importing}
+            />
+            <span className="text-sm font-semibold text-purple-800">Filter Categories</span>
+            <span className="text-xs bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full font-medium">
+              {selectedCategories.size} / {uniqueCategories.length} selected
+            </span>
+            {noneSelected && (
+              <span className="text-xs text-red-600 ml-auto">
+                No category selected → import will include all
+              </span>
+            )}
+          </div>
+
+          <div className="max-h-48 overflow-y-auto divide-y divide-gray-50 bg-white">
+            {uniqueCategories.map((cat) => {
+              const isChecked = selectedCategories.has(cat);
+              return (
+                <label
+                  key={cat}
+                  className={`flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors
+                    ${isChecked ? "hover:bg-purple-50" : "bg-gray-50 hover:bg-gray-100"}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => onToggleCategory(cat)}
+                    className="w-4 h-4 rounded border-gray-300 text-purple-600 cursor-pointer"
+                    disabled={importing}
+                  />
+                  <span className={`text-sm font-mono ${isChecked ? "text-gray-800" : "text-gray-400 line-through"}`}>
+                    {cat}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Preview Table */}
       <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -79,97 +139,69 @@ export function ReviewStage({
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="bg-gray-100 border-b border-gray-200">
-                <th className="px-3 py-2 text-left w-10">
-                  <span className="sr-only">Select</span>
-                </th>
                 {mappedFields.map((m) => (
-                  <th key={m.requiredField} className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">
+                  <th
+                    key={m.requiredField}
+                    className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap"
+                  >
                     {m.label}
                   </th>
                 ))}
-                <th className="px-3 py-2 text-right font-semibold text-gray-600 whitespace-nowrap">
-                  tCO2e
-                </th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">
-                  Status
-                </th>
+
+                {computedCols.map((c) => (
+                  <th
+                    key={c.key}
+                    className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap"
+                  >
+                    {c.label}
+                  </th>
+                ))}
               </tr>
             </thead>
+
             <tbody className="divide-y divide-gray-100">
-              {reviewRows.map((row) => {
-                const isSelected = selectedRowIds.has(row.id);
-                return (
-                  <tr
-                    key={row.id}
-                    onClick={() => row.isValid && onToggleRow(row.id)}
-                    className={`transition-colors
-                      ${!row.isValid ? "bg-red-50 cursor-not-allowed" : "cursor-pointer"}
-                      ${isSelected && row.isValid ? "bg-blue-50" : ""}
-                      ${row.isValid && !isSelected ? "hover:bg-gray-50" : ""}
-                    `}
-                  >
-                    {/* Checkbox */}
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        disabled={!row.isValid}
-                        onChange={() => onToggleRow(row.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 disabled:cursor-not-allowed"
-                      />
+              {reviewRows.map((row, idx) => (
+                <tr key={idx} className="hover:bg-gray-50">
+                  {mappedFields.map((m) => (
+                    <td key={m.requiredField} className="px-3 py-2 text-gray-700 max-w-40 truncate">
+                      {row?.[m.requiredField] ? String(row[m.requiredField]) : <span className="text-gray-300">—</span>}
                     </td>
+                  ))}
 
-                    {/* Mapped Data Cells */}
-                    {mappedFields.map((m) => (
-                      <td key={m.requiredField} className="px-3 py-2 text-gray-700 max-w-40 truncate">
-                        {m.requiredField === "emission_category"
-                          ? row.emission_category || <span className="text-red-400 italic">missing</span>
-                          : row.mappedData[m.requiredField] || <span className="text-gray-300">—</span>
-                        }
+                  {computedCols.map((c) => {
+                    const v = row?.[c.key];
+
+                    // formatting rules
+                    if (c.key === "factor_value") {
+                      return (
+                        <td key={c.key} className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                          {v === null || v === undefined ? <span className="text-gray-300">—</span> : fmtNumber(v, 6)}
+                        </td>
+                      );
+                    }
+                    if (c.key === "total_emission") {
+                      return (
+                        <td key={c.key} className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                          {v === null || v === undefined ? <span className="text-gray-300">—</span> : fmtNumber(v, 2)}
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={c.key} className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                        {v ? String(v) : <span className="text-gray-300">—</span>}
                       </td>
-                    ))}
+                    );
+                  })}
+                </tr>
+              ))}
 
-                    {/* Emission Value */}
-                    <td className="px-3 py-2 text-right font-mono">
-                      {row.total_emission !== null
-                        ? <span className="text-gray-800">{row.total_emission.toFixed(4)}</span>
-                        : <span className="text-gray-300">—</span>
-                      }
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-3 py-2">
-                      {row.isValid ? (
-                        <span className="inline-flex items-center gap-1 text-green-700 bg-green-100 px-2 py-0.5 rounded-full text-xs font-medium">
-                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd"
-                              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                              clipRule="evenodd" />
-                          </svg>
-                          Valid
-                        </span>
-                      ) : (
-                        <span
-                          className="inline-flex items-center gap-1 text-red-700 bg-red-100 px-2 py-0.5 rounded-full text-xs font-medium cursor-help"
-                          title={row.errorReason || "Error"}
-                        >
-                          <svg className="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd"
-                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                              clipRule="evenodd" />
-                          </svg>
-                          {row.errorReason
-                            ? row.errorReason.length > 22
-                              ? row.errorReason.substring(0, 22) + "…"
-                              : row.errorReason
-                            : "Error"}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {!reviewRows.length && (
+                <tr>
+                  <td className="px-3 py-6 text-center text-gray-400" colSpan={colSpan}>
+                    No preview rows returned.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -187,7 +219,12 @@ export function ReviewStage({
           <div className="w-full bg-blue-200 rounded-full h-1.5">
             <div
               className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
-              style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+              style={{
+                width:
+                  importProgress.total > 0
+                    ? `${(importProgress.current / importProgress.total) * 100}%`
+                    : "0%",
+              }}
             />
           </div>
         </div>
@@ -196,26 +233,7 @@ export function ReviewStage({
       {/* Import Error */}
       {importError && (
         <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
-          <svg className="w-4 h-4 text-red-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-              clipRule="evenodd" />
-          </svg>
           <p className="text-sm text-red-700">{importError}</p>
-        </div>
-      )}
-
-      {/* Error rows skipped notice */}
-      {errorRows.length > 0 && (
-        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
-          <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd"
-              d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-              clipRule="evenodd" />
-          </svg>
-          <p className="text-xs text-amber-700">
-            {errorRows.length} row{errorRows.length > 1 ? "s" : ""} with errors will be skipped. Hover the error badge for details.
-          </p>
         </div>
       )}
 
@@ -230,12 +248,10 @@ export function ReviewStage({
         </button>
         <button
           onClick={onImport}
-          disabled={selectedCount === 0 || importing}
+          disabled={importing}
           className="px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
         >
-          {importing
-            ? `Saving ${importProgress.current} of ${importProgress.total}...`
-            : `Import ${selectedCount} row${selectedCount !== 1 ? "s" : ""}`}
+          {importing ? "Importing..." : "Import All"}
         </button>
       </div>
     </div>

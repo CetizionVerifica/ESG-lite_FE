@@ -1,4 +1,5 @@
- import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import Dropdown, { DropdownOption } from "../../components/Dropdown";
 import { Table, Column } from "../../components/Table";
 import Modal from "../../components/Modal";
@@ -17,6 +18,7 @@ import {
     UnitData,
 } from "../../services/unitService";
 import { canConvert, unitsMatchExact } from "../../utils/unitConversions";
+import { getMappingsByCompany, type CategoryMapping } from "../../services/categoryMappingService";
 import { useEmissionCalculation } from "./useEmissionCalculation";
 import {
     UnitSelector,
@@ -24,6 +26,9 @@ import {
     ValidationError,
     DocumentUploadModal,
 } from "./components";
+import DistanceCalculatorModal from "./components/DistanceCalculatorModal";
+import { isDistanceUnit, parseCompositeUnit } from "../../utils/distanceUnits";
+import { MapPin } from "lucide-react";
 import {
     Category,
     ColumnEntity,
@@ -52,6 +57,7 @@ interface Site {
     site_id: number;
     name: string;
     categories?: Category[];
+    company?: { company_id: number; name: string };
 }
 
 // ============================================================================
@@ -102,6 +108,7 @@ const UserDataEntryPage = () => {
     const [loading, setLoading] = useState(false);
     const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
 const rowsPerPage = 10;
 
     // Dependent dropdown configuration state
@@ -112,6 +119,12 @@ const rowsPerPage = 10;
         useState<DependentOptionsMap>({});
     const [emissionCategoryMapping, setEmissionCategoryMapping] =
         useState<EmissionCategoryMapping>({});
+
+    // Company category mapping: company_category_name → global_category_name (= emission_category_name)
+    const [companyMappings, setCompanyMappings] = useState<CategoryMapping[]>([]);
+
+    // Tooltip state (portal-based to escape overflow containers)
+    const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
     // Modal state
     const [modalOpen, setModalOpen] = useState(false);
@@ -124,6 +137,13 @@ const rowsPerPage = 10;
     const [documentModalOpen, setDocumentModalOpen] = useState(false);
     const [selectedEmissionForDocs, setSelectedEmissionForDocs] =
         useState<EmissionRow | null>(null);
+
+    // Distance calculator modal state
+    const [distanceModalState, setDistanceModalState] = useState<{
+        open: boolean;
+        rowId: number;
+        colName: string;
+    } | null>(null);
 
     // Invoice upload state
     const [invoiceUploading, setInvoiceUploading] = useState(false);
@@ -182,6 +202,7 @@ const rowsPerPage = 10;
         targetYear,
         dynamicColumns,
         selectColumnNames,
+        emissionCategoryMapping,
     );
 
     // ---------------------------------------------------------------------------
@@ -191,6 +212,9 @@ const rowsPerPage = 10;
     const currentSite = availableSites.find((s) => s.site_id === selectedSite);
     const categories: Category[] = currentSite?.categories || [];
     const siteId = selectedSite;
+
+    // Use explicitly selected company, or auto-detect from current site
+    const companyId = currentSite?.company?.company_id ?? null;
 
     const siteOptions: DropdownOption[] = availableSites.map((site) => ({
         id: site.site_id,
@@ -266,13 +290,25 @@ const rowsPerPage = 10;
             setEmissions(flattenEmissions(emissionsData));
             setEmissionFactors(factors);
             setUnits(unitsData);
+
+            // Fetch company category mappings (company_category_name → emission_category_name)
+            if (companyId) {
+                try {
+                    const mappings = await getMappingsByCompany(companyId, siteId, selectedCategory);
+                    setCompanyMappings(mappings);
+                } catch {
+                    setCompanyMappings([]);
+                }
+            } else {
+                setCompanyMappings([]);
+            }
         } catch (error) {
             console.error("Error fetching data:", error);
             resetDataState();
         } finally {
             setLoading(false);
         }
-    }, [selectedCategory, selectedDate, siteId]);
+    }, [selectedCategory, selectedDate, siteId, companyId]);
 
     useEffect(() => {
   setCurrentPage(1);
@@ -667,80 +703,104 @@ const rowsPerPage = 10;
         return storedValue;
     };
 
-    // Determine emission category from mapping based on row values
-    const getAutoEmissionCategory = (row: ModalRow): string | null => {
+    // Determine emission category from mapping based on row values.
+    // Returns { key: company_category_name, category: global_category_name } or null.
+    const getAutoEmissionCategory = (row: ModalRow): { key: string; category: string } | null => {
         if (Object.keys(emissionCategoryMapping).length === 0) {
             return null;
         }
 
-        // Find "terminal" child columns - columns that are children but NOT parents of anything else
-        // These are the columns that directly determine the emission category
-        const allChildCols = Object.keys(columnDependencies);
+        // Walk the dependency chain from root to leaf to build the mapping key.
+        // For a 3-dim config like Activity Type → Type of Waste → Disposal Method,
+        // the mapping key is "Metal|Any metals|Open loop" (all dimension values).
+
+        // Find root columns (parents that are not children of anything)
+        const allChildCols = new Set(Object.keys(columnDependencies));
         const allParentCols = new Set(Object.values(columnDependencies));
-        const terminalChildCols = allChildCols.filter(
-            (child) => !allParentCols.has(child),
+        const rootCols = [...allParentCols].filter(
+            (col) => !allChildCols.has(col),
         );
 
-        // If no terminal children, fall back to all child columns
-        const childColsToUse =
-            terminalChildCols.length > 0 ? terminalChildCols : allChildCols;
+        if (rootCols.length === 0) {
+            // No dependencies — try flat mapping with all select column values
+            const selectCols = dynamicColumns.filter(
+                (col) => col.column_type === "select",
+            );
+            for (const col of selectCols) {
+                const val = getRowValue(row, col.column_name);
+                if (!val) continue;
+                const label = getOptionLabel(
+                    col.column_name,
+                    col.pk_id,
+                    String(val),
+                );
+                if (emissionCategoryMapping[label]) {
+                    return { key: label, category: emissionCategoryMapping[label] };
+                }
+                // Case-insensitive fallback
+                const labelLower = label.toLowerCase();
+                for (const [key, value] of Object.entries(
+                    emissionCategoryMapping,
+                )) {
+                    if (key.toLowerCase() === labelLower) {
+                        return { key, category: value };
+                    }
+                }
+            }
+            return null;
+        }
 
-        // Build the mapping key from terminal parent-child pairs only
+        // For each root, walk down the chain collecting labels
         const keyParts: string[] = [];
 
-        for (const childCol of childColsToUse.sort()) {
-            const parentCol = columnDependencies[childCol];
-            if (!parentCol) continue;
+        const walkChain = (colName: string) => {
+            const val = getRowValue(row, colName);
+            if (!val) return false;
 
-            // Use case-insensitive lookup to handle potential key mismatches
-            const parentValue = getRowValue(row, parentCol);
-            if (!parentValue) return null;
-
-            const childValue = getRowValue(row, childCol);
-            if (!childValue) return null;
-
-            // Get labels for both parent and child (case-insensitive column lookup)
-            const parentColLower = parentCol.toLowerCase();
-            const parentColEntity = dynamicColumns.find(
-                (col) => col.column_name.toLowerCase() === parentColLower,
+            const colEntity = dynamicColumns.find(
+                (col) =>
+                    col.column_name.toLowerCase() === colName.toLowerCase(),
             );
-            const parentLabel = parentColEntity
+            const label = colEntity
                 ? getOptionLabel(
-                      parentCol,
-                      parentColEntity.pk_id,
-                      String(parentValue),
+                      colName,
+                      colEntity.pk_id,
+                      String(val),
+                      keyParts.length > 0
+                          ? keyParts[keyParts.length - 1]
+                          : undefined,
                   )
-                : String(parentValue);
+                : String(val);
 
-            const childColLower = childCol.toLowerCase();
-            const childColEntity = dynamicColumns.find(
-                (col) => col.column_name.toLowerCase() === childColLower,
-            );
-            const childLabel = childColEntity
-                ? getOptionLabel(
-                      childCol,
-                      childColEntity.pk_id,
-                      String(childValue),
-                      parentLabel,
-                  )
-                : String(childValue);
+            keyParts.push(label);
 
-            keyParts.push(parentLabel);
-            keyParts.push(childLabel);
+            // Find children that depend on this column
+            for (const [child, parent] of Object.entries(
+                columnDependencies,
+            )) {
+                if (parent === colName) {
+                    if (!walkChain(child)) return false;
+                }
+            }
+            return true;
+        };
+
+        for (const root of rootCols) {
+            if (!walkChain(root)) return null;
         }
 
         const mappingKey = keyParts.join("|");
 
-        // First try exact match
+        // Exact match
         if (emissionCategoryMapping[mappingKey]) {
-            return emissionCategoryMapping[mappingKey];
+            return { key: mappingKey, category: emissionCategoryMapping[mappingKey] };
         }
 
-        // If no exact match, try case-insensitive lookup
+        // Case-insensitive fallback
         const mappingKeyLower = mappingKey.toLowerCase();
         for (const [key, value] of Object.entries(emissionCategoryMapping)) {
             if (key.toLowerCase() === mappingKeyLower) {
-                return value;
+                return { key, category: value };
             }
         }
 
@@ -760,6 +820,11 @@ const rowsPerPage = 10;
             isDependent
         );
     };
+
+    // The first numeric non-dropdown column is the primary activity data field
+    const firstNumericColId = filteredColumns.find(
+        (c) => c.column_type === "number" && !isSelectColumn(c),
+    )?.pk_id ?? null;
 
     // ---------------------------------------------------------------------------
     // Modal Handlers
@@ -817,10 +882,32 @@ const rowsPerPage = 10;
                     });
                 }
 
+                // Auto-compute product for composite distance units (e.g. passenger.km)
+                if (
+                    columnName.endsWith("__multiplier") ||
+                    columnName.endsWith("__distance")
+                ) {
+                    const baseCol = columnName.replace(
+                        /__(?:multiplier|distance)$/,
+                        "",
+                    );
+                    const m = parseFloat(
+                        (updatedRow[`${baseCol}__multiplier`] as string) || "",
+                    );
+                    const d = parseFloat(
+                        (updatedRow[`${baseCol}__distance`] as string) || "",
+                    );
+                    updatedRow[baseCol] =
+                        !isNaN(m) && !isNaN(d) && m > 0 && d > 0
+                            ? (Math.round(m * d * 100) / 100).toString()
+                            : "";
+                }
+
                 // Check if we should auto-set the emission_category
-                const autoCategory = getAutoEmissionCategory(updatedRow);
-                if (autoCategory) {
-                    updatedRow.emission_category = autoCategory;
+                const autoResult = getAutoEmissionCategory(updatedRow);
+                if (autoResult) {
+                    updatedRow.emission_category = autoResult.category;
+                    updatedRow._ecmKey = autoResult.key;
                 } else if (
                     isParentColumn(columnName) ||
                     isDependentColumn(columnName)
@@ -828,6 +915,7 @@ const rowsPerPage = 10;
                     // Clear emission_category when a mapped column changes but no valid mapping exists yet
                     // This ensures the old value doesn't persist when user changes dropdown selections
                     updatedRow.emission_category = "";
+                    updatedRow._ecmKey = "";
                 }
 
                 return updatedRow;
@@ -912,6 +1000,16 @@ const rowsPerPage = 10;
                     date_of_reporting: rowDate,
                     ...activityData
                 } = row;
+
+                // Strip composite-unit helper keys — backend only needs the computed product
+                for (const key of Object.keys(activityData)) {
+                    if (
+                        key.endsWith("__multiplier") ||
+                        key.endsWith("__distance")
+                    ) {
+                        delete activityData[key];
+                    }
+                }
 
                 const result = await createEmission({
                     site_id: siteId,
@@ -1287,9 +1385,10 @@ const rowsPerPage = 10;
                     // (e.g., Waste Type "Sludge" + Disposal Method "Recover"
                     // → "Sludge - Recover"). This overrides the OCR-returned
                     // emission_category which may be inaccurate.
-                    const autoCategory = getAutoEmissionCategory(row);
-                    if (autoCategory) {
-                        row.emission_category = autoCategory;
+                    const autoResult = getAutoEmissionCategory(row);
+                    if (autoResult) {
+                        row.emission_category = autoResult.category;
+                        row._ecmKey = autoResult.key;
                     } else if (row.emission_category && availableFactors.length > 0) {
                         // Fallback: normalize OCR emission_category to match a configured factor name
                         const ecLower = String(row.emission_category).toLowerCase();
@@ -1607,6 +1706,7 @@ const rowsPerPage = 10;
         setEmissions([]);
         setEmissionFactors([]);
         setUnits([]);
+        setCompanyMappings([]);
     };
 
     // ---------------------------------------------------------------------------
@@ -1627,7 +1727,9 @@ const paginatedEmissions = emissions.slice(
 
             {/* Filters */}
             <div
-                className={`grid grid-cols-1 gap-4 mb-6 ${hasMultipleSites ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+                className={`grid grid-cols-1 gap-4 mb-6 ${
+                    hasMultipleSites ? "md:grid-cols-4" : "md:grid-cols-3"
+                }`}>
                 {/* Site Selector - only show when user has multiple sites */}
                 {hasMultipleSites && (
                     <div>
@@ -1792,61 +1894,90 @@ const paginatedEmissions = emissions.slice(
                                     <td className="border border-gray-300 px-2 py-2">
                                         {Object.keys(emissionCategoryMapping)
                                             .length > 0 ? (
-                                            // Auto-mapped mode: show read-only field with auto-determined value
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    value={
-                                                        row.emission_category ||
-                                                        ""
-                                                    }
-                                                    readOnly
-                                                    className={`w-full border px-2 py-1 rounded ${
-                                                        row.emission_category
-                                                            ? "border-green-400 bg-green-50 text-green-800"
-                                                            : "border-gray-300 bg-gray-100 text-gray-500"
-                                                    }`}
-                                                    placeholder="Auto-determined from selections"
-                                                />
-                                                {row.emission_category && (
-                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-green-600">
-                                                        Auto
-                                                    </span>
-                                                )}
-                                            </div>
+                                            // Auto-mapped mode: show company name, hover for global name
+                                            (() => {
+                                                const companyCatName = row._ecmKey as string | undefined;
+                                                const displayName = companyCatName || row.emission_category;
+                                                return (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div
+                                                            title={row.emission_category ? `Global: ${row.emission_category}` : "Select dropdown values to auto-determine"}
+                                                            className={`flex-1 min-w-0 px-2 py-1.5 rounded text-sm font-medium truncate cursor-help ${
+                                                                row.emission_category
+                                                                    ? "bg-green-100 text-green-800 border border-green-300"
+                                                                    : "bg-gray-100 text-gray-400 border border-gray-200 italic"
+                                                            }`}
+                                                        >
+                                                            {displayName || "Auto-determined"}
+                                                        </div>
+                                                        {row.emission_category && companyCatName && companyCatName !== row.emission_category && (
+                                                            <div
+                                                                className="shrink-0 w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center cursor-help"
+                                                                onMouseEnter={(e) => {
+                                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                                    setTooltip({ text: `Global: ${row.emission_category}`, x: rect.left + rect.width / 2, y: rect.top });
+                                                                }}
+                                                                onMouseLeave={() => setTooltip(null)}
+                                                            >
+                                                                i
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()
                                         ) : (
                                             // Manual mode: show dropdown for selection
-                                            <select
-                                                value={
-                                                    row.emission_category || ""
-                                                }
-                                                onChange={(e) =>
-                                                    handleModalRowChange(
-                                                        row.id,
-                                                        "emission_category",
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                className="w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300">
-                                                <option value="">
-                                                    Select Category
-                                                </option>
-                                                {emissionFactors.map(
-                                                    (factor) => (
-                                                        <option
-                                                            key={
-                                                                factor.emission_factor_id
-                                                            }
-                                                            value={
-                                                                factor.emission_category_name
-                                                            }>
-                                                            {
-                                                                factor.emission_category_name
-                                                            }
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
+                                            <div className="flex items-center gap-1">
+                                                <select
+                                                    value={
+                                                        row.emission_category || ""
+                                                    }
+                                                    onChange={(e) =>
+                                                        handleModalRowChange(
+                                                            row.id,
+                                                            "emission_category",
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    className="flex-1 min-w-0 border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300">
+                                                    <option value="">
+                                                        Select Category
+                                                    </option>
+                                                    {companyMappings.length > 0
+                                                        ? companyMappings.map((m) => (
+                                                            <option
+                                                                key={m.id}
+                                                                value={m.global_category_name}>
+                                                                {m.company_category_name}
+                                                            </option>
+                                                        ))
+                                                        : emissionFactors.map((factor) => (
+                                                            <option
+                                                                key={factor.emission_factor_id}
+                                                                value={factor.emission_category_name}>
+                                                                {factor.emission_category_name}
+                                                            </option>
+                                                        ))
+                                                    }
+                                                </select>
+                                                {row.emission_category && (() => {
+                                                    const companyMapping = companyMappings.find((m) => m.global_category_name === row.emission_category);
+                                                    const tooltipText = companyMapping
+                                                        ? `Global EF Name: ${companyMapping.global_category_name}`
+                                                        : `EF Category: ${row.emission_category}`;
+                                                    return (
+                                                        <div
+                                                            className="shrink-0 w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center cursor-help"
+                                                            onMouseEnter={(e) => {
+                                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                                setTooltip({ text: tooltipText, x: rect.left + rect.width / 2, y: rect.top });
+                                                            }}
+                                                            onMouseLeave={() => setTooltip(null)}>
+                                                            i
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
                                         )}
                                     </td>
 
@@ -1921,32 +2052,121 @@ const paginatedEmissions = emissions.slice(
                                                             ),
                                                         )}
                                                     </select>
-                                                ) : (
-                                                    <input
-                                                        type={
-                                                            col.column_type ===
-                                                            "number"
-                                                                ? "number"
-                                                                : "text"
-                                                        }
-                                                        value={
-                                                            row[
-                                                                col.column_name
-                                                            ] || ""
-                                                        }
-                                                        onChange={(e) =>
-                                                            handleModalRowChange(
-                                                                row.id,
-                                                                col.column_name,
-                                                                e.target.value,
-                                                            )
-                                                        }
-                                                        className="w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
-                                                        placeholder={
-                                                            col.column_name
-                                                        }
-                                                    />
-                                                )}
+                                                ) : (() => {
+                                                    const composite =
+                                                        col.pk_id === firstNumericColId
+                                                            ? parseCompositeUnit(row.activity_data_unit)
+                                                            : null;
+                                                    const isDistCol =
+                                                        col.pk_id === firstNumericColId &&
+                                                        isDistanceUnit(row.activity_data_unit);
+
+                                                    if (composite && isDistCol) {
+                                                        // Composite unit — two inputs: multiplier × distance
+                                                        const mulKey = `${col.column_name}__multiplier`;
+                                                        const distKey = `${col.column_name}__distance`;
+                                                        const mulVal = parseFloat((row[mulKey] as string) || "");
+                                                        const distVal = parseFloat((row[distKey] as string) || "");
+                                                        const product =
+                                                            !isNaN(mulVal) && !isNaN(distVal) && mulVal > 0 && distVal > 0
+                                                                ? Math.round(mulVal * distVal * 100) / 100
+                                                                : null;
+
+                                                        return (
+                                                            <div className="space-y-1">
+                                                                <div className="flex items-center gap-1">
+                                                                    <input
+                                                                        type="number"
+                                                                        value={row[mulKey] || ""}
+                                                                        onChange={(e) =>
+                                                                            handleModalRowChange(
+                                                                                row.id,
+                                                                                mulKey,
+                                                                                e.target.value,
+                                                                            )
+                                                                        }
+                                                                        className="w-24 border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                                                                        placeholder={composite.multiplier}
+                                                                    />
+                                                                    <span className="text-gray-400 text-sm shrink-0">×</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={row[distKey] || ""}
+                                                                        onChange={(e) =>
+                                                                            handleModalRowChange(
+                                                                                row.id,
+                                                                                distKey,
+                                                                                e.target.value,
+                                                                            )
+                                                                        }
+                                                                        className="w-24 border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                                                                        placeholder={composite.distance}
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            setDistanceModalState({
+                                                                                open: true,
+                                                                                rowId: row.id,
+                                                                                colName: col.column_name,
+                                                                            })
+                                                                        }
+                                                                        className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 hover:text-blue-700 shrink-0 whitespace-nowrap transition-colors"
+                                                                        title="Calculate distance from map"
+                                                                    >
+                                                                        <MapPin size={12} />
+                                                                        Map
+                                                                    </button>
+                                                                </div>
+                                                                {product !== null && (
+                                                                    <div className="text-xs text-gray-500">
+                                                                        = {product.toLocaleString()} {row.activity_data_unit}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    // Plain unit — single input
+                                                    return (
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type={
+                                                                    col.column_type === "number"
+                                                                        ? "number"
+                                                                        : "text"
+                                                                }
+                                                                value={row[col.column_name] || ""}
+                                                                onChange={(e) =>
+                                                                    handleModalRowChange(
+                                                                        row.id,
+                                                                        col.column_name,
+                                                                        e.target.value,
+                                                                    )
+                                                                }
+                                                                className="w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                                                                placeholder={col.column_name}
+                                                            />
+                                                            {isDistCol && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setDistanceModalState({
+                                                                            open: true,
+                                                                            rowId: row.id,
+                                                                            colName: col.column_name,
+                                                                        })
+                                                                    }
+                                                                    className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 hover:text-blue-700 shrink-0 whitespace-nowrap transition-colors"
+                                                                    title="Calculate distance from map"
+                                                                >
+                                                                    <MapPin size={12} />
+                                                                    Map
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </td>
                                         );
                                     })}
@@ -2001,6 +2221,17 @@ const paginatedEmissions = emissions.slice(
                         onDismiss={() => setSaveError(null)}
                     />
                 )}
+                {successMsg && (
+  <div className="mb-4 flex items-start justify-between gap-3 bg-green-50 border border-green-200 rounded-lg p-3">
+    <p className="text-sm text-green-800">{successMsg}</p>
+    <button
+      className="text-green-700 hover:text-green-900 text-sm"
+      onClick={() => setSuccessMsg(null)}
+    >
+      ✕
+    </button>
+  </div>
+)}
 
                 {/* Modal Actions */}
                 <div className="flex justify-between mt-4">
@@ -2028,6 +2259,33 @@ const paginatedEmissions = emissions.slice(
                 </div>
             </Modal>
 
+            {/* Distance Calculator Modal */}
+            {distanceModalState && (
+                <DistanceCalculatorModal
+                    isOpen={distanceModalState.open}
+                    onClose={() => setDistanceModalState(null)}
+                    targetUnit={
+                        modalRows.find((r) => r.id === distanceModalState.rowId)
+                            ?.activity_data_unit || "km"
+                    }
+                    onDistanceCalculated={(distance) => {
+                        const unit = modalRows.find(
+                            (r) => r.id === distanceModalState.rowId,
+                        )?.activity_data_unit;
+                        const composite = parseCompositeUnit(unit);
+                        const targetCol = composite
+                            ? `${distanceModalState.colName}__distance`
+                            : distanceModalState.colName;
+                        handleModalRowChange(
+                            distanceModalState.rowId,
+                            targetCol,
+                            distance.toString(),
+                        );
+                        setDistanceModalState(null);
+                    }}
+                />
+            )}
+
             {selectedCategory && selectedDate && siteId && (
                 <BulkUploadModal
                     isOpen={bulkUploadOpen}
@@ -2037,13 +2295,19 @@ const paginatedEmissions = emissions.slice(
                     units={units}
                     siteId={siteId}
                     categoryId={selectedCategory}
+                    companyId={companyId ?? undefined}
                     selectedDate={selectedDate}
                     getExpectedUnit={getExpectedUnit}
                     calculateEmission={calculateEmission}
                     getAutoEmissionCategory={getAutoEmissionCategory}
-                    onImportComplete={(newEmissions) => {
-                        setEmissions((prev) => [...newEmissions, ...prev]);
-                    }}
+                    // onImportComplete={(newEmissions) => {
+                    //     setEmissions((prev) => [...newEmissions, ...prev]);
+                    // }}
+                     onImportComplete={async () => {
+    setSuccessMsg("Saved successfully. Imported data is now available in the table.");
+    await fetchData();          
+    setCurrentPage(1);          
+  }}
                 />
             )}
 
@@ -2481,7 +2745,10 @@ const paginatedEmissions = emissions.slice(
                                             Emission Category
                                         </label>
                                         {(() => {
-                                            const isUnmatched = !!emission_category && emissionFactors.length > 0 && !emissionFactors.find((f) => f.emission_category_name === emission_category);
+                                            const isUnmatched = !!emission_category && emissionFactors.length > 0
+                                                && !emissionFactors.find((f) => f.emission_category_name === emission_category)
+                                                && !emissionFactors.find((f) => f.global_category_name === emission_category)
+                                                && !companyMappings.find((m) => m.global_category_name === emission_category);
                                             const needsAttention = isUnmatched || !emission_category;
                                             return emissionFactors.length > 0 ? (
                                                 <div className="relative">
@@ -2501,14 +2768,38 @@ const paginatedEmissions = emissions.slice(
                                                                 {emission_category}
                                                             </option>
                                                         )}
-                                                        {emissionFactors.map((factor) => (
-                                                            <option
-                                                                key={factor.emission_factor_id}
-                                                                value={factor.emission_category_name}>
-                                                                {factor.emission_category_name}
-                                                            </option>
-                                                        ))}
+                                                        {companyMappings.length > 0
+                                                            ? companyMappings.map((m) => (
+                                                                <option
+                                                                    key={m.id}
+                                                                    value={m.global_category_name}>
+                                                                    {m.company_category_name}
+                                                                </option>
+                                                            ))
+                                                            : emissionFactors.map((factor) => (
+                                                                <option
+                                                                    key={factor.emission_factor_id}
+                                                                    value={factor.emission_category_name}>
+                                                                    {factor.emission_category_name}
+                                                                </option>
+                                                            ))
+                                                        }
                                                     </select>
+                                                    {(() => {
+                                                        const globalFactor = emission_category
+                                                            ? emissionFactors.find((f) => f.emission_category_name === emission_category)
+                                                            : null;
+                                                        return !isUnmatched && globalFactor?.global_category_name ? (
+                                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 group">
+                                                                <div className="w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center cursor-help">
+                                                                    i
+                                                                </div>
+                                                                <div className="hidden group-hover:block absolute bottom-full right-0 mb-1 w-64 px-2.5 py-1.5 bg-gray-800 text-white text-xs rounded-md shadow-lg z-50 whitespace-normal">
+                                                                    <span className="text-gray-400">Global:</span> {globalFactor.global_category_name}
+                                                                </div>
+                                                            </div>
+                                                        ) : null;
+                                                    })()}
                                                     {isUnmatched && (
                                                         <div className="absolute right-7 top-1/2 -translate-y-1/2 group">
                                                             <div className="w-4 h-4 rounded-full bg-amber-400 text-white text-[10px] font-bold flex items-center justify-center cursor-help">
@@ -2889,6 +3180,21 @@ const paginatedEmissions = emissions.slice(
                         </div>
                     </div>
                 </div>
+            )}
+            {/* Portal tooltip — renders outside overflow containers */}
+            {tooltip && createPortal(
+                <div
+                    className="px-2.5 py-1.5 bg-gray-800 text-white text-xs rounded-md shadow-lg whitespace-normal max-w-xs pointer-events-none"
+                    style={{
+                        position: 'fixed',
+                        left: tooltip.x,
+                        top: tooltip.y - 8,
+                        transform: 'translate(-50%, -100%)',
+                        zIndex: 99999,
+                    }}>
+                    {tooltip.text}
+                </div>,
+                document.body
             )}
         </div>
     );

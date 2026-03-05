@@ -1,34 +1,56 @@
 import { useCallback } from "react";
 import { getConversionFactor, unitsMatchExact } from "../../utils/unitConversions";
-import { EmissionFactor, ModalRow, EmissionCalculationResult, ColumnEntity } from "./types";
+import { EmissionFactor, ModalRow, EmissionCalculationResult, ColumnEntity, EmissionCategoryMapping } from "./types";
 
 export const useEmissionCalculation = (
   emissionFactors: EmissionFactor[],
   targetYear?: number,
   columns?: ColumnEntity[],
-  selectColumnNames?: string[]
+  selectColumnNames?: string[],
+  emissionCategoryMapping?: EmissionCategoryMapping
 ) => {
+  // Helper: find EF with year filter, trying emission_category_name then global_category_name,
+  // then falling back to company_category_name (JSONB key) if ECM mapping exists.
+  const findFactor = useCallback(
+    (emissionCategory: string): EmissionFactor | undefined => {
+      const yearMatch = (f: EmissionFactor) =>
+        targetYear === undefined || f.year === targetYear;
+
+      // Step 1: match by emission_category_name (global_category_name from ECM)
+      return emissionFactors.find(
+        (f) => f.emission_category_name === emissionCategory && yearMatch(f)
+      )
+      // Step 2: match by global_category_name field on EF
+      || emissionFactors.find(
+        (f) => f.global_category_name === emissionCategory && yearMatch(f)
+      )
+      // Step 3: fallback — reverse-lookup the company_category_name (JSONB key) and try that
+      || (() => {
+        if (!emissionCategoryMapping) return undefined;
+        const companyCatName = Object.entries(emissionCategoryMapping).find(
+          ([, value]) => value === emissionCategory
+        )?.[0];
+        if (!companyCatName || companyCatName === emissionCategory) return undefined;
+        return emissionFactors.find(
+          (f) => f.emission_category_name === companyCatName && yearMatch(f)
+        );
+      })();
+    },
+    [emissionFactors, targetYear, emissionCategoryMapping]
+  );
+
   const getExpectedUnit = useCallback(
     (emissionCategory: string): string | null => {
-      // Filter by year if targetYear is provided
-      const factor = emissionFactors.find(
-        (f) => f.emission_category_name === emissionCategory &&
-               (targetYear === undefined || f.year === targetYear)
-      );
-      return factor?.denominator_unit || null;
+      return findFactor(emissionCategory)?.denominator_unit || null;
     },
-    [emissionFactors, targetYear]
+    [findFactor]
   );
 
   const getEmissionFactor = useCallback(
     (emissionCategory: string): EmissionFactor | undefined => {
-      // Filter by year if targetYear is provided
-      return emissionFactors.find(
-        (f) => f.emission_category_name === emissionCategory &&
-               (targetYear === undefined || f.year === targetYear)
-      );
+      return findFactor(emissionCategory);
     },
-    [emissionFactors, targetYear]
+    [findFactor]
   );
 
   const findActivityValue = useCallback((row: ModalRow): number | null => {
@@ -51,6 +73,8 @@ export const useEmissionCalculation = (
 
     // Find the first numeric value from non-dropdown columns
     for (const [key, value] of Object.entries(row)) {
+      // Skip composite-unit helper fields (e.g. quantity__multiplier, quantity__distance)
+      if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
       if (!skipColumns.has(key)) {
         const numVal = parseFloat(value as string);
         if (!isNaN(numVal) && numVal > 0) {
