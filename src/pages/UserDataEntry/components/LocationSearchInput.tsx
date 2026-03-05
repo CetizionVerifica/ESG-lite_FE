@@ -27,10 +27,19 @@ const LocationSearchInput = ({
   const [showDropdown, setShowDropdown] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setQuery(value);
   }, [value]);
+
+  // Cleanup debounce timer and in-flight requests on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -56,12 +65,16 @@ const LocationSearchInput = ({
     }
 
     debounceRef.current = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
       setIsLoading(true);
       try {
-        const data = await searchLocations(text);
+        const data = await searchLocations(text, controller.signal);
         setResults(data);
         setShowDropdown(data.length > 0);
-      } catch {
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setResults([]);
       } finally {
         setIsLoading(false);

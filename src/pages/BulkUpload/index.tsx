@@ -30,6 +30,7 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
     importProgress,
     importError,
     parseError,
+    resolvingMappings,
     totalRows,
     uniqueCategoryCount,
     validRows,
@@ -137,6 +138,7 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
               onToggleAllCategories={toggleAllCategories}
               onBack={handleReset}
               categoryTypeWarning={categoryTypeWarning}
+              resolvingMappings={resolvingMappings}
               onProceed={proceedToReview}
             />
           )}

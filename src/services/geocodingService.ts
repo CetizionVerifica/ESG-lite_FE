@@ -9,6 +9,7 @@ const NOMINATIM_BASE =
 
 export async function searchLocations(
   query: string,
+  signal?: AbortSignal,
 ): Promise<GeocodingResult[]> {
   if (!query || query.trim().length < 2) return [];
 
@@ -20,6 +21,7 @@ export async function searchLocations(
 
   const res = await fetch(`${NOMINATIM_BASE}/search?${params}`, {
     headers: { "User-Agent": "ESG-Lite-App/1.0" },
+    signal,
   });
 
   if (!res.ok) throw new Error("Geocoding search failed");

@@ -10,6 +10,7 @@ import {
   haversineDistanceMeters,
   RouteResult,
 } from "../../../services/routingService";
+import { getCanonicalDistanceUnit } from "../../../utils/distanceUnits";
 
 type TravelMode = "road" | "air-sea";
 
@@ -37,6 +38,9 @@ const DistanceCalculatorModal = ({
   const [error, setError] = useState<string | null>(null);
   const [travelMode, setTravelMode] = useState<TravelMode>("road");
 
+  // Display unit: always show the pure distance unit (e.g. "km" from "tonne.km")
+  const displayUnit = getCanonicalDistanceUnit(targetUnit) || targetUnit;
+
   // Instant aerial distance (Haversine — great-circle)
   const aerialDistance = useMemo(() => {
     if (!startLocation || !endLocation) return null;
@@ -56,26 +60,28 @@ const DistanceCalculatorModal = ({
   useEffect(() => {
     if (!startLocation || !endLocation || travelMode !== "road") return;
 
-    let cancelled = false;
+    const controller = new AbortController();
     setIsCalculating(true);
     setError(null);
 
     getRoute(
       [startLocation.lat, startLocation.lon],
       [endLocation.lat, endLocation.lon],
+      controller.signal,
     )
       .then((result) => {
-        if (!cancelled) setRoute(result);
+        if (!controller.signal.aborted) setRoute(result);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message || "Failed to calculate route");
+        if (controller.signal.aborted) return;
+        setError(err.message || "Failed to calculate route");
       })
       .finally(() => {
-        if (!cancelled) setIsCalculating(false);
+        if (!controller.signal.aborted) setIsCalculating(false);
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [startLocation, endLocation, travelMode]);
 
@@ -250,7 +256,7 @@ const DistanceCalculatorModal = ({
                 <div className="flex-1">
                   <div className="text-xs text-green-600">Road Distance</div>
                   <div className="text-xl font-semibold text-green-800">
-                    {roadDistance.toLocaleString()} {targetUnit}
+                    {roadDistance.toLocaleString()} {displayUnit}
                   </div>
                 </div>
               </div>
@@ -273,7 +279,7 @@ const DistanceCalculatorModal = ({
                 Straight-Line Distance (Great Circle)
               </div>
               <div className="text-xl font-semibold text-green-800">
-                {aerialDistance.toLocaleString()} {targetUnit}
+                {aerialDistance.toLocaleString()} {displayUnit}
               </div>
             </div>
           </div>

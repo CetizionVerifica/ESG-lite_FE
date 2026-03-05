@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useTheme } from "../context/ThemeContext";
 
 export interface DropdownOption {
@@ -42,6 +43,33 @@ const Dropdown = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+
+  // Recalculate menu position when opened; close on scroll/resize
+  useEffect(() => {
+    if (!isOpen) return;
+    const updatePos = () => {
+      if (dropdownRef.current) {
+        const rect = dropdownRef.current.getBoundingClientRect();
+        setMenuPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+      }
+    };
+    updatePos();
+
+    const handleScroll = (e: Event) => {
+      // Don't close if the scroll is inside the dropdown menu itself (options list)
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setIsOpen(false);
+    };
+    // Capture phase so we catch scrolls on any ancestor (e.g. modal overflow container)
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", updatePos);
+    return () => {
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", updatePos);
+    };
+  }, [isOpen]);
 
   // Single select logic
   const selectedOption = !multiple
@@ -98,12 +126,14 @@ const Dropdown = ({
     setSearchTerm("");
   };
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (check both trigger and portal menu)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
       if (
         dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
+        !dropdownRef.current.contains(target) &&
+        (!menuRef.current || !menuRef.current.contains(target))
       ) {
         setIsOpen(false);
       }
@@ -128,8 +158,8 @@ const Dropdown = ({
       } ${isOpen ? "border-blue-500" : "border-gray-300"}`;
 
   const menuClass = isDark
-    ? "absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg shadow-slate-900/50 z-50"
-    : "absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-50";
+    ? "bg-slate-800 border border-slate-600 rounded shadow-lg shadow-slate-900/50"
+    : "bg-white border border-gray-300 rounded shadow-lg";
 
   const searchInputClass = isDark
     ? "w-full border border-slate-600 bg-slate-700 text-slate-200 px-3 py-2 rounded text-sm focus:outline-none focus:ring focus:ring-blue-500/30 placeholder-slate-400"
@@ -237,9 +267,19 @@ const Dropdown = ({
         </div>
       </button>
 
-      {/* Dropdown Menu */}
-      {isOpen && (
-        <div className={menuClass}>
+      {/* Dropdown Menu — rendered via portal to escape overflow containers */}
+      {isOpen && createPortal(
+        <div
+          ref={menuRef}
+          className={menuClass}
+          style={{
+            position: "fixed",
+            top: menuPos.top,
+            left: menuPos.left,
+            width: menuPos.width,
+            zIndex: 9999,
+          }}
+        >
           {/* Search Input */}
           {searchable && (
             <div className={`p-2 ${borderClass}`}>
@@ -290,7 +330,8 @@ const Dropdown = ({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

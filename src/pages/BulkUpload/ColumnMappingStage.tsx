@@ -15,6 +15,7 @@ interface ColumnMappingStageProps {
   onToggleCategory: (category: string) => void;
   onToggleAllCategories: (categories: string[]) => void;
   categoryTypeWarning: string | null;
+  resolvingMappings?: boolean;
   onBack: () => void;
   onProceed: () => void;
 }
@@ -31,7 +32,8 @@ export function ColumnMappingStage({
   onToggleSkip,
   onToggleCategory,
   onToggleAllCategories,
-  categoryTypeWarning, 
+  categoryTypeWarning,
+  resolvingMappings,
   onBack,
   onProceed,
 }: ColumnMappingStageProps) {
@@ -310,11 +312,11 @@ export function ColumnMappingStage({
         </button>
         <button
           onClick={onProceed}
-          disabled={!requiredMapped || !!categoryTypeWarning}
+          disabled={!requiredMapped || !!categoryTypeWarning || resolvingMappings}
           className="px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
         >
-          Preview Import →
-          {selectedCategories.size > 0 && selectedCategories.size < uniqueCategories.length && (
+          {resolvingMappings ? "Resolving categories..." : "Preview Import →"}
+          {!resolvingMappings && selectedCategories.size > 0 && selectedCategories.size < uniqueCategories.length && (
             <span className="ml-1.5 text-xs opacity-80">({includedRowCount} rows)</span>
           )}
         </button>

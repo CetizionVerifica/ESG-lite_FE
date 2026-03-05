@@ -12,12 +12,13 @@ const OSRM_BASE =
 export async function getRoute(
   start: [number, number], // [lat, lon]
   end: [number, number], // [lat, lon]
+  signal?: AbortSignal,
 ): Promise<RouteResult> {
   // OSRM expects coordinates as lon,lat
   const coords = `${start[1]},${start[0]};${end[1]},${end[0]}`;
   const url = `${OSRM_BASE}/route/v1/driving/${coords}?overview=simplified&geometries=geojson&steps=false`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal });
   if (!res.ok) throw new Error("Route calculation failed");
 
   const data = await res.json();
@@ -43,10 +44,10 @@ const METERS_TO: Record<string, number> = {
 export function convertDistanceFromMeters(
   meters: number,
   targetUnit: string,
-): number {
+): number | null {
   const canonical = getCanonicalDistanceUnit(targetUnit);
-  if (!canonical) return meters;
-  const factor = METERS_TO[canonical] ?? 1;
+  if (!canonical || !(canonical in METERS_TO)) return null;
+  const factor = METERS_TO[canonical];
   return Math.round(meters * factor * 100) / 100;
 }
 

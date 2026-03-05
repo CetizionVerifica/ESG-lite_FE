@@ -1,4 +1,5 @@
- import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import Dropdown, { DropdownOption } from "../../components/Dropdown";
 import { Table, Column } from "../../components/Table";
 import Modal from "../../components/Modal";
@@ -17,6 +18,7 @@ import {
     UnitData,
 } from "../../services/unitService";
 import { canConvert, unitsMatchExact } from "../../utils/unitConversions";
+import { getMappingsByCompany, type CategoryMapping } from "../../services/categoryMappingService";
 import { useEmissionCalculation } from "./useEmissionCalculation";
 import {
     UnitSelector,
@@ -55,6 +57,7 @@ interface Site {
     site_id: number;
     name: string;
     categories?: Category[];
+    company?: { company_id: number; name: string };
 }
 
 // ============================================================================
@@ -115,6 +118,12 @@ const rowsPerPage = 10;
         useState<DependentOptionsMap>({});
     const [emissionCategoryMapping, setEmissionCategoryMapping] =
         useState<EmissionCategoryMapping>({});
+
+    // Company category mapping: company_category_name → global_category_name (= emission_category_name)
+    const [companyMappings, setCompanyMappings] = useState<CategoryMapping[]>([]);
+
+    // Tooltip state (portal-based to escape overflow containers)
+    const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
     // Modal state
     const [modalOpen, setModalOpen] = useState(false);
@@ -192,6 +201,7 @@ const rowsPerPage = 10;
         targetYear,
         dynamicColumns,
         selectColumnNames,
+        emissionCategoryMapping,
     );
 
     // ---------------------------------------------------------------------------
@@ -201,6 +211,9 @@ const rowsPerPage = 10;
     const currentSite = availableSites.find((s) => s.site_id === selectedSite);
     const categories: Category[] = currentSite?.categories || [];
     const siteId = selectedSite;
+
+    // Use explicitly selected company, or auto-detect from current site
+    const companyId = currentSite?.company?.company_id ?? null;
 
     const siteOptions: DropdownOption[] = availableSites.map((site) => ({
         id: site.site_id,
@@ -276,13 +289,25 @@ const rowsPerPage = 10;
             setEmissions(flattenEmissions(emissionsData));
             setEmissionFactors(factors);
             setUnits(unitsData);
+
+            // Fetch company category mappings (company_category_name → emission_category_name)
+            if (companyId) {
+                try {
+                    const mappings = await getMappingsByCompany(companyId, siteId, selectedCategory);
+                    setCompanyMappings(mappings);
+                } catch {
+                    setCompanyMappings([]);
+                }
+            } else {
+                setCompanyMappings([]);
+            }
         } catch (error) {
             console.error("Error fetching data:", error);
             resetDataState();
         } finally {
             setLoading(false);
         }
-    }, [selectedCategory, selectedDate, siteId]);
+    }, [selectedCategory, selectedDate, siteId, companyId]);
 
     useEffect(() => {
   setCurrentPage(1);
@@ -677,80 +702,104 @@ const rowsPerPage = 10;
         return storedValue;
     };
 
-    // Determine emission category from mapping based on row values
-    const getAutoEmissionCategory = (row: ModalRow): string | null => {
+    // Determine emission category from mapping based on row values.
+    // Returns { key: company_category_name, category: global_category_name } or null.
+    const getAutoEmissionCategory = (row: ModalRow): { key: string; category: string } | null => {
         if (Object.keys(emissionCategoryMapping).length === 0) {
             return null;
         }
 
-        // Find "terminal" child columns - columns that are children but NOT parents of anything else
-        // These are the columns that directly determine the emission category
-        const allChildCols = Object.keys(columnDependencies);
+        // Walk the dependency chain from root to leaf to build the mapping key.
+        // For a 3-dim config like Activity Type → Type of Waste → Disposal Method,
+        // the mapping key is "Metal|Any metals|Open loop" (all dimension values).
+
+        // Find root columns (parents that are not children of anything)
+        const allChildCols = new Set(Object.keys(columnDependencies));
         const allParentCols = new Set(Object.values(columnDependencies));
-        const terminalChildCols = allChildCols.filter(
-            (child) => !allParentCols.has(child),
+        const rootCols = [...allParentCols].filter(
+            (col) => !allChildCols.has(col),
         );
 
-        // If no terminal children, fall back to all child columns
-        const childColsToUse =
-            terminalChildCols.length > 0 ? terminalChildCols : allChildCols;
+        if (rootCols.length === 0) {
+            // No dependencies — try flat mapping with all select column values
+            const selectCols = dynamicColumns.filter(
+                (col) => col.column_type === "select",
+            );
+            for (const col of selectCols) {
+                const val = getRowValue(row, col.column_name);
+                if (!val) continue;
+                const label = getOptionLabel(
+                    col.column_name,
+                    col.pk_id,
+                    String(val),
+                );
+                if (emissionCategoryMapping[label]) {
+                    return { key: label, category: emissionCategoryMapping[label] };
+                }
+                // Case-insensitive fallback
+                const labelLower = label.toLowerCase();
+                for (const [key, value] of Object.entries(
+                    emissionCategoryMapping,
+                )) {
+                    if (key.toLowerCase() === labelLower) {
+                        return { key, category: value };
+                    }
+                }
+            }
+            return null;
+        }
 
-        // Build the mapping key from terminal parent-child pairs only
+        // For each root, walk down the chain collecting labels
         const keyParts: string[] = [];
 
-        for (const childCol of childColsToUse.sort()) {
-            const parentCol = columnDependencies[childCol];
-            if (!parentCol) continue;
+        const walkChain = (colName: string) => {
+            const val = getRowValue(row, colName);
+            if (!val) return false;
 
-            // Use case-insensitive lookup to handle potential key mismatches
-            const parentValue = getRowValue(row, parentCol);
-            if (!parentValue) return null;
-
-            const childValue = getRowValue(row, childCol);
-            if (!childValue) return null;
-
-            // Get labels for both parent and child (case-insensitive column lookup)
-            const parentColLower = parentCol.toLowerCase();
-            const parentColEntity = dynamicColumns.find(
-                (col) => col.column_name.toLowerCase() === parentColLower,
+            const colEntity = dynamicColumns.find(
+                (col) =>
+                    col.column_name.toLowerCase() === colName.toLowerCase(),
             );
-            const parentLabel = parentColEntity
+            const label = colEntity
                 ? getOptionLabel(
-                      parentCol,
-                      parentColEntity.pk_id,
-                      String(parentValue),
+                      colName,
+                      colEntity.pk_id,
+                      String(val),
+                      keyParts.length > 0
+                          ? keyParts[keyParts.length - 1]
+                          : undefined,
                   )
-                : String(parentValue);
+                : String(val);
 
-            const childColLower = childCol.toLowerCase();
-            const childColEntity = dynamicColumns.find(
-                (col) => col.column_name.toLowerCase() === childColLower,
-            );
-            const childLabel = childColEntity
-                ? getOptionLabel(
-                      childCol,
-                      childColEntity.pk_id,
-                      String(childValue),
-                      parentLabel,
-                  )
-                : String(childValue);
+            keyParts.push(label);
 
-            keyParts.push(parentLabel);
-            keyParts.push(childLabel);
+            // Find children that depend on this column
+            for (const [child, parent] of Object.entries(
+                columnDependencies,
+            )) {
+                if (parent === colName) {
+                    if (!walkChain(child)) return false;
+                }
+            }
+            return true;
+        };
+
+        for (const root of rootCols) {
+            if (!walkChain(root)) return null;
         }
 
         const mappingKey = keyParts.join("|");
 
-        // First try exact match
+        // Exact match
         if (emissionCategoryMapping[mappingKey]) {
-            return emissionCategoryMapping[mappingKey];
+            return { key: mappingKey, category: emissionCategoryMapping[mappingKey] };
         }
 
-        // If no exact match, try case-insensitive lookup
+        // Case-insensitive fallback
         const mappingKeyLower = mappingKey.toLowerCase();
         for (const [key, value] of Object.entries(emissionCategoryMapping)) {
             if (key.toLowerCase() === mappingKeyLower) {
-                return value;
+                return { key, category: value };
             }
         }
 
@@ -854,9 +903,10 @@ const rowsPerPage = 10;
                 }
 
                 // Check if we should auto-set the emission_category
-                const autoCategory = getAutoEmissionCategory(updatedRow);
-                if (autoCategory) {
-                    updatedRow.emission_category = autoCategory;
+                const autoResult = getAutoEmissionCategory(updatedRow);
+                if (autoResult) {
+                    updatedRow.emission_category = autoResult.category;
+                    updatedRow._ecmKey = autoResult.key;
                 } else if (
                     isParentColumn(columnName) ||
                     isDependentColumn(columnName)
@@ -864,6 +914,7 @@ const rowsPerPage = 10;
                     // Clear emission_category when a mapped column changes but no valid mapping exists yet
                     // This ensures the old value doesn't persist when user changes dropdown selections
                     updatedRow.emission_category = "";
+                    updatedRow._ecmKey = "";
                 }
 
                 return updatedRow;
@@ -1333,9 +1384,10 @@ const rowsPerPage = 10;
                     // (e.g., Waste Type "Sludge" + Disposal Method "Recover"
                     // → "Sludge - Recover"). This overrides the OCR-returned
                     // emission_category which may be inaccurate.
-                    const autoCategory = getAutoEmissionCategory(row);
-                    if (autoCategory) {
-                        row.emission_category = autoCategory;
+                    const autoResult = getAutoEmissionCategory(row);
+                    if (autoResult) {
+                        row.emission_category = autoResult.category;
+                        row._ecmKey = autoResult.key;
                     } else if (row.emission_category && availableFactors.length > 0) {
                         // Fallback: normalize OCR emission_category to match a configured factor name
                         const ecLower = String(row.emission_category).toLowerCase();
@@ -1653,6 +1705,7 @@ const rowsPerPage = 10;
         setEmissions([]);
         setEmissionFactors([]);
         setUnits([]);
+        setCompanyMappings([]);
     };
 
     // ---------------------------------------------------------------------------
@@ -1673,7 +1726,9 @@ const paginatedEmissions = emissions.slice(
 
             {/* Filters */}
             <div
-                className={`grid grid-cols-1 gap-4 mb-6 ${hasMultipleSites ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+                className={`grid grid-cols-1 gap-4 mb-6 ${
+                    hasMultipleSites ? "md:grid-cols-4" : "md:grid-cols-3"
+                }`}>
                 {/* Site Selector - only show when user has multiple sites */}
                 {hasMultipleSites && (
                     <div>
@@ -1838,61 +1893,90 @@ const paginatedEmissions = emissions.slice(
                                     <td className="border border-gray-300 px-2 py-2">
                                         {Object.keys(emissionCategoryMapping)
                                             .length > 0 ? (
-                                            // Auto-mapped mode: show read-only field with auto-determined value
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    value={
-                                                        row.emission_category ||
-                                                        ""
-                                                    }
-                                                    readOnly
-                                                    className={`w-full border px-2 py-1 rounded ${
-                                                        row.emission_category
-                                                            ? "border-green-400 bg-green-50 text-green-800"
-                                                            : "border-gray-300 bg-gray-100 text-gray-500"
-                                                    }`}
-                                                    placeholder="Auto-determined from selections"
-                                                />
-                                                {row.emission_category && (
-                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-green-600">
-                                                        Auto
-                                                    </span>
-                                                )}
-                                            </div>
+                                            // Auto-mapped mode: show company name, hover for global name
+                                            (() => {
+                                                const companyCatName = row._ecmKey as string | undefined;
+                                                const displayName = companyCatName || row.emission_category;
+                                                return (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div
+                                                            title={row.emission_category ? `Global: ${row.emission_category}` : "Select dropdown values to auto-determine"}
+                                                            className={`flex-1 min-w-0 px-2 py-1.5 rounded text-sm font-medium truncate cursor-help ${
+                                                                row.emission_category
+                                                                    ? "bg-green-100 text-green-800 border border-green-300"
+                                                                    : "bg-gray-100 text-gray-400 border border-gray-200 italic"
+                                                            }`}
+                                                        >
+                                                            {displayName || "Auto-determined"}
+                                                        </div>
+                                                        {row.emission_category && companyCatName && companyCatName !== row.emission_category && (
+                                                            <div
+                                                                className="shrink-0 w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center cursor-help"
+                                                                onMouseEnter={(e) => {
+                                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                                    setTooltip({ text: `Global: ${row.emission_category}`, x: rect.left + rect.width / 2, y: rect.top });
+                                                                }}
+                                                                onMouseLeave={() => setTooltip(null)}
+                                                            >
+                                                                i
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()
                                         ) : (
                                             // Manual mode: show dropdown for selection
-                                            <select
-                                                value={
-                                                    row.emission_category || ""
-                                                }
-                                                onChange={(e) =>
-                                                    handleModalRowChange(
-                                                        row.id,
-                                                        "emission_category",
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                className="w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300">
-                                                <option value="">
-                                                    Select Category
-                                                </option>
-                                                {emissionFactors.map(
-                                                    (factor) => (
-                                                        <option
-                                                            key={
-                                                                factor.emission_factor_id
-                                                            }
-                                                            value={
-                                                                factor.emission_category_name
-                                                            }>
-                                                            {
-                                                                factor.emission_category_name
-                                                            }
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
+                                            <div className="flex items-center gap-1">
+                                                <select
+                                                    value={
+                                                        row.emission_category || ""
+                                                    }
+                                                    onChange={(e) =>
+                                                        handleModalRowChange(
+                                                            row.id,
+                                                            "emission_category",
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    className="flex-1 min-w-0 border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300">
+                                                    <option value="">
+                                                        Select Category
+                                                    </option>
+                                                    {companyMappings.length > 0
+                                                        ? companyMappings.map((m) => (
+                                                            <option
+                                                                key={m.id}
+                                                                value={m.global_category_name}>
+                                                                {m.company_category_name}
+                                                            </option>
+                                                        ))
+                                                        : emissionFactors.map((factor) => (
+                                                            <option
+                                                                key={factor.emission_factor_id}
+                                                                value={factor.emission_category_name}>
+                                                                {factor.emission_category_name}
+                                                            </option>
+                                                        ))
+                                                    }
+                                                </select>
+                                                {row.emission_category && (() => {
+                                                    const companyMapping = companyMappings.find((m) => m.global_category_name === row.emission_category);
+                                                    const tooltipText = companyMapping
+                                                        ? `Global EF Name: ${companyMapping.global_category_name}`
+                                                        : `EF Category: ${row.emission_category}`;
+                                                    return (
+                                                        <div
+                                                            className="shrink-0 w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center cursor-help"
+                                                            onMouseEnter={(e) => {
+                                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                                setTooltip({ text: tooltipText, x: rect.left + rect.width / 2, y: rect.top });
+                                                            }}
+                                                            onMouseLeave={() => setTooltip(null)}>
+                                                            i
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
                                         )}
                                     </td>
 
@@ -2199,6 +2283,7 @@ const paginatedEmissions = emissions.slice(
                     units={units}
                     siteId={siteId}
                     categoryId={selectedCategory}
+                    companyId={companyId ?? undefined}
                     selectedDate={selectedDate}
                     getExpectedUnit={getExpectedUnit}
                     calculateEmission={calculateEmission}
@@ -2643,7 +2728,10 @@ const paginatedEmissions = emissions.slice(
                                             Emission Category
                                         </label>
                                         {(() => {
-                                            const isUnmatched = !!emission_category && emissionFactors.length > 0 && !emissionFactors.find((f) => f.emission_category_name === emission_category);
+                                            const isUnmatched = !!emission_category && emissionFactors.length > 0
+                                                && !emissionFactors.find((f) => f.emission_category_name === emission_category)
+                                                && !emissionFactors.find((f) => f.global_category_name === emission_category)
+                                                && !companyMappings.find((m) => m.global_category_name === emission_category);
                                             const needsAttention = isUnmatched || !emission_category;
                                             return emissionFactors.length > 0 ? (
                                                 <div className="relative">
@@ -2663,14 +2751,38 @@ const paginatedEmissions = emissions.slice(
                                                                 {emission_category}
                                                             </option>
                                                         )}
-                                                        {emissionFactors.map((factor) => (
-                                                            <option
-                                                                key={factor.emission_factor_id}
-                                                                value={factor.emission_category_name}>
-                                                                {factor.emission_category_name}
-                                                            </option>
-                                                        ))}
+                                                        {companyMappings.length > 0
+                                                            ? companyMappings.map((m) => (
+                                                                <option
+                                                                    key={m.id}
+                                                                    value={m.global_category_name}>
+                                                                    {m.company_category_name}
+                                                                </option>
+                                                            ))
+                                                            : emissionFactors.map((factor) => (
+                                                                <option
+                                                                    key={factor.emission_factor_id}
+                                                                    value={factor.emission_category_name}>
+                                                                    {factor.emission_category_name}
+                                                                </option>
+                                                            ))
+                                                        }
                                                     </select>
+                                                    {(() => {
+                                                        const globalFactor = emission_category
+                                                            ? emissionFactors.find((f) => f.emission_category_name === emission_category)
+                                                            : null;
+                                                        return !isUnmatched && globalFactor?.global_category_name ? (
+                                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 group">
+                                                                <div className="w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center cursor-help">
+                                                                    i
+                                                                </div>
+                                                                <div className="hidden group-hover:block absolute bottom-full right-0 mb-1 w-64 px-2.5 py-1.5 bg-gray-800 text-white text-xs rounded-md shadow-lg z-50 whitespace-normal">
+                                                                    <span className="text-gray-400">Global:</span> {globalFactor.global_category_name}
+                                                                </div>
+                                                            </div>
+                                                        ) : null;
+                                                    })()}
                                                     {isUnmatched && (
                                                         <div className="absolute right-7 top-1/2 -translate-y-1/2 group">
                                                             <div className="w-4 h-4 rounded-full bg-amber-400 text-white text-[10px] font-bold flex items-center justify-center cursor-help">
@@ -3051,6 +3163,21 @@ const paginatedEmissions = emissions.slice(
                         </div>
                     </div>
                 </div>
+            )}
+            {/* Portal tooltip — renders outside overflow containers */}
+            {tooltip && createPortal(
+                <div
+                    className="px-2.5 py-1.5 bg-gray-800 text-white text-xs rounded-md shadow-lg whitespace-normal max-w-xs pointer-events-none"
+                    style={{
+                        position: 'fixed',
+                        left: tooltip.x,
+                        top: tooltip.y - 8,
+                        transform: 'translate(-50%, -100%)',
+                        zIndex: 99999,
+                    }}>
+                    {tooltip.text}
+                </div>,
+                document.body
             )}
         </div>
     );

@@ -6,6 +6,7 @@ import { getSites } from "../services/siteService";
 import { getCategories } from "../services/categoryService";
 import { createEmissionFactor, bulkCreateEmissionFactors } from "../services/emissionFactorService";
 import EmissionFactorList from "../components/EmissionFactorList";
+import SmartUploadModal from "../components/SmartUploadModal";
 
 interface Category {
   category_id: number;
@@ -49,6 +50,7 @@ const EmissionFactorPage = () => {
   const [uploadResult, setUploadResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [smartUploadOpen, setSmartUploadOpen] = useState(false);
 
   const [_formState, formAction] = useActionState(
     async (_prevData: any, data: FormData) => {
@@ -273,6 +275,12 @@ const EmissionFactorPage = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Emission Factors</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() => setSmartUploadOpen(true)}
+            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+          >
+            Smart Upload
+          </button>
           <button
             onClick={() => setBulkModalOpen(true)}
             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
@@ -554,6 +562,15 @@ const EmissionFactorPage = () => {
         </div>
       )}
       <EmissionFactorList siteId={selectedSite} categoryId={selectedCategory} refreshTrigger={refreshTrigger} />
+
+      {/* Smart Upload Modal */}
+      <SmartUploadModal
+        isOpen={smartUploadOpen}
+        onClose={() => setSmartUploadOpen(false)}
+        sites={sites}
+        categories={categories}
+        onRefresh={() => setRefreshTrigger((prev) => prev + 1)}
+      />
     </div>
   );
 };

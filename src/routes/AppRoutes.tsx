@@ -26,6 +26,7 @@ import UserEmissionsPage from "../pages/UserEmissionsPage";
 import EdeReports from "../pages/Reports/EdePreports";
 import SbtiMain from "../pages/sbti/SbtiMain";
 import GhgReport from "../pages/GhgReport/GhgReport";
+import CategoryMappingPage from "../pages/CategoryMappingPage";
 
 const routes = [
   {
@@ -91,6 +92,10 @@ const routes = [
           {
             path: "emission-factors",
             element: <EmissionFactorPage />,
+          },
+          {
+            path: "category-mappings",
+            element: <CategoryMappingPage />,
           },
           {
             path: "manage-columns",

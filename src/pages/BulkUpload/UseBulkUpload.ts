@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { createEmission, EmissionData } from "../../services/emissionService";
+import { getMappingsByCompany } from "../../services/categoryMappingService";
 import {
   BulkUploadModalProps,
   BulkReviewRow,
@@ -14,6 +15,7 @@ export function useBulkUpload({
   dynamicColumns,
   siteId,
   categoryId,
+  companyId,
   selectedDate,
   calculateEmission,
   getAutoEmissionCategory,
@@ -31,6 +33,10 @@ export function useBulkUpload({
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [importError, setImportError] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [resolvingMappings, setResolvingMappings] = useState(false);
+
+  // Lookup: company_category_name → global_category_name (populated before review)
+  const categoryMappingLookup = useRef<Map<string, string>>(new Map());
 
   const totalRows = uploadedRows.length;
 
@@ -227,10 +233,28 @@ const uniqueCategories = useMemo(() => {
 
       const modalRow: ModalRow = { id: idx, ...mappedData };
 
-      let emission_category = mappedData["emission_category"] || null;
+      let emission_category: string | null = mappedData["emission_category"] || null;
       if (!emission_category) {
-        emission_category = getAutoEmissionCategory(modalRow);
+        const autoResult = getAutoEmissionCategory(modalRow);
+        emission_category = autoResult?.category ?? null;
       }
+
+      // Keep original company category name before resolution
+      const original_company_category = emission_category;
+
+      // Resolve company-specific category name → global category name via mapping
+      if (emission_category && categoryMappingLookup.current.size > 0) {
+        const globalName = categoryMappingLookup.current.get(emission_category);
+        if (idx === 0) {
+          console.log("[BulkUpload] Row 0 resolution: category=", JSON.stringify(emission_category), "lookupSize=", categoryMappingLookup.current.size, "resolved=", JSON.stringify(globalName));
+        }
+        if (globalName) {
+          emission_category = globalName;
+        }
+      } else if (idx === 0) {
+        console.log("[BulkUpload] Row 0 skipping resolution: category=", JSON.stringify(emission_category), "lookupSize=", categoryMappingLookup.current.size);
+      }
+
       if (emission_category) {
         modalRow.emission_category = emission_category;
       }
@@ -274,6 +298,7 @@ const emissionValue = emissionResult.value ?? 0;
         id: idx,
         mappedData,
         emission_category,
+        original_company_category,
         activity_data_unit,
         total_emission: emissionValue,
         isValid,
@@ -282,12 +307,36 @@ const emissionValue = emissionResult.value ?? 0;
     });
   }, [uploadedRows, columnMappings, selectedCategories, getAutoEmissionCategory, calculateEmission]);
 
-  const proceedToReview = useCallback(() => {
+  const proceedToReview = useCallback(async () => {
+    // Fetch category mappings to resolve company → global names
+    console.log("[BulkUpload] proceedToReview: companyId=", companyId, "siteId=", siteId, "categoryId=", categoryId);
+    if (companyId) {
+      setResolvingMappings(true);
+      try {
+        const mappings = await getMappingsByCompany(companyId, siteId, categoryId);
+        console.log("[BulkUpload] Fetched mappings:", mappings.length, "sample:", mappings.slice(0, 3).map(m => `${m.company_category_name} → ${m.global_category_name}`));
+        const lookup = new Map<string, string>();
+        for (const m of mappings) {
+          lookup.set(m.company_category_name, m.global_category_name);
+        }
+        categoryMappingLookup.current = lookup;
+        console.log("[BulkUpload] Lookup size after fetch:", categoryMappingLookup.current.size);
+      } catch (err) {
+        console.error("Failed to fetch category mappings:", err);
+        categoryMappingLookup.current = new Map();
+      } finally {
+        setResolvingMappings(false);
+      }
+    } else {
+      console.warn("[BulkUpload] companyId is falsy, skipping mapping fetch");
+    }
+
+    console.log("[BulkUpload] About to call buildReviewRows, lookup size:", categoryMappingLookup.current.size);
     const rows = buildReviewRows();
     setReviewRows(rows);
     setSelectedRowIds(new Set(rows.filter((r) => r.isValid).map((r) => r.id)));
     setStage("review");
-  }, [buildReviewRows]);
+  }, [buildReviewRows, companyId, siteId, categoryId]);
 
   const toggleRow = useCallback((id: number) => {
     setSelectedRowIds((prev) => {
@@ -380,6 +429,7 @@ const emissionValue = emissionResult.value ?? 0;
     setImportProgress({ current: 0, total: 0 });
     setImportError(null);
     setParseError(null);
+    categoryMappingLookup.current = new Map();
   }, []);
 
   return {
@@ -396,6 +446,7 @@ const emissionValue = emissionResult.value ?? 0;
     importProgress,
     importError,
     parseError,
+    resolvingMappings,
     totalRows,
     uniqueCategoryCount,
     validRows,

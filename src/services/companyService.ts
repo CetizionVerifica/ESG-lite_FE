@@ -5,6 +5,11 @@ export const getCompanies = async () => {
   return response.data;
 };
 
+export const getUserCompanies = async () => {
+  const response = await api.get(`/user/companies`);
+  return response.data;
+};
+
 export const createCompany = async (data: {
   name: string;
   [key: string]: any;

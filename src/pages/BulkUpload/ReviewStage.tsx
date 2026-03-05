@@ -82,7 +82,13 @@ export function ReviewStage({
                 <th className="px-3 py-2 text-left w-10">
                   <span className="sr-only">Select</span>
                 </th>
-                {mappedFields.map((m) => (
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">
+                  Company Category
+                </th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">
+                  Global Category
+                </th>
+                {mappedFields.filter(m => m.requiredField !== "emission_category").map((m) => (
                   <th key={m.requiredField} className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">
                     {m.label}
                   </th>
@@ -120,13 +126,20 @@ export function ReviewStage({
                       />
                     </td>
 
-                    {/* Mapped Data Cells */}
-                    {mappedFields.map((m) => (
+                    {/* Company Category */}
+                    <td className="px-3 py-2 text-gray-700 max-w-40 truncate" title={row.original_company_category || ""}>
+                      {row.original_company_category || <span className="text-red-400 italic">missing</span>}
+                    </td>
+
+                    {/* Global Category (resolved) */}
+                    <td className="px-3 py-2 text-gray-700 max-w-40 truncate" title={row.emission_category || ""}>
+                      {row.emission_category || <span className="text-red-400 italic">missing</span>}
+                    </td>
+
+                    {/* Mapped Data Cells (excluding emission_category) */}
+                    {mappedFields.filter(m => m.requiredField !== "emission_category").map((m) => (
                       <td key={m.requiredField} className="px-3 py-2 text-gray-700 max-w-40 truncate">
-                        {m.requiredField === "emission_category"
-                          ? row.emission_category || <span className="text-red-400 italic">missing</span>
-                          : row.mappedData[m.requiredField] || <span className="text-gray-300">—</span>
-                        }
+                        {row.mappedData[m.requiredField] || <span className="text-gray-300">—</span>}
                       </td>
                     ))}
 
