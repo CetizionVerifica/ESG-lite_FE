@@ -76,7 +76,7 @@ export const getEmissionCategoryNames = async (
   return response.data;
 };
 
-// Bulk create emission factors
+// Bulk create emission factors (chunked to avoid 413 payload limits)
 export const bulkCreateEmissionFactors = async (factors: {
   site_id: number;
   category_id: number;
@@ -85,9 +85,29 @@ export const bulkCreateEmissionFactors = async (factors: {
   denominator_unit?: string;
   source?: string;
   emission_category_name?: string;
+  global_category_name?: string;
 }[]) => {
-  const response = await api.post("/admin/emission-factors/bulk", { factors });
-  return response.data;
+  const CHUNK_SIZE = 50;
+
+  if (factors.length <= CHUNK_SIZE) {
+    const response = await api.post("/admin/emission-factors/bulk", { factors });
+    return response.data;
+  }
+
+  let totalCreated = 0;
+  let totalSkipped = 0;
+  const allErrors: string[] = [];
+
+  for (let i = 0; i < factors.length; i += CHUNK_SIZE) {
+    const chunk = factors.slice(i, i + CHUNK_SIZE);
+    const response = await api.post("/admin/emission-factors/bulk", { factors: chunk });
+    const data = response.data;
+    totalCreated += data.created ?? 0;
+    totalSkipped += data.skipped ?? 0;
+    if (data.errors) allErrors.push(...data.errors);
+  }
+
+  return { created: totalCreated, skipped: totalSkipped, errors: allErrors.length ? allErrors : undefined };
 };
 
 // Bulk delete emission factors
