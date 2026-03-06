@@ -36,6 +36,10 @@ export const unitConversions: Record<string, Record<string, number>> = {
   kilometers: { m: 1000, mile: 0.621371, km: 1 },
   kilometre: { m: 1000, mile: 0.621371, km: 1 },
   kilometres: { m: 1000, mile: 0.621371, km: 1 },
+
+  "tonne.km": { "kg.km": 1000, "g.km": 1000000 },
+"kg.km": { "tonne.km": 0.001, "g.km": 1000 },
+"g.km": { "tonne.km": 0.000001, "kg.km": 0.001},
 };
 
 export const canConvert = (fromUnit: string, toUnit: string): boolean => {
