@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { ArrowDownUp, Car, Navigation, Route } from "lucide-react";
+import { ArrowDownUp, Car, Navigation, Anchor, Route } from "lucide-react";
 import Modal from "../../../components/Modal";
 import LocationSearchInput from "./LocationSearchInput";
 import MapView from "./MapView";
@@ -12,7 +12,9 @@ import {
 } from "../../../services/routingService";
 import { getCanonicalDistanceUnit } from "../../../utils/distanceUnits";
 
-type TravelMode = "road" | "air-sea";
+type TravelMode = "road" | "air" | "sea";
+
+const METERS_PER_NAUTICAL_MILE = 1852;
 
 interface DistanceCalculatorModalProps {
   isOpen: boolean;
@@ -41,15 +43,33 @@ const DistanceCalculatorModal = ({
   // Display unit: always show the pure distance unit (e.g. "km" from "tonne.km")
   const displayUnit = getCanonicalDistanceUnit(targetUnit) || targetUnit;
 
-  // Instant aerial distance (Haversine — great-circle)
-  const aerialDistance = useMemo(() => {
+  // Haversine distance in meters (used by both Air and Sea)
+  const haversineMeters = useMemo(() => {
     if (!startLocation || !endLocation) return null;
-    const meters = haversineDistanceMeters(
+    return haversineDistanceMeters(
       [startLocation.lat, startLocation.lon],
       [endLocation.lat, endLocation.lon],
     );
-    return convertDistanceFromMeters(meters, targetUnit);
-  }, [startLocation, endLocation, targetUnit]);
+  }, [startLocation, endLocation]);
+
+  // Air: straight-line distance in target unit
+  const airDistance = useMemo(() => {
+    if (haversineMeters === null) return null;
+    return convertDistanceFromMeters(haversineMeters, targetUnit);
+  }, [haversineMeters, targetUnit]);
+
+  // Sea: calculate in nautical miles, then convert to target unit
+  const seaNauticalMiles = useMemo(() => {
+    if (haversineMeters === null) return null;
+    return Math.round((haversineMeters / METERS_PER_NAUTICAL_MILE) * 100) / 100;
+  }, [haversineMeters]);
+
+  const seaDistance = useMemo(() => {
+    if (seaNauticalMiles === null) return null;
+    // Convert nautical miles to target unit
+    const seaMeters = seaNauticalMiles * METERS_PER_NAUTICAL_MILE;
+    return convertDistanceFromMeters(seaMeters, targetUnit);
+  }, [seaNauticalMiles, targetUnit]);
 
   // Road distance from OSRM (async)
   const roadDistance = route
@@ -107,7 +127,7 @@ const DistanceCalculatorModal = ({
   };
 
   const currentDistance =
-    travelMode === "road" ? roadDistance : aerialDistance;
+    travelMode === "road" ? roadDistance : travelMode === "air" ? airDistance : seaDistance;
 
   const handleUseDistance = () => {
     if (currentDistance !== null) {
@@ -181,15 +201,27 @@ const DistanceCalculatorModal = ({
           </button>
           <button
             type="button"
-            onClick={() => handleModeChange("air-sea")}
+            onClick={() => handleModeChange("air")}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              travelMode === "air-sea"
+              travelMode === "air"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
             <Navigation size={16} />
-            Air / Sea
+            Air
+          </button>
+          <button
+            type="button"
+            onClick={() => handleModeChange("sea")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              travelMode === "sea"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            <Anchor size={16} />
+            Sea
           </button>
         </div>
 
@@ -236,6 +268,7 @@ const DistanceCalculatorModal = ({
           }
           startLabel={startQuery ? shortName(startQuery) : undefined}
           endLabel={endQuery ? shortName(endQuery) : undefined}
+          travelMode={travelMode}
         />
 
         {/* Distance result — Driving mode */}
@@ -270,8 +303,8 @@ const DistanceCalculatorModal = ({
           </>
         )}
 
-        {/* Distance result — Air / Sea mode (instant) */}
-        {travelMode === "air-sea" && aerialDistance !== null && (
+        {/* Distance result — Air mode (straight-line) */}
+        {travelMode === "air" && airDistance !== null && (
           <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
             <Navigation size={18} className="text-green-500 shrink-0" />
             <div className="flex-1">
@@ -279,7 +312,25 @@ const DistanceCalculatorModal = ({
                 Straight-Line Distance (Great Circle)
               </div>
               <div className="text-xl font-semibold text-green-800">
-                {aerialDistance.toLocaleString()} {displayUnit}
+                {airDistance.toLocaleString()} {displayUnit}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Distance result — Sea mode (nautical miles converted to target unit) */}
+        {travelMode === "sea" && seaDistance !== null && seaNauticalMiles !== null && (
+          <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+            <Anchor size={18} className="text-green-500 shrink-0" />
+            <div className="flex-1">
+              <div className="text-xs text-green-600">
+                Sea Distance (Nautical)
+              </div>
+              <div className="text-xl font-semibold text-green-800">
+                {seaDistance.toLocaleString()} {displayUnit}
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                {seaNauticalMiles.toLocaleString()} nautical miles
               </div>
             </div>
           </div>

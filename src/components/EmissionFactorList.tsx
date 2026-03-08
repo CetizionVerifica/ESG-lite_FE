@@ -5,6 +5,9 @@ import {
   getEmissionFactorsByCategory,
   deleteEmissionFactor,
   bulkDeleteEmissionFactors,
+  deleteEmissionFactorsByBatch,
+  getEmissionFactorBatches,
+  type UploadBatch,
 } from "../services/emissionFactorService";
 
 interface EmissionFactor {
@@ -14,6 +17,7 @@ interface EmissionFactor {
   denominator_unit: string | null;
   source: string | null;
   emission_category_name: string | null;
+  upload_batch_id: string | null;
   site?: { site_id: number; name: string };
   category?: { category_id: number; category_name: string };
 }
@@ -41,6 +45,9 @@ const EmissionFactorList = ({
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [batches, setBatches] = useState<UploadBatch[]>([]);
+  const [showBatches, setShowBatches] = useState(false);
+  const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -68,10 +75,20 @@ const EmissionFactorList = ({
     }
   }, [siteId, categoryId]);
 
+  const loadBatches = useCallback(async () => {
+    try {
+      const data = await getEmissionFactorBatches(siteId, categoryId);
+      setBatches(data);
+    } catch (error) {
+      console.error("Error loading batches:", error);
+    }
+  }, [siteId, categoryId]);
+
   useEffect(() => {
     loadData();
+    loadBatches();
     setSelectedIds(new Set()); // Clear selection when data reloads
-  }, [loadData, refreshTrigger]);
+  }, [loadData, loadBatches, refreshTrigger]);
 
   // Notify parent of selection changes
   useEffect(() => {
@@ -117,6 +134,7 @@ const EmissionFactorList = ({
       await bulkDeleteEmissionFactors(Array.from(selectedIds));
       setEmissionFactors((prev) => prev.filter((ef) => !selectedIds.has(ef.emission_factor_id)));
       setSelectedIds(new Set());
+      loadBatches(); // Refresh batch counts
     } catch (error) {
       console.error("Error bulk deleting emission factors:", error);
     } finally {
@@ -130,9 +148,26 @@ const EmissionFactorList = ({
       setEmissionFactors((prev) =>
         prev.filter((item) => item.emission_factor_id !== row.emission_factor_id)
       );
+      loadBatches(); // Refresh batch counts
     } catch (error) {
       console.error("Error deleting emission factor:", error);
       throw error;
+    }
+  };
+
+  const handleDeleteBatch = async (batchId: string) => {
+    const batch = batches.find((b) => b.upload_batch_id === batchId);
+    if (!confirm(`Delete all ${batch?.count ?? "?"} emission factor(s) from this upload?`)) return;
+
+    setDeletingBatchId(batchId);
+    try {
+      await deleteEmissionFactorsByBatch(batchId);
+      setSelectedIds(new Set());
+      await Promise.all([loadData(), loadBatches()]);
+    } catch (error) {
+      console.error("Error deleting batch:", error);
+    } finally {
+      setDeletingBatchId(null);
     }
   };
 
@@ -181,6 +216,64 @@ const EmissionFactorList = ({
 
   return (
     <div>
+      {/* Upload Batches Panel */}
+      {batches.length > 0 && (
+        <div className="mb-4">
+          <button
+            onClick={() => setShowBatches(!showBatches)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors"
+          >
+            <svg className={`w-4 h-4 transition-transform ${showBatches ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Upload Batches ({batches.length})
+          </button>
+
+          {showBatches && (
+            <div className="mt-2 border border-orange-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-orange-50 text-orange-800">
+                    <th className="px-4 py-2 text-left font-medium">Site</th>
+                    <th className="px-4 py-2 text-left font-medium">Category</th>
+                    <th className="px-4 py-2 text-left font-medium">Factors</th>
+                    <th className="px-4 py-2 text-left font-medium">Uploaded</th>
+                    <th className="px-4 py-2 text-right font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {batches.map((batch) => (
+                    <tr key={batch.upload_batch_id} className="border-t border-orange-100 hover:bg-orange-50/50">
+                      <td className="px-4 py-2 text-gray-700">{batch.site_name}</td>
+                      <td className="px-4 py-2 text-gray-700">{batch.category_name}</td>
+                      <td className="px-4 py-2">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                          {batch.count}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-gray-500">
+                        {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
+                          month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => handleDeleteBatch(batch.upload_batch_id)}
+                          disabled={deletingBatchId === batch.upload_batch_id}
+                          className="px-3 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:bg-gray-400 transition-colors"
+                        >
+                          {deletingBatchId === batch.upload_batch_id ? "Deleting..." : "Delete Batch"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Bulk Actions Bar */}
       {selectedIds.size > 0 && (
         <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
@@ -261,14 +354,12 @@ const EmissionFactorList = ({
                     </td>
                   ))}
                   <td className="border border-gray-300 px-4 py-3">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleDelete(ef)}
-                        className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => handleDelete(ef)}
+                      className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               );

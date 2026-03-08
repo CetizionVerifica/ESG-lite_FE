@@ -38,6 +38,46 @@ interface MapViewProps {
   routeGeometry: GeoJSON.LineString | null;
   startLabel?: string;
   endLabel?: string;
+  travelMode?: "road" | "air" | "sea";
+}
+
+/**
+ * Generate intermediate points along a great-circle arc between two coordinates.
+ * This produces a curved line on a Mercator map projection.
+ */
+function greatCircleArc(
+  start: [number, number],
+  end: [number, number],
+  numPoints = 50,
+): [number, number][] {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const toDeg = (r: number) => (r * 180) / Math.PI;
+
+  const lat1 = toRad(start[0]);
+  const lon1 = toRad(start[1]);
+  const lat2 = toRad(end[0]);
+  const lon2 = toRad(end[1]);
+
+  const d = 2 * Math.asin(
+    Math.sqrt(
+      Math.sin((lat2 - lat1) / 2) ** 2 +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin((lon2 - lon1) / 2) ** 2,
+    ),
+  );
+
+  if (d < 1e-10) return [start, end];
+
+  const points: [number, number][] = [];
+  for (let i = 0; i <= numPoints; i++) {
+    const f = i / numPoints;
+    const A = Math.sin((1 - f) * d) / Math.sin(d);
+    const B = Math.sin(f * d) / Math.sin(d);
+    const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
+    const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
+    const z = A * Math.sin(lat1) + B * Math.sin(lat2);
+    points.push([toDeg(Math.atan2(z, Math.sqrt(x * x + y * y))), toDeg(Math.atan2(y, x))]);
+  }
+  return points;
 }
 
 function MapController({
@@ -105,6 +145,7 @@ const MapView = ({
   routeGeometry,
   startLabel,
   endLabel,
+  travelMode,
 }: MapViewProps) => {
   const routePositions = useMemo<[number, number][]>(() => {
     if (!routeGeometry) return [];
@@ -113,9 +154,15 @@ const MapView = ({
     );
   }, [routeGeometry]);
 
-  // Dashed straight line between points (shown before route loads)
+  // Great-circle arc for sea mode
+  const seaArcPositions = useMemo<[number, number][]>(() => {
+    if (travelMode !== "sea" || !startPoint || !endPoint) return [];
+    return greatCircleArc(startPoint, endPoint);
+  }, [travelMode, startPoint, endPoint]);
+
+  // Dashed straight line between points (shown for air mode or before road route loads)
   const showStraightLine =
-    startPoint && endPoint && routePositions.length === 0;
+    startPoint && endPoint && routePositions.length === 0 && travelMode !== "sea";
 
   return (
     <MapContainer
@@ -151,6 +198,15 @@ const MapView = ({
           color="#9ca3af"
           weight={2}
           dashArray="8 6"
+        />
+      )}
+
+      {seaArcPositions.length > 0 && (
+        <Polyline
+          positions={seaArcPositions}
+          color="#0ea5e9"
+          weight={3}
+          dashArray="6 4"
         />
       )}
 

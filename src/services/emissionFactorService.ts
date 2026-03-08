@@ -88,9 +88,11 @@ export const bulkCreateEmissionFactors = async (factors: {
   global_category_name?: string;
 }[]) => {
   const CHUNK_SIZE = 50;
+  // Generate a single batch ID for the entire upload so all chunks share it
+  const upload_batch_id = crypto.randomUUID();
 
   if (factors.length <= CHUNK_SIZE) {
-    const response = await api.post("/admin/emission-factors/bulk", { factors });
+    const response = await api.post("/admin/emission-factors/bulk", { factors, upload_batch_id });
     return response.data;
   }
 
@@ -100,19 +102,47 @@ export const bulkCreateEmissionFactors = async (factors: {
 
   for (let i = 0; i < factors.length; i += CHUNK_SIZE) {
     const chunk = factors.slice(i, i + CHUNK_SIZE);
-    const response = await api.post("/admin/emission-factors/bulk", { factors: chunk });
+    const response = await api.post("/admin/emission-factors/bulk", { factors: chunk, upload_batch_id });
     const data = response.data;
     totalCreated += data.created ?? 0;
     totalSkipped += data.skipped ?? 0;
     if (data.errors) allErrors.push(...data.errors);
   }
 
-  return { created: totalCreated, skipped: totalSkipped, errors: allErrors.length ? allErrors : undefined };
+  return { created: totalCreated, skipped: totalSkipped, errors: allErrors.length ? allErrors : undefined, upload_batch_id };
 };
 
 // Bulk delete emission factors
 export const bulkDeleteEmissionFactors = async (ids: number[]) => {
   const response = await api.delete("/admin/emission-factors/bulk", { data: { ids } });
+  return response.data;
+};
+
+// Delete all emission factors from a specific upload batch
+export const deleteEmissionFactorsByBatch = async (batchId: string) => {
+  const response = await api.delete(`/admin/emission-factors/batch/${batchId}`);
+  return response.data;
+};
+
+export interface UploadBatch {
+  upload_batch_id: string;
+  count: number;
+  uploaded_at: string;
+  site_id: number;
+  site_name: string;
+  category_id: number;
+  category_name: string;
+}
+
+// Get all upload batches for emission factors
+export const getEmissionFactorBatches = async (
+  siteId?: number | null,
+  categoryId?: number | null,
+): Promise<UploadBatch[]> => {
+  const params: Record<string, number> = {};
+  if (siteId) params.site_id = siteId;
+  if (categoryId) params.category_id = categoryId;
+  const response = await api.get("/admin/emission-factors/batches", { params });
   return response.data;
 };
 

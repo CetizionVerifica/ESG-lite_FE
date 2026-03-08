@@ -28,6 +28,7 @@ export interface TableProps<T> {
     },
   ) => React.ReactNode;
   isDark?: boolean;
+  rowClassName?: (row: T) => string;
 }
 
 export function Table<T extends Record<string, any>>({
@@ -41,6 +42,7 @@ export function Table<T extends Record<string, any>>({
   actionsLabel = "Actions",
   renderActions,
   isDark = false,
+  rowClassName,
 }: TableProps<T>) {
   const [editingId, setEditingId] = useState<any>(null);
   const [editValues, setEditValues] = useState<Partial<T>>({});
@@ -159,7 +161,7 @@ export function Table<T extends Record<string, any>>({
             return (
               <tr
                 key={String(row[keyField])}
-                className={getRowClass(isEditing)}
+                className={`${getRowClass(isEditing)} ${rowClassName ? rowClassName(row) : ""}`}
               >
                 {columns.map((col) => (
                   <td key={String(col.key)} className={cellClass}>

@@ -22,6 +22,7 @@ export interface ImportResponse {
   inserted: number;
   skipped: number;
   total_rows: number;
+  upload_batch_id?: string;
 }
 
 export async function uploadExcelGetHeaders(file: File): Promise<UploadHeadersResponse> {
