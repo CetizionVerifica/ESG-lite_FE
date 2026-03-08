@@ -47,10 +47,44 @@ export interface ApprovedEmissionsReportPayload {
 
 
 
+export interface EmissionsSummary {
+  total_emission: number;
+  pending_count: number;
+  approved_count: number;
+  rejected_count: number;
+}
+
+export interface PaginatedEmissions {
+  data: EmissionData[];
+  total: number;
+  summary: EmissionsSummary;
+}
+
 export const getEmissionsBySite = async (siteId: string | number) => {
   const response = await api.get("/user/emissions", {
     params: { siteId },
   });
+  return response.data;
+};
+
+export const getEmissionsPaginated = async (params: {
+  siteId: number;
+  categoryId?: number | null;
+  year?: number | null;
+  month?: number | null;
+  page: number;
+  limit: number;
+}): Promise<PaginatedEmissions> => {
+  const query: Record<string, string | number> = {
+    siteId: params.siteId,
+    page: params.page,
+    limit: params.limit,
+  };
+  if (params.categoryId) query.categoryId = params.categoryId;
+  if (params.year) query.year = params.year;
+  if (params.month) query.month = params.month;
+
+  const response = await api.get("/user/emissions", { params: query });
   return response.data;
 };
 
@@ -130,6 +164,34 @@ export const bulkRejectEmissions = async (ids: number[], comment: string) => {
 
 export const bulkDeleteEmissions = async (ids: number[]) => {
   const response = await api.delete("/user/emissions/bulk-delete", { data: { ids } });
+  return response.data;
+};
+
+// Delete all emissions from a specific upload batch
+export const deleteEmissionsByBatch = async (batchId: string) => {
+  const response = await api.delete(`/user/emissions/batch/${batchId}`);
+  return response.data;
+};
+
+export interface EmissionUploadBatch {
+  upload_batch_id: string;
+  count: number;
+  uploaded_at: string;
+  site_id: number;
+  site_name: string;
+  category_id: number;
+  category_name: string;
+}
+
+// Get all upload batches for emissions
+export const getEmissionBatches = async (
+  siteId?: number | null,
+  categoryId?: number | null,
+): Promise<EmissionUploadBatch[]> => {
+  const params: Record<string, number> = {};
+  if (siteId) params.siteId = siteId;
+  if (categoryId) params.categoryId = categoryId;
+  const response = await api.get("/user/emissions/batches", { params });
   return response.data;
 };
 

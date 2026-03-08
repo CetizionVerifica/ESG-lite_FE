@@ -140,6 +140,7 @@ export interface ProposedColumn {
 export interface DimColumnNames {
   columns: ProposedColumn[];
   activity_column_name: string;
+  ef_names?: string[];  // Emission factor names specific to this dimension count
 }
 
 export interface EfNamePair {

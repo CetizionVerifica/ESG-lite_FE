@@ -4,10 +4,8 @@ import {
   previewAutoGenerateColumnConfig,
   confirmAutoGenerateColumnConfig,
   ColumnConfigProposal,
-  ProposedConfigGroup,
   ProposedColumn,
   ProposedUnit,
-  DimColumnNames,
   EfNamePair,
   ColumnOptionsMap,
   ColumnDependencies,
@@ -38,8 +36,16 @@ export default function AutoGenerateColumnConfigModal({
   const [proposal, setProposal] = useState<ColumnConfigProposal | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [configName, setConfigName] = useState("");
-  const [selectedGroupIdx, setSelectedGroupIdx] = useState(0);
+
+  // Unit group selection (checkboxes) - both selected by default
+  const [selectedGroupIndices, setSelectedGroupIndices] = useState<Set<number>>(new Set());
+
+  // Track selected dimension for each unit group: Map<groupIndex, selectedDimCount>
+  const [selectedDimensionsByGroup, setSelectedDimensionsByGroup] = useState<Map<number, number>>(new Map());
+
   const [createUnits, setCreateUnits] = useState(true);
+  const [customUnits, setCustomUnits] = useState<string[]>([]);
+  const [customUnitInput, setCustomUnitInput] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("columns");
   const [resultData, setResultData] = useState<{
     configName: string;
@@ -53,13 +59,7 @@ export default function AutoGenerateColumnConfigModal({
   const [editDependentOptions, setEditDependentOptions] = useState<DependentOptionsMap>({});
   const [editMappings, setEditMappings] = useState<EmissionCategoryMapping>({});
 
-  // Dimension selection state
-  const [selectedDimCount, setSelectedDimCount] = useState(1);
-  // Available dimension counts (computed from ef_names natural part counts)
-  const [availableDimCounts, setAvailableDimCounts] = useState<number[]>([]);
   const [efNames, setEfNames] = useState<string[]>([]);
-  // LLM-inferred column names per dimension count
-  const [columnNamesByDim, setColumnNamesByDim] = useState<Record<number, DimColumnNames>>({});
   // ECM name pairs: display_name (company) ↔ lookup_name (EF)
   const [efNamePairs, setEfNamePairs] = useState<EfNamePair[] | undefined>(undefined);
 
@@ -78,21 +78,41 @@ export default function AutoGenerateColumnConfigModal({
     let parsed: { original: string; parts: string[] }[];
 
     if (namePairs && namePairs.length > 0) {
-      // ECM mode: display_name for dropdown parts, lookup_name for mapping values
-      const filteredPairs = namePairs.filter(
-        p => p.display_name.split(" - ").length === dimCount
-      );
-      parsed = filteredPairs.map(p => ({
-        original: p.lookup_name,
-        parts: p.display_name.split(" - ").map(s => s.trim()),
-      }));
+      // ECM mode: pad emission factors to match dimCount
+      parsed = namePairs.map(p => {
+        const parts = p.display_name.split(" - ").map(s => s.trim());
+
+        // Pad with "Unknown" at the beginning if fewer parts than dimCount
+        while (parts.length < dimCount) {
+          parts.unshift("Unknown"); // Insert at beginning for Travel Mode
+        }
+
+        // Convert "-" to "Unknown"
+        const cleanedParts = parts.map(pt => pt === "-" || pt === "" ? "Unknown" : pt);
+
+        return {
+          original: p.lookup_name,
+          parts: cleanedParts.slice(0, dimCount), // Take only first dimCount parts
+        };
+      }).filter(item => item.parts.length === dimCount);
     } else {
-      // EF mode (current behavior): same string for both
-      const filtered = allEfNames.filter(n => n.split(" - ").length === dimCount);
-      parsed = filtered.map(n => ({
-        original: n,
-        parts: n.split(" - ").map(p => p.trim()),
-      }));
+      // EF mode: pad emission factors to match dimCount
+      parsed = allEfNames.map(n => {
+        const parts = n.split(" - ").map(p => p.trim());
+
+        // Pad with "Unknown" at the beginning if fewer parts than dimCount
+        while (parts.length < dimCount) {
+          parts.unshift("Unknown"); // Insert at beginning for Travel Mode
+        }
+
+        // Convert "-" to "Unknown"
+        const cleanedParts = parts.map(p => p === "-" || p === "" ? "Unknown" : p);
+
+        return {
+          original: n,
+          parts: cleanedParts.slice(0, dimCount), // Take only first dimCount parts
+        };
+      }).filter(item => item.parts.length === dimCount);
     }
 
     // Build columns: reuse names from baseColumns where possible
@@ -185,43 +205,89 @@ export default function AutoGenerateColumnConfigModal({
     return { columns: newColumns, options: newOptions, deps: newDeps, depOpts: newDepOpts, mappings: newMappings };
   };
 
-  const loadGroupIntoState = (group: ProposedConfigGroup) => {
-    // Set ef_names and compute available dim counts
-    setEfNames(group.ef_names);
-    setEfNamePairs(group.ef_name_pairs);
-    const partCountSet = new Set(group.ef_names.map(n => n.split(" - ").length));
-    const available = [...partCountSet].sort((a, b) => a - b).filter(c => c <= 4);
-    setAvailableDimCounts(available);
+  // Load combined data from all selected groups with their selected dimensions
+  const loadCombinedGroupsIntoState = useCallback(() => {
+    if (!proposal) return;
 
-    // Store LLM-inferred column names for all dim counts
-    const namesByDim = group.column_names_by_dim || {};
-    setColumnNamesByDim(namesByDim);
+    const combinedColumns: ProposedColumn[] = [];
+    let combinedOptions: ColumnOptionsMap = {};
+    let combinedDeps: ColumnDependencies = {};
+    let combinedDepOpts: DependentOptionsMap = {};
+    let combinedMappings: EmissionCategoryMapping = {};
+    let combinedEfNames: string[] = [];
+    let combinedEfNamePairs: EfNamePair[] = [];
 
-    const detectedDim = group.pattern === "THREE_DIM" ? 3 : group.pattern === "TWO_DIM" ? 2 : 1;
-    setSelectedDimCount(detectedDim);
+    // Iterate through all selected groups
+    for (const groupIdx of Array.from(selectedGroupIndices)) {
+      const group = proposal.configs[groupIdx];
+      const dimCount = selectedDimensionsByGroup.get(groupIdx);
 
-    // Use LLM-inferred columns for the detected dim count
-    const baseColumns = namesByDim[detectedDim]?.columns || group.columns;
-    const result = buildConfigForDimCount(group.ef_names, detectedDim, baseColumns, group.ef_name_pairs);
-    setEditColumns(result.columns);
-    setEditColumnOptions(result.options);
-    setEditDependencies(result.deps);
-    setEditDependentOptions(result.depOpts);
-    setEditMappings(result.mappings);
-  };
+      if (!group || !dimCount) continue;
 
-  // Rebuild when user clicks a dimension button
-  const rebuildForDimCount = (dimCount: number) => {
-    // Use LLM-inferred columns for this dim count, fall back to current columns
-    const baseColumns = columnNamesByDim[dimCount]?.columns || editColumns;
-    const result = buildConfigForDimCount(efNames, dimCount, baseColumns, efNamePairs);
-    setEditColumns(result.columns);
-    setEditColumnOptions(result.options);
-    setEditDependencies(result.deps);
-    setEditDependentOptions(result.depOpts);
-    setEditMappings(result.mappings);
-    setSelectedDimCount(dimCount);
-  };
+      // Get data for this group's selected dimension
+      const namesByDim = group.column_names_by_dim || {};
+      const baseColumns = namesByDim[dimCount]?.columns || group.columns;
+
+      // Use dimension-specific ef_names if backend provides it, otherwise fallback to filtering
+      const dimConfig = namesByDim[dimCount];
+      const efNamesForDim = dimConfig?.ef_names || group.ef_names.filter(n => n.split(" - ").length === dimCount);
+
+      const result = buildConfigForDimCount(efNamesForDim, dimCount, baseColumns, group.ef_name_pairs);
+
+      // Merge columns - deduplicate by column_name (keep dimensional columns unique, collect all activity columns)
+      for (const col of result.columns) {
+        const existingCol = combinedColumns.find(c => c.column_name === col.column_name);
+        if (!existingCol) {
+          combinedColumns.push(col);
+        }
+      }
+
+      // Merge options - combine arrays for each column
+      for (const [colName, options] of Object.entries(result.options)) {
+        if (!combinedOptions[colName]) {
+          combinedOptions[colName] = [];
+        }
+        const existingIds = new Set(combinedOptions[colName].map((opt) => opt.id));
+        const newOptions = options.filter((opt) => !existingIds.has(opt.id));
+        combinedOptions[colName] = [...combinedOptions[colName], ...newOptions];
+      }
+
+      // Merge dependencies (unchanged)
+      combinedDeps = { ...combinedDeps, ...result.deps };
+
+      // Merge dependent options - combine arrays
+      for (const [colName, depMap] of Object.entries(result.depOpts)) {
+        if (!combinedDepOpts[colName]) {
+          combinedDepOpts[colName] = {};
+        }
+        for (const [parentVal, options] of Object.entries(depMap)) {
+          if (!combinedDepOpts[colName][parentVal]) {
+            combinedDepOpts[colName][parentVal] = [];
+          }
+          const existingIds = new Set(combinedDepOpts[colName][parentVal].map((opt) => opt.id));
+          const newOptions = (options as DropdownOptionValue[]).filter((opt) => !existingIds.has(opt.id));
+          combinedDepOpts[colName][parentVal] = [...combinedDepOpts[colName][parentVal], ...newOptions];
+        }
+      }
+
+      // Merge mappings (unchanged)
+      combinedMappings = { ...combinedMappings, ...result.mappings };
+      combinedEfNames = [...combinedEfNames, ...group.ef_names];
+      if (group.ef_name_pairs) {
+        combinedEfNamePairs = [...combinedEfNamePairs, ...group.ef_name_pairs];
+      }
+    }
+
+    // Set combined data to state
+    setEditColumns(combinedColumns);
+    setEditColumnOptions(combinedOptions);
+    setEditDependencies(combinedDeps);
+    setEditDependentOptions(combinedDepOpts);
+    setEditMappings(combinedMappings);
+    setEfNames(combinedEfNames);
+    setEfNamePairs(combinedEfNamePairs.length > 0 ? combinedEfNamePairs : undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposal, selectedGroupIndices, selectedDimensionsByGroup]);
 
   const fetchPreview = useCallback(async () => {
     setStep("loading");
@@ -230,8 +296,21 @@ export default function AutoGenerateColumnConfigModal({
       const data = await previewAutoGenerateColumnConfig(siteId, categoryId);
       setProposal(data);
       setConfigName(data.config_name);
-      setSelectedGroupIdx(0);
-      if (data.configs[0]) loadGroupIntoState(data.configs[0]);
+
+      // Select all unit groups by default
+      const allIndices = new Set(data.configs.map((_, idx) => idx));
+      setSelectedGroupIndices(allIndices);
+
+      // Set default dimension for each unit group (auto-select first available dimension)
+      const defaultDimensions = new Map<number, number>();
+      data.configs.forEach((group, idx) => {
+        const detectedDim =
+          group.pattern === "THREE_DIM" ? 3 : group.pattern === "TWO_DIM" ? 2 : 1;
+        defaultDimensions.set(idx, detectedDim);
+      });
+      setSelectedDimensionsByGroup(defaultDimensions);
+
+      // The useEffect will automatically load combined data when selections are set
       setActiveTab("columns");
       setStep("preview");
     } catch (err: any) {
@@ -248,13 +327,55 @@ export default function AutoGenerateColumnConfigModal({
     }
   }, [isOpen, siteId, categoryId, fetchPreview]);
 
-  // When switching unit group tabs, load that group's data
-  const handleGroupSwitch = (idx: number) => {
-    setSelectedGroupIdx(idx);
-    if (proposal?.configs[idx]) {
-      loadGroupIntoState(proposal.configs[idx]);
+  // Reload combined data whenever unit group or dimension selections change
+  useEffect(() => {
+    if (proposal && selectedGroupIndices.size > 0 && selectedDimensionsByGroup.size > 0) {
+      loadCombinedGroupsIntoState();
     }
+  }, [selectedGroupIndices, selectedDimensionsByGroup, proposal, loadCombinedGroupsIntoState]);
+
+  // Toggle unit group selection
+  const handleGroupToggle = (idx: number) => {
+    setSelectedGroupIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        // Prevent deselecting the last group (minimum 1 required)
+        if (next.size > 1) {
+          next.delete(idx);
+          // Also remove its dimension selection
+          setSelectedDimensionsByGroup((prevDims) => {
+            const newDims = new Map(prevDims);
+            newDims.delete(idx);
+            return newDims;
+          });
+        }
+      } else {
+        next.add(idx);
+        // Add default dimension for this group
+        if (proposal?.configs[idx]) {
+          const group = proposal.configs[idx];
+          const detectedDim =
+            group.pattern === "THREE_DIM" ? 3 : group.pattern === "TWO_DIM" ? 2 : 1;
+          setSelectedDimensionsByGroup((prevDims) => {
+            const newDims = new Map(prevDims);
+            newDims.set(idx, detectedDim);
+            return newDims;
+          });
+        }
+      }
+      return next;
+    });
   };
+
+  // Switch dimension for a specific unit group
+  const handleDimensionChange = (groupIdx: number, dimCount: number) => {
+    setSelectedDimensionsByGroup((prev) => {
+      const next = new Map(prev);
+      next.set(groupIdx, dimCount);
+      return next;
+    });
+  };
+
 
   const handleConfirm = async () => {
     if (!proposal) return;
@@ -263,14 +384,24 @@ export default function AutoGenerateColumnConfigModal({
     setError(null);
 
     try {
-      const selectedUnits: ProposedUnit[] = createUnits
-        ? proposal.proposed_units.filter((u) => !u.already_exists)
-        : [];
+      const selectedUnits: ProposedUnit[] = [
+        ...(createUnits ? proposal.proposed_units.filter((u) => !u.already_exists) : []),
+        ...customUnits.map((name) => ({ unit_name: name, already_exists: false })),
+      ];
+
+      const allUnitsCreated: string[] = [];
+
+      // Use the user-edited state directly (what the preview shows)
+      const selectedIndices = Array.from(selectedGroupIndices).sort((a, b) => a - b);
+      const unitNames = selectedIndices
+        .map((idx) => proposal.configs[idx]?.denominator_unit)
+        .filter(Boolean);
+      const configSuffix = unitNames.length > 1 ? unitNames.join(" + ") : unitNames[0] || "";
 
       const result = await confirmAutoGenerateColumnConfig({
         site_id: proposal.site_id,
         category_id: proposal.category_id,
-        config_name: configName,
+        config_name: `${configName} - ${configSuffix}`,
         columns: editColumns,
         column_options: editColumnOptions,
         column_dependencies: editDependencies,
@@ -280,9 +411,13 @@ export default function AutoGenerateColumnConfigModal({
         proposed_units: selectedUnits,
       });
 
+      if (result.units_created) {
+        allUnitsCreated.push(...result.units_created);
+      }
+
       setResultData({
-        configName: configName,
-        unitsCreated: result.units_created || [],
+        configName: `${configName} - ${configSuffix}`,
+        unitsCreated: allUnitsCreated,
       });
       setStep("result");
     } catch (err: any) {
@@ -303,6 +438,8 @@ export default function AutoGenerateColumnConfigModal({
     setConfigName("");
     setResultData(null);
     setEfNamePairs(undefined);
+    setCustomUnits([]);
+    setCustomUnitInput("");
     onClose();
   };
 
@@ -409,14 +546,13 @@ export default function AutoGenerateColumnConfigModal({
     const makeOption = (val: string) => ({ id: val, label: val });
 
     // Extract display parts, using ECM pairs when available
+    // No filtering by dimension count since we combine data from multiple groups with different dimensions
     let allParts: string[][];
     if (efNamePairs && efNamePairs.length > 0) {
       allParts = efNamePairs
-        .filter(p => p.display_name.split(" - ").length === selectedDimCount)
         .map(p => p.display_name.split(" - ").map(s => s.trim()));
     } else {
       allParts = efNames
-        .filter(n => n.split(" - ").length === selectedDimCount)
         .map(n => n.split(" - ").map(p => p.trim()));
     }
 
@@ -513,6 +649,10 @@ export default function AutoGenerateColumnConfigModal({
 
     // Remove mappings (they're now invalid)
     setEditMappings({});
+  };
+
+  const handleRemoveActivityColumn = (colIdx: number) => {
+    setEditColumns(prev => prev.filter((_, idx) => idx !== colIdx));
   };
 
   // ── Dropdown option editing ──
@@ -665,17 +805,23 @@ export default function AutoGenerateColumnConfigModal({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm text-gray-500">
                     <span>{proposal.site_name} / {proposal.category_name}</span>
-                    {proposal.configs[selectedGroupIdx]?.source === "ecm" && (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
-                        Using company names
-                      </span>
-                    )}
+                    {(() => {
+                      const firstSelectedIdx = Array.from(selectedGroupIndices)[0];
+                      return proposal.configs[firstSelectedIdx]?.source === "ecm" && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
+                          Using company names
+                        </span>
+                      );
+                    })()}
                   </div>
-                  {proposal.configs[selectedGroupIdx] && (
-                    <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
-                      {Object.keys(editMappings).length} emission factors (of {proposal.configs[selectedGroupIdx].ef_names.length} total)
-                    </span>
-                  )}
+                  {(() => {
+                    const firstSelectedIdx = Array.from(selectedGroupIndices)[0];
+                    return proposal.configs[firstSelectedIdx] && (
+                      <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
+                        {Object.keys(editMappings).length} emission factors (of {proposal.configs[firstSelectedIdx].ef_names.length} total)
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 {/* Existing config warning */}
@@ -686,89 +832,119 @@ export default function AutoGenerateColumnConfigModal({
                   </div>
                 )}
 
-                {/* Config name + unit group */}
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                      Config Name
-                    </label>
-                    <input
-                      type="text"
-                      value={configName}
-                      onChange={(e) => setConfigName(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </div>
-                  {proposal.configs.length > 1 && (
+                {/* Config name */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Config Name
+                  </label>
+                  <input
+                    type="text"
+                    value={configName}
+                    onChange={(e) => setConfigName(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Unit Groups & Dimensions - Horizontal Layout */}
+                {proposal.configs.length > 1 && (
+                  <div className="border border-gray-200 rounded-lg p-3 space-y-3">
+                    {/* Unit Group Selection */}
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">
-                        Unit Group
+                      <label className="block text-xs font-medium text-gray-500 mb-2">
+                        Select Unit Groups ({selectedGroupIndices.size} selected)
                       </label>
-                      <div className="flex gap-1">
+                      <div className="flex flex-wrap gap-2">
                         {proposal.configs.map((group, idx) => (
-                          <button
+                          <label
                             key={idx}
-                            onClick={() => handleGroupSwitch(idx)}
-                            className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
-                              idx === selectedGroupIdx
-                                ? "bg-purple-600 text-white"
-                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border cursor-pointer transition-colors ${
+                              selectedGroupIndices.has(idx)
+                                ? "bg-purple-50 border-purple-600 text-purple-700"
+                                : "bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100"
                             }`}
                           >
-                            {group.denominator_unit}
-                          </button>
+                            <input
+                              type="checkbox"
+                              checked={selectedGroupIndices.has(idx)}
+                              onChange={() => handleGroupToggle(idx)}
+                              className="rounded border-gray-300 text-purple-600"
+                            />
+                            <span>{group.denominator_unit}</span>
+                          </label>
                         ))}
                       </div>
                     </div>
-                  )}
-                </div>
 
-                {/* Dimension selector */}
-                <div className="border border-gray-200 rounded-lg p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">
-                        Dimensions (split by &ldquo; - &rdquo;)
-                      </label>
-                      <div className="flex gap-1">
-                        {availableDimCounts.map((dim) => {
-                          const count = efNames.filter(n => n.split(" - ").length === dim).length;
+                    {/* Dimension Selectors - Horizontal Cards */}
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(selectedGroupIndices)
+                        .sort((a, b) => a - b)
+                        .map((groupIdx) => {
+                          const group = proposal.configs[groupIdx];
+                          if (!group) return null;
+
+                          // Calculate available dimensions for this group
+                          const partCountSet = new Set(
+                            group.ef_names.map((n) => n.split(" - ").length)
+                          );
+                          const availableDims = [...partCountSet]
+                            .sort((a, b) => a - b)
+                            .filter((c) => c <= 4);
+
+                          const selectedDim = selectedDimensionsByGroup.get(groupIdx) || availableDims[0] || 1;
+
                           return (
-                            <button
-                              key={dim}
-                              onClick={() => rebuildForDimCount(dim)}
-                              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                                dim === selectedDimCount
-                                  ? "bg-purple-600 text-white"
-                                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                              }`}
+                            <div
+                              key={groupIdx}
+                              className="flex-1 min-w-[200px] border border-purple-200 rounded-lg p-2.5 bg-purple-50/30"
                             >
-                              {dim}-dim
-                              <span className={`ml-1 ${dim === selectedDimCount ? "text-purple-200" : "text-gray-400"}`}>
-                                ({count})
-                              </span>
-                            </button>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-xs font-semibold text-purple-900">
+                                  {group.denominator_unit}
+                                </span>
+                                <span className="text-[10px] text-gray-500">
+                                  {group.ef_names.length} emission factors
+                                </span>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-medium text-gray-500 mb-1">
+                                  Dimensions (split by &ldquo; - &rdquo;)
+                                </label>
+                                <div className="flex gap-1">
+                                  {availableDims.map((dim) => {
+                                    const count = group.ef_names.filter(
+                                      (n) => n.split(" - ").length === dim
+                                    ).length;
+                                    return (
+                                      <button
+                                        key={dim}
+                                        onClick={() => handleDimensionChange(groupIdx, dim)}
+                                        className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+                                          dim === selectedDim
+                                            ? "bg-purple-600 text-white"
+                                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                        }`}
+                                      >
+                                        {dim}-dim
+                                        <span
+                                          className={`ml-1 text-[10px] ${
+                                            dim === selectedDim ? "text-purple-200" : "text-gray-400"
+                                          }`}
+                                        >
+                                          ({count})
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
                           );
                         })}
-                      </div>
                     </div>
-                    <span
-                      className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                        selectedDimCount === 1
-                          ? "bg-blue-100 text-blue-700"
-                          : selectedDimCount === 2
-                            ? "bg-purple-100 text-purple-700"
-                            : "bg-orange-100 text-orange-700"
-                      }`}
-                    >
-                      {selectedDimCount === 1
-                        ? "Flat (simple dropdown)"
-                        : selectedDimCount === 2
-                          ? "2-Level (parent \u2192 child)"
-                          : `${selectedDimCount}-Level (chained)`}
-                    </span>
                   </div>
-                </div>
+                )}
 
                 {/* Tab navigation */}
                 <div className="flex gap-1 border-b border-gray-200">
@@ -791,7 +967,7 @@ export default function AutoGenerateColumnConfigModal({
                 </div>
 
                 {/* Tab content */}
-                <div className="min-h-[240px] max-h-[400px] overflow-y-auto">
+                <div className="min-h-[240px] max-h-[400px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-gray-400">
                   {activeTab === "columns" && (
                     <ColumnsTab
                       columns={editColumns}
@@ -801,6 +977,7 @@ export default function AutoGenerateColumnConfigModal({
                       onResetDimension={handleResetDimension}
                       onAddDimension={handleAddDimension}
                       onRemoveDimension={handleRemoveDimension}
+                      onRemoveActivityColumn={handleRemoveActivityColumn}
                     />
                   )}
 
@@ -834,30 +1011,87 @@ export default function AutoGenerateColumnConfigModal({
                   )}
                 </div>
 
-                {/* Units */}
-                {proposal.proposed_units.filter((u) => !u.already_exists).length > 0 && (
-                  <div className="pt-2 border-t border-gray-200">
-                    <label className="flex items-center gap-2 text-sm">
+                {/* Units - Always visible */}
+                {proposal && (
+                  <div className="pt-2 border-t border-gray-200 space-y-2">
+                    {(() => {
+                      const missingUnits = proposal.proposed_units.filter((u) => !u.already_exists);
+                      const hasMissingUnits = missingUnits.length > 0;
+
+                      return (
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={createUnits}
+                            onChange={(e) => setCreateUnits(e.target.checked)}
+                            className="rounded border-gray-300 text-purple-600"
+                            disabled={!hasMissingUnits}
+                          />
+                          <span className={hasMissingUnits ? "text-gray-700" : "text-gray-400"}>
+                            {hasMissingUnits ? (
+                              <>
+                                Also create missing unit{missingUnits.length !== 1 ? "s" : ""}:{" "}
+                                <strong>
+                                  {missingUnits.map((u) => u.unit_name).join(", ")}
+                                </strong>
+                              </>
+                            ) : (
+                              "No missing units to create (all units already exist)"
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })()}
+
+                    {/* Custom units */}
+                    <div className="flex items-center gap-2">
                       <input
-                        type="checkbox"
-                        checked={createUnits}
-                        onChange={(e) => setCreateUnits(e.target.checked)}
-                        className="rounded border-gray-300 text-purple-600"
+                        type="text"
+                        value={customUnitInput}
+                        onChange={(e) => setCustomUnitInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const name = customUnitInput.trim().toLowerCase();
+                            if (name && !customUnits.includes(name) && !proposal.proposed_units.some((u) => u.unit_name.toLowerCase() === name)) {
+                              setCustomUnits((prev) => [...prev, name]);
+                              setCustomUnitInput("");
+                            }
+                          }
+                        }}
+                        placeholder="Add custom unit..."
+                        className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-purple-400"
                       />
-                      <span className="text-gray-700">
-                        Also create missing unit
-                        {proposal.proposed_units.filter((u) => !u.already_exists).length !== 1
-                          ? "s"
-                          : ""}
-                        :{" "}
-                        <strong>
-                          {proposal.proposed_units
-                            .filter((u) => !u.already_exists)
-                            .map((u) => u.unit_name)
-                            .join(", ")}
-                        </strong>
-                      </span>
-                    </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const name = customUnitInput.trim().toLowerCase();
+                          if (name && !customUnits.includes(name) && !proposal.proposed_units.some((u) => u.unit_name.toLowerCase() === name)) {
+                            setCustomUnits((prev) => [...prev, name]);
+                            setCustomUnitInput("");
+                          }
+                        }}
+                        className="text-sm px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    {customUnits.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {customUnits.map((u) => (
+                          <span key={u} className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">
+                            {u}
+                            <button
+                              type="button"
+                              onClick={() => setCustomUnits((prev) => prev.filter((x) => x !== u))}
+                              className="text-purple-500 hover:text-purple-700 font-bold"
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -940,6 +1174,7 @@ function ColumnsTab({
   onResetDimension,
   onAddDimension,
   onRemoveDimension,
+  onRemoveActivityColumn,
 }: {
   columns: ProposedColumn[];
   columnOptions: ColumnOptionsMap;
@@ -948,6 +1183,7 @@ function ColumnsTab({
   onResetDimension: (dimIdx: number) => void;
   onAddDimension: () => void;
   onRemoveDimension: (dimIdx: number) => void;
+  onRemoveActivityColumn: (colIdx: number) => void;
 }) {
   const selectColumns = columns.filter((c) => c.column_type === "select");
   const numberColumns = columns.filter((c) => c.column_type === "number");
@@ -1086,6 +1322,13 @@ function ColumnsTab({
                 existing
               </span>
             )}
+            <button
+              onClick={() => onRemoveActivityColumn(globalIdx)}
+              className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded transition-colors shrink-0"
+              title="Remove this activity column"
+            >
+              ✕
+            </button>
           </div>
         );
       })}

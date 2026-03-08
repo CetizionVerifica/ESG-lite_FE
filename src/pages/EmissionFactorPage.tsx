@@ -52,7 +52,7 @@ const EmissionFactorPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [smartUploadOpen, setSmartUploadOpen] = useState(false);
 
-  const [_formState, formAction] = useActionState(
+  const [formState, formAction] = useActionState(
     async (_prevData: any, data: FormData) => {
       try {
         const year = parseInt(data.get("year") as string);
@@ -385,6 +385,16 @@ const EmissionFactorPage = () => {
               className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
             />
           </div>
+          {formState?.error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded text-sm">
+              {formState.error}
+            </div>
+          )}
+          {formState?.success && (
+            <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded text-sm">
+              Emission factor created successfully.
+            </div>
+          )}
           <div className="flex justify-end gap-2 mt-4">
             <button
               type="button"

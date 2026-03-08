@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import Dropdown, { DropdownOption } from "../../components/Dropdown";
 import { Table, Column } from "../../components/Table";
@@ -10,6 +10,9 @@ import {
     createEmission,
     updateEmission,
     deleteEmission,
+    deleteEmissionsByBatch,
+    getEmissionBatches,
+    type EmissionUploadBatch,
     EmissionData,
 } from "../../services/emissionService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
@@ -89,6 +92,8 @@ const UserDataEntryPage = () => {
 
     const hasMultipleSites = availableSites.length > 1;
 
+    // FERA (Fuel and Energy Related Activities) — dynamically resolved from site's categories
+
     // ---------------------------------------------------------------------------
     // State
     // ---------------------------------------------------------------------------
@@ -101,9 +106,13 @@ const UserDataEntryPage = () => {
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [dynamicColumns, setDynamicColumns] = useState<ColumnEntity[]>([]);
     const [emissions, setEmissions] = useState<EmissionRow[]>([]);
+    const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>([]);
+    const [showEmissionBatches, setShowEmissionBatches] = useState(false);
+    const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
     const [emissionFactors, setEmissionFactors] = useState<EmissionFactor[]>(
         [],
     );
+    const [feraEmissionFactors, setFeraEmissionFactors] = useState<EmissionFactor[]>([]);
     const [units, setUnits] = useState<UnitData[]>([]);
     const [loading, setLoading] = useState(false);
     const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
@@ -205,12 +214,36 @@ const rowsPerPage = 10;
         emissionCategoryMapping,
     );
 
+    // FERA emission calculation (uses FERA factors for the same fuel type)
+    const { calculateEmission: calculateFeraEmission, getExpectedUnit: getFeraExpectedUnit, getEmissionFactor: getFeraEmissionFactor } = useEmissionCalculation(
+        feraEmissionFactors,
+        targetYear,
+        dynamicColumns,
+        selectColumnNames,
+        emissionCategoryMapping,
+        true, // fallbackToRaw — FERA factors account for fuel energy content in their factor_value
+    );
+
     // ---------------------------------------------------------------------------
     // Derived Data (continued)
     // ---------------------------------------------------------------------------
     // Get current site and its categories
     const currentSite = availableSites.find((s) => s.site_id === selectedSite);
     const categories: Category[] = currentSite?.categories || [];
+
+    // FERA category — dynamically found from the site's assigned categories
+    const feraCategory = useMemo(
+        () => categories.find((c) => c.category_name.toLowerCase() === "fera"),
+        [categories],
+    );
+    const feraCategoryId = feraCategory?.category_id ?? null;
+
+    // Check overlap: does the current category share any emission_category_names with FERA?
+    const isFeraCategory = useMemo(() => {
+        if (!feraCategoryId || feraEmissionFactors.length === 0 || emissionFactors.length === 0) return false;
+        const feraNames = new Set(feraEmissionFactors.map((f) => f.emission_category_name?.toLowerCase()));
+        return emissionFactors.some((f) => feraNames.has(f.emission_category_name?.toLowerCase()));
+    }, [feraCategoryId, feraEmissionFactors, emissionFactors]);
     const siteId = selectedSite;
 
     // Use explicitly selected company, or auto-detect from current site
@@ -221,10 +254,12 @@ const rowsPerPage = 10;
         label: site.name,
     }));
 
-    const categoryOptions: DropdownOption[] = categories.map((category) => ({
-        id: category.category_id,
-        label: category.category_name,
-    }));
+    const categoryOptions: DropdownOption[] = categories
+        .filter((category) => category.category_id !== feraCategoryId)
+        .map((category) => ({
+            id: category.category_id,
+            label: category.category_name,
+        }));
 
     const dateOptions = generateDateOptions();
 
@@ -252,6 +287,7 @@ const rowsPerPage = 10;
             setDynamicColumns([]);
             setEmissions([]);
             setEmissionFactors([]);
+            setFeraEmissionFactors([]);
             setUnits([]);
             return;
         }
@@ -287,9 +323,33 @@ const rowsPerPage = 10;
             setColumnDependencies(config?.column_dependencies || {});
             setDependentOptions(config?.dependent_options || {});
             setEmissionCategoryMapping(config?.emission_category_mapping || {});
-            setEmissions(flattenEmissions(emissionsData));
             setEmissionFactors(factors);
             setUnits(unitsData);
+
+            // Fetch FERA emissions + factors + units if the site has a FERA category
+            if (feraCategoryId) {
+                const [feraFactorsData, feraEmissionsData, feraUnitsData] = await Promise.all([
+                    getUserEmissionFactorsBySiteAndCategory(siteId, feraCategoryId, factorYear).catch(() => []),
+                    getEmissionsBySiteAndCategory(siteId, feraCategoryId, selectedDate).catch(() => []),
+                    getUserUnitsBySiteAndCategory(siteId, feraCategoryId).catch((): UnitData[] => []),
+                ]);
+                setFeraEmissionFactors(feraFactorsData);
+                // Merge regular + FERA emissions, marking FERA rows
+                const feraRows = flattenEmissions(feraEmissionsData).map((r) => ({ ...r, _isFeraRow: true }));
+                setEmissions([...flattenEmissions(emissionsData), ...feraRows]);
+                // Merge FERA units into the unit list (deduplicated by unit_name)
+                const existingNames = new Set(unitsData.map((u: UnitData) => u.unit_name.toLowerCase()));
+                const newFeraUnits = feraUnitsData.filter((u: UnitData) => !existingNames.has(u.unit_name.toLowerCase()));
+                if (newFeraUnits.length > 0) {
+                    setUnits([...unitsData, ...newFeraUnits]);
+                }
+            } else {
+                setFeraEmissionFactors([]);
+                setEmissions(flattenEmissions(emissionsData));
+            }
+
+            // Fetch upload batches for this site+category
+            getEmissionBatches(siteId, selectedCategory).then(setEmissionBatches).catch(() => setEmissionBatches([]));
 
             // Fetch company category mappings (company_category_name → emission_category_name)
             if (companyId) {
@@ -308,7 +368,7 @@ const rowsPerPage = 10;
         } finally {
             setLoading(false);
         }
-    }, [selectedCategory, selectedDate, siteId, companyId]);
+    }, [selectedCategory, selectedDate, siteId, companyId, feraCategoryId]);
 
     useEffect(() => {
   setCurrentPage(1);
@@ -343,6 +403,12 @@ const rowsPerPage = 10;
                 }
                 setEmissionFactors(factors);
                 setUnits(unitsData);
+                // Also fetch FERA factors
+                if (feraCategoryId) {
+                    getUserEmissionFactorsBySiteAndCategory(siteId, feraCategoryId, factorYear)
+                        .then(setFeraEmissionFactors)
+                        .catch(() => setFeraEmissionFactors([]));
+                }
             })
             .catch(() => {
                 // Non-critical — dropdowns will fall back to text inputs
@@ -1011,6 +1077,13 @@ const rowsPerPage = 10;
                     }
                 }
 
+                // Strip internal flags before sending to backend
+                delete activityData._isFeraRow;
+                delete activityData._ecmKey;
+
+                // Skip FERA rows — backend auto-creates them
+                if (row._isFeraRow) continue;
+
                 const result = await createEmission({
                     site_id: siteId,
                     category_id: selectedCategory,
@@ -1022,6 +1095,12 @@ const rowsPerPage = 10;
                 });
 
                 newEmissions.push(flattenEmission(result.emission));
+                // If backend auto-created a FERA entry, add it too
+                if (result.fera_emission) {
+                    const feraFlat = flattenEmission(result.fera_emission);
+                    feraFlat._isFeraRow = true;
+                    newEmissions.push(feraFlat);
+                }
             }
 
             setEmissions((prev) => [...newEmissions, ...prev]);
@@ -1091,13 +1170,31 @@ const rowsPerPage = 10;
 
     const handleDelete = async (row: EmissionRow) => {
         try {
-            await deleteEmission(row.pk_id);
+            const result = await deleteEmission(row.pk_id);
+            // Backend deletes both regular + linked FERA, remove all from local state
+            const deletedIds = new Set(result?.deleted_ids || [row.pk_id]);
+            // Also remove by fera_linked_id in case response doesn't include them
+            if (row.fera_linked_id) deletedIds.add(row.fera_linked_id);
             setEmissions((prev) =>
-                prev.filter((item) => item.pk_id !== row.pk_id),
+                prev.filter((item) => !deletedIds.has(item.pk_id) && item.fera_linked_id !== row.pk_id),
             );
         } catch (error) {
             console.error("Error deleting emission:", error);
             throw error;
+        }
+    };
+
+    const handleDeleteBatch = async (batchId: string) => {
+        const batch = emissionBatches.find((b) => b.upload_batch_id === batchId);
+        if (!confirm(`Delete all ${batch?.count ?? "?"} emission(s) from this upload?`)) return;
+        setDeletingBatchId(batchId);
+        try {
+            await deleteEmissionsByBatch(batchId);
+            await fetchData();
+        } catch (error) {
+            console.error("Error deleting batch:", error);
+        } finally {
+            setDeletingBatchId(null);
         }
     };
 
@@ -1609,6 +1706,12 @@ const rowsPerPage = 10;
             label: "Emission Category",
             editable: false,
             type: "text" as const,
+            render: (value: string, row: EmissionRow) => {
+                if (row._isFeraRow) {
+                    return `${value || ""} (FERA)`;
+                }
+                return value || "";
+            },
         },
         ...filteredColumns.map((col) => {
             const isDropdown = isSelectColumn(col);
@@ -1705,6 +1808,7 @@ const rowsPerPage = 10;
         setEmissionCategoryMapping({});
         setEmissions([]);
         setEmissionFactors([]);
+        setFeraEmissionFactors([]);
         setUnits([]);
         setCompanyMappings([]);
     };
@@ -1882,6 +1986,11 @@ const paginatedEmissions = emissions.slice(
                                 <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold">
                                     Total Emission (tCO2e)
                                 </th>
+                                {isFeraCategory && (
+                                    <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold bg-purple-50 text-purple-700">
+                                        FERA (tCO2e)
+                                    </th>
+                                )}
                                 <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold w-20">
                                     Actions
                                 </th>
@@ -1889,10 +1998,14 @@ const paginatedEmissions = emissions.slice(
                         </thead>
                         <tbody>
                             {modalRows.map((row) => (
-                                <tr key={row.id} className="hover:bg-gray-50">
+                                <tr key={row.id} className={`hover:bg-gray-50 ${row._isFeraRow ? "bg-purple-50" : ""}`}>
                                     {/* Emission Category Select */}
                                     <td className="border border-gray-300 px-2 py-2">
-                                        {Object.keys(emissionCategoryMapping)
+                                        {row._isFeraRow ? (
+                                            <div className="px-2 py-1.5 rounded text-sm font-semibold bg-purple-100 text-purple-800 border border-purple-300">
+                                                {row.emission_category} (FERA)
+                                            </div>
+                                        ) : Object.keys(emissionCategoryMapping)
                                             .length > 0 ? (
                                             // Auto-mapped mode: show company name, hover for global name
                                             (() => {
@@ -2175,9 +2288,10 @@ const paginatedEmissions = emissions.slice(
                                     <td className="border border-gray-300 px-2 py-2">
                                         <UnitSelector
                                             currentUnit={row.activity_data_unit}
-                                            expectedUnit={getExpectedUnit(
-                                                row.emission_category || "",
-                                            )}
+                                            expectedUnit={row._isFeraRow
+                                                ? getFeraExpectedUnit(row.emission_category || "")
+                                                : getExpectedUnit(row.emission_category || "")
+                                            }
                                             units={units}
                                             onChange={(value) =>
                                                 handleModalRowChange(
@@ -2192,9 +2306,34 @@ const paginatedEmissions = emissions.slice(
                                     {/* Emission Preview */}
                                     <td className="border border-gray-300 px-2 py-2">
                                         <EmissionPreview
-                                            result={calculateEmission(row)}
+                                            result={row._isFeraRow ? calculateFeraEmission(row) : calculateEmission(row)}
                                         />
                                     </td>
+
+                                    {/* FERA Emission Preview Column */}
+                                    {isFeraCategory && (
+                                        <td className="border border-gray-300 px-2 py-2 bg-purple-50/40">
+                                            {!row._isFeraRow && row.emission_category && getFeraEmissionFactor(row.emission_category) ? (
+                                                (() => {
+                                                    const feraResult = calculateFeraEmission(row);
+                                                    return feraResult.value !== null ? (
+                                                        <div className="space-y-0.5">
+                                                            <div className={`font-semibold ${feraResult.status === "converted" ? "text-yellow-600" : "text-purple-700"}`}>
+                                                                {feraResult.value.toFixed(2)}
+                                                            </div>
+                                                            {feraResult.status === "converted" && (
+                                                                <div className="text-xs text-yellow-600">(with conversion)</div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-xs text-gray-400 italic">{feraResult.status}</div>
+                                                    );
+                                                })()
+                                            ) : (
+                                                <span className="text-xs text-gray-300">—</span>
+                                            )}
+                                        </td>
+                                    )}
 
                                     {/* Actions */}
                                     <td className="border border-gray-300 px-2 py-2">
@@ -2235,11 +2374,18 @@ const paginatedEmissions = emissions.slice(
 
                 {/* Modal Actions */}
                 <div className="flex justify-between mt-4">
-                    <button
-                        onClick={handleAddModalRow}
-                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
-                        + Add Row
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={handleAddModalRow}
+                            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                            + Add Row
+                        </button>
+                        {isFeraCategory && feraEmissionFactors.length > 0 && (
+                            <span className="px-3 py-2 text-sm text-purple-700 bg-purple-50 rounded border border-purple-200">
+                                FERA auto-calculated
+                            </span>
+                        )}
+                    </div>
 
                     <div className="flex gap-2">
                         <button
@@ -2318,6 +2464,61 @@ const paginatedEmissions = emissions.slice(
                         <div className="text-center py-4">Loading data...</div>
                     ) : dynamicColumns.length > 0 ? (
                         <>
+                        {/* Upload Batches Panel */}
+                        {emissionBatches.length > 0 && (
+                            <div className="mb-3">
+                                <button
+                                    onClick={() => setShowEmissionBatches(!showEmissionBatches)}
+                                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors"
+                                >
+                                    <svg className={`w-4 h-4 transition-transform ${showEmissionBatches ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                    Upload Batches ({emissionBatches.length})
+                                </button>
+
+                                {showEmissionBatches && (
+                                    <div className="mt-2 border border-orange-200 rounded-lg overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="bg-orange-50 text-orange-800">
+                                                    <th className="px-4 py-2 text-left font-medium">Category</th>
+                                                    <th className="px-4 py-2 text-left font-medium">Rows</th>
+                                                    <th className="px-4 py-2 text-left font-medium">Uploaded</th>
+                                                    <th className="px-4 py-2 text-right font-medium">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {emissionBatches.map((batch) => (
+                                                    <tr key={batch.upload_batch_id} className="border-t border-orange-100 hover:bg-orange-50/50">
+                                                        <td className="px-4 py-2 text-gray-700">{batch.category_name}</td>
+                                                        <td className="px-4 py-2">
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                                                {batch.count}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-2 text-gray-500">
+                                                            {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
+                                                                month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
+                                                            })}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-right">
+                                                            <button
+                                                                onClick={() => handleDeleteBatch(batch.upload_batch_id)}
+                                                                disabled={deletingBatchId === batch.upload_batch_id}
+                                                                className="px-3 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:bg-gray-400 transition-colors"
+                                                            >
+                                                                {deletingBatchId === batch.upload_batch_id ? "Deleting..." : "Delete Batch"}
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <Table<EmissionRow>
                             data={paginatedEmissions}
                             columns={tableColumns}
@@ -2326,6 +2527,7 @@ const paginatedEmissions = emissions.slice(
                             onDelete={handleDelete}
                             loading={loading}
                             showActions={true}
+                            rowClassName={(row) => row._isFeraRow ? "bg-purple-50" : ""}
                             renderActions={(
                                 row,
                                 { editButton, deleteButton },
@@ -2338,6 +2540,15 @@ const paginatedEmissions = emissions.slice(
                                         Docs
                                     </button>
                                 );
+
+                                // FERA rows are auto-managed — no individual actions
+                                if (row._isFeraRow) {
+                                    return (
+                                        <span className="text-xs text-purple-600 italic">
+                                            Auto (FERA)
+                                        </span>
+                                    );
+                                }
 
                                 if (row.status === "approved") {
                                     return (
