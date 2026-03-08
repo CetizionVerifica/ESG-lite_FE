@@ -1409,7 +1409,7 @@ const rowsPerPage = 10;
                     const invoiceData = response.data?.[em.invoice_index ?? 0];
                     if (invoiceData) {
                         row._invoiceNumber = invoiceData.invoice_number ?? undefined;
-                        row._invoiceDate = invoiceData.invoice_date ?? undefined;
+                        row._invoiceDate = invoiceData.billing_month_end ?? invoiceData.invoice_date ?? undefined;
                         row._totalAmount = invoiceData.total_amount ?? undefined;
                         row._currency = invoiceData.currency ?? undefined;
                     }
@@ -1535,7 +1535,7 @@ const rowsPerPage = 10;
                     const invoiceData = response.data?.[em.invoice_index ?? 0];
                     if (invoiceData) {
                         row._invoiceNumber = invoiceData.invoice_number ?? undefined;
-                        row._invoiceDate = invoiceData.invoice_date ?? undefined;
+                        row._invoiceDate = invoiceData.billing_month_end ?? invoiceData.invoice_date ?? undefined;
                         row._totalAmount = invoiceData.total_amount ?? undefined;
                         row._currency = invoiceData.currency ?? undefined;
                     }
@@ -2572,7 +2572,9 @@ const paginatedEmissions = emissions.slice(
                                             </div>
                                             <div className="flex items-center gap-2 mt-0.5">
                                                 {invoiceDate && (
-                                                    <span className="text-xs text-gray-400">{invoiceDate}</span>
+                                                    <span className="text-xs text-gray-400">
+                                                        {new Date(invoiceDate + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+                                                    </span>
                                                 )}
                                                 {totalAmount != null && (
                                                     <span className="text-xs text-gray-500 font-medium">
