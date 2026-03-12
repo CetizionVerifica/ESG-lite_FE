@@ -9,7 +9,7 @@ import {
   rejectProductionData,
   bulkApproveProductionData,
   bulkRejectProductionData,
-  updateProductionData,
+  managerUpdateProductionData,
   ProductionData,
   ProductionDataStatus,
 } from "../services/productionDataService";
@@ -232,7 +232,7 @@ const ManagerProductionDataPage = () => {
   const handleEditSave = async () => {
     if (!editingData) return;
     try {
-      const response = await updateProductionData(editingData.production_id, {
+      const response = await managerUpdateProductionData(editingData.production_id, {
         quantity: parseFloat(editForm.quantity),
         unit: editForm.unit,
         start_date: editForm.start_date,
@@ -532,7 +532,7 @@ const ManagerProductionDataPage = () => {
       >
         <div className="mb-4">
           <label className={labelClass}>
-            Rejection Reason (Optional)
+            Rejection Reason (Required)
           </label>
           <textarea
             value={rejectComment}
@@ -556,7 +556,8 @@ const ManagerProductionDataPage = () => {
           </button>
           <button
             onClick={handleReject}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            disabled={!rejectComment.trim()}
+            className={`px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 ${!rejectComment.trim() ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             Reject
           </button>
@@ -573,6 +574,11 @@ const ManagerProductionDataPage = () => {
         title="Edit Production Data"
         isDark={isDark}
       >
+        {editingData?.status === "approved" && (
+          <div className={`mb-4 p-3 rounded text-sm ${isDark ? "bg-yellow-900/20 border border-yellow-700/30 text-yellow-400" : "bg-yellow-50 border border-yellow-200 text-yellow-800"}`}>
+            This entry is approved. Changes will be logged in the audit trail.
+          </div>
+        )}
         <div className="space-y-4">
           <div>
             <label className={labelClass}>Quantity</label>

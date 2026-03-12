@@ -167,6 +167,14 @@ export const bulkDeleteEmissions = async (ids: number[]) => {
   return response.data;
 };
 
+export const managerUpdateEmission = async (
+  id: string | number,
+  data: { activity_data?: any; date_of_reporting?: string }
+) => {
+  const response = await api.put(`/user/emissions/manager-edit/${id}`, data);
+  return response.data;
+};
+
 // Delete all emissions from a specific upload batch
 export const deleteEmissionsByBatch = async (batchId: string) => {
   const response = await api.delete(`/user/emissions/batch/${batchId}`);
