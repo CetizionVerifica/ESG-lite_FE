@@ -7,7 +7,8 @@ export const useEmissionCalculation = (
   targetYear?: number,
   columns?: ColumnEntity[],
   selectColumnNames?: string[],
-  emissionCategoryMapping?: EmissionCategoryMapping
+  emissionCategoryMapping?: EmissionCategoryMapping,
+  fallbackToRaw?: boolean
 ) => {
   // Helper: find EF with year filter, trying emission_category_name then global_category_name,
   // then falling back to company_category_name (JSONB key) if ECM mapping exists.
@@ -119,8 +120,15 @@ export const useEmissionCalculation = (
       if (conversionFactor) {
         const convertedValue = activityValue * conversionFactor;
         const emission = Math.round(((convertedValue * factor.factor_value) / 1000) * 100) / 100;
-        
+
         return { value: emission, status: "converted" };
+      }
+
+      // fallbackToRaw: use raw activity value when no conversion exists (e.g. FERA factors
+      // where the factor already accounts for the fuel's energy content)
+      if (fallbackToRaw) {
+        const emission = Math.round(((activityValue * factor.factor_value) / 1000) * 100) / 100;
+        return { value: emission, status: "ok" };
       }
 
       return { value: null, status: "Unit mismatch - no conversion available" };

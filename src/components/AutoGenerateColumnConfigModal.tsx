@@ -4,7 +4,6 @@ import {
   previewAutoGenerateColumnConfig,
   confirmAutoGenerateColumnConfig,
   ColumnConfigProposal,
-  ProposedConfigGroup,
   ProposedColumn,
   ProposedUnit,
   EfNamePair,
@@ -45,6 +44,8 @@ export default function AutoGenerateColumnConfigModal({
   const [selectedDimensionsByGroup, setSelectedDimensionsByGroup] = useState<Map<number, number>>(new Map());
 
   const [createUnits, setCreateUnits] = useState(true);
+  const [customUnits, setCustomUnits] = useState<string[]>([]);
+  const [customUnitInput, setCustomUnitInput] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("columns");
   const [resultData, setResultData] = useState<{
     configName: string;
@@ -383,119 +384,39 @@ export default function AutoGenerateColumnConfigModal({
     setError(null);
 
     try {
-      const selectedUnits: ProposedUnit[] = createUnits
-        ? proposal.proposed_units.filter((u) => !u.already_exists)
-        : [];
+      const selectedUnits: ProposedUnit[] = [
+        ...(createUnits ? proposal.proposed_units.filter((u) => !u.already_exists) : []),
+        ...customUnits.map((name) => ({ unit_name: name, already_exists: false })),
+      ];
 
       const allUnitsCreated: string[] = [];
+
+      // Use the user-edited state directly (what the preview shows)
       const selectedIndices = Array.from(selectedGroupIndices).sort((a, b) => a - b);
+      const unitNames = selectedIndices
+        .map((idx) => proposal.configs[idx]?.denominator_unit)
+        .filter(Boolean);
+      const configSuffix = unitNames.length > 1 ? unitNames.join(" + ") : unitNames[0] || "";
 
-      // Group unit groups by their selected dimension
-      const groupsByDimension = new Map<number, number[]>();
-      for (const groupIdx of selectedIndices) {
-        const selectedDim = selectedDimensionsByGroup.get(groupIdx);
-        if (!selectedDim) continue;
+      const result = await confirmAutoGenerateColumnConfig({
+        site_id: proposal.site_id,
+        category_id: proposal.category_id,
+        config_name: `${configName} - ${configSuffix}`,
+        columns: editColumns,
+        column_options: editColumnOptions,
+        column_dependencies: editDependencies,
+        dependent_options: editDependentOptions,
+        emission_category_mapping: editMappings,
+        create_units: createUnits,
+        proposed_units: selectedUnits,
+      });
 
-        if (!groupsByDimension.has(selectedDim)) {
-          groupsByDimension.set(selectedDim, []);
-        }
-        groupsByDimension.get(selectedDim)!.push(groupIdx);
-      }
-
-      let configsCreated = 0;
-
-      // Create one config per dimension (combining multiple unit groups with same dimension)
-      for (const [dimCount, groupIndices] of groupsByDimension.entries()) {
-        // Merge data from all groups with this dimension
-        let mergedColumns: ProposedColumn[] = [];
-        const mergedOptions: ColumnOptionsMap = {};
-        let mergedDeps: ColumnDependencies = {};
-        const mergedDepOpts: DependentOptionsMap = {};
-        let mergedMappings: EmissionCategoryMapping = {};
-        const unitNames: string[] = [];
-
-        for (const groupIdx of groupIndices) {
-          const group = proposal.configs[groupIdx];
-          if (!group) continue;
-
-          unitNames.push(group.denominator_unit);
-
-          // Build config data for this group
-          const namesByDim = group.column_names_by_dim || {};
-          const baseColumns = namesByDim[dimCount]?.columns || group.columns;
-          const configData = buildConfigForDimCount(
-            group.ef_names,
-            dimCount,
-            baseColumns,
-            group.ef_name_pairs
-          );
-
-          // Merge columns (use first group's columns only)
-          if (mergedColumns.length === 0) {
-            mergedColumns = configData.columns;
-          }
-          // Note: Only keeping the first activity column to avoid confusion
-          // Users can manually add other activity columns if needed
-
-          // Merge options - combine arrays for each column
-          for (const [colName, options] of Object.entries(configData.options)) {
-            if (mergedOptions[colName]) {
-              // Combine options, avoiding duplicates by id
-              const existingIds = new Set(mergedOptions[colName].map((opt) => opt.id));
-              const newOptions = options.filter((opt) => !existingIds.has(opt.id));
-              mergedOptions[colName] = [...mergedOptions[colName], ...newOptions];
-            } else {
-              mergedOptions[colName] = options;
-            }
-          }
-
-          // Merge dependencies
-          mergedDeps = { ...mergedDeps, ...configData.deps };
-
-          // Merge dependent options - combine arrays for each parent value
-          for (const [colName, depMap] of Object.entries(configData.depOpts)) {
-            if (!mergedDepOpts[colName]) {
-              mergedDepOpts[colName] = {};
-            }
-            for (const [parentVal, options] of Object.entries(depMap)) {
-              if (mergedDepOpts[colName][parentVal]) {
-                // Combine options, avoiding duplicates by id
-                const existingIds = new Set(mergedDepOpts[colName][parentVal].map((opt) => opt.id));
-                const newOptions = (options as DropdownOptionValue[]).filter((opt) => !existingIds.has(opt.id));
-                mergedDepOpts[colName][parentVal] = [...mergedDepOpts[colName][parentVal], ...newOptions];
-              } else {
-                mergedDepOpts[colName][parentVal] = options as DropdownOptionValue[];
-              }
-            }
-          }
-
-          // Merge mappings
-          mergedMappings = { ...mergedMappings, ...configData.mappings };
-        }
-
-        // Create single config for this dimension
-        const configSuffix = unitNames.length > 1 ? unitNames.join(" + ") : unitNames[0];
-        const result = await confirmAutoGenerateColumnConfig({
-          site_id: proposal.site_id,
-          category_id: proposal.category_id,
-          config_name: `${configName} - ${configSuffix}`,
-          columns: mergedColumns,
-          column_options: mergedOptions,
-          column_dependencies: mergedDeps,
-          dependent_options: mergedDepOpts,
-          emission_category_mapping: mergedMappings,
-          create_units: createUnits && configsCreated === 0,
-          proposed_units: configsCreated === 0 ? selectedUnits : [],
-        });
-
-        if (result.units_created) {
-          allUnitsCreated.push(...result.units_created);
-        }
-        configsCreated++;
+      if (result.units_created) {
+        allUnitsCreated.push(...result.units_created);
       }
 
       setResultData({
-        configName: `${configsCreated} config(s) created`,
+        configName: `${configName} - ${configSuffix}`,
         unitsCreated: allUnitsCreated,
       });
       setStep("result");
@@ -517,6 +438,8 @@ export default function AutoGenerateColumnConfigModal({
     setConfigName("");
     setResultData(null);
     setEfNamePairs(undefined);
+    setCustomUnits([]);
+    setCustomUnitInput("");
     onClose();
   };
 
@@ -1090,7 +1013,7 @@ export default function AutoGenerateColumnConfigModal({
 
                 {/* Units - Always visible */}
                 {proposal && (
-                  <div className="pt-2 border-t border-gray-200">
+                  <div className="pt-2 border-t border-gray-200 space-y-2">
                     {(() => {
                       const missingUnits = proposal.proposed_units.filter((u) => !u.already_exists);
                       const hasMissingUnits = missingUnits.length > 0;
@@ -1119,6 +1042,56 @@ export default function AutoGenerateColumnConfigModal({
                         </label>
                       );
                     })()}
+
+                    {/* Custom units */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={customUnitInput}
+                        onChange={(e) => setCustomUnitInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const name = customUnitInput.trim().toLowerCase();
+                            if (name && !customUnits.includes(name) && !proposal.proposed_units.some((u) => u.unit_name.toLowerCase() === name)) {
+                              setCustomUnits((prev) => [...prev, name]);
+                              setCustomUnitInput("");
+                            }
+                          }
+                        }}
+                        placeholder="Add custom unit..."
+                        className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const name = customUnitInput.trim().toLowerCase();
+                          if (name && !customUnits.includes(name) && !proposal.proposed_units.some((u) => u.unit_name.toLowerCase() === name)) {
+                            setCustomUnits((prev) => [...prev, name]);
+                            setCustomUnitInput("");
+                          }
+                        }}
+                        className="text-sm px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    {customUnits.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {customUnits.map((u) => (
+                          <span key={u} className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">
+                            {u}
+                            <button
+                              type="button"
+                              onClick={() => setCustomUnits((prev) => prev.filter((x) => x !== u))}
+                              className="text-purple-500 hover:text-purple-700 font-bold"
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

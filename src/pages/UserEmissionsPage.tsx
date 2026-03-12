@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { useAuth } from "../context/AuthContext";
-import { getEmissionsBySite, EmissionData, EmissionStatus } from "../services/emissionService";
+import { getEmissionsPaginated, EmissionData, EmissionStatus, EmissionsSummary } from "../services/emissionService";
 import DocumentViewerModal from "../components/DocumentViewerModal";
 import { getDocumentsByEmission, EmissionDocument } from "../services/documentService";
 import {
@@ -91,10 +91,14 @@ const UserEmissionsPage = () => {
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
+  const [totalEmissions, setTotalEmissions] = useState(0);
+  const [summary, setSummary] = useState<EmissionsSummary>({
+    total_emission: 0, pending_count: 0, approved_count: 0, rejected_count: 0,
+  });
   const [loading, setLoading] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 5;
+  const rowsPerPage = 20;
 
   // Document viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -135,10 +139,6 @@ const UserEmissionsPage = () => {
       setSelectedSite(availableSites[0].site_id);
     }
   }, [availableSites, selectedSite]);
-
-  useEffect(() => {
-  setCurrentPage(1);
-}, [selectedCategory, selectedYear, selectedMonth, selectedSite]);
 
   // Reset category when site changes
   useEffect(() => {
@@ -329,25 +329,44 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     [getOptionLabel]
   );
 
-  // Fetch all emissions for the user's site
-  const fetchEmissions = useCallback(async () => {
+  // Fetch emissions with server-side filtering and pagination
+  const fetchPage = useCallback(async (page: number) => {
     if (!siteId) return;
 
     try {
       setLoading(true);
-      const data = await getEmissionsBySite(siteId);
-      setEmissions(data);
+      const result = await getEmissionsPaginated({
+        siteId,
+        categoryId: selectedCategory,
+        year: selectedYear,
+        month: selectedMonth,
+        page,
+        limit: rowsPerPage,
+      });
+      setEmissions(result.data);
+      setTotalEmissions(result.total);
+      setSummary(result.summary);
     } catch (error) {
       console.error("Error fetching emissions:", error);
       setEmissions([]);
+      setTotalEmissions(0);
+      setSummary({ total_emission: 0, pending_count: 0, approved_count: 0, rejected_count: 0 });
     } finally {
       setLoading(false);
     }
-  }, [siteId]);
+  }, [siteId, selectedCategory, selectedYear, selectedMonth]);
 
+  // When filters change, reset to page 1 and fetch
   useEffect(() => {
-    fetchEmissions();
-  }, [fetchEmissions]);
+    setCurrentPage(1);
+    fetchPage(1);
+  }, [fetchPage]);
+
+  // When page changes (user clicks pagination), fetch that page
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    fetchPage(page);
+  };
 
   
 
@@ -381,98 +400,8 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     setSelectedDocument(doc);
   };
 
-  // Filter emissions based on selected category, year, and month
-  const filteredEmissions = useMemo(() => {
-    let result = emissions;
 
-    if (selectedCategory) {
-      result = result.filter(
-        (emission) => emission.category?.category_id === selectedCategory
-      );
-    }
-
-    if (selectedYear) {
-      result = result.filter((emission) => {
-        const emissionYear = parseInt(emission.date_of_reporting.substring(0, 4));
-        return emissionYear === selectedYear;
-      });
-    }
-
-    if (selectedMonth) {
-      result = result.filter((emission) => {
-        const emissionMonth = parseInt(emission.date_of_reporting.substring(5, 7));
-        return emissionMonth === selectedMonth;
-      });
-    }
-
-    return result;
-  }, [emissions, selectedCategory, selectedYear, selectedMonth]);
-
-  // Calculate totals
-  const totalEmission = useMemo(() => {
-    return filteredEmissions.reduce((sum, e) => sum + Number(e.total_emission), 0);
-  }, [filteredEmissions]);
-
-  // Calculate total activity data (sum of numeric activity values)
-  const totalActivityData = useMemo(() => {
-    return filteredEmissions.reduce((sum, e) => {
-      if (!e.activity_data) return sum;
-
-      // Look for common activity value fields
-      const commonFields = ['activity_value', 'quantity', 'value', 'amount', 'consumption'];
-      for (const field of commonFields) {
-        if (e.activity_data[field] !== undefined && e.activity_data[field] !== '') {
-          const numValue = parseFloat(e.activity_data[field]);
-          if (!isNaN(numValue)) {
-            return sum + numValue;
-          }
-        }
-      }
-
-      // Fallback: find any numeric value in activity_data
-      for (const [key, value] of Object.entries(e.activity_data)) {
-        if (key === 'emission_category') continue;
-        const numValue = parseFloat(String(value));
-        if (!isNaN(numValue) && numValue > 0) {
-          return sum + numValue;
-        }
-      }
-
-      return sum;
-    }, 0);
-  }, [filteredEmissions]);
-
-  // Get the most common activity unit from filtered emissions
-  const activityUnit = useMemo(() => {
-    const units = filteredEmissions
-      .map((e) => e.activity_data_unit)
-      .filter((u): u is string => !!u && u.trim() !== '');
-
-    if (units.length === 0) return '';
-
-    // Count occurrences of each unit
-    const unitCounts = units.reduce((acc, unit) => {
-      acc[unit] = (acc[unit] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    // Return the most common unit
-    return Object.entries(unitCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
-  }, [filteredEmissions]);
-
-  const statusCounts = useMemo(() => {
-    return {
-      pending: filteredEmissions.filter((e) => e.status === "pending").length,
-      approved: filteredEmissions.filter((e) => e.status === "approved").length,
-      rejected: filteredEmissions.filter((e) => e.status === "rejected").length,
-    };
-  }, [filteredEmissions]);
-
-  const totalPages = Math.ceil(filteredEmissions.length / rowsPerPage);
-const paginatedEmissions = filteredEmissions.slice(
-  (currentPage - 1) * rowsPerPage,
-  currentPage * rowsPerPage
-);
+  const totalPages = Math.ceil(totalEmissions / rowsPerPage);
 
   return (
     <div className="p-6">
@@ -531,41 +460,33 @@ const paginatedEmissions = filteredEmissions.slice(
       </div>
 
       {/* Summary Stats */}
-      <div className={`grid grid-cols-2 gap-4 mb-6 ${selectedCategory ? 'md:grid-cols-6' : 'md:grid-cols-5'}`}>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-sm text-gray-500">Total Records</div>
-          <div className="text-2xl font-bold">{filteredEmissions.length}</div>
+          <div className="text-2xl font-bold">{totalEmissions}</div>
         </div>
-        {selectedCategory && (
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <div className="text-sm text-blue-700">Total Activity Data</div>
-            <div className="text-2xl font-bold text-blue-800">
-              {totalActivityData.toFixed(2)} {activityUnit}
-            </div>
-          </div>
-        )}
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-sm text-gray-500">Total Emission</div>
-          <div className="text-2xl font-bold">{totalEmission.toFixed(2)} tCO2e</div>
+          <div className="text-2xl font-bold">{summary.total_emission.toFixed(2)} tCO2e</div>
         </div>
         <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
           <div className="text-sm text-yellow-700">Pending</div>
-          <div className="text-2xl font-bold text-yellow-800">{statusCounts.pending}</div>
+          <div className="text-2xl font-bold text-yellow-800">{summary.pending_count}</div>
         </div>
         <div className="bg-green-50 p-4 rounded-lg border border-green-200">
           <div className="text-sm text-green-700">Approved</div>
-          <div className="text-2xl font-bold text-green-800">{statusCounts.approved}</div>
+          <div className="text-2xl font-bold text-green-800">{summary.approved_count}</div>
         </div>
         <div className="bg-red-50 p-4 rounded-lg border border-red-200">
           <div className="text-sm text-red-700">Rejected</div>
-          <div className="text-2xl font-bold text-red-800">{statusCounts.rejected}</div>
+          <div className="text-2xl font-bold text-red-800">{summary.rejected_count}</div>
         </div>
       </div>
 
       {/* Emissions Table */}
       {loading ? (
         <div className="text-center py-8">Loading emissions...</div>
-      ) : filteredEmissions.length === 0 ? (
+      ) : emissions.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           No emissions found for the selected filters.
         </div>
@@ -601,7 +522,7 @@ const paginatedEmissions = filteredEmissions.slice(
               </tr>
             </thead>
             <tbody>
-              {paginatedEmissions.map((emission) => (
+              {emissions.map((emission) => (
                 <tr key={emission.pk_id} className="hover:bg-gray-50">
                   <td className="border border-gray-300 px-4 py-3">
                     {emission.category?.category_name || "-"}
@@ -660,21 +581,21 @@ const paginatedEmissions = filteredEmissions.slice(
               </span>{" "}
               to{" "}
               <span className="font-medium">
-                {Math.min(currentPage * rowsPerPage, filteredEmissions.length)}
+                {Math.min(currentPage * rowsPerPage, totalEmissions)}
               </span>{" "}
               of{" "}
-              <span className="font-medium">{filteredEmissions.length}</span> entries
+              <span className="font-medium">{totalEmissions}</span> entries
             </p>
 
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setCurrentPage(1)}
+                onClick={() => handlePageChange(1)}
                 disabled={currentPage === 1}
                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >«</button>
 
               <button
-                onClick={() => setCurrentPage((p) => p - 1)}
+                onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >‹</button>
@@ -698,7 +619,7 @@ const paginatedEmissions = filteredEmissions.slice(
                   ) : (
                     <button
                       key={item}
-                      onClick={() => setCurrentPage(item as number)}
+                      onClick={() => handlePageChange(item as number)}
                       className={`px-3 py-1 text-sm rounded border transition-colors ${
                         currentPage === item
                           ? "bg-blue-600 text-white border-blue-600"
@@ -709,13 +630,13 @@ const paginatedEmissions = filteredEmissions.slice(
                 )}
 
               <button
-                onClick={() => setCurrentPage((p) => p + 1)}
+                onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >›</button>
 
               <button
-                onClick={() => setCurrentPage(totalPages)}
+                onClick={() => handlePageChange(totalPages)}
                 disabled={currentPage === totalPages}
                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >»</button>
