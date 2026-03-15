@@ -8,7 +8,10 @@ import {
   rejectEmission,
   bulkApproveEmissions,
   bulkDeleteEmissions,
+  getEmissionBatches,
+  approveEmissionsByBatch,
   EmissionData,
+  type EmissionUploadBatch,
 } from "../../services/emissionService";
 import {
   getUserColumnConfigsBySiteAndCategory,
@@ -73,6 +76,9 @@ const ManagerPage = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>([]);
+  const [showBatches, setShowBatches] = useState(false);
+  const [approvingBatchId, setApprovingBatchId] = useState<string | null>(null);
 
   const [columnOptionsMap, setColumnOptionsMap] = useState<Record<number, ColumnOptionsMap>>({});
   const [dependentOptionsMap, setDependentOptionsMap] = useState<Record<number, DependentOptionsMap>>({});
@@ -299,6 +305,8 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       setLoading(true);
       const data = await getEmissionsBySite(selectedSite);
       setEmissions(data);
+      // Fetch upload batches for this site
+      getEmissionBatches(selectedSite).then(setEmissionBatches).catch(() => setEmissionBatches([]));
     } catch (error) {
       console.error("Error fetching emissions:", error);
       setEmissions([]);
@@ -343,9 +351,23 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
   // Handle bulk delete emissions
   const handleBulkDelete = useCallback(async (ids: number[]) => {
     await bulkDeleteEmissions(ids);
-    // Refresh emissions after bulk delete
     await fetchEmissions();
   }, [fetchEmissions]);
+
+  // Handle batch approve - approve all pending emissions in a batch
+  const handleBatchApprove = useCallback(async (batchId: string) => {
+    const batch = emissionBatches.find((b) => b.upload_batch_id === batchId);
+    if (!confirm(`Approve all pending emissions from this batch (${batch?.count ?? "?"} rows)?`)) return;
+    setApprovingBatchId(batchId);
+    try {
+      await approveEmissionsByBatch(batchId);
+      await fetchEmissions();
+    } catch (error) {
+      console.error("Error approving batch:", error);
+    } finally {
+      setApprovingBatchId(null);
+    }
+  }, [fetchEmissions, emissionBatches]);
 
   // Filter emissions based on selected category and date
   const filteredEmissions = useMemo(() => {
@@ -434,6 +456,67 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
           <span className={countTextClass}>
             {filteredEmissions.length} emission{filteredEmissions.length !== 1 ? "s" : ""} found
           </span>
+        </div>
+      )}
+
+      {/* Upload Batches Panel */}
+      {emissionBatches.length > 0 && (
+        <div className="mb-4">
+          <button
+            onClick={() => setShowBatches(!showBatches)}
+            className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              isDark
+                ? "text-orange-400 bg-orange-900/20 border border-orange-700/30 hover:bg-orange-900/40"
+                : "text-orange-700 bg-orange-50 border border-orange-200 hover:bg-orange-100"
+            }`}
+          >
+            <svg className={`w-4 h-4 transition-transform ${showBatches ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Upload Batches ({emissionBatches.length})
+          </button>
+
+          {showBatches && (
+            <div className={`mt-2 border rounded-lg overflow-hidden ${isDark ? "border-slate-600" : "border-orange-200"}`}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className={isDark ? "bg-slate-800 text-slate-300" : "bg-orange-50 text-orange-800"}>
+                    <th className="px-4 py-2 text-left font-medium">Category</th>
+                    <th className="px-4 py-2 text-left font-medium">Rows</th>
+                    <th className="px-4 py-2 text-left font-medium">Uploaded</th>
+                    <th className="px-4 py-2 text-right font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emissionBatches.map((batch) => (
+                    <tr key={batch.upload_batch_id} className={`border-t ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-orange-100 hover:bg-orange-50/50"}`}>
+                      <td className={`px-4 py-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{batch.category_name}</td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isDark ? "bg-orange-900/30 text-orange-400" : "bg-orange-100 text-orange-800"}`}>
+                          {batch.count}
+                        </span>
+                      </td>
+                      <td className={`px-4 py-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+                        {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
+                          year: "numeric", month: "short", day: "numeric",
+                          hour: "2-digit", minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => handleBatchApprove(batch.upload_batch_id)}
+                          disabled={approvingBatchId === batch.upload_batch_id}
+                          className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:bg-gray-400 transition-colors"
+                        >
+                          {approvingBatchId === batch.upload_batch_id ? "Approving..." : "Approve Batch"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

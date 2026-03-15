@@ -17,6 +17,7 @@ import {
 
 export function useBulkUpload({
   dynamicColumns,
+  extraFields,
   siteId,
   categoryId,
   companyId: _companyId,
@@ -85,8 +86,19 @@ export function useBulkUpload({
       isRequired: true,
     });
 
+    // Extra supplementary fields (optional, skipped by default)
+    extraFields.forEach((ef) => {
+      fields.push({
+        requiredField: `extra_${ef.key}`,
+        label: `${ef.label} (supplementary)`,
+        mappedTo: "",
+        skipped: true,
+        isRequired: false,
+      });
+    });
+
     return fields;
-  }, [dynamicColumns]);
+  }, [dynamicColumns, extraFields]);
 
   const autoMap = useCallback((fields: ColumnMappingEntry[], headers: string[]) => {
     return fields.map((field) => {
@@ -230,13 +242,19 @@ export function useBulkUpload({
     (rows: Record<string, string>[]): BulkReviewRow[] => {
       return rows.map((uploadedRow, idx) => {
         const mappedData: Record<string, string> = {};
+        const extra_data: Record<string, string> = {};
 
         columnMappings.forEach((mapping) => {
           if (!mapping.skipped && mapping.mappedTo) {
-            // IMPORTANT: preview rows already returned as required_field keys (python mapped_df)
-            mappedData[mapping.requiredField] = String(
-              uploadedRow[mapping.requiredField] ?? ""
-            ).trim();
+            const value = String(uploadedRow[mapping.requiredField] ?? "").trim();
+
+            // Separate extra fields (prefixed with "extra_") from core fields
+            if (mapping.requiredField.startsWith("extra_")) {
+              const realKey = mapping.requiredField.replace(/^extra_/, "");
+              if (value) extra_data[realKey] = value;
+            } else {
+              mappedData[mapping.requiredField] = value;
+            }
           }
         });
 
@@ -265,6 +283,7 @@ export function useBulkUpload({
         return {
           id: idx,
           mappedData,
+          extra_data,
           emission_category,
           original_company_category: mappedData["emission_category"] || null,
           activity_data_unit,

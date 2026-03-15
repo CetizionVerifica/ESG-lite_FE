@@ -5,11 +5,11 @@ import {
   getColumnConfigsBySiteAndCategory,
   deleteColumnConfig,
   updateColumnConfig,
-  previewAutoGenerateColumnConfig,
   ColumnOptionsMap,
   ColumnDependencies,
   DependentOptionsMap,
   EmissionCategoryMapping,
+  ExtraFieldDefinition,
 } from "../services/columnConfigService";
 import { getColumns, DropdownOptionValue } from "../services/columnService";
 import { Table, Column } from "./Table";
@@ -44,6 +44,7 @@ interface ColumnConfigEntity {
   column_dependencies?: ColumnDependencies;
   dependent_options?: DependentOptionsMap;
   emission_category_mapping?: EmissionCategoryMapping;
+  extra_fields?: ExtraFieldDefinition[];
 }
 
 interface ColumnConfigListProps {
@@ -70,26 +71,7 @@ const ColumnConfigList = ({
   const [newOptionId, setNewOptionId] = useState("");
   const [newOptionLabel, setNewOptionLabel] = useState("");
 
-  // Auto-fill state
-  const [autoFillingConfigId, setAutoFillingConfigId] = useState<number | null>(null);
 
-  // Auto-fill preview modal state
-  const [autoFillModalOpen, setAutoFillModalOpen] = useState(false);
-  const [autoFillConfig, setAutoFillConfig] = useState<ColumnConfigEntity | null>(null);
-  const [autoFillProposal, setAutoFillProposal] = useState<{
-    column_options: ColumnOptionsMap;
-    column_dependencies: ColumnDependencies;
-    dependent_options: DependentOptionsMap;
-    emission_category_mapping: EmissionCategoryMapping;
-    pattern: string;
-  } | null>(null);
-  const [autoFillSections, setAutoFillSections] = useState({
-    column_options: true,
-    column_dependencies: true,
-    dependent_options: true,
-    emission_category_mapping: true,
-  });
-  const [applyingAutoFill, setApplyingAutoFill] = useState(false);
 
   // Modal state for dependent dropdown configuration
   const [dependencyModalOpen, setDependencyModalOpen] = useState(false);
@@ -98,6 +80,12 @@ const ColumnConfigList = ({
   const [editingEmissionMapping, setEditingEmissionMapping] = useState<EmissionCategoryMapping>({});
   const [newMappingKey, setNewMappingKey] = useState("");
   const [newMappingValue, setNewMappingValue] = useState("");
+
+  // Extra fields modal state
+  const [extraFieldsModalOpen, setExtraFieldsModalOpen] = useState(false);
+  const [extraFieldsConfig, setExtraFieldsConfig] = useState<ColumnConfigEntity | null>(null);
+  const [editingExtraFields, setEditingExtraFields] = useState<ExtraFieldDefinition[]>([]);
+  const [savingExtraFields, setSavingExtraFields] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -414,152 +402,6 @@ const ColumnConfigList = ({
     }));
   };
 
-  // Auto-fill: open preview modal with proposal data
-  const handleAutoFillPreview = async (config: ColumnConfigEntity) => {
-    if (!config.site?.site_id || !config.category?.category_id) return;
-    if (config.columns.length === 0) {
-      alert("Add columns to this config first before auto-filling.");
-      return;
-    }
-
-    setAutoFillingConfigId(config.pk_id);
-    try {
-      const proposal = await previewAutoGenerateColumnConfig(
-        config.site.site_id,
-        config.category.category_id
-      );
-
-      if (!proposal.configs || proposal.configs.length === 0) {
-        alert("No emission factors found for this site + category.");
-        return;
-      }
-
-      const group = proposal.configs[0];
-
-      // Match proposed columns to existing config columns by type + position.
-      // The generator creates: [select1, select2, ..., number] in order.
-      // The existing config may have the same structure with different names.
-      const proposedSelect = group.columns.filter(c => c.column_type === "select");
-      const existingSelect = config.columns.filter(c => c.column_type === "select");
-
-      // Build proposedName → { configName, pkId } mapping by matching position
-      const nameMap: Record<string, { configName: string; pkId: number }> = {};
-      for (let i = 0; i < proposedSelect.length && i < existingSelect.length; i++) {
-        nameMap[proposedSelect[i].column_name] = {
-          configName: existingSelect[i].column_name,
-          pkId: existingSelect[i].pk_id,
-        };
-      }
-      // Also map number columns
-      const proposedNumber = group.columns.filter(c => c.column_type === "number");
-      const existingNumber = config.columns.filter(c => c.column_type === "number");
-      for (let i = 0; i < proposedNumber.length && i < existingNumber.length; i++) {
-        nameMap[proposedNumber[i].column_name] = {
-          configName: existingNumber[i].column_name,
-          pkId: existingNumber[i].pk_id,
-        };
-      }
-
-      // Helper: remap a proposed column name to the config's column name
-      const remap = (name: string) => nameMap[name]?.configName || name;
-
-      // Remap column_options keys from proposed names to pk_ids
-      const remappedOptions: ColumnOptionsMap = {};
-      for (const [colName, opts] of Object.entries(group.column_options)) {
-        const mapped = nameMap[colName];
-        if (mapped) {
-          remappedOptions[mapped.pkId.toString()] = opts;
-        }
-      }
-
-      // Remap column_dependencies keys (child → parent) using config column names
-      const remappedDeps: ColumnDependencies = {};
-      for (const [child, parent] of Object.entries(group.column_dependencies)) {
-        remappedDeps[remap(child)] = remap(parent);
-      }
-
-      // Remap dependent_options keys using config column names
-      const remappedDepOpts: DependentOptionsMap = {};
-      for (const [childCol, parentOpts] of Object.entries(group.dependent_options)) {
-        remappedDepOpts[remap(childCol)] = parentOpts;
-      }
-
-      setAutoFillConfig(config);
-      setAutoFillProposal({
-        column_options: remappedOptions,
-        column_dependencies: remappedDeps,
-        dependent_options: remappedDepOpts,
-        emission_category_mapping: group.emission_category_mapping,
-        pattern: group.pattern,
-      });
-      // Pre-check all sections
-      setAutoFillSections({
-        column_options: true,
-        column_dependencies: true,
-        dependent_options: true,
-        emission_category_mapping: true,
-      });
-      setAutoFillModalOpen(true);
-    } catch (err: any) {
-      console.error("Auto-fill error:", err);
-      alert(
-        err?.response?.data?.message || err?.message || "Failed to auto-fill config"
-      );
-    } finally {
-      setAutoFillingConfigId(null);
-    }
-  };
-
-  // Auto-fill: apply only selected sections
-  const handleApplyAutoFill = async () => {
-    if (!autoFillConfig || !autoFillProposal) return;
-
-    setApplyingAutoFill(true);
-    try {
-      const updatePayload: any = {};
-      if (autoFillSections.column_options) {
-        updatePayload.column_options = autoFillProposal.column_options;
-      }
-      if (autoFillSections.column_dependencies) {
-        updatePayload.column_dependencies = autoFillProposal.column_dependencies;
-      }
-      if (autoFillSections.dependent_options) {
-        updatePayload.dependent_options = autoFillProposal.dependent_options;
-      }
-      if (autoFillSections.emission_category_mapping) {
-        updatePayload.emission_category_mapping = autoFillProposal.emission_category_mapping;
-      }
-
-      if (Object.keys(updatePayload).length === 0) {
-        alert("Select at least one section to apply.");
-        setApplyingAutoFill(false);
-        return;
-      }
-
-      await updateColumnConfig(autoFillConfig.pk_id, updatePayload);
-
-      // Update local state — only merge selected sections
-      setColumnConfigs((prev) =>
-        prev.map((item) =>
-          item.pk_id === autoFillConfig.pk_id
-            ? { ...item, ...updatePayload }
-            : item
-        )
-      );
-
-      setAutoFillModalOpen(false);
-      setAutoFillConfig(null);
-      setAutoFillProposal(null);
-    } catch (err: any) {
-      console.error("Auto-fill apply error:", err);
-      alert(
-        err?.response?.data?.message || err?.message || "Failed to apply auto-fill"
-      );
-    } finally {
-      setApplyingAutoFill(false);
-    }
-  };
-
   // Theme classes
   const inputClass = isDark
     ? "w-full px-3 py-2 border border-slate-600 rounded-md bg-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -576,6 +418,52 @@ const ColumnConfigList = ({
   const buttonDangerClass = isDark
     ? "px-2 py-1 text-red-400 hover:text-red-300"
     : "px-2 py-1 text-red-500 hover:text-red-700";
+
+  // Extra fields handlers
+  const openExtraFieldsModal = (config: ColumnConfigEntity) => {
+    setExtraFieldsConfig(config);
+    setEditingExtraFields(JSON.parse(JSON.stringify(config.extra_fields || [])));
+    setExtraFieldsModalOpen(true);
+  };
+
+  const handleSaveExtraFields = async () => {
+    if (!extraFieldsConfig) return;
+    setSavingExtraFields(true);
+    try {
+      await updateColumnConfig(extraFieldsConfig.pk_id, {
+        extra_fields: editingExtraFields,
+      });
+      setColumnConfigs((prev) =>
+        prev.map((c) =>
+          c.pk_id === extraFieldsConfig.pk_id
+            ? { ...c, extra_fields: editingExtraFields }
+            : c
+        )
+      );
+      setExtraFieldsModalOpen(false);
+    } catch (error) {
+      console.error("Error saving extra fields:", error);
+    } finally {
+      setSavingExtraFields(false);
+    }
+  };
+
+  const addExtraField = () => {
+    setEditingExtraFields((prev) => [
+      ...prev,
+      { key: "", label: "", type: "text", required: false },
+    ]);
+  };
+
+  const updateExtraField = (index: number, updates: Partial<ExtraFieldDefinition>) => {
+    setEditingExtraFields((prev) =>
+      prev.map((f, i) => (i === index ? { ...f, ...updates } : f))
+    );
+  };
+
+  const removeExtraField = (index: number) => {
+    setEditingExtraFields((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const columnOptions: DropdownOption[] = allColumns.map((column) => ({
     id: column.pk_id,
@@ -689,28 +577,29 @@ const ColumnConfigList = ({
       },
     },
     {
-      key: "pk_id" as keyof ColumnConfigEntity,
-      label: "Auto-fill",
+      key: "extra_fields" as keyof ColumnConfigEntity,
+      label: "Extra Fields",
       editable: false,
       render: (_value, row) => {
-        const isLoading = autoFillingConfigId === row.pk_id;
+        const count = row.extra_fields?.length || 0;
         return (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleAutoFillPreview(row);
+              openExtraFieldsModal(row);
             }}
-            disabled={isLoading || row.columns.length === 0}
-            className={`text-xs px-2 py-1 rounded transition-colors ${
-              isLoading
-                ? "bg-purple-100 text-purple-500 cursor-wait"
+            className={`text-xs px-2 py-1 rounded ${
+              count > 0
+                ? isDark
+                  ? "bg-blue-800 text-blue-200 hover:bg-blue-700"
+                  : "bg-blue-100 text-blue-700 hover:bg-blue-200"
                 : isDark
-                  ? "bg-purple-900 text-purple-300 hover:bg-purple-800 disabled:opacity-40 disabled:cursor-not-allowed"
-                  : "bg-purple-100 text-purple-700 hover:bg-purple-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  ? "bg-slate-700 text-slate-400 hover:bg-slate-600"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
-            title={row.columns.length === 0 ? "Add columns first" : "Auto-fill options, dependencies & mappings from emission factors"}
+            title="Manage supplementary fields for this category"
           >
-            {isLoading ? "Loading..." : "Auto-fill"}
+            {count > 0 ? `${count} fields` : "Configure"}
           </button>
         );
       },
@@ -857,211 +746,6 @@ const ColumnConfigList = ({
             </button>
           </div>
         </div>
-      </Modal>
-
-      {/* Auto-fill Preview Modal */}
-      <Modal
-        isOpen={autoFillModalOpen}
-        onClose={() => {
-          setAutoFillModalOpen(false);
-          setAutoFillConfig(null);
-          setAutoFillProposal(null);
-        }}
-        title={`Auto-fill Preview — ${autoFillConfig?.site?.name || ""} / ${autoFillConfig?.category?.category_name || ""}`}
-        isDark={isDark}
-      >
-        {autoFillProposal && autoFillConfig && (
-          <div className="space-y-4">
-            <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-              Pattern detected: <span className="font-semibold">{autoFillProposal.pattern}</span>.
-              Select which sections to apply:
-            </p>
-
-            {/* Section: Column Options */}
-            {(() => {
-              const currentCount = Object.values(autoFillConfig.column_options || {}).reduce((sum, opts) => sum + opts.length, 0);
-              const proposedCount = Object.values(autoFillProposal.column_options).reduce((sum, opts) => sum + opts.length, 0);
-              return (
-                <div className={`p-3 rounded-md border ${autoFillSections.column_options ? (isDark ? "border-blue-500 bg-slate-700" : "border-blue-400 bg-blue-50") : (isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-gray-50")}`}>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoFillSections.column_options}
-                      onChange={(e) => setAutoFillSections(s => ({ ...s, column_options: e.target.checked }))}
-                      className="w-4 h-4"
-                    />
-                    <span className={`font-medium text-sm ${isDark ? "text-slate-200" : "text-gray-700"}`}>
-                      Column Options
-                    </span>
-                    <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      (current: {currentCount} options → proposed: {proposedCount} options)
-                    </span>
-                  </label>
-                  {autoFillSections.column_options && (
-                    <div className={`mt-2 ml-6 text-xs space-y-1 ${isDark ? "text-slate-300" : "text-gray-600"}`}>
-                      {Object.entries(autoFillProposal.column_options).map(([colId, opts]) => {
-                        const col = autoFillConfig.columns.find(c => c.pk_id.toString() === colId);
-                        return (
-                          <div key={colId}>
-                            <span className="font-medium">{col?.column_name || colId}:</span>{" "}
-                            {opts.map(o => o.label).join(", ")}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Section: Column Dependencies */}
-            {(() => {
-              const currentCount = Object.keys(autoFillConfig.column_dependencies || {}).length;
-              const proposedCount = Object.keys(autoFillProposal.column_dependencies).length;
-              return (
-                <div className={`p-3 rounded-md border ${autoFillSections.column_dependencies ? (isDark ? "border-blue-500 bg-slate-700" : "border-blue-400 bg-blue-50") : (isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-gray-50")}`}>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoFillSections.column_dependencies}
-                      onChange={(e) => setAutoFillSections(s => ({ ...s, column_dependencies: e.target.checked }))}
-                      className="w-4 h-4"
-                    />
-                    <span className={`font-medium text-sm ${isDark ? "text-slate-200" : "text-gray-700"}`}>
-                      Column Dependencies
-                    </span>
-                    <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      (current: {currentCount} → proposed: {proposedCount})
-                    </span>
-                  </label>
-                  {autoFillSections.column_dependencies && proposedCount > 0 && (
-                    <div className={`mt-2 ml-6 text-xs space-y-1 ${isDark ? "text-slate-300" : "text-gray-600"}`}>
-                      {Object.entries(autoFillProposal.column_dependencies).map(([child, parent]) => (
-                        <div key={child}>
-                          <span className="font-medium">{child}</span> depends on <span className="font-medium">{parent}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Section: Dependent Options */}
-            {(() => {
-              const currentCount = Object.values(autoFillConfig.dependent_options || {}).reduce(
-                (sum, parentOpts) => sum + Object.values(parentOpts).reduce((s, opts) => s + opts.length, 0), 0
-              );
-              const proposedCount = Object.values(autoFillProposal.dependent_options).reduce(
-                (sum, parentOpts) => sum + Object.values(parentOpts).reduce((s, opts) => s + opts.length, 0), 0
-              );
-              return (
-                <div className={`p-3 rounded-md border ${autoFillSections.dependent_options ? (isDark ? "border-blue-500 bg-slate-700" : "border-blue-400 bg-blue-50") : (isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-gray-50")}`}>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoFillSections.dependent_options}
-                      onChange={(e) => setAutoFillSections(s => ({ ...s, dependent_options: e.target.checked }))}
-                      className="w-4 h-4"
-                    />
-                    <span className={`font-medium text-sm ${isDark ? "text-slate-200" : "text-gray-700"}`}>
-                      Dependent Options
-                    </span>
-                    <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      (current: {currentCount} options → proposed: {proposedCount} options)
-                    </span>
-                  </label>
-                  {autoFillSections.dependent_options && Object.keys(autoFillProposal.dependent_options).length > 0 && (
-                    <div className={`mt-2 ml-6 text-xs max-h-32 overflow-y-auto space-y-1 ${isDark ? "text-slate-300" : "text-gray-600"}`}>
-                      {Object.entries(autoFillProposal.dependent_options).map(([childCol, parentOpts]) => (
-                        <div key={childCol}>
-                          <span className="font-medium">{childCol}:</span>{" "}
-                          {Object.entries(parentOpts).map(([parentVal, opts]) => (
-                            <span key={parentVal}>
-                              {parentVal} → [{opts.map(o => o.label).join(", ")}]{" "}
-                            </span>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Section: Emission Category Mapping */}
-            {(() => {
-              const currentCount = Object.keys(autoFillConfig.emission_category_mapping || {}).length;
-              const proposedCount = Object.keys(autoFillProposal.emission_category_mapping).length;
-              return (
-                <div className={`p-3 rounded-md border ${autoFillSections.emission_category_mapping ? (isDark ? "border-blue-500 bg-slate-700" : "border-blue-400 bg-blue-50") : (isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-gray-50")}`}>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoFillSections.emission_category_mapping}
-                      onChange={(e) => setAutoFillSections(s => ({ ...s, emission_category_mapping: e.target.checked }))}
-                      className="w-4 h-4"
-                    />
-                    <span className={`font-medium text-sm ${isDark ? "text-slate-200" : "text-gray-700"}`}>
-                      Emission Category Mapping
-                    </span>
-                    <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                      (current: {currentCount} → proposed: {proposedCount} mappings)
-                    </span>
-                  </label>
-                  {autoFillSections.emission_category_mapping && proposedCount > 0 && (
-                    <div className={`mt-2 ml-6 max-h-40 overflow-y-auto ${isDark ? "border-slate-600" : "border-gray-300"}`}>
-                      <table className="w-full text-xs">
-                        <thead className={`sticky top-0 ${isDark ? "bg-slate-600" : "bg-gray-100"}`}>
-                          <tr>
-                            <th className={`px-2 py-1 text-left font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Key</th>
-                            <th className={`px-2 py-1 text-left font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Emission Category</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.entries(autoFillProposal.emission_category_mapping).slice(0, 20).map(([key, val]) => (
-                            <tr key={key} className={isDark ? "border-t border-slate-600" : "border-t border-gray-200"}>
-                              <td className={`px-2 py-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{key}</td>
-                              <td className={`px-2 py-1 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{val}</td>
-                            </tr>
-                          ))}
-                          {Object.keys(autoFillProposal.emission_category_mapping).length > 20 && (
-                            <tr>
-                              <td colSpan={2} className={`px-2 py-1 italic ${isDark ? "text-slate-400" : "text-gray-400"}`}>
-                                ...and {Object.keys(autoFillProposal.emission_category_mapping).length - 20} more
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Actions */}
-            <div className={`flex justify-end gap-3 pt-4 border-t ${isDark ? "border-slate-600" : "border-gray-200"}`}>
-              <button
-                onClick={() => {
-                  setAutoFillModalOpen(false);
-                  setAutoFillConfig(null);
-                  setAutoFillProposal(null);
-                }}
-                className={buttonSecondaryClass}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleApplyAutoFill}
-                disabled={applyingAutoFill || !Object.values(autoFillSections).some(Boolean)}
-                className={buttonPrimaryClass}
-              >
-                {applyingAutoFill ? "Applying..." : "Apply Selected"}
-              </button>
-            </div>
-          </div>
-        )}
       </Modal>
 
       {/* Dependency Configuration Modal */}
@@ -1360,6 +1044,142 @@ const ColumnConfigList = ({
             >
               Save Configuration
             </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Extra Fields Modal */}
+      <Modal
+        isOpen={extraFieldsModalOpen}
+        onClose={() => setExtraFieldsModalOpen(false)}
+        title={`Extra Fields — ${extraFieldsConfig?.category?.category_name || ""} (${extraFieldsConfig?.site?.name || ""})`}
+        isDark={isDark}
+        className="max-w-3xl!"
+      >
+        <div className="space-y-4">
+          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+            Supplementary fields stored in <code>extra_data</code>. These don&apos;t affect emission calculations.
+          </p>
+
+          {editingExtraFields.length === 0 ? (
+            <p className={`text-sm italic ${isDark ? "text-slate-500" : "text-gray-400"}`}>
+              No extra fields configured. Click &quot;Add Field&quot; below.
+            </p>
+          ) : (
+            <div className={`border rounded-md overflow-hidden ${isDark ? "border-slate-600" : "border-gray-300"}`}>
+              <table className="w-full text-sm">
+                <thead className={isDark ? "bg-slate-700" : "bg-gray-100"}>
+                  <tr>
+                    <th className={`px-3 py-2 text-left font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Key</th>
+                    <th className={`px-3 py-2 text-left font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Label</th>
+                    <th className={`px-3 py-2 text-left font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Type</th>
+                    <th className={`px-3 py-2 text-left font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Required</th>
+                    <th className={`px-3 py-2 text-left font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Options / Show For</th>
+                    <th className="px-3 py-2 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {editingExtraFields.map((field, idx) => (
+                    <tr key={idx} className={`border-t ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                      <td className="px-3 py-2">
+                        <input
+                          type="text"
+                          value={field.key}
+                          onChange={(e) => updateExtraField(idx, { key: e.target.value })}
+                          placeholder="field_key"
+                          className={`w-full px-2 py-1 rounded text-sm border ${isDark ? "bg-slate-800 border-slate-600 text-slate-200" : "border-gray-300"}`}
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="text"
+                          value={field.label}
+                          onChange={(e) => updateExtraField(idx, { label: e.target.value })}
+                          placeholder="Display Label"
+                          className={`w-full px-2 py-1 rounded text-sm border ${isDark ? "bg-slate-800 border-slate-600 text-slate-200" : "border-gray-300"}`}
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <select
+                          value={field.type}
+                          onChange={(e) => updateExtraField(idx, { type: e.target.value as ExtraFieldDefinition["type"] })}
+                          className={`w-full px-2 py-1 rounded text-sm border ${isDark ? "bg-slate-800 border-slate-600 text-slate-200" : "border-gray-300"}`}
+                        >
+                          <option value="text">Text</option>
+                          <option value="number">Number</option>
+                          <option value="date">Date</option>
+                          <option value="select">Select</option>
+                          <option value="textarea">Textarea</option>
+                        </select>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={field.required}
+                          onChange={(e) => updateExtraField(idx, { required: e.target.checked })}
+                          className="w-4 h-4"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        {field.type === "select" && (
+                          <input
+                            type="text"
+                            value={(field.options || []).join(", ")}
+                            onChange={(e) =>
+                              updateExtraField(idx, {
+                                options: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                              })
+                            }
+                            placeholder="opt1, opt2, opt3"
+                            className={`w-full px-2 py-1 rounded text-sm border ${isDark ? "bg-slate-800 border-slate-600 text-slate-200" : "border-gray-300"}`}
+                          />
+                        )}
+                        {field.type !== "select" && (
+                          <input
+                            type="text"
+                            value={(field.show_for || []).join(", ")}
+                            onChange={(e) =>
+                              updateExtraField(idx, {
+                                show_for: e.target.value ? e.target.value.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+                              })
+                            }
+                            placeholder="show_for (optional)"
+                            className={`w-full px-2 py-1 rounded text-sm border ${isDark ? "bg-slate-800 border-slate-600 text-slate-200 placeholder-slate-500" : "border-gray-300 placeholder-gray-400"}`}
+                          />
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => removeExtraField(idx)}
+                          className={buttonDangerClass}
+                          title="Remove field"
+                        >
+                          &times;
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="flex justify-between items-center pt-2">
+            <button onClick={addExtraField} className={`text-sm ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}>
+              + Add Field
+            </button>
+            <div className="flex gap-2">
+              <button onClick={() => setExtraFieldsModalOpen(false)} className={buttonSecondaryClass}>
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveExtraFields}
+                disabled={savingExtraFields}
+                className={buttonPrimaryClass}
+              >
+                {savingExtraFields ? "Saving..." : "Save"}
+              </button>
+            </div>
           </div>
         </div>
       </Modal>

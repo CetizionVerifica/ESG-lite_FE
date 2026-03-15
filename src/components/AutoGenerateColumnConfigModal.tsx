@@ -13,6 +13,8 @@ import {
   EmissionCategoryMapping,
 } from "../services/columnConfigService";
 import { DropdownOptionValue } from "../services/columnService";
+import { ExtraFieldDefinition } from "../pages/UserDataEntry/types";
+import { getDefaultExtraFieldsFE } from "../utils/defaultExtraFields";
 
 type Step = "loading" | "preview" | "submitting" | "result";
 type Tab = "columns" | "options" | "dependencies" | "mappings";
@@ -1010,6 +1012,43 @@ export default function AutoGenerateColumnConfigModal({
                     />
                   )}
                 </div>
+
+                {/* Extra Fields Preview */}
+                {(() => {
+                  const extraFields = getDefaultExtraFieldsFE(categoryId);
+                  if (extraFields.length === 0) return null;
+                  return (
+                    <div className="pt-2 border-t border-gray-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-semibold text-blue-700">
+                          Supplementary Fields
+                        </span>
+                        <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+                          {extraFields.length} fields
+                        </span>
+                        <span className="text-xs text-gray-400 ml-auto">
+                          Auto-added based on category
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {extraFields.map((ef: ExtraFieldDefinition) => (
+                          <span
+                            key={ef.key}
+                            className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-md"
+                          >
+                            {ef.label}
+                            <span className="text-blue-400">({ef.type})</span>
+                            {ef.options && ef.options.length > 0 && (
+                              <span className="text-blue-300" title={ef.options.join(", ")}>
+                                [{ef.options.length}]
+                              </span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Units - Always visible */}
                 {proposal && (
