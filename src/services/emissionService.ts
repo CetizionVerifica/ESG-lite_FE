@@ -73,6 +73,7 @@ export const getEmissionsPaginated = async (params: {
   categoryId?: number | null;
   year?: number | null;
   month?: number | null;
+  status?: string | null;
   page: number;
   limit: number;
 }): Promise<PaginatedEmissions> => {
@@ -84,6 +85,7 @@ export const getEmissionsPaginated = async (params: {
   if (params.categoryId != null) query.categoryId = params.categoryId;
   if (params.year != null) query.year = params.year;
   if (params.month != null) query.month = params.month;
+  if (params.status) query.status = params.status;
 
   const response = await api.get("/user/emissions", { params: query });
   return response.data;
@@ -192,6 +194,14 @@ export const getEmissionFactorForEmission = async (emissionId: number): Promise<
 // Approve all pending emissions from a specific upload batch
 export const approveEmissionsByBatch = async (batchId: string, comment?: string) => {
   const response = await api.put(`/user/emissions/batch/${batchId}/approve`, { comment });
+  return response.data;
+};
+
+export const managerUpdateEmission = async (
+  id: string | number,
+  data: { activity_data?: any; date_of_reporting?: string }
+) => {
+  const response = await api.put(`/user/emissions/manager-edit/${id}`, data);
   return response.data;
 };
 

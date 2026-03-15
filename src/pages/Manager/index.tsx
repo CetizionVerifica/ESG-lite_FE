@@ -7,10 +7,13 @@ import {
   approveEmission,
   rejectEmission,
   bulkApproveEmissions,
+  bulkRejectEmissions,
   bulkDeleteEmissions,
   getEmissionBatches,
   approveEmissionsByBatch,
+  managerUpdateEmission,
   EmissionData,
+  EmissionStatus,
   type EmissionUploadBatch,
 } from "../../services/emissionService";
 import {
@@ -34,6 +37,12 @@ interface Site {
   name: string;
   categories: Category[];
 }
+
+const STATUS_OPTIONS: DropdownOption[] = [
+  { id: "pending", label: "Pending" },
+  { id: "approved", label: "Approved" },
+  { id: "rejected", label: "Rejected" },
+];
 
 function generateDateOptions(): DropdownOption[] {
   const options: DropdownOption[] = [];
@@ -74,6 +83,7 @@ const ManagerPage = () => {
   );
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<EmissionStatus | null>(null);
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [loading, setLoading] = useState(false);
   const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>([]);
@@ -348,6 +358,12 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     await fetchEmissions();
   }, [fetchEmissions]);
 
+  // Handle bulk reject emissions
+  const handleBulkReject = useCallback(async (ids: number[], comment: string) => {
+    await bulkRejectEmissions(ids, comment);
+    await fetchEmissions();
+  }, [fetchEmissions]);
+
   // Handle bulk delete emissions
   const handleBulkDelete = useCallback(async (ids: number[]) => {
     await bulkDeleteEmissions(ids);
@@ -369,7 +385,18 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     }
   }, [fetchEmissions, emissionBatches]);
 
-  // Filter emissions based on selected category and date
+  // Handle manager edit emission
+  const handleManagerEdit = useCallback(async (
+    id: number,
+    data: { activity_data?: Record<string, any>; date_of_reporting?: string }
+  ) => {
+    const response = await managerUpdateEmission(id, data);
+    setEmissions((prev) =>
+      prev.map((e) => e.pk_id === id ? response.emission : e)
+    );
+  }, []);
+
+  // Filter emissions based on selected category, date, and status
   const filteredEmissions = useMemo(() => {
     let result = emissions;
 
@@ -388,8 +415,12 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       });
     }
 
+    if (selectedStatus) {
+      result = result.filter((emission) => emission.status === selectedStatus);
+    }
+
     return result;
-  }, [emissions, selectedCategory, selectedDate]);
+  }, [emissions, selectedCategory, selectedDate, selectedStatus]);
 
   // Theme classes
   const containerClass = isDark
@@ -413,7 +444,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       <h1 className="text-2xl font-bold mb-6">Manage data</h1>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         {/* Site Selection - only show if manager has multiple sites */}
         <div>
           <label className={labelClass}>Site</label>
@@ -433,6 +464,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             value={selectedCategory}
             onChange={(option) => setSelectedCategory(option?.id as number)}
             searchable={true}
+            clearable={true}
           />
         </div>
         <div>
@@ -443,7 +475,26 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             value={selectedDate}
             onChange={(option) => setSelectedDate(option?.id as string)}
             searchable={true}
+            clearable={true}
           />
+        </div>
+        <div>
+          <label className={labelClass}>Status</label>
+          <Dropdown
+            options={STATUS_OPTIONS}
+            placeholder="All Statuses"
+            value={selectedStatus}
+            onChange={(option) => setSelectedStatus(option?.id as EmissionStatus)}
+            clearable={true}
+          />
+        </div>
+        <div className="flex items-end">
+          <button
+            onClick={fetchEmissions}
+            className={isDark ? "px-4 py-2 bg-slate-700 text-slate-200 rounded hover:bg-slate-600" : "px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"}
+          >
+            Refresh
+          </button>
         </div>
       </div>
 
@@ -455,6 +506,11 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
           </span>
           <span className={countTextClass}>
             {filteredEmissions.length} emission{filteredEmissions.length !== 1 ? "s" : ""} found
+            {filteredEmissions.filter((e) => e.status === "pending").length > 0 && (
+              <span className={isDark ? "ml-2 text-yellow-400" : "ml-2 text-yellow-600"}>
+                ({filteredEmissions.filter((e) => e.status === "pending").length} pending)
+              </span>
+            )}
           </span>
         </div>
       )}
@@ -527,7 +583,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         onApprove={handleApprove}
         onReject={handleReject}
         onBulkApprove={handleBulkApprove}
+        onBulkReject={handleBulkReject}
         onBulkDelete={handleBulkDelete}
+        onManagerEdit={handleManagerEdit}
         isDark={isDark}
         formatActivityData={formatActivityData}
       />
