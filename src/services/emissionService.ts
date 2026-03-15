@@ -72,6 +72,7 @@ export const getEmissionsPaginated = async (params: {
   categoryId?: number | null;
   year?: number | null;
   month?: number | null;
+  status?: string | null;
   page: number;
   limit: number;
 }): Promise<PaginatedEmissions> => {
@@ -83,6 +84,7 @@ export const getEmissionsPaginated = async (params: {
   if (params.categoryId) query.categoryId = params.categoryId;
   if (params.year) query.year = params.year;
   if (params.month) query.month = params.month;
+  if (params.status) query.status = params.status;
 
   const response = await api.get("/user/emissions", { params: query });
   return response.data;

@@ -90,6 +90,7 @@ const UserEmissionsPage = () => {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<EmissionStatus | null>(null);
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [totalEmissions, setTotalEmissions] = useState(0);
   const [summary, setSummary] = useState<EmissionsSummary>({
@@ -340,6 +341,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         categoryId: selectedCategory,
         year: selectedYear,
         month: selectedMonth,
+        status: selectedStatus,
         page,
         limit: rowsPerPage,
       });
@@ -354,7 +356,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     } finally {
       setLoading(false);
     }
-  }, [siteId, selectedCategory, selectedYear, selectedMonth]);
+  }, [siteId, selectedCategory, selectedYear, selectedMonth, selectedStatus]);
 
   // When filters change, reset to page 1 and fetch
   useEffect(() => {
@@ -410,7 +412,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       </h1>
 
       {/* Filters */}
-      <div className={`grid grid-cols-1 gap-4 mb-6 ${hasMultipleSites ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+      <div className={`grid grid-cols-1 gap-4 mb-6 ${hasMultipleSites ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
         {/* Site Selector - only show when user has multiple sites */}
         {hasMultipleSites && (
           <div>
@@ -454,6 +456,20 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             value={selectedMonth}
             onChange={(option) => setSelectedMonth(option?.id as number)}
             searchable={true}
+            clearable={true}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Status</label>
+          <Dropdown
+            options={[
+              { id: "pending", label: "Pending" },
+              { id: "approved", label: "Approved" },
+              { id: "rejected", label: "Rejected" },
+            ]}
+            placeholder="All Statuses"
+            value={selectedStatus}
+            onChange={(option) => setSelectedStatus(option?.id as EmissionStatus)}
             clearable={true}
           />
         </div>
