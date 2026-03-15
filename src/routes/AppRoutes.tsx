@@ -27,6 +27,7 @@ import EdeReports from "../pages/Reports/EdePreports";
 import SbtiMain from "../pages/sbti/SbtiMain";
 import GhgReport from "../pages/GhgReport/GhgReport";
 import CategoryMappingPage from "../pages/CategoryMappingPage";
+import ManagerUsersPage from "../pages/ManagerUsers";
 
 const routes = [
   {
@@ -152,6 +153,10 @@ const routes = [
           {
             path: "manage-production-data",
             element: <ManagerProductionDataPage />
+          },
+          {
+            path: "manage-users",
+            element: <ManagerUsersPage />
           }
         ],
       },
