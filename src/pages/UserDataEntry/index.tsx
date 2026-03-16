@@ -421,7 +421,7 @@ const UserDataEntryPage = () => {
             setEmissionBatches([]);
             return;
         }
-        getEmissionBatches(siteId).then(setEmissionBatches).catch(() => setEmissionBatches([]));
+        getEmissionBatches(siteId).then(setEmissionBatches).catch((err) => { console.error("Failed to fetch batches:", err); setEmissionBatches([]); });
     }, [siteId]);
 
     useEffect(() => {
