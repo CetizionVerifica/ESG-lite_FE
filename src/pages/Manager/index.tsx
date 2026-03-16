@@ -423,10 +423,12 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
   const handleBatchReject = useCallback(async (batchId: string) => {
     const batch = emissionBatches.find((b) => b.upload_batch_id === batchId);
     const rejectableCount = (batch?.pending_count ?? 0) + (batch?.approved_count ?? 0);
-    if (!confirm(`Reject all ${rejectableCount} pending/approved emission(s) from this batch?`)) return;
+    const reason = prompt(`Reject all ${rejectableCount} pending/approved emission(s) from this batch?\n\nEnter reason for rejection:`);
+    if (reason === null) return; // user cancelled
+    if (!reason.trim()) { alert("Rejection reason is required."); return; }
     setRejectingBatchId(batchId);
     try {
-      await rejectEmissionsByBatch(batchId);
+      await rejectEmissionsByBatch(batchId, reason.trim());
       await fetchEmissions();
     } catch (error) {
       console.error("Error rejecting batch:", error);
