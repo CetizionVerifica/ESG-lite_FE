@@ -14,7 +14,6 @@ import {
     bulkDeleteEmissions,
     deleteEmissionsByBatch,
     getEmissionBatches,
-    downloadEmissions,
     getEmissionFactorForEmission,
     type EmissionUploadBatch,
     type EmissionFactorDetails,
@@ -1802,10 +1801,13 @@ const UserDataEntryPage = () => {
             editable: false,
             type: "text" as const,
             render: (value: string, row: EmissionRow) => {
+                // Show company category name if mapping exists, otherwise global name
+                const mapping = companyMappings.find((m) => m.global_category_name === value);
+                const displayName = mapping ? mapping.company_category_name : (value || "");
                 if (row._isFeraRow) {
-                    return `${value || ""} (FERA)`;
+                    return `${displayName} (FERA)`;
                 }
-                return value || "";
+                return displayName;
             },
         },
         ...filteredColumns.map((col) => {
@@ -1873,12 +1875,6 @@ const UserDataEntryPage = () => {
             label: "Total Emission (tCO2e)",
             editable: false,
             type: "number" as const,
-        },
-        {
-            key: "unit",
-            label: "Unit",
-            editable: false,
-            type: "text" as const,
         },
         {
             key: "status",
@@ -2019,31 +2015,6 @@ const UserDataEntryPage = () => {
                                 Bulk Upload
                             </button>
                         </>
-                    )}
-
-                    {/* Download Emissions as Excel */}
-                    {emissions.length > 0 && (
-                        <button
-                            onClick={() => downloadEmissions({
-                                siteId: siteId,
-                                categoryId: selectedCategory || undefined,
-                                date: selectedDate || undefined,
-                            })}
-                            className="px-4 py-2 bg-white border border-gray-400 text-gray-700 rounded hover:bg-gray-50 flex items-center gap-2">
-                            <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                                />
-                            </svg>
-                            Download
-                        </button>
                     )}
 
                     {/* Bulk Delete Selected */}
@@ -3261,27 +3232,21 @@ const UserDataEntryPage = () => {
                     <div className="space-y-3">
                         {factorModalEmission && (
                             <div className="text-sm text-gray-500 mb-4">
-                                Emission #{factorModalEmission.pk_id} &mdash; {factorModalEmission.emission_category || "N/A"}
+                                Emission #{factorModalEmission.pk_id}
                             </div>
                         )}
                         <table className="w-full text-sm">
                             <tbody>
                                 <tr className="border-b border-gray-100">
-                                    <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Emission Category</td>
+                                    <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Category</td>
                                     <td className="py-2 text-gray-900">{factorModalData.emission_category_name || "—"}</td>
                                 </tr>
-                                {factorModalData.global_category_name && (
-                                    <tr className="border-b border-gray-100">
-                                        <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Global Category</td>
-                                        <td className="py-2 text-gray-900">{factorModalData.global_category_name}</td>
-                                    </tr>
-                                )}
                                 <tr className="border-b border-gray-100">
                                     <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Factor Value</td>
                                     <td className="py-2 text-gray-900 font-mono">{factorModalData.factor_value}</td>
                                 </tr>
                                 <tr className="border-b border-gray-100">
-                                    <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Denominator Unit</td>
+                                    <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Unit</td>
                                     <td className="py-2 text-gray-900">{factorModalData.denominator_unit || "—"}</td>
                                 </tr>
                                 <tr className="border-b border-gray-100">
