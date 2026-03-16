@@ -386,9 +386,6 @@ const UserDataEntryPage = () => {
             // Clear stale selections after data reload
             setSelectedEmissionIds(new Set());
 
-            // Fetch upload batches for this site+category
-            getEmissionBatches(siteId, selectedCategory).then(setEmissionBatches).catch(() => setEmissionBatches([]));
-
             // Fetch company category mappings (company_category_name → emission_category_name)
             if (companyId) {
                 try {
@@ -417,6 +414,19 @@ const UserDataEntryPage = () => {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    // Fetch upload batches whenever site changes (independent of category/date)
+    const fetchBatches = useCallback(() => {
+        if (!siteId) {
+            setEmissionBatches([]);
+            return;
+        }
+        getEmissionBatches(siteId).then(setEmissionBatches).catch(() => setEmissionBatches([]));
+    }, [siteId]);
+
+    useEffect(() => {
+        fetchBatches();
+    }, [fetchBatches]);
 
     // Proactively fetch emission factors, units, and column configs as soon as
     // site + category are selected, so the Invoice Review Modal dropdowns are
@@ -1268,6 +1278,7 @@ const UserDataEntryPage = () => {
         try {
             await deleteEmissionsByBatch(batchId);
             await fetchData();
+            fetchBatches();
         } catch (error) {
             console.error("Error deleting batch:", error);
         } finally {
@@ -2089,7 +2100,7 @@ const UserDataEntryPage = () => {
             )}
 
             {/* Upload Batches Panel - always visible when batches exist */}
-            {selectedCategory && selectedDate && emissionBatches.length > 0 && (
+            {emissionBatches.length > 0 && (
                 <div className="mb-4 border border-orange-300 rounded-lg bg-orange-50 overflow-hidden">
                     <button
                         onClick={() => setShowEmissionBatches(!showEmissionBatches)}
@@ -2596,8 +2607,9 @@ const UserDataEntryPage = () => {
                     // }}
                      onImportComplete={async () => {
     setSuccessMsg("Saved successfully. Imported data is now available in the table.");
-    await fetchData();          
-    setCurrentPage(1);          
+    await fetchData();
+    setCurrentPage(1);
+    fetchBatches();
   }}
                 />
             )}
