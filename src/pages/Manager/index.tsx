@@ -92,7 +92,7 @@ const ManagerPage = () => {
   const [totalCount, setTotalCount] = useState(0);
   const PAGE_LIMIT = 50;
   const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>([]);
-  const [showBatches, setShowBatches] = useState(false);
+  const [showBatches, setShowBatches] = useState(true);
   const [approvingBatchId, setApprovingBatchId] = useState<string | null>(null);
   const [rejectingBatchId, setRejectingBatchId] = useState<string | null>(null);
 
@@ -343,7 +343,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       setTotalCount(result.total);
       setTotalPages(Math.max(1, Math.ceil(result.total / PAGE_LIMIT)));
       // Fetch upload batches for this site
-      getEmissionBatches(selectedSite).then(setEmissionBatches).catch(() => setEmissionBatches([]));
+      getEmissionBatches(selectedSite, selectedCategory).then(setEmissionBatches).catch(() => setEmissionBatches([]));
     } catch (error) {
       console.error("Error fetching emissions:", error);
       setEmissions([]);

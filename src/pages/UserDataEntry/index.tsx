@@ -110,7 +110,7 @@ const UserDataEntryPage = () => {
     const [dynamicColumns, setDynamicColumns] = useState<ColumnEntity[]>([]);
     const [emissions, setEmissions] = useState<EmissionRow[]>([]);
     const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>([]);
-    const [showEmissionBatches, setShowEmissionBatches] = useState(false);
+    const [showEmissionBatches, setShowEmissionBatches] = useState(true);
     const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
     const [emissionFactors, setEmissionFactors] = useState<EmissionFactor[]>(
         [],
@@ -2530,6 +2530,8 @@ const paginatedEmissions = emissions.slice(
                                                 <tr className="bg-orange-50 text-orange-800">
                                                     <th className="px-4 py-2 text-left font-medium">Category</th>
                                                     <th className="px-4 py-2 text-left font-medium">Rows</th>
+                                                    <th className="px-4 py-2 text-left font-medium">Status</th>
+                                                    <th className="px-4 py-2 text-left font-medium">Uploaded By</th>
                                                     <th className="px-4 py-2 text-left font-medium">Uploaded</th>
                                                     <th className="px-4 py-2 text-right font-medium">Action</th>
                                                 </tr>
@@ -2542,6 +2544,28 @@ const paginatedEmissions = emissions.slice(
                                                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
                                                                 {batch.count}
                                                             </span>
+                                                        </td>
+                                                        <td className="px-4 py-2">
+                                                            <div className="flex gap-1.5 flex-wrap">
+                                                                {(batch.pending_count ?? 0) > 0 && (
+                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                                        {batch.pending_count} pending
+                                                                    </span>
+                                                                )}
+                                                                {(batch.approved_count ?? 0) > 0 && (
+                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                                                        {batch.approved_count} approved
+                                                                    </span>
+                                                                )}
+                                                                {(batch.rejected_count ?? 0) > 0 && (
+                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                                                        {batch.rejected_count} rejected
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-2 text-gray-700">
+                                                            {batch.uploaded_by || "-"}
                                                         </td>
                                                         <td className="px-4 py-2 text-gray-500">
                                                             {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
