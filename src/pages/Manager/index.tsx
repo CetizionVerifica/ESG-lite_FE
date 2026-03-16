@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Dropdown, { DropdownOption } from "../../components/Dropdown";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import {
-  getEmissionsBySite,
+  getEmissionsPaginated,
   approveEmission,
   rejectEmission,
   bulkApproveEmissions,
@@ -87,6 +87,10 @@ const ManagerPage = () => {
   const [selectedStatus, setSelectedStatus] = useState<EmissionStatus | null>(null);
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_LIMIT = 50;
   const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>([]);
   const [showBatches, setShowBatches] = useState(false);
   const [approvingBatchId, setApprovingBatchId] = useState<string | null>(null);
@@ -309,23 +313,51 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
   );
 
 
-  // Fetch all emissions for the selected site
-  const fetchEmissions = useCallback(async () => {
+  // Fetch paginated emissions for the selected site with filters
+  const fetchEmissions = useCallback(async (page?: number) => {
     if (!selectedSite) return;
+
+    const pageToFetch = page ?? currentPage;
+
+    // Parse year and month from selectedDate (format: "YYYY-MM-DD")
+    let year: number | null = null;
+    let month: number | null = null;
+    if (selectedDate) {
+      const parts = selectedDate.split("-");
+      year = parseInt(parts[0]);
+      month = parseInt(parts[1]);
+    }
 
     try {
       setLoading(true);
-      const data = await getEmissionsBySite(selectedSite);
-      setEmissions(data);
+      const result = await getEmissionsPaginated({
+        siteId: selectedSite,
+        categoryId: selectedCategory,
+        year,
+        month,
+        status: selectedStatus,
+        page: pageToFetch,
+        limit: PAGE_LIMIT,
+      });
+      setEmissions(result.data);
+      setTotalCount(result.total);
+      setTotalPages(Math.max(1, Math.ceil(result.total / PAGE_LIMIT)));
       // Fetch upload batches for this site
       getEmissionBatches(selectedSite).then(setEmissionBatches).catch(() => setEmissionBatches([]));
     } catch (error) {
       console.error("Error fetching emissions:", error);
       setEmissions([]);
+      setTotalCount(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  }, [selectedSite]);
+  }, [selectedSite, selectedCategory, selectedDate, selectedStatus, currentPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedSite, selectedCategory, selectedDate, selectedStatus]);
 
   useEffect(() => {
     fetchEmissions();
@@ -414,31 +446,6 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     );
   }, []);
 
-  // Filter emissions based on selected category, date, and status
-  const filteredEmissions = useMemo(() => {
-    let result = emissions;
-
-    if (selectedCategory) {
-      result = result.filter(
-        (emission) => emission.category?.category_id === selectedCategory
-      );
-    }
-
-    if (selectedDate) {
-      result = result.filter((emission) => {
-        // Compare year-month portion only (selectedDate is now YYYY-MM-DD format)
-        const emissionYearMonth = emission.date_of_reporting.substring(0, 7);
-        const selectedYearMonth = selectedDate.substring(0, 7);
-        return emissionYearMonth === selectedYearMonth;
-      });
-    }
-
-    if (selectedStatus) {
-      result = result.filter((emission) => emission.status === selectedStatus);
-    }
-
-    return result;
-  }, [emissions, selectedCategory, selectedDate, selectedStatus]);
 
   // Theme classes
   const containerClass = isDark
@@ -508,7 +515,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         </div>
         <div className="flex items-end">
           <button
-            onClick={fetchEmissions}
+            onClick={() => fetchEmissions()}
             className={isDark ? "px-4 py-2 bg-slate-700 text-slate-200 rounded hover:bg-slate-600" : "px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"}
           >
             Refresh
@@ -523,10 +530,10 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             Viewing: {currentSite.name}
           </span>
           <span className={countTextClass}>
-            {filteredEmissions.length} emission{filteredEmissions.length !== 1 ? "s" : ""} found
-            {filteredEmissions.filter((e) => e.status === "pending").length > 0 && (
+            {totalCount} emission{totalCount !== 1 ? "s" : ""} found
+            {emissions.filter((e) => e.status === "pending").length > 0 && (
               <span className={isDark ? "ml-2 text-yellow-400" : "ml-2 text-yellow-600"}>
-                ({filteredEmissions.filter((e) => e.status === "pending").length} pending)
+                ({emissions.filter((e) => e.status === "pending").length} pending on this page)
               </span>
             )}
           </span>
@@ -636,7 +643,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
       {/* Emissions Table */}
       <EmissionsTable
-        emissions={filteredEmissions}
+        emissions={emissions}
         loading={loading}
         onApprove={handleApprove}
         onReject={handleReject}
@@ -647,6 +654,53 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         isDark={isDark}
         formatActivityData={formatActivityData}
       />
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className={`flex items-center justify-between px-4 py-3 border-t mt-2 rounded-b-lg ${isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-white"}`}>
+          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+            Showing{" "}
+            <span className="font-medium">{(currentPage - 1) * PAGE_LIMIT + 1}</span>{" "}
+            to{" "}
+            <span className="font-medium">{Math.min(currentPage * PAGE_LIMIT, totalCount)}</span>{" "}
+            of{" "}
+            <span className="font-medium">{totalCount}</span> entries
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { setCurrentPage(1); }}
+              disabled={currentPage === 1}
+              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}
+            >
+              &laquo;
+            </button>
+            <button
+              onClick={() => { setCurrentPage((p) => p - 1); }}
+              disabled={currentPage === 1}
+              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}
+            >
+              &lsaquo;
+            </button>
+            <span className={`px-3 py-1 text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => { setCurrentPage((p) => p + 1); }}
+              disabled={currentPage === totalPages}
+              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}
+            >
+              &rsaquo;
+            </button>
+            <button
+              onClick={() => { setCurrentPage(totalPages); }}
+              disabled={currentPage === totalPages}
+              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}
+            >
+              &raquo;
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
