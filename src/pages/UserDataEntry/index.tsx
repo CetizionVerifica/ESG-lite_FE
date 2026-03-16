@@ -1230,8 +1230,8 @@ const rowsPerPage = 10;
         setBulkDeleting(true);
         try {
             const res = await bulkDeleteEmissions(Array.from(selectedEmissionIds));
-            const deletedIds = new Set<number>(res.data?.deleted_ids || Array.from(selectedEmissionIds));
-            setEmissions((prev) => prev.filter((e) => !deletedIds.has(e.pk_id)));
+            const deletedIds = new Set<number>(res.deleted_ids || Array.from(selectedEmissionIds));
+            setEmissions((prev) => prev.filter((e) => !deletedIds.has(e.pk_id) && !deletedIds.has(e.fera_linked_id as number)));
             setSelectedEmissionIds(new Set());
         } catch (error) {
             console.error("Error bulk deleting emissions:", error);
