@@ -2071,6 +2071,88 @@ const paginatedEmissions = emissions.slice(
                 </div>
             )}
 
+            {/* Upload Batches Panel - always visible when batches exist */}
+            {selectedCategory && selectedDate && emissionBatches.length > 0 && (
+                <div className="mb-4 border border-orange-300 rounded-lg bg-orange-50 overflow-hidden">
+                    <button
+                        onClick={() => setShowEmissionBatches(!showEmissionBatches)}
+                        className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-orange-800 hover:bg-orange-100 transition-colors"
+                    >
+                        <div className="flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            Upload Batches ({emissionBatches.length})
+                        </div>
+                        <svg className={`w-4 h-4 transition-transform ${showEmissionBatches ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                    {showEmissionBatches && (
+                        <div className="border-t border-orange-200">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-orange-100 text-orange-900">
+                                        <th className="px-4 py-2 text-left font-medium">Category</th>
+                                        <th className="px-4 py-2 text-left font-medium">Rows</th>
+                                        <th className="px-4 py-2 text-left font-medium">Status</th>
+                                        <th className="px-4 py-2 text-left font-medium">Uploaded By</th>
+                                        <th className="px-4 py-2 text-left font-medium">Uploaded</th>
+                                        <th className="px-4 py-2 text-right font-medium">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {emissionBatches.map((batch) => (
+                                        <tr key={batch.upload_batch_id} className="border-t border-orange-100 hover:bg-orange-50/80">
+                                            <td className="px-4 py-2 text-gray-700">{batch.category_name}</td>
+                                            <td className="px-4 py-2">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-900">
+                                                    {batch.count}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-2">
+                                                <div className="flex gap-1.5 flex-wrap">
+                                                    {(batch.pending_count ?? 0) > 0 && (
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                            {batch.pending_count} pending
+                                                        </span>
+                                                    )}
+                                                    {(batch.approved_count ?? 0) > 0 && (
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                                            {batch.approved_count} approved
+                                                        </span>
+                                                    )}
+                                                    {(batch.rejected_count ?? 0) > 0 && (
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                                            {batch.rejected_count} rejected
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-2 text-gray-700">{batch.uploaded_by || "-"}</td>
+                                            <td className="px-4 py-2 text-gray-500">
+                                                {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
+                                                    month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
+                                                })}
+                                            </td>
+                                            <td className="px-4 py-2 text-right">
+                                                <button
+                                                    onClick={() => handleDeleteBatch(batch.upload_batch_id)}
+                                                    disabled={deletingBatchId === batch.upload_batch_id}
+                                                    className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:bg-gray-400 transition-colors"
+                                                >
+                                                    {deletingBatchId === batch.upload_batch_id ? "Deleting..." : "Delete Batch"}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Entry Modal */}
             <Modal
                 isOpen={modalOpen}
@@ -2510,85 +2592,6 @@ const paginatedEmissions = emissions.slice(
                         <div className="text-center py-4">Loading data...</div>
                     ) : dynamicColumns.length > 0 ? (
                         <>
-                        {/* Upload Batches Panel */}
-                        {emissionBatches.length > 0 && (
-                            <div className="mb-3">
-                                <button
-                                    onClick={() => setShowEmissionBatches(!showEmissionBatches)}
-                                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors"
-                                >
-                                    <svg className={`w-4 h-4 transition-transform ${showEmissionBatches ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                    </svg>
-                                    Upload Batches ({emissionBatches.length})
-                                </button>
-
-                                {showEmissionBatches && (
-                                    <div className="mt-2 border border-orange-200 rounded-lg overflow-hidden">
-                                        <table className="w-full text-sm">
-                                            <thead>
-                                                <tr className="bg-orange-50 text-orange-800">
-                                                    <th className="px-4 py-2 text-left font-medium">Category</th>
-                                                    <th className="px-4 py-2 text-left font-medium">Rows</th>
-                                                    <th className="px-4 py-2 text-left font-medium">Status</th>
-                                                    <th className="px-4 py-2 text-left font-medium">Uploaded By</th>
-                                                    <th className="px-4 py-2 text-left font-medium">Uploaded</th>
-                                                    <th className="px-4 py-2 text-right font-medium">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {emissionBatches.map((batch) => (
-                                                    <tr key={batch.upload_batch_id} className="border-t border-orange-100 hover:bg-orange-50/50">
-                                                        <td className="px-4 py-2 text-gray-700">{batch.category_name}</td>
-                                                        <td className="px-4 py-2">
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                                                                {batch.count}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-2">
-                                                            <div className="flex gap-1.5 flex-wrap">
-                                                                {(batch.pending_count ?? 0) > 0 && (
-                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                                                                        {batch.pending_count} pending
-                                                                    </span>
-                                                                )}
-                                                                {(batch.approved_count ?? 0) > 0 && (
-                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                                                        {batch.approved_count} approved
-                                                                    </span>
-                                                                )}
-                                                                {(batch.rejected_count ?? 0) > 0 && (
-                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                                                                        {batch.rejected_count} rejected
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-2 text-gray-700">
-                                                            {batch.uploaded_by || "-"}
-                                                        </td>
-                                                        <td className="px-4 py-2 text-gray-500">
-                                                            {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
-                                                                month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
-                                                            })}
-                                                        </td>
-                                                        <td className="px-4 py-2 text-right">
-                                                            <button
-                                                                onClick={() => handleDeleteBatch(batch.upload_batch_id)}
-                                                                disabled={deletingBatchId === batch.upload_batch_id}
-                                                                className="px-3 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:bg-gray-400 transition-colors"
-                                                            >
-                                                                {deletingBatchId === batch.upload_batch_id ? "Deleting..." : "Delete Batch"}
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </div>
-                        )}
                         <Table<EmissionRow>
                             data={paginatedEmissions}
                             columns={tableColumns}
