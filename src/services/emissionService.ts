@@ -220,6 +220,9 @@ export const deleteEmissionsByBatch = async (batchId: string) => {
 export interface EmissionUploadBatch {
   upload_batch_id: string;
   count: number;
+  pending_count: number;
+  approved_count: number;
+  rejected_count: number;
   uploaded_at: string;
   site_id: number;
   site_name: string;

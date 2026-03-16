@@ -390,7 +390,8 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
   // Handle batch reject - reject all pending emissions in a batch
   const handleBatchReject = useCallback(async (batchId: string) => {
     const batch = emissionBatches.find((b) => b.upload_batch_id === batchId);
-    if (!confirm(`Reject all pending emissions from this batch (${batch?.count ?? "?"} rows)?`)) return;
+    const rejectableCount = (batch?.pending_count ?? 0) + (batch?.approved_count ?? 0);
+    if (!confirm(`Reject all ${rejectableCount} pending/approved emission(s) from this batch?`)) return;
     setRejectingBatchId(batchId);
     try {
       await rejectEmissionsByBatch(batchId);
@@ -556,6 +557,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                   <tr className={isDark ? "bg-slate-800 text-slate-300" : "bg-orange-50 text-orange-800"}>
                     <th className="px-4 py-2 text-left font-medium">Category</th>
                     <th className="px-4 py-2 text-left font-medium">Rows</th>
+                    <th className="px-4 py-2 text-left font-medium">Status</th>
                     <th className="px-4 py-2 text-left font-medium">Uploaded By</th>
                     <th className="px-4 py-2 text-left font-medium">Uploaded</th>
                     <th className="px-4 py-2 text-right font-medium">Action</th>
@@ -570,6 +572,25 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                           {batch.count}
                         </span>
                       </td>
+                      <td className="px-4 py-2">
+                        <div className="flex gap-1.5 flex-wrap">
+                          {batch.pending_count > 0 && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              {batch.pending_count} pending
+                            </span>
+                          )}
+                          {batch.approved_count > 0 && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                              {batch.approved_count} approved
+                            </span>
+                          )}
+                          {batch.rejected_count > 0 && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                              {batch.rejected_count} rejected
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className={`px-4 py-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
                         {batch.uploaded_by || "-"}
                       </td>
@@ -581,20 +602,27 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                       </td>
                       <td className="px-4 py-2 text-right">
                         <div className="flex gap-2 justify-end">
-                          <button
-                            onClick={() => handleBatchApprove(batch.upload_batch_id)}
-                            disabled={approvingBatchId === batch.upload_batch_id}
-                            className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:bg-gray-400 transition-colors"
-                          >
-                            {approvingBatchId === batch.upload_batch_id ? "Approving..." : "Approve Batch"}
-                          </button>
-                          <button
-                            onClick={() => handleBatchReject(batch.upload_batch_id)}
-                            disabled={rejectingBatchId === batch.upload_batch_id}
-                            className="px-3 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:bg-gray-400 transition-colors"
-                          >
-                            {rejectingBatchId === batch.upload_batch_id ? "Rejecting..." : "Reject"}
-                          </button>
+                          {batch.pending_count > 0 && (
+                            <button
+                              onClick={() => handleBatchApprove(batch.upload_batch_id)}
+                              disabled={approvingBatchId === batch.upload_batch_id}
+                              className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:bg-gray-400 transition-colors"
+                            >
+                              {approvingBatchId === batch.upload_batch_id ? "Approving..." : "Approve"}
+                            </button>
+                          )}
+                          {(batch.pending_count > 0 || batch.approved_count > 0) && (
+                            <button
+                              onClick={() => handleBatchReject(batch.upload_batch_id)}
+                              disabled={rejectingBatchId === batch.upload_batch_id}
+                              className="px-3 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:bg-gray-400 transition-colors"
+                            >
+                              {rejectingBatchId === batch.upload_batch_id ? "Rejecting..." : "Reject"}
+                            </button>
+                          )}
+                          {batch.rejected_count === batch.count && (
+                            <span className={`text-xs italic ${isDark ? "text-slate-500" : "text-gray-400"}`}>All rejected</span>
+                          )}
                         </div>
                       </td>
                     </tr>
