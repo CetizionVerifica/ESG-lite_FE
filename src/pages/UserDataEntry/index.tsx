@@ -7,6 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import {
     getEmissionsBySiteAndCategory,
+    getEmissionsPaginated,
     createEmission,
     updateEmission,
     deleteEmission,
@@ -120,8 +121,10 @@ const UserDataEntryPage = () => {
     const [loading, setLoading] = useState(false);
     const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const PAGE_LIMIT = 50;
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
-const rowsPerPage = 10;
 
     // Dependent dropdown configuration state
     const [columnOptions, setColumnOptions] = useState<ColumnOptionsMap>({});
@@ -298,11 +301,13 @@ const rowsPerPage = 10;
     // ---------------------------------------------------------------------------
     // Data Fetching
     // ---------------------------------------------------------------------------
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (page?: number) => {
         if (!selectedCategory || !selectedDate || !siteId) {
             setDynamicColumns([]);
             setExtraFields([]);
             setEmissions([]);
+            setTotalCount(0);
+            setTotalPages(1);
             setSelectedEmissionIds(new Set());
             setEmissionFactors([]);
             setFeraEmissionFactors([]);
@@ -310,23 +315,30 @@ const rowsPerPage = 10;
             return;
         }
 
+        const pageToFetch = page ?? currentPage;
+
         try {
             setLoading(true);
 
             // Calculate target year for emission factors (reporting year - 1)
             const factorYear = parseInt(selectedDate.substring(0, 4)) - 1;
+            const dateYear = parseInt(selectedDate.substring(0, 4));
+            const dateMonth = parseInt(selectedDate.substring(5, 7));
 
-            const [configs, emissionsData, factors, unitsData] =
+            const [configs, paginatedResult, factors, unitsData] =
                 await Promise.all([
                     getUserColumnConfigsBySiteAndCategory(
                         siteId,
                         selectedCategory,
                     ),
-                    getEmissionsBySiteAndCategory(
+                    getEmissionsPaginated({
                         siteId,
-                        selectedCategory,
-                        selectedDate,
-                    ),
+                        categoryId: selectedCategory,
+                        year: dateYear,
+                        month: dateMonth,
+                        page: pageToFetch,
+                        limit: PAGE_LIMIT,
+                    }),
                     getUserEmissionFactorsBySiteAndCategory(
                         siteId,
                         selectedCategory,
@@ -345,6 +357,10 @@ const rowsPerPage = 10;
             setEmissionFactors(factors);
             setUnits(unitsData);
 
+            const mainEmissions = flattenEmissions(paginatedResult.data);
+            setTotalCount(paginatedResult.total);
+            setTotalPages(Math.max(1, Math.ceil(paginatedResult.total / PAGE_LIMIT)));
+
             // Fetch FERA emissions + factors + units if the site has a FERA category
             if (feraCategoryId) {
                 const [feraFactorsData, feraEmissionsData, feraUnitsData] = await Promise.all([
@@ -355,7 +371,7 @@ const rowsPerPage = 10;
                 setFeraEmissionFactors(feraFactorsData);
                 // Merge regular + FERA emissions, marking FERA rows
                 const feraRows = flattenEmissions(feraEmissionsData).map((r) => ({ ...r, _isFeraRow: true }));
-                setEmissions([...flattenEmissions(emissionsData), ...feraRows]);
+                setEmissions([...mainEmissions, ...feraRows]);
                 // Merge FERA units into the unit list (deduplicated by unit_name)
                 const existingNames = new Set(unitsData.map((u: UnitData) => u.unit_name.toLowerCase()));
                 const newFeraUnits = feraUnitsData.filter((u: UnitData) => !existingNames.has(u.unit_name.toLowerCase()));
@@ -364,7 +380,7 @@ const rowsPerPage = 10;
                 }
             } else {
                 setFeraEmissionFactors([]);
-                setEmissions(flattenEmissions(emissionsData));
+                setEmissions(mainEmissions);
             }
 
             // Clear stale selections after data reload
@@ -390,10 +406,15 @@ const rowsPerPage = 10;
         } finally {
             setLoading(false);
         }
-    }, [selectedCategory, selectedDate, siteId, companyId, feraCategoryId]);
+    }, [selectedCategory, selectedDate, siteId, companyId, feraCategoryId, currentPage]);
 
+    // Reset to page 1 when filters change
     useEffect(() => {
         setCurrentPage(1);
+    }, [selectedCategory, selectedDate, siteId]);
+
+    // Fetch data when page or filters change
+    useEffect(() => {
         fetchData();
     }, [fetchData]);
 
@@ -1890,11 +1911,7 @@ const rowsPerPage = 10;
     // Render
     // ---------------------------------------------------------------------------
 
-    const totalPages = Math.ceil(emissions.length / rowsPerPage);
-const paginatedEmissions = emissions.slice(
-  (currentPage - 1) * rowsPerPage,
-  currentPage * rowsPerPage
-);
+    const paginatedEmissions = emissions;
 
     return (
         <div className="p-6">
@@ -2679,18 +2696,18 @@ const paginatedEmissions = emissions.slice(
                         />
 
  {totalPages > 1 && (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white mt-2">
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white mt-2 rounded-b-lg">
                         <p className="text-sm text-gray-600">
                             Showing{" "}
                             <span className="font-medium">
-                                {(currentPage - 1) * rowsPerPage + 1}
+                                {(currentPage - 1) * PAGE_LIMIT + 1}
                             </span>{" "}
                             to{" "}
                             <span className="font-medium">
-                                {Math.min(currentPage * rowsPerPage, emissions.length)}
+                                {Math.min(currentPage * PAGE_LIMIT, totalCount)}
                             </span>{" "}
                             of{" "}
-                            <span className="font-medium">{emissions.length}</span> entries
+                            <span className="font-medium">{totalCount}</span> entries
                         </p>
 
                         <div className="flex items-center gap-1">
@@ -2698,54 +2715,29 @@ const paginatedEmissions = emissions.slice(
                                 onClick={() => setCurrentPage(1)}
                                 disabled={currentPage === 1}
                                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >«</button>
+                            >&laquo;</button>
 
                             <button
                                 onClick={() => setCurrentPage((p) => p - 1)}
                                 disabled={currentPage === 1}
                                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >‹</button>
+                            >&lsaquo;</button>
 
-                            {Array.from({ length: totalPages }, (_, i) => i + 1)
-                                .filter(
-                                    (page) =>
-                                        page === 1 ||
-                                        page === totalPages ||
-                                        Math.abs(page - currentPage) <= 2
-                                )
-                                .reduce<(number | "...")[]>((acc, page, idx, arr) => {
-                                    if (idx > 0 && page - (arr[idx - 1] as number) > 1)
-                                        acc.push("...");
-                                    acc.push(page);
-                                    return acc;
-                                }, [])
-                                .map((item, idx) =>
-                                    item === "..." ? (
-                                        <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">…</span>
-                                    ) : (
-                                        <button
-                                            key={item}
-                                            onClick={() => setCurrentPage(item as number)}
-                                            className={`px-3 py-1 text-sm rounded border transition-colors ${
-                                                currentPage === item
-                                                    ? "bg-blue-600 text-white border-blue-600"
-                                                    : "border-gray-300 hover:bg-gray-50 text-gray-700"
-                                            }`}
-                                        >{item}</button>
-                                    )
-                                )}
+                            <span className="px-3 py-1 text-sm text-gray-700">
+                                Page {currentPage} of {totalPages}
+                            </span>
 
                             <button
                                 onClick={() => setCurrentPage((p) => p + 1)}
                                 disabled={currentPage === totalPages}
                                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >›</button>
+                            >&rsaquo;</button>
 
                             <button
                                 onClick={() => setCurrentPage(totalPages)}
                                 disabled={currentPage === totalPages}
                                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >»</button>
+                            >&raquo;</button>
                         </div>
                     </div>
                 )}
