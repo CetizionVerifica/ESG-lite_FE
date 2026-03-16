@@ -197,6 +197,12 @@ export const approveEmissionsByBatch = async (batchId: string, comment?: string)
   return response.data;
 };
 
+// Reject all pending emissions from a specific upload batch
+export const rejectEmissionsByBatch = async (batchId: string, comment?: string) => {
+  const response = await api.put(`/user/emissions/batch/${batchId}/reject`, { comment });
+  return response.data;
+};
+
 export const managerUpdateEmission = async (
   id: string | number,
   data: { activity_data?: any; date_of_reporting?: string }
@@ -219,6 +225,7 @@ export interface EmissionUploadBatch {
   site_name: string;
   category_id: number;
   category_name: string;
+  uploaded_by?: string;
 }
 
 // Get all upload batches for emissions

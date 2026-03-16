@@ -2491,6 +2491,7 @@ const paginatedEmissions = emissions.slice(
                     getExpectedUnit={getExpectedUnit}
                     calculateEmission={calculateEmission}
                     getAutoEmissionCategory={getAutoEmissionCategory}
+                    userId={user?.user_id}
                     // onImportComplete={(newEmissions) => {
                     //     setEmissions((prev) => [...newEmissions, ...prev]);
                     // }}

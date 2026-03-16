@@ -149,4 +149,5 @@ export interface BulkUploadModalProps {
     calculateEmission: (row: ModalRow) => EmissionCalculationResult;
     getAutoEmissionCategory: (row: ModalRow) => { key: string; category: string } | null;
     onImportComplete: (newEmissions: EmissionRow[]) => void;
+    userId?: number;
 }

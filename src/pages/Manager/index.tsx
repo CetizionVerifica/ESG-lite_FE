@@ -11,6 +11,7 @@ import {
   bulkDeleteEmissions,
   getEmissionBatches,
   approveEmissionsByBatch,
+  rejectEmissionsByBatch,
   managerUpdateEmission,
   EmissionData,
   EmissionStatus,
@@ -89,6 +90,7 @@ const ManagerPage = () => {
   const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>([]);
   const [showBatches, setShowBatches] = useState(false);
   const [approvingBatchId, setApprovingBatchId] = useState<string | null>(null);
+  const [rejectingBatchId, setRejectingBatchId] = useState<string | null>(null);
 
   const [columnOptionsMap, setColumnOptionsMap] = useState<Record<number, ColumnOptionsMap>>({});
   const [dependentOptionsMap, setDependentOptionsMap] = useState<Record<number, DependentOptionsMap>>({});
@@ -385,6 +387,21 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     }
   }, [fetchEmissions, emissionBatches]);
 
+  // Handle batch reject - reject all pending emissions in a batch
+  const handleBatchReject = useCallback(async (batchId: string) => {
+    const batch = emissionBatches.find((b) => b.upload_batch_id === batchId);
+    if (!confirm(`Reject all pending emissions from this batch (${batch?.count ?? "?"} rows)?`)) return;
+    setRejectingBatchId(batchId);
+    try {
+      await rejectEmissionsByBatch(batchId);
+      await fetchEmissions();
+    } catch (error) {
+      console.error("Error rejecting batch:", error);
+    } finally {
+      setRejectingBatchId(null);
+    }
+  }, [fetchEmissions, emissionBatches]);
+
   // Handle manager edit emission
   const handleManagerEdit = useCallback(async (
     id: number,
@@ -539,6 +556,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                   <tr className={isDark ? "bg-slate-800 text-slate-300" : "bg-orange-50 text-orange-800"}>
                     <th className="px-4 py-2 text-left font-medium">Category</th>
                     <th className="px-4 py-2 text-left font-medium">Rows</th>
+                    <th className="px-4 py-2 text-left font-medium">Uploaded By</th>
                     <th className="px-4 py-2 text-left font-medium">Uploaded</th>
                     <th className="px-4 py-2 text-right font-medium">Action</th>
                   </tr>
@@ -552,6 +570,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                           {batch.count}
                         </span>
                       </td>
+                      <td className={`px-4 py-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                        {batch.uploaded_by || "-"}
+                      </td>
                       <td className={`px-4 py-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                         {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
                           year: "numeric", month: "short", day: "numeric",
@@ -559,13 +580,22 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                         })}
                       </td>
                       <td className="px-4 py-2 text-right">
-                        <button
-                          onClick={() => handleBatchApprove(batch.upload_batch_id)}
-                          disabled={approvingBatchId === batch.upload_batch_id}
-                          className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:bg-gray-400 transition-colors"
-                        >
-                          {approvingBatchId === batch.upload_batch_id ? "Approving..." : "Approve Batch"}
-                        </button>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => handleBatchApprove(batch.upload_batch_id)}
+                            disabled={approvingBatchId === batch.upload_batch_id}
+                            className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:bg-gray-400 transition-colors"
+                          >
+                            {approvingBatchId === batch.upload_batch_id ? "Approving..." : "Approve Batch"}
+                          </button>
+                          <button
+                            onClick={() => handleBatchReject(batch.upload_batch_id)}
+                            disabled={rejectingBatchId === batch.upload_batch_id}
+                            className="px-3 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:bg-gray-400 transition-colors"
+                          >
+                            {rejectingBatchId === batch.upload_batch_id ? "Rejecting..." : "Reject"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

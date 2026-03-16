@@ -23,6 +23,7 @@ export function useBulkUpload({
   companyId: _companyId,
   selectedDate,
   getAutoEmissionCategory,
+  userId,
   // onImportComplete, // kept but not used inside handleImport anymore (BulkUploadModal will call it)
   // onClose,          // kept but not used inside handleImport anymore (BulkUploadModal will close)
 }: Omit<
@@ -92,7 +93,7 @@ export function useBulkUpload({
         requiredField: `extra_${ef.key}`,
         label: `${ef.label} (supplementary)`,
         mappedTo: "",
-        skipped: true,
+        skipped: false,
         isRequired: false,
       });
     });
@@ -102,8 +103,13 @@ export function useBulkUpload({
 
   const autoMap = useCallback((fields: ColumnMappingEntry[], headers: string[]) => {
     return fields.map((field) => {
+      const fieldName = field.requiredField.toLowerCase().trim();
+      const fieldNameNoPrefix = fieldName.replace(/^extra_/, "");
       const match = headers.find(
-        (h) => h.toLowerCase().trim() === field.requiredField.toLowerCase().trim()
+        (h) => {
+          const header = h.toLowerCase().trim();
+          return header === fieldName || header === fieldNameNoPrefix;
+        }
       );
       return match ? { ...field, mappedTo: match } : field;
     });
@@ -246,7 +252,7 @@ export function useBulkUpload({
 
         columnMappings.forEach((mapping) => {
           if (!mapping.skipped && mapping.mappedTo) {
-            const value = String(uploadedRow[mapping.requiredField] ?? "").trim();
+            const value = String(uploadedRow[mapping.mappedTo] ?? "").trim();
 
             // Separate extra fields (prefixed with "extra_") from core fields
             if (mapping.requiredField.startsWith("extra_")) {
@@ -364,7 +370,8 @@ export function useBulkUpload({
         selected,
         siteId,
         categoryId,
-        selectedDate
+        selectedDate,
+        userId
       );
 
       setImportProgress({ current: res.inserted ?? 0, total: res.total_rows ?? totalRows ?? 0 });
