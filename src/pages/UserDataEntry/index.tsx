@@ -2124,7 +2124,6 @@ const UserDataEntryPage = () => {
                                         <th className="px-4 py-2 text-left font-medium">Category</th>
                                         <th className="px-4 py-2 text-left font-medium">Rows</th>
                                         <th className="px-4 py-2 text-left font-medium">Status</th>
-                                        <th className="px-4 py-2 text-left font-medium">Uploaded By</th>
                                         <th className="px-4 py-2 text-left font-medium">Uploaded</th>
                                         <th className="px-4 py-2 text-right font-medium">Action</th>
                                     </tr>
@@ -2157,7 +2156,6 @@ const UserDataEntryPage = () => {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-2 text-gray-700">{batch.uploaded_by || "-"}</td>
                                             <td className="px-4 py-2 text-gray-500">
                                                 {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
                                                     month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
