@@ -2,6 +2,7 @@ import { useActionState, useState, useEffect, useCallback, useMemo } from "react
 import Modal from "../components/Modal";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { Table, Column } from "../components/Table";
+import { AuditTrailModal } from "../components/AuditTrailTimeline";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { getProductsBySite, Product } from "../services/productService";
@@ -40,6 +41,8 @@ const ProductionDataPage = () => {
   const currentSite = availableSites.find((s) => s.site_id === selectedSite);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [auditEntityId, setAuditEntityId] = useState<number | null>(null);
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -213,6 +216,23 @@ const ProductionDataPage = () => {
             </div>
           )}
         </div>
+      ),
+    },
+    {
+      key: "history" as any,
+      label: "History",
+      editable: false,
+      render: (_v: any, row: ProductionData) => (
+        <button
+          onClick={() => {
+            setAuditEntityId(row.production_id);
+            setAuditModalOpen(true);
+          }}
+          className={`px-2 py-1 text-xs rounded ${isDark ? "bg-slate-600 text-slate-300 hover:bg-slate-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+          title="View edit history"
+        >
+          History
+        </button>
       ),
     },
   ];
@@ -400,6 +420,20 @@ const ProductionDataPage = () => {
           );
         }}
       />
+
+      {/* Audit Trail Modal */}
+      {auditEntityId && (
+        <AuditTrailModal
+          isOpen={auditModalOpen}
+          onClose={() => {
+            setAuditModalOpen(false);
+            setAuditEntityId(null);
+          }}
+          entityType="production_data"
+          entityId={auditEntityId}
+          isDark={isDark}
+        />
+      )}
     </div>
   );
 };
