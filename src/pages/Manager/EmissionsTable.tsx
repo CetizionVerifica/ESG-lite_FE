@@ -3,6 +3,7 @@ import { EmissionData, EmissionStatus } from "../../services/emissionService";
 import { getDocumentsByEmission, EmissionDocument } from "../../services/documentService";
 import DocumentViewerModal from "../../components/DocumentViewerModal";
 import Modal from "../../components/Modal";
+import AuditTrailTimeline, { AuditTrailModal } from "../../components/AuditTrailTimeline";
 
 interface EmissionsTableProps {
   emissions: EmissionData[];
@@ -81,6 +82,10 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
 
   // Delete confirmation modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Audit trail modal state
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [auditEntityId, setAuditEntityId] = useState<number | null>(null);
 
   // Document viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -642,6 +647,16 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                           Edit
                         </button>
                       )}
+                      <button
+                        onClick={() => {
+                          setAuditEntityId(emission.pk_id);
+                          setAuditModalOpen(true);
+                        }}
+                        className={`px-2 py-1 text-xs rounded ${isDark ? "bg-slate-600 text-slate-300 hover:bg-slate-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                        title="View edit history"
+                      >
+                        History
+                      </button>
                     </div>
                   </td>
                 )}
@@ -729,6 +744,13 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
             />
           </div>
         </div>
+        {editingEmission && (
+          <AuditTrailTimeline
+            entityType="emission"
+            entityId={editingEmission.pk_id}
+            isDark={isDark}
+          />
+        )}
         <div className="flex justify-end gap-2 mt-4">
           <button
             onClick={() => {
@@ -777,6 +799,20 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
           </div>
         </div>
       </Modal>
+
+      {/* Audit Trail Modal */}
+      {auditEntityId && (
+        <AuditTrailModal
+          isOpen={auditModalOpen}
+          onClose={() => {
+            setAuditModalOpen(false);
+            setAuditEntityId(null);
+          }}
+          entityType="emission"
+          entityId={auditEntityId}
+          isDark={isDark}
+        />
+      )}
 
       {/* Document Viewer Modal */}
       <DocumentViewerModal
