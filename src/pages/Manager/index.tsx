@@ -26,6 +26,7 @@ import {
 
 
 import EmissionsTable from "./EmissionsTable";
+import Modal from "../../components/Modal";
 
 interface Category {
   category_id: number;
@@ -95,6 +96,15 @@ const ManagerPage = () => {
   const [showBatches, setShowBatches] = useState(true);
   const [approvingBatchId, setApprovingBatchId] = useState<string | null>(null);
   const [rejectingBatchId, setRejectingBatchId] = useState<string | null>(null);
+
+  // Batch approve modal state
+  const [batchApproveModalOpen, setBatchApproveModalOpen] = useState(false);
+  const [batchApproveId, setBatchApproveId] = useState<string | null>(null);
+
+  // Batch reject modal state
+  const [batchRejectModalOpen, setBatchRejectModalOpen] = useState(false);
+  const [batchRejectId, setBatchRejectId] = useState<string | null>(null);
+  const [batchRejectComment, setBatchRejectComment] = useState("");
 
   const [columnOptionsMap, setColumnOptionsMap] = useState<Record<number, ColumnOptionsMap>>({});
   const [dependentOptionsMap, setDependentOptionsMap] = useState<Record<number, DependentOptionsMap>>({});
@@ -404,38 +414,49 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     await fetchEmissions();
   }, [fetchEmissions]);
 
-  // Handle batch approve - approve all pending emissions in a batch
-  const handleBatchApprove = useCallback(async (batchId: string) => {
-    const batch = emissionBatches.find((b) => b.upload_batch_id === batchId);
-    if (!confirm(`Approve all pending emissions from this batch (${batch?.count ?? "?"} rows)?`)) return;
-    setApprovingBatchId(batchId);
+  // Handle batch approve - open confirmation modal
+  const handleBatchApprove = useCallback((batchId: string) => {
+    setBatchApproveId(batchId);
+    setBatchApproveModalOpen(true);
+  }, []);
+
+  const confirmBatchApprove = useCallback(async () => {
+    if (!batchApproveId) return;
+    setBatchApproveModalOpen(false);
+    setApprovingBatchId(batchApproveId);
     try {
-      await approveEmissionsByBatch(batchId);
+      await approveEmissionsByBatch(batchApproveId);
       await fetchEmissions();
     } catch (error) {
       console.error("Error approving batch:", error);
     } finally {
       setApprovingBatchId(null);
+      setBatchApproveId(null);
     }
-  }, [fetchEmissions, emissionBatches]);
+  }, [batchApproveId, fetchEmissions]);
 
-  // Handle batch reject - reject all pending emissions in a batch
-  const handleBatchReject = useCallback(async (batchId: string) => {
-    const batch = emissionBatches.find((b) => b.upload_batch_id === batchId);
-    const rejectableCount = (batch?.pending_count ?? 0) + (batch?.approved_count ?? 0);
-    const reason = prompt(`Reject all ${rejectableCount} pending/approved emission(s) from this batch?\n\nEnter reason for rejection:`);
-    if (reason === null) return; // user cancelled
-    if (!reason.trim()) { alert("Rejection reason is required."); return; }
-    setRejectingBatchId(batchId);
+  // Handle batch reject - open reject modal with reason input
+  const handleBatchReject = useCallback((batchId: string) => {
+    setBatchRejectId(batchId);
+    setBatchRejectComment("");
+    setBatchRejectModalOpen(true);
+  }, []);
+
+  const confirmBatchReject = useCallback(async () => {
+    if (!batchRejectId || !batchRejectComment.trim()) return;
+    setBatchRejectModalOpen(false);
+    setRejectingBatchId(batchRejectId);
     try {
-      await rejectEmissionsByBatch(batchId, reason.trim());
+      await rejectEmissionsByBatch(batchRejectId, batchRejectComment.trim());
       await fetchEmissions();
     } catch (error) {
       console.error("Error rejecting batch:", error);
     } finally {
       setRejectingBatchId(null);
+      setBatchRejectId(null);
+      setBatchRejectComment("");
     }
-  }, [fetchEmissions, emissionBatches]);
+  }, [batchRejectId, batchRejectComment, fetchEmissions]);
 
   // Handle manager edit emission
   const handleManagerEdit = useCallback(async (
@@ -656,6 +677,91 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         isDark={isDark}
         formatActivityData={formatActivityData}
       />
+
+      {/* Batch Approve Confirmation Modal */}
+      <Modal
+        isOpen={batchApproveModalOpen}
+        onClose={() => { setBatchApproveModalOpen(false); setBatchApproveId(null); }}
+        title="Approve Batch"
+        isDark={isDark}
+        className="max-w-md!"
+      >
+        {(() => {
+          const batch = emissionBatches.find((b) => b.upload_batch_id === batchApproveId);
+          return (
+            <div>
+              <p className={isDark ? "text-slate-300 mb-4" : "text-gray-700 mb-4"}>
+                Are you sure you want to approve all <strong>{batch?.pending_count ?? "?"}</strong> pending emission(s) from this batch?
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => { setBatchApproveModalOpen(false); setBatchApproveId(null); }}
+                  className={isDark ? "px-4 py-2 bg-slate-600 text-slate-200 rounded hover:bg-slate-500" : "px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBatchApprove}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Approve All
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* Batch Reject Modal with Reason Input */}
+      <Modal
+        isOpen={batchRejectModalOpen}
+        onClose={() => { setBatchRejectModalOpen(false); setBatchRejectId(null); setBatchRejectComment(""); }}
+        title="Reject Batch"
+        isDark={isDark}
+        className="max-w-md!"
+      >
+        {(() => {
+          const batch = emissionBatches.find((b) => b.upload_batch_id === batchRejectId);
+          const rejectableCount = (batch?.pending_count ?? 0) + (batch?.approved_count ?? 0);
+          return (
+            <div>
+              <p className={isDark ? "text-slate-300 mb-3" : "text-gray-700 mb-3"}>
+                Reject all <strong>{rejectableCount}</strong> pending/approved emission(s) from this batch?
+              </p>
+              <div className="mb-4">
+                <label className={isDark ? "block text-sm font-medium mb-1 text-slate-300" : "block text-sm font-medium mb-1 text-gray-700"}>
+                  Rejection Reason (Required)
+                </label>
+                <textarea
+                  value={batchRejectComment}
+                  onChange={(e) => setBatchRejectComment(e.target.value)}
+                  className={isDark
+                    ? "w-full border border-slate-600 bg-slate-700 text-slate-200 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-red-500/30"
+                    : "w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-red-300"
+                  }
+                  rows={3}
+                  placeholder="Enter reason for rejection..."
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => { setBatchRejectModalOpen(false); setBatchRejectId(null); setBatchRejectComment(""); }}
+                  className={isDark ? "px-4 py-2 bg-slate-600 text-slate-200 rounded hover:bg-slate-500" : "px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBatchReject}
+                  disabled={!batchRejectComment.trim()}
+                  className={`px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 ${!batchRejectComment.trim() ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  Reject All
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
 
       {/* Pagination Controls */}
       {totalPages > 1 && (

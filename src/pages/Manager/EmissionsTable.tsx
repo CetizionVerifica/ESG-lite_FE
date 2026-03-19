@@ -79,11 +79,17 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
   }>({ activity_data: {}, date_of_reporting: "" });
   const [editLoading, setEditLoading] = useState(false);
 
+  // Delete confirmation modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
   // Document viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerDocuments, setViewerDocuments] = useState<EmissionDocument[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<EmissionDocument | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
+
+  // Notification state (replaces alert())
+  const [notification, setNotification] = useState<{ message: string; type: "info" | "error" } | null>(null);
 
 
   // Get pending and approved emissions
@@ -156,12 +162,15 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     }
   };
 
-  // Handle bulk delete
-  const handleBulkDelete = async () => {
+  // Handle bulk delete - open confirmation modal
+  const handleBulkDelete = () => {
     if (!onBulkDelete || selectedApprovedIds.size === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedApprovedIds.size} approved emission(s)?`)) {
-      return;
-    }
+    setDeleteModalOpen(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (!onBulkDelete) return;
+    setDeleteModalOpen(false);
     setDeleteLoading(true);
     try {
       await onBulkDelete(Array.from(selectedApprovedIds));
@@ -267,11 +276,13 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
         setSelectedDocument(docs[0]);
         setViewerOpen(true);
       } else {
-        alert("No documents found for this emission.");
+        setNotification({ message: "No documents found for this emission.", type: "info" });
+        setTimeout(() => setNotification(null), 4000);
       }
     } catch (error) {
       console.error("Error fetching documents:", error);
-      alert("Failed to load documents.");
+      setNotification({ message: "Failed to load documents.", type: "error" });
+      setTimeout(() => setNotification(null), 4000);
     } finally {
       setLoadingDocs(false);
     }
@@ -738,6 +749,35 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
         </div>
       </Modal>
 
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title="Delete Emissions"
+        isDark={isDark}
+        className="max-w-md!"
+      >
+        <div>
+          <p className={isDark ? "text-slate-300 mb-4" : "text-gray-700 mb-4"}>
+            Are you sure you want to delete <strong>{selectedApprovedIds.size}</strong> approved emission{selectedApprovedIds.size !== 1 ? "s" : ""}? This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setDeleteModalOpen(false)}
+              className={cancelBtnClass}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmBulkDelete}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Document Viewer Modal */}
       <DocumentViewerModal
         isOpen={viewerOpen}
@@ -746,6 +786,23 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
         documents={viewerDocuments}
         onNavigate={handleNavigateDocument}
       />
+
+      {/* Notification Toast */}
+      {notification && (
+        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium transition-opacity ${
+          notification.type === "error"
+            ? (isDark ? "bg-red-900/90 text-red-200 border border-red-700" : "bg-red-100 text-red-800 border border-red-300")
+            : (isDark ? "bg-slate-700 text-slate-200 border border-slate-600" : "bg-gray-100 text-gray-800 border border-gray-300")
+        }`}>
+          {notification.message}
+          <button
+            onClick={() => setNotification(null)}
+            className={`ml-3 ${isDark ? "text-slate-400 hover:text-slate-200" : "text-gray-500 hover:text-gray-700"}`}
+          >
+            &times;
+          </button>
+        </div>
+      )}
     </div>
   );
 }
