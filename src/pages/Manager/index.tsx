@@ -179,7 +179,8 @@ const ManagerPage = () => {
     };
 
     fetchColumnConfigs();
-  }, [siteId, categories]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId, selectedSite]);
 
   
   

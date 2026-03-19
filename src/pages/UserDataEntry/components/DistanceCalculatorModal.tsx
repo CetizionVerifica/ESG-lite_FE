@@ -191,13 +191,6 @@ const DistanceCalculatorModal = ({
     setRoadResult(null);
   };
 
-  const shortName = (name: string) => {
-    const parts = name.split(",");
-    return parts.length > 1
-      ? `${parts[0].trim()}, ${parts[1].trim()}`
-      : parts[0].trim();
-  };
-
   const bothLocationsSet = startLocation && endLocation;
 
   return (
@@ -285,8 +278,6 @@ const DistanceCalculatorModal = ({
           }
           endPoint={endLocation ? [endLocation.lat, endLocation.lon] : null}
           encodedPolyline={travelMode === "road" ? roadResult?.encodedPolyline : null}
-          startLabel={startQuery ? shortName(startQuery) : undefined}
-          endLabel={endQuery ? shortName(endQuery) : undefined}
           travelMode={travelMode}
         />
 

@@ -15,8 +15,6 @@ interface MapViewProps {
   startPoint: [number, number] | null;
   endPoint: [number, number] | null;
   encodedPolyline?: string | null;
-  startLabel?: string;
-  endLabel?: string;
   travelMode?: "road" | "air" | "sea";
 }
 

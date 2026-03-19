@@ -107,8 +107,9 @@ const LocationSearchInput = ({
     hasSelectedPlaceRef.current = false;
   };
 
-  const handleBlur = async () => {
-    await resolveRawQuery();
+  const handleBlur = () => {
+    // Delay to let handlePlaceChanged fire first when selecting from autocomplete dropdown
+    setTimeout(() => resolveRawQuery(), 200);
   };
 
   const handleKeyDown = async (
