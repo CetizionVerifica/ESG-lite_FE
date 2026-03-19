@@ -8,7 +8,12 @@ import {
   convertDistanceFromMeters,
   haversineDistanceMeters,
 } from "../../../services/routingService";
-import { calculateRoadDistance } from "../../../services/distanceService";
+import {
+  calculateRoadDistance,
+  calculateSeaDistance,
+  type RoadDistanceData,
+  type SeaDistanceData,
+} from "../../../services/distanceService";
 import { getCanonicalDistanceUnit } from "../../../utils/distanceUnits";
 
 type TravelMode = "road" | "air" | "sea";
@@ -20,16 +25,6 @@ interface DistanceCalculatorModalProps {
   onClose: () => void;
   targetUnit: string;
   onDistanceCalculated: (distance: number) => void;
-}
-
-interface RoadDistanceResult {
-  mode: "road";
-  distanceMeters: number;
-  duration: string | null;
-  durationText: string | null;
-  encodedPolyline: string | null;
-  origin: string;
-  destination: string;
 }
 
 const DistanceCalculatorModal = ({
@@ -44,7 +39,8 @@ const DistanceCalculatorModal = ({
   const [endLocation, setEndLocation] = useState<GeocodingResult | null>(null);
   const [startQuery, setStartQuery] = useState("");
   const [endQuery, setEndQuery] = useState("");
-  const [roadResult, setRoadResult] = useState<RoadDistanceResult | null>(null);
+  const [roadResult, setRoadResult] = useState<RoadDistanceData | null>(null);
+  const [seaResult, setSeaResult] = useState<SeaDistanceData | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [travelMode, setTravelMode] = useState<TravelMode>("road");
@@ -53,6 +49,7 @@ const DistanceCalculatorModal = ({
 
   const haversineMeters = useMemo(() => {
     if (!startLocation || !endLocation) return null;
+
     return haversineDistanceMeters(
       [startLocation.lat, startLocation.lon],
       [endLocation.lat, endLocation.lon],
@@ -64,62 +61,101 @@ const DistanceCalculatorModal = ({
     return convertDistanceFromMeters(haversineMeters, targetUnit);
   }, [haversineMeters, targetUnit]);
 
-  const seaNauticalMiles = useMemo(() => {
+  // Keep current formula-based sea logic as fallback
+  const fallbackSeaNauticalMiles = useMemo(() => {
     if (haversineMeters === null) return null;
     return Math.round((haversineMeters / METERS_PER_NAUTICAL_MILE) * 100) / 100;
   }, [haversineMeters]);
 
-  const seaDistance = useMemo(() => {
-    if (seaNauticalMiles === null) return null;
+  const fallbackSeaDistance = useMemo(() => {
+    if (fallbackSeaNauticalMiles === null) return null;
+
     return convertDistanceFromMeters(
-      seaNauticalMiles * METERS_PER_NAUTICAL_MILE,
+      fallbackSeaNauticalMiles * METERS_PER_NAUTICAL_MILE,
       targetUnit,
     );
-  }, [seaNauticalMiles, targetUnit]);
+  }, [fallbackSeaNauticalMiles, targetUnit]);
 
   const roadDistance = roadResult
     ? convertDistanceFromMeters(roadResult.distanceMeters, targetUnit)
     : null;
 
+  const apiSeaDistance = seaResult
+    ? convertDistanceFromMeters(seaResult.distanceMeters, targetUnit)
+    : null;
+
+  const finalSeaDistance = apiSeaDistance ?? fallbackSeaDistance;
+
+  const finalSeaNauticalMiles =
+    seaResult?.distanceMeters != null
+      ? Math.round(
+          (seaResult.distanceMeters / METERS_PER_NAUTICAL_MILE) * 100,
+        ) / 100
+      : fallbackSeaNauticalMiles;
+
   useEffect(() => {
-    if (!startLocation || !endLocation || travelMode !== "road") return;
+    if (!startLocation || !endLocation) return;
+    if (travelMode !== "road" && travelMode !== "sea") return;
 
     let cancelled = false;
 
     setIsCalculating(true);
     setError(null);
     setRoadResult(null);
+    setSeaResult(null);
 
-    calculateRoadDistance({
+    const commonPayload = {
       origin: {
         address: startLocation.display_name,
         lat: startLocation.lat,
         lng: startLocation.lon,
-        placeId: startLocation.place_id,
+        placeId: startLocation.place_id || undefined,
       },
       destination: {
         address: endLocation.display_name,
         lat: endLocation.lat,
         lng: endLocation.lon,
-        placeId: endLocation.place_id,
+        placeId: endLocation.place_id || undefined,
       },
-      mode: "road",
-    })
-      .then((result) => {
-        if (cancelled) return;
-        setRoadResult(result);
+    };
+
+    const handleError = (err: any, mode: "road" | "sea") => {
+      if (cancelled) return;
+
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          `Failed to calculate ${mode} distance`,
+      );
+    };
+
+    if (travelMode === "road") {
+      calculateRoadDistance({
+        ...commonPayload,
+        mode: "road",
       })
-      .catch((err: any) => {
-        if (cancelled) return;
-        setError(
-          err?.response?.data?.message ||
-            err?.message ||
-            "Failed to calculate road distance",
-        );
+        .then((result) => {
+          if (cancelled) return;
+          setRoadResult(result);
+        })
+        .catch((err: any) => handleError(err, "road"))
+        .finally(() => {
+          if (!cancelled) setIsCalculating(false);
+        });
+    } else {
+      calculateSeaDistance({
+        ...commonPayload,
+        mode: "sea",
       })
-      .finally(() => {
-        if (!cancelled) setIsCalculating(false);
-      });
+        .then((result) => {
+          if (cancelled) return;
+          setSeaResult(result);
+        })
+        .catch((err: any) => handleError(err, "sea"))
+        .finally(() => {
+          if (!cancelled) setIsCalculating(false);
+        });
+    }
 
     return () => {
       cancelled = true;
@@ -133,6 +169,7 @@ const DistanceCalculatorModal = ({
       setStartQuery("");
       setEndQuery("");
       setRoadResult(null);
+      setSeaResult(null);
       setError(null);
       setIsCalculating(false);
       setTravelMode("road");
@@ -142,6 +179,7 @@ const DistanceCalculatorModal = ({
   const handleModeChange = (mode: TravelMode) => {
     setTravelMode(mode);
     setRoadResult(null);
+    setSeaResult(null);
     setError(null);
   };
 
@@ -150,7 +188,7 @@ const DistanceCalculatorModal = ({
       ? roadDistance
       : travelMode === "air"
         ? airDistance
-        : seaDistance;
+        : finalSeaDistance;
 
   const handleUseDistance = () => {
     if (currentDistance !== null) {
@@ -163,24 +201,32 @@ const DistanceCalculatorModal = ({
     setStartLocation(result);
     setStartQuery(result.display_name);
     setRoadResult(null);
+    setSeaResult(null);
+    setError(null);
   };
 
   const handleStartClear = () => {
     setStartLocation(null);
     setStartQuery("");
     setRoadResult(null);
+    setSeaResult(null);
+    setError(null);
   };
 
   const handleEndSelect = (result: GeocodingResult) => {
     setEndLocation(result);
     setEndQuery(result.display_name);
     setRoadResult(null);
+    setSeaResult(null);
+    setError(null);
   };
 
   const handleEndClear = () => {
     setEndLocation(null);
     setEndQuery("");
     setRoadResult(null);
+    setSeaResult(null);
+    setError(null);
   };
 
   const handleSwap = () => {
@@ -189,9 +235,11 @@ const DistanceCalculatorModal = ({
     setStartQuery(endQuery);
     setEndQuery(startQuery);
     setRoadResult(null);
+    setSeaResult(null);
+    setError(null);
   };
 
-  const bothLocationsSet = startLocation && endLocation;
+  const bothLocationsSet = Boolean(startLocation && endLocation);
 
   return (
     <Modal
@@ -214,6 +262,7 @@ const DistanceCalculatorModal = ({
             <Car size={16} />
             Road
           </button>
+
           <button
             type="button"
             onClick={() => handleModeChange("air")}
@@ -226,6 +275,7 @@ const DistanceCalculatorModal = ({
             <Navigation size={16} />
             Air
           </button>
+
           <button
             type="button"
             onClick={() => handleModeChange("sea")}
@@ -250,6 +300,7 @@ const DistanceCalculatorModal = ({
               placeholder="Search for start location..."
               markerColor="green"
             />
+
             <LocationSearchInput
               label="End Location"
               value={endQuery}
@@ -278,6 +329,7 @@ const DistanceCalculatorModal = ({
           }
           endPoint={endLocation ? [endLocation.lat, endLocation.lon] : null}
           encodedPolyline={travelMode === "road" ? roadResult?.encodedPolyline : null}
+          seaGeometry={travelMode === "sea" ? seaResult?.seaGeometry ?? null : null}
           travelMode={travelMode}
         />
 
@@ -331,24 +383,46 @@ const DistanceCalculatorModal = ({
           </div>
         )}
 
-        {travelMode === "sea" &&
-          seaDistance !== null &&
-          seaNauticalMiles !== null && (
-            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-              <Anchor size={18} className="text-green-500 shrink-0" />
-              <div className="flex-1">
-                <div className="text-xs text-green-600">
-                  Sea Distance (Nautical)
-                </div>
-                <div className="text-xl font-semibold text-green-800">
-                  {seaDistance.toLocaleString()} {displayUnit}
-                </div>
-                <div className="text-xs text-gray-500 mt-0.5">
-                  {seaNauticalMiles.toLocaleString()} nautical miles
+        {travelMode === "sea" && bothLocationsSet && (
+          <>
+            {isCalculating && (
+              <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 animate-pulse">
+                <Route size={18} className="text-blue-400 shrink-0" />
+                <div className="text-sm text-blue-600">
+                  Calculating sea distance...
                 </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {finalSeaDistance !== null &&
+              finalSeaNauticalMiles !== null &&
+              !isCalculating && (
+                <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                  <Anchor size={18} className="text-green-500 shrink-0" />
+                  <div className="flex-1">
+                    <div className="text-xs text-green-600">Sea Distance</div>
+                    <div className="text-xl font-semibold text-green-800">
+                      {finalSeaDistance.toLocaleString()} {displayUnit}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {finalSeaNauticalMiles.toLocaleString()} nautical miles
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {seaResult
+                        ? "Calculated via sea route service"
+                        : "Estimated from straight-line distance"}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            {error && !isCalculating && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                {error}
+              </div>
+            )}
+          </>
+        )}
 
         <div className="flex justify-end gap-2 pt-1">
           <button
@@ -357,6 +431,7 @@ const DistanceCalculatorModal = ({
           >
             Cancel
           </button>
+
           <button
             onClick={handleUseDistance}
             disabled={currentDistance === null || isCalculating}
