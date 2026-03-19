@@ -7,12 +7,16 @@ import { useAuth } from "../../context/AuthContext";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import {
     getEmissionsBySiteAndCategory,
+    getEmissionsPaginated,
     createEmission,
     updateEmission,
     deleteEmission,
+    bulkDeleteEmissions,
     deleteEmissionsByBatch,
     getEmissionBatches,
+    getEmissionFactorForEmission,
     type EmissionUploadBatch,
+    type EmissionFactorDetails,
     EmissionData,
 } from "../../services/emissionService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
@@ -25,7 +29,6 @@ import { getMappingsByCompany, type CategoryMapping } from "../../services/categ
 import { useEmissionCalculation } from "./useEmissionCalculation";
 import {
     UnitSelector,
-    EmissionPreview,
     ValidationError,
     DocumentUploadModal,
 } from "./components";
@@ -107,7 +110,7 @@ const UserDataEntryPage = () => {
     const [dynamicColumns, setDynamicColumns] = useState<ColumnEntity[]>([]);
     const [emissions, setEmissions] = useState<EmissionRow[]>([]);
     const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>([]);
-    const [showEmissionBatches, setShowEmissionBatches] = useState(false);
+    const [showEmissionBatches, setShowEmissionBatches] = useState(true);
     const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
     const [emissionFactors, setEmissionFactors] = useState<EmissionFactor[]>(
         [],
@@ -117,8 +120,10 @@ const UserDataEntryPage = () => {
     const [loading, setLoading] = useState(false);
     const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const PAGE_LIMIT = 50;
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
-const rowsPerPage = 10;
 
     // Dependent dropdown configuration state
     const [columnOptions, setColumnOptions] = useState<ColumnOptionsMap>({});
@@ -128,6 +133,9 @@ const rowsPerPage = 10;
         useState<DependentOptionsMap>({});
     const [emissionCategoryMapping, setEmissionCategoryMapping] =
         useState<EmissionCategoryMapping>({});
+
+    // Extra supplementary field definitions from column config
+    const [extraFields, setExtraFields] = useState<import("./types").ExtraFieldDefinition[]>([]);
 
     // Company category mapping: company_category_name → global_category_name (= emission_category_name)
     const [companyMappings, setCompanyMappings] = useState<CategoryMapping[]>([]);
@@ -175,6 +183,16 @@ const rowsPerPage = 10;
     const [reusingInvoiceId, setReusingInvoiceId] = useState<number | null>(null);
     const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
 
+    // Multi-select for bulk delete
+    const [selectedEmissionIds, setSelectedEmissionIds] = useState<Set<number>>(new Set());
+    const [bulkDeleting, setBulkDeleting] = useState(false);
+
+    // Emission factor viewer
+    const [factorModalOpen, setFactorModalOpen] = useState(false);
+    const [factorModalData, setFactorModalData] = useState<EmissionFactorDetails | null>(null);
+    const [factorModalEmission, setFactorModalEmission] = useState<EmissionRow | null>(null);
+    const [factorLoading, setFactorLoading] = useState(false);
+
     // ---------------------------------------------------------------------------
     // Derived Data
     // ---------------------------------------------------------------------------
@@ -206,7 +224,7 @@ const rowsPerPage = 10;
     // ---------------------------------------------------------------------------
     // Hooks
     // ---------------------------------------------------------------------------
-    const { getExpectedUnit, calculateEmission } = useEmissionCalculation(
+    const { getExpectedUnit, getEmissionFactor, calculateEmission } = useEmissionCalculation(
         emissionFactors,
         targetYear,
         dynamicColumns,
@@ -282,33 +300,44 @@ const rowsPerPage = 10;
     // ---------------------------------------------------------------------------
     // Data Fetching
     // ---------------------------------------------------------------------------
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (page?: number) => {
         if (!selectedCategory || !selectedDate || !siteId) {
             setDynamicColumns([]);
+            setExtraFields([]);
             setEmissions([]);
+            setTotalCount(0);
+            setTotalPages(1);
+            setSelectedEmissionIds(new Set());
             setEmissionFactors([]);
             setFeraEmissionFactors([]);
             setUnits([]);
             return;
         }
 
+        const pageToFetch = page ?? currentPage;
+
         try {
             setLoading(true);
 
             // Calculate target year for emission factors (reporting year - 1)
             const factorYear = parseInt(selectedDate.substring(0, 4)) - 1;
+            const dateYear = parseInt(selectedDate.substring(0, 4));
+            const dateMonth = parseInt(selectedDate.substring(5, 7));
 
-            const [configs, emissionsData, factors, unitsData] =
+            const [configs, paginatedResult, factors, unitsData] =
                 await Promise.all([
                     getUserColumnConfigsBySiteAndCategory(
                         siteId,
                         selectedCategory,
                     ),
-                    getEmissionsBySiteAndCategory(
+                    getEmissionsPaginated({
                         siteId,
-                        selectedCategory,
-                        selectedDate,
-                    ),
+                        categoryId: selectedCategory,
+                        year: dateYear,
+                        month: dateMonth,
+                        page: pageToFetch,
+                        limit: PAGE_LIMIT,
+                    }),
                     getUserEmissionFactorsBySiteAndCategory(
                         siteId,
                         selectedCategory,
@@ -323,8 +352,13 @@ const rowsPerPage = 10;
             setColumnDependencies(config?.column_dependencies || {});
             setDependentOptions(config?.dependent_options || {});
             setEmissionCategoryMapping(config?.emission_category_mapping || {});
+            setExtraFields(config?.extra_fields || []);
             setEmissionFactors(factors);
             setUnits(unitsData);
+
+            const mainEmissions = flattenEmissions(paginatedResult.data);
+            setTotalCount(paginatedResult.total);
+            setTotalPages(Math.max(1, Math.ceil(paginatedResult.total / PAGE_LIMIT)));
 
             // Fetch FERA emissions + factors + units if the site has a FERA category
             if (feraCategoryId) {
@@ -336,7 +370,7 @@ const rowsPerPage = 10;
                 setFeraEmissionFactors(feraFactorsData);
                 // Merge regular + FERA emissions, marking FERA rows
                 const feraRows = flattenEmissions(feraEmissionsData).map((r) => ({ ...r, _isFeraRow: true }));
-                setEmissions([...flattenEmissions(emissionsData), ...feraRows]);
+                setEmissions([...mainEmissions, ...feraRows]);
                 // Merge FERA units into the unit list (deduplicated by unit_name)
                 const existingNames = new Set(unitsData.map((u: UnitData) => u.unit_name.toLowerCase()));
                 const newFeraUnits = feraUnitsData.filter((u: UnitData) => !existingNames.has(u.unit_name.toLowerCase()));
@@ -345,11 +379,11 @@ const rowsPerPage = 10;
                 }
             } else {
                 setFeraEmissionFactors([]);
-                setEmissions(flattenEmissions(emissionsData));
+                setEmissions(mainEmissions);
             }
 
-            // Fetch upload batches for this site+category
-            getEmissionBatches(siteId, selectedCategory).then(setEmissionBatches).catch(() => setEmissionBatches([]));
+            // Clear stale selections after data reload
+            setSelectedEmissionIds(new Set());
 
             // Fetch company category mappings (company_category_name → emission_category_name)
             if (companyId) {
@@ -368,15 +402,30 @@ const rowsPerPage = 10;
         } finally {
             setLoading(false);
         }
-    }, [selectedCategory, selectedDate, siteId, companyId, feraCategoryId]);
+    }, [selectedCategory, selectedDate, siteId, companyId, feraCategoryId, currentPage]);
 
+    // Reset to page 1 when filters change
     useEffect(() => {
-  setCurrentPage(1);
-}, [emissions]);
+        setCurrentPage(1);
+    }, [selectedCategory, selectedDate, siteId]);
 
+    // Fetch data when page or filters change
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    // Fetch upload batches whenever site changes (independent of category/date)
+    const fetchBatches = useCallback(() => {
+        if (!siteId) {
+            setEmissionBatches([]);
+            return;
+        }
+        getEmissionBatches(siteId).then(setEmissionBatches).catch((err) => { console.error("Failed to fetch batches:", err); setEmissionBatches([]); });
+    }, [siteId]);
+
+    useEffect(() => {
+        fetchBatches();
+    }, [fetchBatches]);
 
     // Proactively fetch emission factors, units, and column configs as soon as
     // site + category are selected, so the Invoice Review Modal dropdowns are
@@ -400,6 +449,7 @@ const rowsPerPage = 10;
                     setColumnDependencies(config.column_dependencies || {});
                     setDependentOptions(config.dependent_options || {});
                     setEmissionCategoryMapping(config.emission_category_mapping || {});
+                    setExtraFields(config.extra_fields || []);
                 }
                 setEmissionFactors(factors);
                 setUnits(unitsData);
@@ -413,7 +463,7 @@ const rowsPerPage = 10;
             .catch(() => {
                 // Non-critical — dropdowns will fall back to text inputs
             });
-    }, [siteId, selectedCategory, selectedDate]);
+    }, [siteId, selectedCategory, selectedDate, feraCategoryId]);
 
     // Close the full-screen invoice preview on Escape
     useEffect(() => {
@@ -870,6 +920,22 @@ const rowsPerPage = 10;
             }
         }
 
+        // Progressive sub-key fallback: if the full chain doesn't match,
+        // try dropping leading dimensions (e.g. "Air|Flight|International" → "Flight|International")
+        // This handles configs where columns have more dimensions than the mapping keys.
+        for (let start = 1; start < keyParts.length; start++) {
+            const subKey = keyParts.slice(start).join("|");
+            if (emissionCategoryMapping[subKey]) {
+                return { key: subKey, category: emissionCategoryMapping[subKey] };
+            }
+            const subKeyLower = subKey.toLowerCase();
+            for (const [key, value] of Object.entries(emissionCategoryMapping)) {
+                if (key.toLowerCase() === subKeyLower) {
+                    return { key, category: value };
+                }
+            }
+        }
+
         return null;
     };
 
@@ -896,7 +962,7 @@ const rowsPerPage = 10;
     // Modal Handlers
     // ---------------------------------------------------------------------------
     const openModal = () => {
-        const initialRow = createModalRow(1, dynamicColumns);
+        const initialRow = createModalRow(1, dynamicColumns, extraFields);
         setModalRows([initialRow]);
         setNextRowId(2);
         setSaveError(null);
@@ -909,7 +975,7 @@ const rowsPerPage = 10;
     };
 
     const handleAddModalRow = () => {
-        const newRow = createModalRow(nextRowId, dynamicColumns);
+        const newRow = createModalRow(nextRowId, dynamicColumns, extraFields);
         setModalRows((prev) => [...prev, newRow]);
         setNextRowId((prev) => prev + 1);
     };
@@ -1077,6 +1143,10 @@ const rowsPerPage = 10;
                     }
                 }
 
+                // Extract extra_data before stripping internal fields
+                const extraData = activityData._extra_data || {};
+                delete activityData._extra_data;
+
                 // Strip internal flags before sending to backend
                 delete activityData._isFeraRow;
                 delete activityData._ecmKey;
@@ -1088,6 +1158,7 @@ const rowsPerPage = 10;
                     site_id: siteId,
                     category_id: selectedCategory,
                     activity_data: activityData,
+                    extra_data: extraData,
                     total_emission: 0,
                     unit: "kg CO2e",
                     date_of_reporting: rowDate || dateOfReporting,
@@ -1184,6 +1255,37 @@ const rowsPerPage = 10;
         }
     };
 
+    const handleViewFactor = async (row: EmissionRow) => {
+        setFactorModalEmission(row);
+        setFactorModalData(null);
+        setFactorModalOpen(true);
+        setFactorLoading(true);
+        try {
+            const result = await getEmissionFactorForEmission(row.pk_id);
+            setFactorModalData(result.emission_factor);
+        } catch (error) {
+            console.error("Error fetching emission factor:", error);
+        } finally {
+            setFactorLoading(false);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedEmissionIds.size === 0) return;
+        if (!confirm(`Delete ${selectedEmissionIds.size} selected emission(s)?`)) return;
+        setBulkDeleting(true);
+        try {
+            const res = await bulkDeleteEmissions(Array.from(selectedEmissionIds));
+            const deletedIds = new Set<number>(res.deleted_ids || Array.from(selectedEmissionIds));
+            setEmissions((prev) => prev.filter((e) => !deletedIds.has(e.pk_id) && !deletedIds.has(e.fera_linked_id as number)));
+            setSelectedEmissionIds(new Set());
+        } catch (error) {
+            console.error("Error bulk deleting emissions:", error);
+        } finally {
+            setBulkDeleting(false);
+        }
+    };
+
     const handleDeleteBatch = async (batchId: string) => {
         const batch = emissionBatches.find((b) => b.upload_batch_id === batchId);
         if (!confirm(`Delete all ${batch?.count ?? "?"} emission(s) from this upload?`)) return;
@@ -1191,6 +1293,7 @@ const rowsPerPage = 10;
         try {
             await deleteEmissionsByBatch(batchId);
             await fetchData();
+            fetchBatches();
         } catch (error) {
             console.error("Error deleting batch:", error);
         } finally {
@@ -1323,10 +1426,17 @@ const rowsPerPage = 10;
                     ...activityData
                 } = row;
 
+                // Extract extra_data and strip internal fields before sending
+                const extraData = activityData._extra_data || {};
+                delete activityData._extra_data;
+                delete activityData._ecmKey;
+                delete activityData._isFeraRow;
+
                 const result = await createEmission({
                     site_id: siteId,
                     category_id: selectedCategory,
                     activity_data: activityData,
+                    extra_data: extraData,
                     total_emission: 0,
                     unit: "kg CO2e",
                     date_of_reporting: date_of_reporting || selectedDate || "",
@@ -1506,7 +1616,7 @@ const rowsPerPage = 10;
                     const invoiceData = response.data?.[em.invoice_index ?? 0];
                     if (invoiceData) {
                         row._invoiceNumber = invoiceData.invoice_number ?? undefined;
-                        row._invoiceDate = invoiceData.invoice_date ?? undefined;
+                        row._invoiceDate = invoiceData.billing_month_end ?? invoiceData.invoice_date ?? undefined;
                         row._totalAmount = invoiceData.total_amount ?? undefined;
                         row._currency = invoiceData.currency ?? undefined;
                     }
@@ -1632,7 +1742,7 @@ const rowsPerPage = 10;
                     const invoiceData = response.data?.[em.invoice_index ?? 0];
                     if (invoiceData) {
                         row._invoiceNumber = invoiceData.invoice_number ?? undefined;
-                        row._invoiceDate = invoiceData.invoice_date ?? undefined;
+                        row._invoiceDate = invoiceData.billing_month_end ?? invoiceData.invoice_date ?? undefined;
                         row._totalAmount = invoiceData.total_amount ?? undefined;
                         row._currency = invoiceData.currency ?? undefined;
                     }
@@ -1707,10 +1817,13 @@ const rowsPerPage = 10;
             editable: false,
             type: "text" as const,
             render: (value: string, row: EmissionRow) => {
+                // Show company category name if mapping exists, otherwise global name
+                const mapping = companyMappings.find((m) => m.global_category_name === value);
+                const displayName = mapping ? mapping.company_category_name : (value || "");
                 if (row._isFeraRow) {
-                    return `${value || ""} (FERA)`;
+                    return `${displayName} (FERA)`;
                 }
-                return value || "";
+                return displayName;
             },
         },
         ...filteredColumns.map((col) => {
@@ -1764,17 +1877,20 @@ const rowsPerPage = 10;
             editable: false,
             type: "text" as const,
         },
+        ...extraFields.map((ef) => ({
+            key: `_extra_${ef.key}` as keyof EmissionRow,
+            label: ef.label,
+            editable: false,
+            type: "text" as const,
+            render: (_: unknown, row: EmissionRow) => {
+                return row._extra_data?.[ef.key] || "";
+            },
+        })),
         {
             key: "total_emission",
             label: "Total Emission (tCO2e)",
             editable: false,
             type: "number" as const,
-        },
-        {
-            key: "unit",
-            label: "Unit",
-            editable: false,
-            type: "text" as const,
         },
         {
             key: "status",
@@ -1806,6 +1922,7 @@ const rowsPerPage = 10;
         setColumnDependencies({});
         setDependentOptions({});
         setEmissionCategoryMapping({});
+        setExtraFields([]);
         setEmissions([]);
         setEmissionFactors([]);
         setFeraEmissionFactors([]);
@@ -1817,11 +1934,7 @@ const rowsPerPage = 10;
     // Render
     // ---------------------------------------------------------------------------
 
-    const totalPages = Math.ceil(emissions.length / rowsPerPage);
-const paginatedEmissions = emissions.slice(
-  (currentPage - 1) * rowsPerPage,
-  currentPage * rowsPerPage
-);
+    const paginatedEmissions = emissions;
 
     return (
         <div className="p-6">
@@ -1920,6 +2033,19 @@ const paginatedEmissions = emissions.slice(
                         </>
                     )}
 
+                    {/* Bulk Delete Selected */}
+                    {selectedEmissionIds.size > 0 && (
+                        <button
+                            onClick={handleBulkDelete}
+                            disabled={bulkDeleting}
+                            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            {bulkDeleting ? "Deleting..." : `Delete Selected (${selectedEmissionIds.size})`}
+                        </button>
+                    )}
+
                     {/* Upload Invoice only needs site + category (date comes from invoice) */}
                     <button
                         onClick={() => invoiceFileRef.current?.click()}
@@ -1960,397 +2086,410 @@ const paginatedEmissions = emissions.slice(
                 </div>
             )}
 
+            {/* Upload Batches Panel - always visible when batches exist */}
+            {emissionBatches.length > 0 && (
+                <div className="mb-4 border border-orange-300 rounded-lg bg-orange-50 overflow-hidden">
+                    <button
+                        onClick={() => setShowEmissionBatches(!showEmissionBatches)}
+                        className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-orange-800 hover:bg-orange-100 transition-colors"
+                    >
+                        <div className="flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            Upload Batches ({emissionBatches.length})
+                        </div>
+                        <svg className={`w-4 h-4 transition-transform ${showEmissionBatches ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                    {showEmissionBatches && (
+                        <div className="border-t border-orange-200">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-orange-100 text-orange-900">
+                                        <th className="px-4 py-2 text-left font-medium">Category</th>
+                                        <th className="px-4 py-2 text-left font-medium">Rows</th>
+                                        <th className="px-4 py-2 text-left font-medium">Status</th>
+                                        <th className="px-4 py-2 text-left font-medium">Uploaded</th>
+                                        <th className="px-4 py-2 text-right font-medium">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {emissionBatches.map((batch) => (
+                                        <tr key={batch.upload_batch_id} className="border-t border-orange-100 hover:bg-orange-50/80">
+                                            <td className="px-4 py-2 text-gray-700">{batch.category_name}</td>
+                                            <td className="px-4 py-2">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-900">
+                                                    {batch.count}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-2">
+                                                <div className="flex gap-1.5 flex-wrap">
+                                                    {(batch.pending_count ?? 0) > 0 && (
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                            {batch.pending_count} pending
+                                                        </span>
+                                                    )}
+                                                    {(batch.approved_count ?? 0) > 0 && (
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                                            {batch.approved_count} approved
+                                                        </span>
+                                                    )}
+                                                    {(batch.rejected_count ?? 0) > 0 && (
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                                            {batch.rejected_count} rejected
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-2 text-gray-500">
+                                                {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
+                                                    month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
+                                                })}
+                                            </td>
+                                            <td className="px-4 py-2 text-right">
+                                                <button
+                                                    onClick={() => handleDeleteBatch(batch.upload_batch_id)}
+                                                    disabled={deletingBatchId === batch.upload_batch_id}
+                                                    className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:bg-gray-400 transition-colors"
+                                                >
+                                                    {deletingBatchId === batch.upload_batch_id ? "Deleting..." : "Delete Batch"}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Entry Modal */}
             <Modal
                 isOpen={modalOpen}
                 onClose={closeModal}
                 title="Add New Entries"
-                className="max-w-6xl! max-h-[85vh]!">
-                <div className="overflow-x-auto">
-                    <table className="w-full border-collapse border border-gray-300">
-                        <thead>
-                            <tr className="bg-gray-100">
-                                <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold">
-                                    Emission Category
-                                </th>
-                                {filteredColumns.map((col) => (
-                                    <th
-                                        key={col.pk_id}
-                                        className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold">
-                                        {col.column_name}
-                                    </th>
-                                ))}
-                                <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold">
-                                    Activity Unit
-                                </th>
-                                <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold">
-                                    Total Emission (tCO2e)
-                                </th>
-                                {isFeraCategory && (
-                                    <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold bg-purple-50 text-purple-700">
-                                        FERA (tCO2e)
-                                    </th>
-                                )}
-                                <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold w-20">
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {modalRows.map((row) => (
-                                <tr key={row.id} className={`hover:bg-gray-50 ${row._isFeraRow ? "bg-purple-50" : ""}`}>
-                                    {/* Emission Category Select */}
-                                    <td className="border border-gray-300 px-2 py-2">
-                                        {row._isFeraRow ? (
-                                            <div className="px-2 py-1.5 rounded text-sm font-semibold bg-purple-100 text-purple-800 border border-purple-300">
-                                                {row.emission_category} (FERA)
-                                            </div>
-                                        ) : Object.keys(emissionCategoryMapping)
-                                            .length > 0 ? (
-                                            // Auto-mapped mode: show company name, hover for global name
-                                            (() => {
-                                                const companyCatName = row._ecmKey as string | undefined;
-                                                const displayName = companyCatName || row.emission_category;
-                                                return (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <div
-                                                            title={row.emission_category ? `Global: ${row.emission_category}` : "Select dropdown values to auto-determine"}
-                                                            className={`flex-1 min-w-0 px-2 py-1.5 rounded text-sm font-medium truncate cursor-help ${
-                                                                row.emission_category
-                                                                    ? "bg-green-100 text-green-800 border border-green-300"
-                                                                    : "bg-gray-100 text-gray-400 border border-gray-200 italic"
-                                                            }`}
-                                                        >
-                                                            {displayName || "Auto-determined"}
-                                                        </div>
-                                                        {row.emission_category && companyCatName && companyCatName !== row.emission_category && (
-                                                            <div
-                                                                className="shrink-0 w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center cursor-help"
-                                                                onMouseEnter={(e) => {
-                                                                    const rect = e.currentTarget.getBoundingClientRect();
-                                                                    setTooltip({ text: `Global: ${row.emission_category}`, x: rect.left + rect.width / 2, y: rect.top });
-                                                                }}
-                                                                onMouseLeave={() => setTooltip(null)}
-                                                            >
-                                                                i
-                                                            </div>
-                                                        )}
+                className="max-w-4xl! max-h-[85vh]!">
+                <div className="space-y-4">
+                    {modalRows.map((row, rowIdx) => {
+                        const visibleExtraFields = extraFields.filter((ef) => {
+                            const rowCategory = row.emission_category || "";
+                            return !ef.show_for || ef.show_for.length === 0
+                                || ef.show_for.some((s) => rowCategory.toLowerCase().includes(s.toLowerCase()));
+                        });
+                        const matchedFactor = row.emission_category && !row._isFeraRow
+                            ? getEmissionFactor(row.emission_category) : undefined;
+                        const emissionResult = row._isFeraRow ? calculateFeraEmission(row) : calculateEmission(row);
+
+                        return (
+                        <div key={row.id} className={`border rounded-lg shadow-sm ${row._isFeraRow ? "border-purple-300 bg-purple-50/30" : "border-gray-200 bg-white"}`}>
+                            {/* Card Header */}
+                            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50 rounded-t-lg">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-sm font-semibold text-gray-600">Entry {rowIdx + 1}</span>
+                                    {row._isFeraRow && (
+                                        <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">FERA</span>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => handleRemoveModalRow(row.id)}
+                                    disabled={modalRows.length === 1}
+                                    className="text-red-500 hover:text-red-700 disabled:text-gray-300 text-sm font-medium"
+                                    title="Remove entry">
+                                    Remove
+                                </button>
+                            </div>
+
+                            <div className="p-4 space-y-4">
+                                {/* Section 1: Emission Category (full width — most important field) */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Emission Category</label>
+                                    {row._isFeraRow ? (
+                                        <div className="px-3 py-2.5 rounded-md text-sm font-semibold bg-purple-100 text-purple-800 border border-purple-300">
+                                            {row.emission_category} (FERA)
+                                        </div>
+                                    ) : Object.keys(emissionCategoryMapping).length > 0 ? (
+                                        (() => {
+                                            const companyCatName = row._ecmKey as string | undefined;
+                                            const displayName = companyCatName || row.emission_category;
+                                            return (
+                                                <div className="flex items-center gap-1.5">
+                                                    <div
+                                                        title={row.emission_category ? `Global: ${row.emission_category}` : "Select dropdown values to auto-determine"}
+                                                        className={`flex-1 min-w-0 px-3 py-2.5 rounded-md text-sm font-medium truncate cursor-help ${
+                                                            row.emission_category
+                                                                ? "bg-green-50 text-green-800 border border-green-300"
+                                                                : "bg-gray-50 text-gray-400 border border-gray-200 italic"
+                                                        }`}
+                                                    >
+                                                        {displayName || "Auto-determined from selections below"}
                                                     </div>
-                                                );
-                                            })()
-                                        ) : (
-                                            // Manual mode: show dropdown for selection
-                                            <div className="flex items-center gap-1">
-                                                <select
-                                                    value={
-                                                        row.emission_category || ""
-                                                    }
-                                                    onChange={(e) =>
-                                                        handleModalRowChange(
-                                                            row.id,
-                                                            "emission_category",
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                    className="flex-1 min-w-0 border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300">
-                                                    <option value="">
-                                                        Select Category
-                                                    </option>
-                                                    {companyMappings.length > 0
-                                                        ? companyMappings.map((m) => (
-                                                            <option
-                                                                key={m.id}
-                                                                value={m.global_category_name}>
-                                                                {m.company_category_name}
-                                                            </option>
-                                                        ))
-                                                        : emissionFactors.map((factor) => (
-                                                            <option
-                                                                key={factor.emission_factor_id}
-                                                                value={factor.emission_category_name}>
-                                                                {factor.emission_category_name}
-                                                            </option>
-                                                        ))
-                                                    }
-                                                </select>
-                                                {row.emission_category && (() => {
-                                                    const companyMapping = companyMappings.find((m) => m.global_category_name === row.emission_category);
-                                                    const tooltipText = companyMapping
-                                                        ? `Global EF Name: ${companyMapping.global_category_name}`
-                                                        : `EF Category: ${row.emission_category}`;
-                                                    return (
+                                                    {row.emission_category && companyCatName && companyCatName !== row.emission_category && (
                                                         <div
-                                                            className="shrink-0 w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center cursor-help"
+                                                            className="shrink-0 w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center cursor-help"
                                                             onMouseEnter={(e) => {
                                                                 const rect = e.currentTarget.getBoundingClientRect();
-                                                                setTooltip({ text: tooltipText, x: rect.left + rect.width / 2, y: rect.top });
+                                                                setTooltip({ text: `Global: ${row.emission_category}`, x: rect.left + rect.width / 2, y: rect.top });
                                                             }}
-                                                            onMouseLeave={() => setTooltip(null)}>
+                                                            onMouseLeave={() => setTooltip(null)}
+                                                        >
                                                             i
                                                         </div>
-                                                    );
-                                                })()}
-                                            </div>
-                                        )}
-                                    </td>
-
-                                    {/* Dynamic Columns */}
-                                    {filteredColumns.map((col) => {
-                                        const parentColName =
-                                            getParentColumnName(
-                                                col.column_name,
+                                                    )}
+                                                </div>
                                             );
-                                        // Use case-insensitive lookup to handle potential key mismatches
-                                        const parentValue = parentColName
-                                            ? getRowValue(row, parentColName)
-                                            : undefined;
-                                        const options =
-                                            getColumnDropdownOptions(
-                                                col.column_name,
-                                                col.pk_id,
-                                                parentValue,
-                                            );
-                                        const showAsSelect =
-                                            isSelectColumn(col) &&
-                                            options.length > 0;
-                                        const isDisabledDependent =
-                                            isDependentColumn(
-                                                col.column_name,
-                                            ) && !parentValue;
+                                        })()
+                                    ) : (
+                                        <div className="flex items-center gap-1.5">
+                                            <select
+                                                value={row.emission_category || ""}
+                                                onChange={(e) => handleModalRowChange(row.id, "emission_category", e.target.value)}
+                                                className="w-full border border-gray-300 px-3 py-2.5 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                                                <option value="">Select Emission Category...</option>
+                                                {companyMappings.length > 0
+                                                    ? companyMappings.map((m) => (
+                                                        <option key={m.id} value={m.global_category_name}>{m.company_category_name}</option>
+                                                    ))
+                                                    : emissionFactors.map((factor) => (
+                                                        <option key={factor.emission_factor_id} value={factor.emission_category_name}>{factor.emission_category_name}</option>
+                                                    ))
+                                                }
+                                            </select>
+                                            {row.emission_category && (() => {
+                                                const companyMapping = companyMappings.find((m) => m.global_category_name === row.emission_category);
+                                                const tooltipText = companyMapping
+                                                    ? `Global EF Name: ${companyMapping.global_category_name}`
+                                                    : `EF Category: ${row.emission_category}`;
+                                                return (
+                                                    <div
+                                                        className="shrink-0 w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center cursor-help"
+                                                        onMouseEnter={(e) => {
+                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                            setTooltip({ text: tooltipText, x: rect.left + rect.width / 2, y: rect.top });
+                                                        }}
+                                                        onMouseLeave={() => setTooltip(null)}>
+                                                        i
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+                                    {/* Inline Emission Factor Info */}
+                                    {matchedFactor && (
+                                        <div className="mt-1.5 flex items-center gap-2 text-xs text-gray-500">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded font-mono">
+                                                EF: {matchedFactor.factor_value}
+                                            </span>
+                                            <span>per {matchedFactor.denominator_unit || "unit"}</span>
+                                            <span className="text-gray-300">|</span>
+                                            <span>Year: {matchedFactor.year}</span>
+                                            {matchedFactor.global_category_name && (
+                                                <>
+                                                    <span className="text-gray-300">|</span>
+                                                    <span className="truncate max-w-[200px]" title={matchedFactor.global_category_name}>{matchedFactor.global_category_name}</span>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
 
-                                        return (
-                                            <td
-                                                key={col.pk_id}
-                                                className="border border-gray-300 px-2 py-2">
-                                                {showAsSelect ? (
-                                                    <select
-                                                        value={
-                                                            row[
-                                                                col.column_name
-                                                            ] || ""
-                                                        }
-                                                        onChange={(e) =>
-                                                            handleModalRowChange(
-                                                                row.id,
-                                                                col.column_name,
-                                                                e.target.value,
-                                                            )
-                                                        }
-                                                        disabled={
-                                                            isDisabledDependent
-                                                        }
-                                                        className={`w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300 ${
-                                                            isDisabledDependent
-                                                                ? "bg-gray-100 cursor-not-allowed"
-                                                                : ""
-                                                        }`}>
-                                                        <option value="">
-                                                            {isDisabledDependent
-                                                                ? `Select ${toColumnTitle(parentColName!)} first`
-                                                                : `Select ${toColumnTitle(col.column_name)}`}
-                                                        </option>
-                                                        {options.map(
-                                                            (option) => (
-                                                                <option
-                                                                    key={
-                                                                        option.id
-                                                                    }
-                                                                    value={
-                                                                        option.id
-                                                                    }>
-                                                                    {
-                                                                        option.label
-                                                                    }
-                                                                </option>
-                                                            ),
-                                                        )}
-                                                    </select>
-                                                ) : (() => {
-                                                    const composite =
-                                                        col.pk_id === firstNumericColId
-                                                            ? parseCompositeUnit(row.activity_data_unit)
-                                                            : null;
-                                                    const isDistCol =
-                                                        col.pk_id === firstNumericColId &&
-                                                        isDistanceUnit(row.activity_data_unit);
+                                {/* Section 2: Activity Data — dynamic columns + unit in a grid */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Activity Data</label>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                        {/* Dynamic Columns */}
+                                        {filteredColumns.map((col) => {
+                                            const parentColName = getParentColumnName(col.column_name);
+                                            const parentValue = parentColName ? getRowValue(row, parentColName) : undefined;
+                                            const options = getColumnDropdownOptions(col.column_name, col.pk_id, parentValue);
+                                            const showAsSelect = isSelectColumn(col) && options.length > 0;
+                                            const isDisabledDependent = isDependentColumn(col.column_name) && !parentValue;
 
-                                                    if (composite && isDistCol) {
-                                                        // Composite unit — two inputs: multiplier × distance
-                                                        const mulKey = `${col.column_name}__multiplier`;
-                                                        const distKey = `${col.column_name}__distance`;
-                                                        const mulVal = parseFloat((row[mulKey] as string) || "");
-                                                        const distVal = parseFloat((row[distKey] as string) || "");
-                                                        const product =
-                                                            !isNaN(mulVal) && !isNaN(distVal) && mulVal > 0 && distVal > 0
-                                                                ? Math.round(mulVal * distVal * 100) / 100
-                                                                : null;
+                                            return (
+                                                <div key={col.pk_id}>
+                                                    <label className="block text-xs text-gray-500 mb-1">{col.column_name}</label>
+                                                    {showAsSelect ? (
+                                                        <select
+                                                            value={row[col.column_name] || ""}
+                                                            onChange={(e) => handleModalRowChange(row.id, col.column_name, e.target.value)}
+                                                            disabled={isDisabledDependent}
+                                                            className={`w-full border border-gray-300 px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                                                                isDisabledDependent ? "bg-gray-100 cursor-not-allowed" : ""
+                                                            }`}>
+                                                            <option value="">
+                                                                {isDisabledDependent
+                                                                    ? `Select ${toColumnTitle(parentColName!)} first`
+                                                                    : `Select ${toColumnTitle(col.column_name)}`}
+                                                            </option>
+                                                            {options.map((option) => (
+                                                                <option key={option.id} value={option.id}>{option.label}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (() => {
+                                                        const composite = col.pk_id === firstNumericColId ? parseCompositeUnit(row.activity_data_unit) : null;
+                                                        const isDistCol = col.pk_id === firstNumericColId && isDistanceUnit(row.activity_data_unit);
+
+                                                        if (composite && isDistCol) {
+                                                            const mulKey = `${col.column_name}__multiplier`;
+                                                            const distKey = `${col.column_name}__distance`;
+                                                            const mulVal = parseFloat((row[mulKey] as string) || "");
+                                                            const distVal = parseFloat((row[distKey] as string) || "");
+                                                            const product = !isNaN(mulVal) && !isNaN(distVal) && mulVal > 0 && distVal > 0
+                                                                ? Math.round(mulVal * distVal * 100) / 100 : null;
+
+                                                            return (
+                                                                <div className="space-y-1">
+                                                                    <div className="flex items-center gap-1">
+                                                                        <input type="number" value={row[mulKey] || ""}
+                                                                            onChange={(e) => handleModalRowChange(row.id, mulKey, e.target.value)}
+                                                                            className="w-20 border border-gray-300 px-2 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                                            placeholder={composite.multiplier} />
+                                                                        <span className="text-gray-400 text-sm shrink-0">×</span>
+                                                                        <input type="number" value={row[distKey] || ""}
+                                                                            onChange={(e) => handleModalRowChange(row.id, distKey, e.target.value)}
+                                                                            className="w-20 border border-gray-300 px-2 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                                            placeholder={composite.distance} />
+                                                                        <button type="button"
+                                                                            onClick={() => setDistanceModalState({ open: true, rowId: row.id, colName: col.column_name })}
+                                                                            className="flex items-center gap-1 px-2 py-2 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 shrink-0"
+                                                                            title="Calculate distance from map">
+                                                                            <MapPin size={12} /> Map
+                                                                        </button>
+                                                                    </div>
+                                                                    {product !== null && (
+                                                                        <div className="text-xs text-gray-500">= {product.toLocaleString()} {row.activity_data_unit}</div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        }
 
                                                         return (
-                                                            <div className="space-y-1">
-                                                                <div className="flex items-center gap-1">
-                                                                    <input
-                                                                        type="number"
-                                                                        value={row[mulKey] || ""}
-                                                                        onChange={(e) =>
-                                                                            handleModalRowChange(
-                                                                                row.id,
-                                                                                mulKey,
-                                                                                e.target.value,
-                                                                            )
-                                                                        }
-                                                                        className="w-24 border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
-                                                                        placeholder={composite.multiplier}
-                                                                    />
-                                                                    <span className="text-gray-400 text-sm shrink-0">×</span>
-                                                                    <input
-                                                                        type="number"
-                                                                        value={row[distKey] || ""}
-                                                                        onChange={(e) =>
-                                                                            handleModalRowChange(
-                                                                                row.id,
-                                                                                distKey,
-                                                                                e.target.value,
-                                                                            )
-                                                                        }
-                                                                        className="w-24 border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
-                                                                        placeholder={composite.distance}
-                                                                    />
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() =>
-                                                                            setDistanceModalState({
-                                                                                open: true,
-                                                                                rowId: row.id,
-                                                                                colName: col.column_name,
-                                                                            })
-                                                                        }
-                                                                        className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 hover:text-blue-700 shrink-0 whitespace-nowrap transition-colors"
-                                                                        title="Calculate distance from map"
-                                                                    >
-                                                                        <MapPin size={12} />
-                                                                        Map
+                                                            <div className="flex items-center gap-1">
+                                                                <input
+                                                                    type={col.column_type === "number" ? "number" : "text"}
+                                                                    value={row[col.column_name] || ""}
+                                                                    onChange={(e) => handleModalRowChange(row.id, col.column_name, e.target.value)}
+                                                                    className="w-full border border-gray-300 px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                                    placeholder={col.column_name} />
+                                                                {isDistCol && (
+                                                                    <button type="button"
+                                                                        onClick={() => setDistanceModalState({ open: true, rowId: row.id, colName: col.column_name })}
+                                                                        className="flex items-center gap-1 px-2 py-2 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 shrink-0"
+                                                                        title="Calculate distance from map">
+                                                                        <MapPin size={12} /> Map
                                                                     </button>
-                                                                </div>
-                                                                {product !== null && (
-                                                                    <div className="text-xs text-gray-500">
-                                                                        = {product.toLocaleString()} {row.activity_data_unit}
-                                                                    </div>
                                                                 )}
                                                             </div>
                                                         );
-                                                    }
+                                                    })()}
+                                                </div>
+                                            );
+                                        })}
 
-                                                    // Plain unit — single input
-                                                    return (
-                                                        <div className="flex items-center gap-1">
+                                        {/* Activity Unit */}
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">Unit</label>
+                                            <UnitSelector
+                                                currentUnit={row.activity_data_unit}
+                                                expectedUnit={row._isFeraRow
+                                                    ? getFeraExpectedUnit(row.emission_category || "")
+                                                    : getExpectedUnit(row.emission_category || "")
+                                                }
+                                                units={units}
+                                                onChange={(value) => handleModalRowChange(row.id, "activity_data_unit", value)}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Section 3: Supplementary Fields */}
+                                {visibleExtraFields.length > 0 && (
+                                    <div>
+                                        <label className="block text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1.5">Supplementary Details</label>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 bg-blue-50/30 rounded-md border border-blue-100">
+                                            {visibleExtraFields.map((ef) => {
+                                                const updateExtraField = (val: string) => {
+                                                    setModalRows((prev) =>
+                                                        prev.map((r) =>
+                                                            r.id === row.id
+                                                                ? { ...r, _extra_data: { ...r._extra_data, [ef.key]: val } }
+                                                                : r,
+                                                        ),
+                                                    );
+                                                };
+                                                const isWide = ef.type === "textarea";
+                                                return (
+                                                    <div key={ef.key} className={isWide ? "col-span-2 md:col-span-3" : ""}>
+                                                        <label className="block text-xs text-gray-500 mb-1">
+                                                            {ef.label}{ef.required && <span className="text-red-500 ml-0.5">*</span>}
+                                                        </label>
+                                                        {ef.type === "select" ? (
+                                                            <select
+                                                                className="w-full border border-gray-300 bg-white rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                                value={row._extra_data?.[ef.key] || ""}
+                                                                onChange={(e) => updateExtraField(e.target.value)}>
+                                                                <option value="">Select...</option>
+                                                                {ef.options?.map((opt) => (
+                                                                    <option key={opt} value={opt}>{opt}</option>
+                                                                ))}
+                                                            </select>
+                                                        ) : ef.type === "textarea" ? (
+                                                            <textarea
+                                                                className="w-full border border-gray-300 bg-white rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                                rows={2}
+                                                                value={row._extra_data?.[ef.key] || ""}
+                                                                placeholder={ef.label}
+                                                                onChange={(e) => updateExtraField(e.target.value)} />
+                                                        ) : (
                                                             <input
-                                                                type={
-                                                                    col.column_type === "number"
-                                                                        ? "number"
-                                                                        : "text"
-                                                                }
-                                                                value={row[col.column_name] || ""}
-                                                                onChange={(e) =>
-                                                                    handleModalRowChange(
-                                                                        row.id,
-                                                                        col.column_name,
-                                                                        e.target.value,
-                                                                    )
-                                                                }
-                                                                className="w-full border border-gray-300 px-2 py-1 rounded focus:outline-none focus:ring focus:ring-blue-300"
-                                                                placeholder={col.column_name}
-                                                            />
-                                                            {isDistCol && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        setDistanceModalState({
-                                                                            open: true,
-                                                                            rowId: row.id,
-                                                                            colName: col.column_name,
-                                                                        })
-                                                                    }
-                                                                    className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 hover:text-blue-700 shrink-0 whitespace-nowrap transition-colors"
-                                                                    title="Calculate distance from map"
-                                                                >
-                                                                    <MapPin size={12} />
-                                                                    Map
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })()}
-                                            </td>
-                                        );
-                                    })}
+                                                                type={ef.type === "number" ? "number" : ef.type === "date" ? "date" : "text"}
+                                                                className="w-full border border-gray-300 bg-white rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                                value={row._extra_data?.[ef.key] || ""}
+                                                                placeholder={ef.label}
+                                                                onChange={(e) => updateExtraField(e.target.value)} />
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
 
-                                    {/* Unit Selector */}
-                                    <td className="border border-gray-300 px-2 py-2">
-                                        <UnitSelector
-                                            currentUnit={row.activity_data_unit}
-                                            expectedUnit={row._isFeraRow
-                                                ? getFeraExpectedUnit(row.emission_category || "")
-                                                : getExpectedUnit(row.emission_category || "")
-                                            }
-                                            units={units}
-                                            onChange={(value) =>
-                                                handleModalRowChange(
-                                                    row.id,
-                                                    "activity_data_unit",
-                                                    value,
-                                                )
-                                            }
-                                        />
-                                    </td>
-
-                                    {/* Emission Preview */}
-                                    <td className="border border-gray-300 px-2 py-2">
-                                        <EmissionPreview
-                                            result={row._isFeraRow ? calculateFeraEmission(row) : calculateEmission(row)}
-                                        />
-                                    </td>
-
-                                    {/* FERA Emission Preview Column */}
-                                    {isFeraCategory && (
-                                        <td className="border border-gray-300 px-2 py-2 bg-purple-50/40">
-                                            {!row._isFeraRow && row.emission_category && getFeraEmissionFactor(row.emission_category) ? (
-                                                (() => {
-                                                    const feraResult = calculateFeraEmission(row);
-                                                    return feraResult.value !== null ? (
-                                                        <div className="space-y-0.5">
-                                                            <div className={`font-semibold ${feraResult.status === "converted" ? "text-yellow-600" : "text-purple-700"}`}>
-                                                                {feraResult.value.toFixed(2)}
-                                                            </div>
-                                                            {feraResult.status === "converted" && (
-                                                                <div className="text-xs text-yellow-600">(with conversion)</div>
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="text-xs text-gray-400 italic">{feraResult.status}</div>
-                                                    );
-                                                })()
-                                            ) : (
-                                                <span className="text-xs text-gray-300">—</span>
-                                            )}
-                                        </td>
+                                {/* Section 4: Emission Result — prominent display */}
+                                <div className="flex items-center gap-4 px-4 py-3 bg-gray-50 rounded-md border border-gray-100">
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <span className="text-sm font-medium text-gray-600">Calculated Emission:</span>
+                                        {emissionResult.value !== null ? (
+                                            <span className={`text-lg font-bold ${emissionResult.status === "converted" ? "text-yellow-600" : "text-green-700"}`}>
+                                                {emissionResult.value.toFixed(2)} <span className="text-sm font-normal text-gray-500">tCO2e</span>
+                                            </span>
+                                        ) : (
+                                            <span className="text-sm text-gray-400 italic">{emissionResult.status}</span>
+                                        )}
+                                        {emissionResult.status === "converted" && (
+                                            <span className="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded">(unit converted)</span>
+                                        )}
+                                    </div>
+                                    {isFeraCategory && !row._isFeraRow && row.emission_category && getFeraEmissionFactor(row.emission_category) && (
+                                        (() => {
+                                            const feraResult = calculateFeraEmission(row);
+                                            return feraResult.value !== null ? (
+                                                <div className="flex items-center gap-2 px-3 py-1 bg-purple-50 rounded border border-purple-200">
+                                                    <span className="text-xs font-medium text-purple-600">FERA:</span>
+                                                    <span className={`text-sm font-bold ${feraResult.status === "converted" ? "text-yellow-600" : "text-purple-700"}`}>
+                                                        {feraResult.value.toFixed(2)} tCO2e
+                                                    </span>
+                                                </div>
+                                            ) : null;
+                                        })()
                                     )}
-
-                                    {/* Actions */}
-                                    <td className="border border-gray-300 px-2 py-2">
-                                        <button
-                                            onClick={() =>
-                                                handleRemoveModalRow(row.id)
-                                            }
-                                            disabled={modalRows.length === 1}
-                                            className="px-2 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 disabled:bg-gray-400">
-                                            Delete
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    
+                                </div>
+                            </div>
+                        </div>
+                        );
+                    })}
                 </div>
 
                 {/* Error Display */}
@@ -2439,6 +2578,7 @@ const paginatedEmissions = emissions.slice(
                     dynamicColumns={dynamicColumns}
                     emissionFactors={emissionFactors}
                     units={units}
+                    extraFields={extraFields}
                     siteId={siteId}
                     categoryId={selectedCategory}
                     companyId={companyId ?? undefined}
@@ -2446,13 +2586,15 @@ const paginatedEmissions = emissions.slice(
                     getExpectedUnit={getExpectedUnit}
                     calculateEmission={calculateEmission}
                     getAutoEmissionCategory={getAutoEmissionCategory}
+                    userId={user?.user_id}
                     // onImportComplete={(newEmissions) => {
                     //     setEmissions((prev) => [...newEmissions, ...prev]);
                     // }}
                      onImportComplete={async () => {
     setSuccessMsg("Saved successfully. Imported data is now available in the table.");
-    await fetchData();          
-    setCurrentPage(1);          
+    await fetchData();
+    setCurrentPage(1);
+    fetchBatches();
   }}
                 />
             )}
@@ -2464,61 +2606,6 @@ const paginatedEmissions = emissions.slice(
                         <div className="text-center py-4">Loading data...</div>
                     ) : dynamicColumns.length > 0 ? (
                         <>
-                        {/* Upload Batches Panel */}
-                        {emissionBatches.length > 0 && (
-                            <div className="mb-3">
-                                <button
-                                    onClick={() => setShowEmissionBatches(!showEmissionBatches)}
-                                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors"
-                                >
-                                    <svg className={`w-4 h-4 transition-transform ${showEmissionBatches ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                    </svg>
-                                    Upload Batches ({emissionBatches.length})
-                                </button>
-
-                                {showEmissionBatches && (
-                                    <div className="mt-2 border border-orange-200 rounded-lg overflow-hidden">
-                                        <table className="w-full text-sm">
-                                            <thead>
-                                                <tr className="bg-orange-50 text-orange-800">
-                                                    <th className="px-4 py-2 text-left font-medium">Category</th>
-                                                    <th className="px-4 py-2 text-left font-medium">Rows</th>
-                                                    <th className="px-4 py-2 text-left font-medium">Uploaded</th>
-                                                    <th className="px-4 py-2 text-right font-medium">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {emissionBatches.map((batch) => (
-                                                    <tr key={batch.upload_batch_id} className="border-t border-orange-100 hover:bg-orange-50/50">
-                                                        <td className="px-4 py-2 text-gray-700">{batch.category_name}</td>
-                                                        <td className="px-4 py-2">
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                                                                {batch.count}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-2 text-gray-500">
-                                                            {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
-                                                                month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
-                                                            })}
-                                                        </td>
-                                                        <td className="px-4 py-2 text-right">
-                                                            <button
-                                                                onClick={() => handleDeleteBatch(batch.upload_batch_id)}
-                                                                disabled={deletingBatchId === batch.upload_batch_id}
-                                                                className="px-3 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:bg-gray-400 transition-colors"
-                                                            >
-                                                                {deletingBatchId === batch.upload_batch_id ? "Deleting..." : "Delete Batch"}
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </div>
-                        )}
                         <Table<EmissionRow>
                             data={paginatedEmissions}
                             columns={tableColumns}
@@ -2527,11 +2614,22 @@ const paginatedEmissions = emissions.slice(
                             onDelete={handleDelete}
                             loading={loading}
                             showActions={true}
+                            selectedIds={selectedEmissionIds}
+                            onSelectionChange={setSelectedEmissionIds}
+                            isRowSelectable={(row) => !row._isFeraRow && row.status !== "approved"}
                             rowClassName={(row) => row._isFeraRow ? "bg-purple-50" : ""}
                             renderActions={(
                                 row,
                                 { editButton, deleteButton },
                             ) => {
+                                const viewFactorButton = (
+                                    <button
+                                        onClick={() => handleViewFactor(row)}
+                                        className="px-3 py-1 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700"
+                                        title="View Emission Factor">
+                                        View
+                                    </button>
+                                );
                                 const docsButton = (
                                     <button
                                         onClick={() => handleOpenDocuments(row)}
@@ -2559,6 +2657,7 @@ const paginatedEmissions = emissions.slice(
                                                     "Manager"}
                                             </span>
                                             <div className="flex gap-2">
+                                                {viewFactorButton}
                                                 {docsButton}
                                             </div>
                                         </div>
@@ -2575,6 +2674,7 @@ const paginatedEmissions = emissions.slice(
                                             </span>
                                             <div className="flex gap-2">
                                                 {editButton}
+                                                {viewFactorButton}
                                                 {docsButton}
                                             </div>
                                         </div>
@@ -2585,6 +2685,7 @@ const paginatedEmissions = emissions.slice(
                                     <div className="flex gap-2">
                                         {editButton}
                                         {deleteButton}
+                                        {viewFactorButton}
                                         {docsButton}
                                     </div>
                                 );
@@ -2592,18 +2693,18 @@ const paginatedEmissions = emissions.slice(
                         />
 
  {totalPages > 1 && (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white mt-2">
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white mt-2 rounded-b-lg">
                         <p className="text-sm text-gray-600">
                             Showing{" "}
                             <span className="font-medium">
-                                {(currentPage - 1) * rowsPerPage + 1}
+                                {(currentPage - 1) * PAGE_LIMIT + 1}
                             </span>{" "}
                             to{" "}
                             <span className="font-medium">
-                                {Math.min(currentPage * rowsPerPage, emissions.length)}
+                                {Math.min(currentPage * PAGE_LIMIT, totalCount)}
                             </span>{" "}
                             of{" "}
-                            <span className="font-medium">{emissions.length}</span> entries
+                            <span className="font-medium">{totalCount}</span> entries
                         </p>
 
                         <div className="flex items-center gap-1">
@@ -2611,54 +2712,29 @@ const paginatedEmissions = emissions.slice(
                                 onClick={() => setCurrentPage(1)}
                                 disabled={currentPage === 1}
                                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >«</button>
+                            >&laquo;</button>
 
                             <button
                                 onClick={() => setCurrentPage((p) => p - 1)}
                                 disabled={currentPage === 1}
                                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >‹</button>
+                            >&lsaquo;</button>
 
-                            {Array.from({ length: totalPages }, (_, i) => i + 1)
-                                .filter(
-                                    (page) =>
-                                        page === 1 ||
-                                        page === totalPages ||
-                                        Math.abs(page - currentPage) <= 2
-                                )
-                                .reduce<(number | "...")[]>((acc, page, idx, arr) => {
-                                    if (idx > 0 && page - (arr[idx - 1] as number) > 1)
-                                        acc.push("...");
-                                    acc.push(page);
-                                    return acc;
-                                }, [])
-                                .map((item, idx) =>
-                                    item === "..." ? (
-                                        <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">…</span>
-                                    ) : (
-                                        <button
-                                            key={item}
-                                            onClick={() => setCurrentPage(item as number)}
-                                            className={`px-3 py-1 text-sm rounded border transition-colors ${
-                                                currentPage === item
-                                                    ? "bg-blue-600 text-white border-blue-600"
-                                                    : "border-gray-300 hover:bg-gray-50 text-gray-700"
-                                            }`}
-                                        >{item}</button>
-                                    )
-                                )}
+                            <span className="px-3 py-1 text-sm text-gray-700">
+                                Page {currentPage} of {totalPages}
+                            </span>
 
                             <button
                                 onClick={() => setCurrentPage((p) => p + 1)}
                                 disabled={currentPage === totalPages}
                                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >›</button>
+                            >&rsaquo;</button>
 
                             <button
                                 onClick={() => setCurrentPage(totalPages)}
                                 disabled={currentPage === totalPages}
                                 className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >»</button>
+                            >&raquo;</button>
                         </div>
                     </div>
                 )}
@@ -2783,7 +2859,9 @@ const paginatedEmissions = emissions.slice(
                                             </div>
                                             <div className="flex items-center gap-2 mt-0.5">
                                                 {invoiceDate && (
-                                                    <span className="text-xs text-gray-400">{invoiceDate}</span>
+                                                    <span className="text-xs text-gray-400">
+                                                        {new Date(invoiceDate + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+                                                    </span>
                                                 )}
                                                 {totalAmount != null && (
                                                     <span className="text-xs text-gray-500 font-medium">
@@ -3158,6 +3236,61 @@ const paginatedEmissions = emissions.slice(
                 />
             )}
 
+            {/* Emission Factor Viewer Modal */}
+            <Modal
+                isOpen={factorModalOpen}
+                onClose={() => { setFactorModalOpen(false); setFactorModalData(null); setFactorModalEmission(null); }}
+                title="Emission Factor Details"
+                className="max-w-lg!">
+                {factorLoading ? (
+                    <div className="text-center py-8 text-gray-500">Loading...</div>
+                ) : factorModalData ? (
+                    <div className="space-y-3">
+                        {factorModalEmission && (
+                            <div className="text-sm text-gray-500 mb-4">
+                                Emission #{factorModalEmission.pk_id}
+                            </div>
+                        )}
+                        <table className="w-full text-sm">
+                            <tbody>
+                                <tr className="border-b border-gray-100">
+                                    <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Category</td>
+                                    <td className="py-2 text-gray-900">{factorModalData.emission_category_name || "—"}</td>
+                                </tr>
+                                <tr className="border-b border-gray-100">
+                                    <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Factor Value</td>
+                                    <td className="py-2 text-gray-900 font-mono">{factorModalData.factor_value}</td>
+                                </tr>
+                                <tr className="border-b border-gray-100">
+                                    <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Unit</td>
+                                    <td className="py-2 text-gray-900">{factorModalData.denominator_unit || "—"}</td>
+                                </tr>
+                                <tr className="border-b border-gray-100">
+                                    <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Year</td>
+                                    <td className="py-2 text-gray-900">{factorModalData.year}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-2 pr-4 font-medium text-gray-600 whitespace-nowrap">Source</td>
+                                    <td className="py-2 text-gray-900">{factorModalData.source || "—"}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        {factorModalEmission && (
+                            <div className="mt-4 pt-3 border-t border-gray-200">
+                                <div className="text-xs text-gray-500 mb-1">Calculated Emission</div>
+                                <div className="text-lg font-semibold text-gray-900">
+                                    {Number(factorModalEmission.total_emission).toFixed(4)} <span className="text-sm font-normal text-gray-500">tCO2e</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="text-center py-8 text-gray-500">
+                        No matching emission factor found for this entry.
+                    </div>
+                )}
+            </Modal>
+
             {/* Invoice Library Modal */}
             <Modal
                 isOpen={invoiceListOpen}
@@ -3437,11 +3570,17 @@ function generateDateOptions(): DropdownOption[] {
     return options;
 }
 
-function createModalRow(id: number, columns: ColumnEntity[]): ModalRow {
+function createModalRow(id: number, columns: ColumnEntity[], extraFields?: import("./types").ExtraFieldDefinition[]): ModalRow {
     const row: ModalRow = { id };
     columns.forEach((col) => {
         row[col.column_name] = "";
     });
+    // Initialize extra_data sub-object from extra field definitions
+    const extra: Record<string, string> = {};
+    if (extraFields) {
+        extraFields.forEach((ef) => { extra[ef.key] = ""; });
+    }
+    row._extra_data = extra;
     return row;
 }
 
@@ -3456,6 +3595,7 @@ function flattenEmission(emission: EmissionData): EmissionRow {
         status: emission.status,
         reviewed_by: emission.reviewed_by,
         review_comment: emission.review_comment,
+        _extra_data: emission.extra_data || {},
     };
 }
 

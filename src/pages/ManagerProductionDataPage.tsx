@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import Modal from "../components/Modal";
+import AuditTrailTimeline, { AuditTrailModal } from "../components/AuditTrailTimeline";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import {
@@ -9,7 +10,7 @@ import {
   rejectProductionData,
   bulkApproveProductionData,
   bulkRejectProductionData,
-  updateProductionData,
+  managerUpdateProductionData,
   ProductionData,
   ProductionDataStatus,
 } from "../services/productionDataService";
@@ -85,6 +86,10 @@ const ManagerProductionDataPage = () => {
   const [rejectComment, setRejectComment] = useState("");
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [bulkRejectMode, setBulkRejectMode] = useState(false);
+
+  // Audit trail modal state
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [auditEntityId, setAuditEntityId] = useState<number | null>(null);
 
   // Edit modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -232,7 +237,7 @@ const ManagerProductionDataPage = () => {
   const handleEditSave = async () => {
     if (!editingData) return;
     try {
-      const response = await updateProductionData(editingData.production_id, {
+      const response = await managerUpdateProductionData(editingData.production_id, {
         quantity: parseFloat(editForm.quantity),
         unit: editForm.unit,
         start_date: editForm.start_date,
@@ -509,6 +514,16 @@ const ManagerProductionDataPage = () => {
                       >
                         Edit
                       </button>
+                      <button
+                        onClick={() => {
+                          setAuditEntityId(data.production_id);
+                          setAuditModalOpen(true);
+                        }}
+                        className={`px-2 py-1 text-xs rounded ${isDark ? "bg-slate-600 text-slate-300 hover:bg-slate-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                        title="View edit history"
+                      >
+                        History
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -532,7 +547,7 @@ const ManagerProductionDataPage = () => {
       >
         <div className="mb-4">
           <label className={labelClass}>
-            Rejection Reason (Optional)
+            Rejection Reason (Required)
           </label>
           <textarea
             value={rejectComment}
@@ -556,7 +571,8 @@ const ManagerProductionDataPage = () => {
           </button>
           <button
             onClick={handleReject}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            disabled={!rejectComment.trim()}
+            className={`px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 ${!rejectComment.trim() ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             Reject
           </button>
@@ -573,6 +589,11 @@ const ManagerProductionDataPage = () => {
         title="Edit Production Data"
         isDark={isDark}
       >
+        {editingData?.status === "approved" && (
+          <div className={`mb-4 p-3 rounded text-sm ${isDark ? "bg-yellow-900/20 border border-yellow-700/30 text-yellow-400" : "bg-yellow-50 border border-yellow-200 text-yellow-800"}`}>
+            This entry is approved. Changes will be logged in the audit trail.
+          </div>
+        )}
         <div className="space-y-4">
           <div>
             <label className={labelClass}>Quantity</label>
@@ -621,6 +642,13 @@ const ManagerProductionDataPage = () => {
             />
           </div>
         </div>
+        {editingData && (
+          <AuditTrailTimeline
+            entityType="production_data"
+            entityId={editingData.production_id}
+            isDark={isDark}
+          />
+        )}
         <div className="flex justify-end gap-2 mt-4">
           <button
             onClick={() => {
@@ -639,6 +667,20 @@ const ManagerProductionDataPage = () => {
           </button>
         </div>
       </Modal>
+
+      {/* Audit Trail Modal */}
+      {auditEntityId && (
+        <AuditTrailModal
+          isOpen={auditModalOpen}
+          onClose={() => {
+            setAuditModalOpen(false);
+            setAuditEntityId(null);
+          }}
+          entityType="production_data"
+          entityId={auditEntityId}
+          isDark={isDark}
+        />
+      )}
     </div>
   );
 };

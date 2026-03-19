@@ -86,6 +86,15 @@ export const createColumnConfig = async (data: {
   return response.data;
 };
 
+export interface ExtraFieldDefinition {
+  key: string;
+  label: string;
+  type: "text" | "number" | "date" | "select" | "textarea";
+  required: boolean;
+  options?: string[];
+  show_for?: string[];
+}
+
 export const updateColumnConfig = async (
   id: string | number,
   data: {
@@ -97,6 +106,7 @@ export const updateColumnConfig = async (
     column_dependencies?: ColumnDependencies;
     dependent_options?: DependentOptionsMap;
     emission_category_mapping?: EmissionCategoryMapping;
+    extra_fields?: ExtraFieldDefinition[];
   }
 ) => {
   const response = await api.put(`/admin/column-configs/${id}`, data);

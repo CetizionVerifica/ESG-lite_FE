@@ -33,6 +33,7 @@ export interface InvoiceData {
     total_quantity: number | null;
     unit_of_measurement: string | null;
     emission_category: string | null;
+    billing_month_end: string | null;
 }
 
 export interface ValidationCheck {

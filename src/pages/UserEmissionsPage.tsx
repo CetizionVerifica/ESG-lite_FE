@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { AuditTrailModal } from "../components/AuditTrailTimeline";
 import { useAuth } from "../context/AuthContext";
 import { getEmissionsPaginated, EmissionData, EmissionStatus, EmissionsSummary } from "../services/emissionService";
 import DocumentViewerModal from "../components/DocumentViewerModal";
@@ -90,6 +91,7 @@ const UserEmissionsPage = () => {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<EmissionStatus | null>(null);
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [totalEmissions, setTotalEmissions] = useState(0);
   const [summary, setSummary] = useState<EmissionsSummary>({
@@ -99,6 +101,10 @@ const UserEmissionsPage = () => {
 
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 20;
+
+  // Audit trail modal state
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [auditEntityId, setAuditEntityId] = useState<number | null>(null);
 
   // Document viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -340,6 +346,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         categoryId: selectedCategory,
         year: selectedYear,
         month: selectedMonth,
+        status: selectedStatus,
         page,
         limit: rowsPerPage,
       });
@@ -354,7 +361,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     } finally {
       setLoading(false);
     }
-  }, [siteId, selectedCategory, selectedYear, selectedMonth]);
+  }, [siteId, selectedCategory, selectedYear, selectedMonth, selectedStatus]);
 
   // When filters change, reset to page 1 and fetch
   useEffect(() => {
@@ -410,7 +417,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       </h1>
 
       {/* Filters */}
-      <div className={`grid grid-cols-1 gap-4 mb-6 ${hasMultipleSites ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+      <div className={`grid grid-cols-1 gap-4 mb-6 ${hasMultipleSites ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
         {/* Site Selector - only show when user has multiple sites */}
         {hasMultipleSites && (
           <div>
@@ -454,6 +461,20 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             value={selectedMonth}
             onChange={(option) => setSelectedMonth(option?.id as number)}
             searchable={true}
+            clearable={true}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Status</label>
+          <Dropdown
+            options={[
+              { id: "pending", label: "Pending" },
+              { id: "approved", label: "Approved" },
+              { id: "rejected", label: "Rejected" },
+            ]}
+            placeholder="All Statuses"
+            value={selectedStatus}
+            onChange={(option) => setSelectedStatus(option?.id as EmissionStatus)}
             clearable={true}
           />
         </div>
@@ -519,6 +540,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                 <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
                   Documents
                 </th>
+                <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
+                  History
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -566,6 +590,18 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                       className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50 transition-colors"
                     >
                       View Docs
+                    </button>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    <button
+                      onClick={() => {
+                        setAuditEntityId(emission.pk_id);
+                        setAuditModalOpen(true);
+                      }}
+                      className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+                      title="View edit history"
+                    >
+                      History
                     </button>
                   </td>
                 </tr>
@@ -644,6 +680,19 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
           </div>
         )}
         </div>
+      )}
+
+      {/* Audit Trail Modal */}
+      {auditEntityId && (
+        <AuditTrailModal
+          isOpen={auditModalOpen}
+          onClose={() => {
+            setAuditModalOpen(false);
+            setAuditEntityId(null);
+          }}
+          entityType="emission"
+          entityId={auditEntityId}
+        />
       )}
 
       {/* Document Viewer Modal */}

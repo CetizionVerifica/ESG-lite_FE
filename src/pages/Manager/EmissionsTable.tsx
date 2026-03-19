@@ -1,7 +1,9 @@
-import { useState, useEffect  } from "react";
+import { useState } from "react";
 import { EmissionData, EmissionStatus } from "../../services/emissionService";
 import { getDocumentsByEmission, EmissionDocument } from "../../services/documentService";
 import DocumentViewerModal from "../../components/DocumentViewerModal";
+import Modal from "../../components/Modal";
+import AuditTrailTimeline, { AuditTrailModal } from "../../components/AuditTrailTimeline";
 
 interface EmissionsTableProps {
   emissions: EmissionData[];
@@ -9,7 +11,9 @@ interface EmissionsTableProps {
   onApprove?: (id: number, comment?: string) => Promise<void>;
   onReject?: (id: number, comment: string) => Promise<void>;
   onBulkApprove?: (ids: number[]) => Promise<void>;
+  onBulkReject?: (ids: number[], comment: string) => Promise<void>;
   onBulkDelete?: (ids: number[]) => Promise<void>;
+  onManagerEdit?: (id: number, data: { activity_data?: Record<string, any>; date_of_reporting?: string }) => Promise<void>;
   isDark?: boolean;
   formatActivityData?: (
     activityData: Record<string, unknown>,
@@ -53,14 +57,35 @@ const StatusBadge = ({ status, isDark = false }: { status: EmissionStatus; isDar
   );
 };
 
-const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove, onBulkDelete, isDark = false,formatActivityData }: EmissionsTableProps) => {
+const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove, onBulkReject, onBulkDelete, onManagerEdit, isDark = false, formatActivityData }: EmissionsTableProps) => {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
-  const [rejectingId, setRejectingId] = useState<number | null>(null);
-  const [rejectComment, setRejectComment] = useState("");
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<number>>(new Set());
   const [selectedApprovedIds, setSelectedApprovedIds] = useState<Set<number>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Reject modal state
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectComment, setRejectComment] = useState("");
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [bulkRejectMode, setBulkRejectMode] = useState(false);
+  const [bulkRejectLoading, setBulkRejectLoading] = useState(false);
+
+  // Edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingEmission, setEditingEmission] = useState<EmissionData | null>(null);
+  const [editForm, setEditForm] = useState<{
+    activity_data: Record<string, any>;
+    date_of_reporting: string;
+  }>({ activity_data: {}, date_of_reporting: "" });
+  const [editLoading, setEditLoading] = useState(false);
+
+  // Delete confirmation modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Audit trail modal state
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [auditEntityId, setAuditEntityId] = useState<number | null>(null);
 
   // Document viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -68,8 +93,9 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
   const [selectedDocument, setSelectedDocument] = useState<EmissionDocument | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 5;
+  // Notification state (replaces alert())
+  const [notification, setNotification] = useState<{ message: string; type: "info" | "error" } | null>(null);
+
 
   // Get pending and approved emissions
   const pendingEmissions = emissions.filter((e) => e.status === "pending");
@@ -141,12 +167,15 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     }
   };
 
-  // Handle bulk delete
-  const handleBulkDelete = async () => {
+  // Handle bulk delete - open confirmation modal
+  const handleBulkDelete = () => {
     if (!onBulkDelete || selectedApprovedIds.size === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedApprovedIds.size} approved emission(s)?`)) {
-      return;
-    }
+    setDeleteModalOpen(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (!onBulkDelete) return;
+    setDeleteModalOpen(false);
     setDeleteLoading(true);
     try {
       await onBulkDelete(Array.from(selectedApprovedIds));
@@ -166,26 +195,80 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     }
   };
 
+  // Single reject - open modal
   const handleRejectClick = (id: number) => {
     setRejectingId(id);
     setRejectComment("");
+    setBulkRejectMode(false);
+    setRejectModalOpen(true);
   };
 
+  // Bulk reject - open modal
+  const handleBulkRejectClick = () => {
+    setBulkRejectMode(true);
+    setRejectComment("");
+    setRejectModalOpen(true);
+  };
+
+  // Confirm reject (handles both single and bulk)
   const handleRejectConfirm = async () => {
-    if (!onReject || !rejectingId || !rejectComment.trim()) return;
-    setActionLoadingId(rejectingId);
-    try {
-      await onReject(rejectingId, rejectComment.trim());
-      setRejectingId(null);
-      setRejectComment("");
-    } finally {
-      setActionLoadingId(null);
+    if (!rejectComment.trim()) return;
+
+    if (bulkRejectMode) {
+      if (!onBulkReject || selectedPendingIds.size === 0) return;
+      setBulkRejectLoading(true);
+      try {
+        await onBulkReject(Array.from(selectedPendingIds), rejectComment.trim());
+        setSelectedPendingIds(new Set());
+      } finally {
+        setBulkRejectLoading(false);
+      }
+    } else if (rejectingId) {
+      if (!onReject) return;
+      setActionLoadingId(rejectingId);
+      try {
+        await onReject(rejectingId, rejectComment.trim());
+      } finally {
+        setActionLoadingId(null);
+      }
     }
+
+    setRejectModalOpen(false);
+    setRejectComment("");
+    setRejectingId(null);
+    setBulkRejectMode(false);
   };
 
   const handleRejectCancel = () => {
-    setRejectingId(null);
+    setRejectModalOpen(false);
     setRejectComment("");
+    setRejectingId(null);
+    setBulkRejectMode(false);
+  };
+
+  // Edit handlers
+  const handleEditClick = (emission: EmissionData) => {
+    setEditingEmission(emission);
+    setEditForm({
+      activity_data: { ...emission.activity_data },
+      date_of_reporting: emission.date_of_reporting.split("T")[0],
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!onManagerEdit || !editingEmission) return;
+    setEditLoading(true);
+    try {
+      await onManagerEdit(editingEmission.pk_id, {
+        activity_data: editForm.activity_data,
+        date_of_reporting: editForm.date_of_reporting,
+      });
+      setEditModalOpen(false);
+      setEditingEmission(null);
+    } finally {
+      setEditLoading(false);
+    }
   };
 
   // Document viewer handlers
@@ -198,11 +281,13 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
         setSelectedDocument(docs[0]);
         setViewerOpen(true);
       } else {
-        alert("No documents found for this emission.");
+        setNotification({ message: "No documents found for this emission.", type: "info" });
+        setTimeout(() => setNotification(null), 4000);
       }
     } catch (error) {
       console.error("Error fetching documents:", error);
-      alert("Failed to load documents.");
+      setNotification({ message: "Failed to load documents.", type: "error" });
+      setTimeout(() => setNotification(null), 4000);
     } finally {
       setLoadingDocs(false);
     }
@@ -235,9 +320,6 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     }));
   };
 
-  useEffect(() => {
-  setCurrentPage(1);
-}, [emissions]);
 
   // Theme classes
   const loadingClass = isDark ? "text-center py-8 text-slate-300" : "text-center py-8 text-gray-700";
@@ -273,13 +355,33 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     return isDark ? "hover:bg-slate-800" : "hover:bg-gray-50";
   };
 
-  const inputClass = isDark
-    ? "w-full border border-slate-600 bg-slate-700 text-slate-200 px-2 py-1 rounded text-sm focus:outline-none focus:ring focus:ring-red-500/30"
-    : "w-full border border-gray-300 px-2 py-1 rounded text-sm focus:outline-none focus:ring focus:ring-red-300";
+  const modalInputClass = isDark
+    ? "w-full border border-slate-600 bg-slate-700 text-slate-200 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-500/30"
+    : "w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300";
 
   const viewDocsClass = isDark
     ? "px-3 py-1 text-sm bg-blue-600/30 text-blue-300 rounded hover:bg-blue-600/50 disabled:opacity-50 transition-colors"
     : "px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50 transition-colors";
+
+  const rejectReasonClass = isDark
+    ? "text-xs text-red-400 mt-1"
+    : "text-xs text-red-600 mt-1";
+
+  const reviewTextClass = isDark
+    ? "text-xs text-slate-400 mt-1"
+    : "text-xs text-gray-500 mt-1";
+
+  const labelClass = isDark
+    ? "block text-sm font-medium mb-1 text-slate-300"
+    : "block text-sm font-medium mb-1 text-gray-700";
+
+  const cancelBtnClass = isDark
+    ? "px-4 py-2 bg-slate-600 text-slate-200 rounded hover:bg-slate-500"
+    : "px-4 py-2 bg-gray-300 rounded hover:bg-gray-400";
+
+  const auditWarningClass = isDark
+    ? "mb-4 p-3 rounded text-sm bg-yellow-900/20 border border-yellow-700/30 text-yellow-400"
+    : "mb-4 p-3 rounded text-sm bg-yellow-50 border border-yellow-200 text-yellow-800";
 
   if (loading) {
     return <div className={loadingClass}>Loading emissions...</div>;
@@ -293,20 +395,15 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     );
   }
 
-  const showActions = onApprove || onReject;
+  const showActions = onApprove || onReject || onManagerEdit;
   const showBulkApprove = onBulkApprove && pendingEmissions.length > 0;
   const showBulkDelete = onBulkDelete && approvedEmissions.length > 0;
   const showCheckboxColumn = showBulkApprove || showBulkDelete;
 
-  const totalPages = Math.ceil(emissions.length / rowsPerPage);
-const paginatedEmissions = emissions.slice(
-  (currentPage - 1) * rowsPerPage,
-  currentPage * rowsPerPage
-);
 
   return (
     <div>
-      {/* Bulk Actions Bar for Pending (Approve) */}
+      {/* Bulk Actions Bar for Pending (Approve + Reject) */}
       {showBulkApprove && (
         <div className={bulkApproveBgClass}>
           <div className="flex items-center gap-4">
@@ -346,6 +443,15 @@ const paginatedEmissions = emissions.slice(
                 >
                   {bulkLoading ? "Approving..." : `Approve Selected (${selectedPendingIds.size})`}
                 </button>
+                {onBulkReject && (
+                  <button
+                    onClick={handleBulkRejectClick}
+                    disabled={bulkRejectLoading}
+                    className="px-4 py-1.5 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700 disabled:bg-gray-400"
+                  >
+                    {bulkRejectLoading ? "Rejecting..." : `Reject Selected (${selectedPendingIds.size})`}
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -423,9 +529,8 @@ const paginatedEmissions = emissions.slice(
           </tr>
         </thead>
         <tbody>
-          {paginatedEmissions.map((emission) => {
+          {emissions.map((emission) => {
             const isLoading = actionLoadingId === emission.pk_id;
-            const isRejecting = rejectingId === emission.pk_id;
             const isPending = emission.status === "pending";
             const isApproved = emission.status === "approved";
 
@@ -463,15 +568,6 @@ const paginatedEmissions = emissions.slice(
                 <td className={tdClass}>
                   {emission.category?.category_name || "-"}
                 </td>
-                {/* <td className={tdClass}>
-                  <div className="max-w-xs">
-                    {Object.entries(emission.activity_data || {}).map(([key, value]) => (
-                      <div key={key} className="text-sm">
-                        <span className="font-medium">{key}:</span> {String(value)}
-                      </div>
-                    ))}
-                  </div>
-                </td> */}
                 <td className={tdClass}>
                     <div className="max-w-xs">
                       {activityRows.map(({ key, displayValue }) => (
@@ -492,6 +588,16 @@ const paginatedEmissions = emissions.slice(
                 </td>
                 <td className={tdClass}>
                   <StatusBadge status={emission.status} isDark={isDark} />
+                  {emission.status === "rejected" && emission.review_comment && (
+                    <div className={rejectReasonClass}>
+                      {emission.review_comment}
+                    </div>
+                  )}
+                  {emission.status !== "pending" && emission.reviewed_by && (
+                    <div className={reviewTextClass}>
+                      by {emission.reviewed_by.name}
+                    </div>
+                  )}
                 </td>
                 <td className={tdClass}>
                   {emission.created_by?.name || "-"}
@@ -510,54 +616,48 @@ const paginatedEmissions = emissions.slice(
                 </td>
                 {showActions && (
                   <td className={tdClass}>
-                    {isPending && !isRejecting && (
-                      <div className="flex gap-2">
+                    <div className="flex gap-1">
+                      {isPending && (
+                        <>
+                          {onApprove && (
+                            <button
+                              onClick={() => handleApprove(emission.pk_id)}
+                              disabled={isLoading}
+                              className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-400"
+                            >
+                              {isLoading ? "..." : "Approve"}
+                            </button>
+                          )}
+                          {onReject && (
+                            <button
+                              onClick={() => handleRejectClick(emission.pk_id)}
+                              disabled={isLoading}
+                              className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 disabled:bg-gray-400"
+                            >
+                              Reject
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {onManagerEdit && (
                         <button
-                          onClick={() => handleApprove(emission.pk_id)}
-                          disabled={isLoading}
-                          className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+                          onClick={() => handleEditClick(emission)}
+                          className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
                         >
-                          {isLoading ? "..." : "Approve"}
+                          Edit
                         </button>
-                        <button
-                          onClick={() => handleRejectClick(emission.pk_id)}
-                          disabled={isLoading}
-                          className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 disabled:bg-gray-400"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                    {isRejecting && (
-                      <div className="flex flex-col gap-2">
-                        <input
-                          type="text"
-                          placeholder="Rejection reason (required)"
-                          value={rejectComment}
-                          onChange={(e) => setRejectComment(e.target.value)}
-                          className={inputClass}
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={handleRejectConfirm}
-                            disabled={isLoading || !rejectComment.trim()}
-                            className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 disabled:bg-gray-400"
-                          >
-                            {isLoading ? "..." : "Confirm"}
-                          </button>
-                          <button
-                            onClick={handleRejectCancel}
-                            disabled={isLoading}
-                            className={`px-3 py-1 rounded text-sm ${isDark ? "bg-slate-600 text-slate-200 hover:bg-slate-500" : "bg-gray-400 text-white hover:bg-gray-500"}`}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {!isPending && (
-                      <span className={`text-sm ${isDark ? "text-slate-500" : "text-gray-500"}`}>-</span>
-                    )}
+                      )}
+                      <button
+                        onClick={() => {
+                          setAuditEntityId(emission.pk_id);
+                          setAuditModalOpen(true);
+                        }}
+                        className={`px-2 py-1 text-xs rounded ${isDark ? "bg-slate-600 text-slate-300 hover:bg-slate-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                        title="View edit history"
+                      >
+                        History
+                      </button>
+                    </div>
                   </td>
                 )}
               </tr>
@@ -567,48 +667,151 @@ const paginatedEmissions = emissions.slice(
         </table>
       </div>
 
- {totalPages > 1 && (
-        <div className={`flex items-center justify-between px-4 py-3 border-t mt-2 ${isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-white"}`}>
-          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
-            Showing{" "}
-            <span className="font-medium">{(currentPage - 1) * rowsPerPage + 1}</span>{" "}
-            to{" "}
-            <span className="font-medium">{Math.min(currentPage * rowsPerPage, emissions.length)}</span>{" "}
-            of{" "}
-            <span className="font-medium">{emissions.length}</span> entries
-          </p>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1}
-              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}>«</button>
-            <button onClick={() => setCurrentPage((p) => p - 1)} disabled={currentPage === 1}
-              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}>‹</button>
 
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((page) => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
-              .reduce<(number | "...")[]>((acc, page, idx, arr) => {
-                if (idx > 0 && page - (arr[idx - 1] as number) > 1) acc.push("...");
-                acc.push(page);
-                return acc;
-              }, [])
-              .map((item, idx) =>
-                item === "..." ? (
-                  <span key={`ellipsis-${idx}`} className={`px-2 ${isDark ? "text-slate-500" : "text-gray-400"}`}>…</span>
-                ) : (
-                  <button key={item} onClick={() => setCurrentPage(item as number)}
-                    className={`px-3 py-1 text-sm rounded border transition-colors ${
-                      currentPage === item
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"
-                    }`}>{item}</button>
-                )
-              )}
+      {/* Reject Modal */}
+      <Modal
+        isOpen={rejectModalOpen}
+        onClose={handleRejectCancel}
+        title={bulkRejectMode ? `Reject ${selectedPendingIds.size} Emission${selectedPendingIds.size !== 1 ? "s" : ""}` : "Reject Emission"}
+        isDark={isDark}
+      >
+        <div className="mb-4">
+          <label className={labelClass}>
+            Rejection Reason (Required)
+          </label>
+          <textarea
+            value={rejectComment}
+            onChange={(e) => setRejectComment(e.target.value)}
+            className={modalInputClass}
+            rows={3}
+            placeholder="Enter reason for rejection..."
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={handleRejectCancel}
+            className={cancelBtnClass}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleRejectConfirm}
+            disabled={!rejectComment.trim() || bulkRejectLoading}
+            className={`px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 ${!rejectComment.trim() || bulkRejectLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            {bulkRejectLoading ? "Rejecting..." : "Reject"}
+          </button>
+        </div>
+      </Modal>
 
-            <button onClick={() => setCurrentPage((p) => p + 1)} disabled={currentPage === totalPages}
-              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}>›</button>
-            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}
-              className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}>»</button>
+      {/* Edit Modal */}
+      <Modal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingEmission(null);
+        }}
+        title="Edit Emission Data"
+        isDark={isDark}
+      >
+        {editingEmission?.status === "approved" && (
+          <div className={auditWarningClass}>
+            This entry is approved. Changes will be logged in the audit trail.
+          </div>
+        )}
+        <div className="space-y-4">
+          {Object.entries(editForm.activity_data).map(([key, value]) => (
+            <div key={key}>
+              <label className={labelClass}>{key}</label>
+              <input
+                type="text"
+                value={String(value)}
+                onChange={(e) => setEditForm({
+                  ...editForm,
+                  activity_data: { ...editForm.activity_data, [key]: e.target.value }
+                })}
+                className={modalInputClass}
+              />
+            </div>
+          ))}
+          <div>
+            <label className={labelClass}>Date of Reporting</label>
+            <input
+              type="date"
+              value={editForm.date_of_reporting}
+              onChange={(e) => setEditForm({ ...editForm, date_of_reporting: e.target.value })}
+              className={modalInputClass}
+            />
           </div>
         </div>
+        {editingEmission && (
+          <AuditTrailTimeline
+            entityType="emission"
+            entityId={editingEmission.pk_id}
+            isDark={isDark}
+          />
+        )}
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            onClick={() => {
+              setEditModalOpen(false);
+              setEditingEmission(null);
+            }}
+            className={cancelBtnClass}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleEditSave}
+            disabled={editLoading}
+            className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ${editLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            {editLoading ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title="Delete Emissions"
+        isDark={isDark}
+        className="max-w-md!"
+      >
+        <div>
+          <p className={isDark ? "text-slate-300 mb-4" : "text-gray-700 mb-4"}>
+            Are you sure you want to delete <strong>{selectedApprovedIds.size}</strong> approved emission{selectedApprovedIds.size !== 1 ? "s" : ""}? This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setDeleteModalOpen(false)}
+              className={cancelBtnClass}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmBulkDelete}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Audit Trail Modal */}
+      {auditEntityId && (
+        <AuditTrailModal
+          isOpen={auditModalOpen}
+          onClose={() => {
+            setAuditModalOpen(false);
+            setAuditEntityId(null);
+          }}
+          entityType="emission"
+          entityId={auditEntityId}
+          isDark={isDark}
+        />
       )}
 
       {/* Document Viewer Modal */}
@@ -619,6 +822,23 @@ const paginatedEmissions = emissions.slice(
         documents={viewerDocuments}
         onNavigate={handleNavigateDocument}
       />
+
+      {/* Notification Toast */}
+      {notification && (
+        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium transition-opacity ${
+          notification.type === "error"
+            ? (isDark ? "bg-red-900/90 text-red-200 border border-red-700" : "bg-red-100 text-red-800 border border-red-300")
+            : (isDark ? "bg-slate-700 text-slate-200 border border-slate-600" : "bg-gray-100 text-gray-800 border border-gray-300")
+        }`}>
+          {notification.message}
+          <button
+            onClick={() => setNotification(null)}
+            className={`ml-3 ${isDark ? "text-slate-400 hover:text-slate-200" : "text-gray-500 hover:text-gray-700"}`}
+          >
+            &times;
+          </button>
+        </div>
+      )}
     </div>
   );
 }

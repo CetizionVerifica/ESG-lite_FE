@@ -29,6 +29,9 @@ export interface TableProps<T> {
   ) => React.ReactNode;
   isDark?: boolean;
   rowClassName?: (row: T) => string;
+  selectedIds?: Set<any>;
+  onSelectionChange?: (ids: Set<any>) => void;
+  isRowSelectable?: (row: T) => boolean;
 }
 
 export function Table<T extends Record<string, any>>({
@@ -43,6 +46,9 @@ export function Table<T extends Record<string, any>>({
   renderActions,
   isDark = false,
   rowClassName,
+  selectedIds,
+  onSelectionChange,
+  isRowSelectable,
 }: TableProps<T>) {
   const [editingId, setEditingId] = useState<any>(null);
   const [editValues, setEditValues] = useState<Partial<T>>({});
@@ -73,6 +79,35 @@ export function Table<T extends Record<string, any>>({
     isDark
       ? `${isEditing ? "bg-blue-900/30" : "hover:bg-slate-700"} transition-colors`
       : `${isEditing ? "bg-blue-50" : "hover:bg-gray-50"} transition-colors`;
+
+  const showSelection = !!selectedIds && !!onSelectionChange;
+  const selectableRows = showSelection
+    ? data.filter((row) => !isRowSelectable || isRowSelectable(row))
+    : [];
+  const allSelectableSelected =
+    showSelection && selectableRows.length > 0 && selectableRows.every((row) => selectedIds!.has(row[keyField]));
+
+  const toggleRow = (id: any) => {
+    if (!onSelectionChange || !selectedIds) return;
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
+  };
+
+  const toggleAll = () => {
+    if (!onSelectionChange || !selectedIds) return;
+    if (allSelectableSelected) {
+      // Only deselect current page's rows, preserve other-page selections
+      const next = new Set(selectedIds);
+      selectableRows.forEach((row) => next.delete(row[keyField]));
+      onSelectionChange(next);
+    } else {
+      const next = new Set(selectedIds);
+      selectableRows.forEach((row) => next.add(row[keyField]));
+      onSelectionChange(next);
+    }
+  };
 
   const handleEditStart = (row: T) => {
     setEditingId(row[keyField]);
@@ -147,6 +182,16 @@ export function Table<T extends Record<string, any>>({
       <table className={tableClass}>
         <thead>
           <tr className={headerRowClass}>
+            {showSelection && (
+              <th className={`${headerCellClass} w-10 text-center`}>
+                <input
+                  type="checkbox"
+                  checked={allSelectableSelected}
+                  onChange={toggleAll}
+                  className="w-4 h-4 cursor-pointer"
+                />
+              </th>
+            )}
             {columns.map((col) => (
               <th key={String(col.key)} className={headerCellClass}>
                 {col.label}
@@ -163,6 +208,21 @@ export function Table<T extends Record<string, any>>({
                 key={String(row[keyField])}
                 className={`${getRowClass(isEditing)} ${rowClassName ? rowClassName(row) : ""}`}
               >
+                {showSelection && (() => {
+                  const selectable = !isRowSelectable || isRowSelectable(row);
+                  return (
+                    <td className={`${cellClass} text-center`}>
+                      {selectable ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds!.has(row[keyField])}
+                          onChange={() => toggleRow(row[keyField])}
+                          className="w-4 h-4 cursor-pointer"
+                        />
+                      ) : null}
+                    </td>
+                  );
+                })()}
                 {columns.map((col) => (
                   <td key={String(col.key)} className={cellClass}>
                     {isEditing && col.editable ? (

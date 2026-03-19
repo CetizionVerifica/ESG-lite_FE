@@ -2,6 +2,7 @@ import { useActionState, useState, useEffect, useCallback, useMemo } from "react
 import Modal from "../components/Modal";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { Table, Column } from "../components/Table";
+import { AuditTrailModal } from "../components/AuditTrailTimeline";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { getProductsBySite, Product } from "../services/productService";
@@ -40,6 +41,8 @@ const ProductionDataPage = () => {
   const currentSite = availableSites.find((s) => s.site_id === selectedSite);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [auditEntityId, setAuditEntityId] = useState<number | null>(null);
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -161,6 +164,18 @@ const ProductionDataPage = () => {
   const selectedProductUnit =
     products.find((p) => p.product_id === selectedProduct)?.unit || "";
 
+  const statusStyles = isDark
+    ? {
+        pending: "bg-yellow-900/30 text-yellow-400 border border-yellow-700/50",
+        approved: "bg-green-900/30 text-green-400 border border-green-700/50",
+        rejected: "bg-red-900/30 text-red-400 border border-red-700/50",
+      }
+    : {
+        pending: "bg-yellow-100 text-yellow-800",
+        approved: "bg-green-100 text-green-800",
+        rejected: "bg-red-100 text-red-800",
+      };
+
   const columns: Column<ProductionData>[] = [
     { key: "production_id", label: "ID", editable: false },
     {
@@ -186,6 +201,40 @@ const ProductionDataPage = () => {
       render: (value: string) => new Date(value).toLocaleDateString(),
     },
     { key: "notes", label: "Notes", editable: true, type: "text" },
+    {
+      key: "status" as any,
+      label: "Status",
+      editable: false,
+      render: (_v: any, row: ProductionData) => (
+        <div>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${statusStyles[row.status] || ""}`}>
+            {row.status}
+          </span>
+          {row.status === "rejected" && row.review_comment && (
+            <div className={`text-xs mt-1 ${isDark ? "text-red-400" : "text-red-600"}`}>
+              {row.review_comment}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "history" as any,
+      label: "History",
+      editable: false,
+      render: (_v: any, row: ProductionData) => (
+        <button
+          onClick={() => {
+            setAuditEntityId(row.production_id);
+            setAuditModalOpen(true);
+          }}
+          className={`px-2 py-1 text-xs rounded ${isDark ? "bg-slate-600 text-slate-300 hover:bg-slate-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+          title="View edit history"
+        >
+          History
+        </button>
+      ),
+    },
   ];
 
   // Theme classes
@@ -359,7 +408,32 @@ const ProductionDataPage = () => {
         loading={loading}
         showActions={true}
         isDark={isDark}
+        renderActions={(row, { editButton, deleteButton }) => {
+          if (row.status === "approved") {
+            return null;
+          }
+          return (
+            <>
+              {editButton}
+              {deleteButton}
+            </>
+          );
+        }}
       />
+
+      {/* Audit Trail Modal */}
+      {auditEntityId && (
+        <AuditTrailModal
+          isOpen={auditModalOpen}
+          onClose={() => {
+            setAuditModalOpen(false);
+            setAuditEntityId(null);
+          }}
+          entityType="production_data"
+          entityId={auditEntityId}
+          isDark={isDark}
+        />
+      )}
     </div>
   );
 };

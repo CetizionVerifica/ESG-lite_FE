@@ -230,6 +230,30 @@ const CategoryMappingPage = () => {
         )}
       </div>
 
+      {/* Bulk Delete Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+          <span className="text-sm font-medium text-red-700">
+            {selectedIds.size} mapping{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+            >
+              Clear Selection
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="flex items-center gap-2 px-4 py-1.5 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700"
+            >
+              <Trash2 size={14} />
+              Delete Selected ({selectedIds.size})
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       {loading ? (
         <div className="text-center py-12 text-gray-500">Loading...</div>

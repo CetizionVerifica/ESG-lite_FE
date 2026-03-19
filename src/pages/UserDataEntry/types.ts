@@ -43,6 +43,17 @@ export interface ColumnEntity {
     dropdown_options?: DropdownOptionValue[] | null;
 }
 
+// Definition for supplementary (extra) fields per category
+// These fields don't affect emission calculation — stored separately in emission.extra_data
+export interface ExtraFieldDefinition {
+    key: string;          // e.g., "equipment", "po_number"
+    label: string;        // e.g., "Equipment", "PO Number"
+    type: "text" | "number" | "date" | "select" | "textarea";
+    required: boolean;
+    options?: string[];   // For type="select" only
+    show_for?: string[];  // If set, only show when emission_category contains one of these strings
+}
+
 export interface ColumnConfig {
     pk_id: number;
     config_name: string;
@@ -51,6 +62,7 @@ export interface ColumnConfig {
     column_dependencies?: ColumnDependencies;
     dependent_options?: DependentOptionsMap;
     emission_category_mapping?: EmissionCategoryMapping;
+    extra_fields?: ExtraFieldDefinition[];
 }
 
 export interface EmissionFactor {
@@ -83,6 +95,7 @@ export interface ModalRow {
     id: number;
     emission_category?: string;
     activity_data_unit?: string;
+    _extra_data?: Record<string, any>;
     _ocrUnit?: string;
     _vendorName?: string;
     _invoiceIndex?: number;
@@ -104,6 +117,7 @@ export type UploadStage = "upload" | "mapping" | "review";
 export interface BulkReviewRow {
     id: number;
     mappedData: Record<string, string>;
+    extra_data: Record<string, string>;
     emission_category: string | null;
     original_company_category: string | null;
     activity_data_unit: string | null;
@@ -126,6 +140,7 @@ export interface BulkUploadModalProps {
     dynamicColumns: ColumnEntity[];
     emissionFactors: EmissionFactor[];
     units: UnitData[];
+    extraFields: ExtraFieldDefinition[];
     siteId: number;
     categoryId: number;
     companyId?: number;
@@ -134,4 +149,5 @@ export interface BulkUploadModalProps {
     calculateEmission: (row: ModalRow) => EmissionCalculationResult;
     getAutoEmissionCategory: (row: ModalRow) => { key: string; category: string } | null;
     onImportComplete: (newEmissions: EmissionRow[]) => void;
+    userId?: number;
 }

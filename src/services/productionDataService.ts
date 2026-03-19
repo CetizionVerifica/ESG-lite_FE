@@ -158,6 +158,20 @@ export const approveProductionData = async (
   return response.data;
 };
 
+export const managerUpdateProductionData = async (
+  id: number | string,
+  data: {
+    quantity?: number;
+    unit?: string;
+    start_date?: string;
+    end_date?: string;
+    notes?: string;
+  }
+): Promise<{ message: string; productionData: ProductionData }> => {
+  const response = await api.put(`/user/production-data/manager-edit/${id}`, data);
+  return response.data;
+};
+
 export const rejectProductionData = async (
   id: number | string,
   comment?: string

@@ -17,11 +17,13 @@ import {
 
 export function useBulkUpload({
   dynamicColumns,
+  extraFields,
   siteId,
   categoryId,
   companyId: _companyId,
   selectedDate,
   getAutoEmissionCategory,
+  userId,
   // onImportComplete, // kept but not used inside handleImport anymore (BulkUploadModal will call it)
   // onClose,          // kept but not used inside handleImport anymore (BulkUploadModal will close)
 }: Omit<
@@ -85,13 +87,29 @@ export function useBulkUpload({
       isRequired: true,
     });
 
+    // Extra supplementary fields (optional, skipped by default)
+    extraFields.forEach((ef) => {
+      fields.push({
+        requiredField: `extra_${ef.key}`,
+        label: `${ef.label} (supplementary)`,
+        mappedTo: "",
+        skipped: false,
+        isRequired: false,
+      });
+    });
+
     return fields;
-  }, [dynamicColumns]);
+  }, [dynamicColumns, extraFields]);
 
   const autoMap = useCallback((fields: ColumnMappingEntry[], headers: string[]) => {
     return fields.map((field) => {
+      const fieldName = field.requiredField.toLowerCase().trim();
+      const fieldNameNoPrefix = fieldName.replace(/^extra_/, "");
       const match = headers.find(
-        (h) => h.toLowerCase().trim() === field.requiredField.toLowerCase().trim()
+        (h) => {
+          const header = h.toLowerCase().trim();
+          return header === fieldName || header === fieldNameNoPrefix;
+        }
       );
       return match ? { ...field, mappedTo: match } : field;
     });
@@ -230,13 +248,19 @@ export function useBulkUpload({
     (rows: Record<string, string>[]): BulkReviewRow[] => {
       return rows.map((uploadedRow, idx) => {
         const mappedData: Record<string, string> = {};
+        const extra_data: Record<string, string> = {};
 
         columnMappings.forEach((mapping) => {
           if (!mapping.skipped && mapping.mappedTo) {
-            // IMPORTANT: preview rows already returned as required_field keys (python mapped_df)
-            mappedData[mapping.requiredField] = String(
-              uploadedRow[mapping.requiredField] ?? ""
-            ).trim();
+            const value = String(uploadedRow[mapping.mappedTo] ?? "").trim();
+
+            // Separate extra fields (prefixed with "extra_") from core fields
+            if (mapping.requiredField.startsWith("extra_")) {
+              const realKey = mapping.requiredField.replace(/^extra_/, "");
+              if (value) extra_data[realKey] = value;
+            } else {
+              mappedData[mapping.requiredField] = value;
+            }
           }
         });
 
@@ -265,6 +289,7 @@ export function useBulkUpload({
         return {
           id: idx,
           mappedData,
+          extra_data,
           emission_category,
           original_company_category: mappedData["emission_category"] || null,
           activity_data_unit,
@@ -345,7 +370,8 @@ export function useBulkUpload({
         selected,
         siteId,
         categoryId,
-        selectedDate
+        selectedDate,
+        userId
       );
 
       setImportProgress({ current: res.inserted ?? 0, total: res.total_rows ?? totalRows ?? 0 });

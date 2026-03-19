@@ -102,7 +102,8 @@ export async function importAllRows(
   selectedCategories: string[],
   siteId: number,
   categoryId: number,
-  dateOfReporting: string
+  dateOfReporting: string,
+  userId?: number
 ): Promise<ImportResponse> {
   const response = await fetch(`${PYTHON_API_URL}/v1/excel/import`, {
     method: "POST",
@@ -114,6 +115,7 @@ export async function importAllRows(
       site_id: siteId,
       category_id: categoryId,
       date_of_reporting: dateOfReporting,
+      ...(userId != null && { user_id: userId }),
     }),
   });
 
