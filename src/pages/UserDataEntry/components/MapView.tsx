@@ -11,10 +11,16 @@ import { GOOGLE_MAPS_LOADER_OPTIONS } from "../../../utils/googleMapsLoader";
 const DEFAULT_CENTER = { lat: 20, lng: 0 };
 const DEFAULT_ZOOM = 2;
 
+interface SeaGeometry {
+  type?: string;
+  coordinates?: number[][];
+}
+
 interface MapViewProps {
   startPoint: [number, number] | null;
   endPoint: [number, number] | null;
   encodedPolyline?: string | null;
+  seaGeometry?: SeaGeometry | null;
   startLabel?: string;
   endLabel?: string;
   travelMode?: "road" | "air" | "sea";
@@ -79,6 +85,7 @@ const MapView = ({
   startPoint,
   endPoint,
   encodedPolyline,
+  seaGeometry,
   travelMode,
 }: MapViewProps) => {
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -86,10 +93,11 @@ const MapView = ({
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const roadPath = useMemo(() => {
-    if (!isLoaded || !encodedPolyline || !window.google?.maps?.geometry) return [];
+    if (!isLoaded || !encodedPolyline || !window.google?.maps?.geometry) {
+      return [];
+    }
 
-    const decoded =
-      google.maps.geometry.encoding.decodePath(encodedPolyline);
+    const decoded = google.maps.geometry.encoding.decodePath(encodedPolyline);
 
     return decoded.map((p) => ({
       lat: p.lat(),
@@ -97,13 +105,34 @@ const MapView = ({
     }));
   }, [isLoaded, encodedPolyline]);
 
-  const seaArcPath = useMemo(() => {
+  const apiSeaPath = useMemo(() => {
+    if (travelMode !== "sea" || !seaGeometry?.coordinates?.length) return [];
+
+    return seaGeometry.coordinates
+      .filter(
+        (coord): coord is [number, number] =>
+          Array.isArray(coord) &&
+          coord.length >= 2 &&
+          typeof coord[0] === "number" &&
+          typeof coord[1] === "number",
+      )
+      .map(([lng, lat]) => ({
+        lat,
+        lng,
+      }));
+  }, [travelMode, seaGeometry]);
+
+  const fallbackSeaArcPath = useMemo(() => {
     if (travelMode !== "sea" || !startPoint || !endPoint) return [];
+
     return greatCircleArc(startPoint, endPoint).map(([lat, lng]) => ({
       lat,
       lng,
     }));
   }, [travelMode, startPoint, endPoint]);
+
+  const seaPath =
+    apiSeaPath.length > 0 ? apiSeaPath : fallbackSeaArcPath;
 
   const straightLinePath = useMemo(() => {
     if (!startPoint || !endPoint) return [];
@@ -120,9 +149,16 @@ const MapView = ({
     const map = mapRef.current;
     if (!map) return;
 
-    if (roadPath.length > 1) {
+    if (travelMode === "road" && roadPath.length > 1) {
       const bounds = new google.maps.LatLngBounds();
       roadPath.forEach((p) => bounds.extend(p));
+      map.fitBounds(bounds, 60);
+      return;
+    }
+
+    if (travelMode === "sea" && seaPath.length > 1) {
+      const bounds = new google.maps.LatLngBounds();
+      seaPath.forEach((p) => bounds.extend(p));
       map.fitBounds(bounds, 60);
       return;
     }
@@ -149,7 +185,7 @@ const MapView = ({
 
     map.panTo(DEFAULT_CENTER);
     map.setZoom(DEFAULT_ZOOM);
-  }, [startPoint, endPoint, roadPath]);
+  }, [startPoint, endPoint, roadPath, seaPath, travelMode]);
 
   if (loadError) {
     return (
@@ -218,9 +254,9 @@ const MapView = ({
           />
         )}
 
-        {seaArcPath.length > 0 && (
+        {seaPath.length > 0 && travelMode === "sea" && (
           <Polyline
-            path={seaArcPath}
+            path={seaPath}
             options={{
               strokeColor: "#0ea5e9",
               strokeWeight: 3,
