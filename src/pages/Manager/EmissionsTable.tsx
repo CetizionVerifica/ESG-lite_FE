@@ -1,9 +1,14 @@
 import { useState } from "react";
 import { EmissionData, EmissionStatus } from "../../services/emissionService";
-import { getDocumentsByEmission, EmissionDocument } from "../../services/documentService";
+import {
+  getDocumentsByEmission,
+  EmissionDocument,
+} from "../../services/documentService";
 import DocumentViewerModal from "../../components/DocumentViewerModal";
 import Modal from "../../components/Modal";
-import AuditTrailTimeline, { AuditTrailModal } from "../../components/AuditTrailTimeline";
+import AuditTrailTimeline, {
+  AuditTrailModal,
+} from "../../components/AuditTrailTimeline";
 
 interface EmissionsTableProps {
   emissions: EmissionData[];
@@ -13,11 +18,14 @@ interface EmissionsTableProps {
   onBulkApprove?: (ids: number[]) => Promise<void>;
   onBulkReject?: (ids: number[], comment: string) => Promise<void>;
   onBulkDelete?: (ids: number[]) => Promise<void>;
-  onManagerEdit?: (id: number, data: { activity_data?: Record<string, any>; date_of_reporting?: string }) => Promise<void>;
+  onManagerEdit?: (
+    id: number,
+    data: { activity_data?: Record<string, any>; date_of_reporting?: string },
+  ) => Promise<void>;
   isDark?: boolean;
   formatActivityData?: (
     activityData: Record<string, unknown>,
-    categoryId: number
+    categoryId: number,
   ) => { key: string; displayValue: string }[];
 }
 
@@ -30,23 +38,33 @@ function formatDate(dateString: string): string {
   });
 }
 
-const StatusBadge = ({ status, isDark = false }: { status: EmissionStatus; isDark?: boolean }) => {
-  const statusStyles: Record<EmissionStatus, { light: string; dark: string }> = {
-    pending: {
-      light: "bg-yellow-100 text-yellow-800",
-      dark: "bg-yellow-900/30 text-yellow-400",
-    },
-    approved: {
-      light: "bg-green-100 text-green-800",
-      dark: "bg-green-900/30 text-green-400",
-    },
-    rejected: {
-      light: "bg-red-100 text-red-800",
-      dark: "bg-red-900/30 text-red-400",
-    },
-  };
+const StatusBadge = ({
+  status,
+  isDark = false,
+}: {
+  status: EmissionStatus;
+  isDark?: boolean;
+}) => {
+  const statusStyles: Record<EmissionStatus, { light: string; dark: string }> =
+    {
+      pending: {
+        light: "bg-yellow-100 text-yellow-800",
+        dark: "bg-yellow-900/30 text-yellow-400",
+      },
+      approved: {
+        light: "bg-green-100 text-green-800",
+        dark: "bg-green-900/30 text-green-400",
+      },
+      rejected: {
+        light: "bg-red-100 text-red-800",
+        dark: "bg-red-900/30 text-red-400",
+      },
+    };
 
-  const style = statusStyles[status] || { light: "bg-gray-100 text-gray-800", dark: "bg-slate-700 text-slate-300" };
+  const style = statusStyles[status] || {
+    light: "bg-gray-100 text-gray-800",
+    dark: "bg-slate-700 text-slate-300",
+  };
 
   return (
     <span
@@ -57,10 +75,25 @@ const StatusBadge = ({ status, isDark = false }: { status: EmissionStatus; isDar
   );
 };
 
-const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove, onBulkReject, onBulkDelete, onManagerEdit, isDark = false, formatActivityData }: EmissionsTableProps) => {
+const EmissionsTable = ({
+  emissions,
+  loading,
+  onApprove,
+  onReject,
+  onBulkApprove,
+  onBulkReject,
+  onBulkDelete,
+  onManagerEdit,
+  isDark = false,
+  formatActivityData,
+}: EmissionsTableProps) => {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
-  const [selectedPendingIds, setSelectedPendingIds] = useState<Set<number>>(new Set());
-  const [selectedApprovedIds, setSelectedApprovedIds] = useState<Set<number>>(new Set());
+  const [selectedPendingIds, setSelectedPendingIds] = useState<Set<number>>(
+    new Set(),
+  );
+  const [selectedApprovedIds, setSelectedApprovedIds] = useState<Set<number>>(
+    new Set(),
+  );
   const [bulkLoading, setBulkLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -73,7 +106,9 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
 
   // Edit modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingEmission, setEditingEmission] = useState<EmissionData | null>(null);
+  const [editingEmission, setEditingEmission] = useState<EmissionData | null>(
+    null,
+  );
   const [editForm, setEditForm] = useState<{
     activity_data: Record<string, any>;
     date_of_reporting: string;
@@ -89,13 +124,18 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
 
   // Document viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerDocuments, setViewerDocuments] = useState<EmissionDocument[]>([]);
-  const [selectedDocument, setSelectedDocument] = useState<EmissionDocument | null>(null);
+  const [viewerDocuments, setViewerDocuments] = useState<EmissionDocument[]>(
+    [],
+  );
+  const [selectedDocument, setSelectedDocument] =
+    useState<EmissionDocument | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
 
   // Notification state (replaces alert())
-  const [notification, setNotification] = useState<{ message: string; type: "info" | "error" } | null>(null);
-
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: "info" | "error";
+  } | null>(null);
 
   // Get pending and approved emissions
   const pendingEmissions = emissions.filter((e) => e.status === "pending");
@@ -104,12 +144,20 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
   const approvedIds = approvedEmissions.map((e) => e.pk_id);
 
   // Check selection states for pending
-  const allPendingSelected = pendingIds.length > 0 && pendingIds.every((id) => selectedPendingIds.has(id));
-  const somePendingSelected = pendingIds.some((id) => selectedPendingIds.has(id));
+  const allPendingSelected =
+    pendingIds.length > 0 &&
+    pendingIds.every((id) => selectedPendingIds.has(id));
+  const somePendingSelected = pendingIds.some((id) =>
+    selectedPendingIds.has(id),
+  );
 
   // Check selection states for approved
-  const allApprovedSelected = approvedIds.length > 0 && approvedIds.every((id) => selectedApprovedIds.has(id));
-  const someApprovedSelected = approvedIds.some((id) => selectedApprovedIds.has(id));
+  const allApprovedSelected =
+    approvedIds.length > 0 &&
+    approvedIds.every((id) => selectedApprovedIds.has(id));
+  const someApprovedSelected = approvedIds.some((id) =>
+    selectedApprovedIds.has(id),
+  );
 
   // Toggle single pending row selection
   const togglePendingRowSelection = (id: number) => {
@@ -218,7 +266,10 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
       if (!onBulkReject || selectedPendingIds.size === 0) return;
       setBulkRejectLoading(true);
       try {
-        await onBulkReject(Array.from(selectedPendingIds), rejectComment.trim());
+        await onBulkReject(
+          Array.from(selectedPendingIds),
+          rejectComment.trim(),
+        );
         setSelectedPendingIds(new Set());
       } finally {
         setBulkRejectLoading(false);
@@ -281,7 +332,10 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
         setSelectedDocument(docs[0]);
         setViewerOpen(true);
       } else {
-        setNotification({ message: "No documents found for this emission.", type: "info" });
+        setNotification({
+          message: "No documents found for this emission.",
+          type: "info",
+        });
         setTimeout(() => setNotification(null), 4000);
       }
     } catch (error) {
@@ -304,7 +358,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
   };
 
   const resolveActivityData = (
-    emission: EmissionData
+    emission: EmissionData,
   ): { key: string; displayValue: string }[] => {
     const activityData = emission.activity_data || {};
     const categoryId = emission.category?.category_id || 0;
@@ -320,10 +374,13 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     }));
   };
 
-
   // Theme classes
-  const loadingClass = isDark ? "text-center py-8 text-slate-300" : "text-center py-8 text-gray-700";
-  const emptyClass = isDark ? "text-center py-8 text-slate-400" : "text-center py-8 text-gray-500";
+  const loadingClass = isDark
+    ? "text-center py-8 text-slate-300"
+    : "text-center py-8 text-gray-700";
+  const emptyClass = isDark
+    ? "text-center py-8 text-slate-400"
+    : "text-center py-8 text-gray-500";
 
   const bulkApproveBgClass = isDark
     ? "mb-4 p-3 bg-green-900/20 border border-green-700/30 rounded-lg flex items-center justify-between"
@@ -345,7 +402,10 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
     ? "border border-slate-600 px-4 py-3 text-slate-300"
     : "border border-gray-300 px-4 py-3 text-gray-900";
 
-  const getRowClass = (isPendingSelected: boolean, isApprovedSelected: boolean) => {
+  const getRowClass = (
+    isPendingSelected: boolean,
+    isApprovedSelected: boolean,
+  ) => {
     if (isPendingSelected) {
       return isDark ? "bg-green-900/20" : "bg-green-50";
     }
@@ -400,7 +460,6 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
   const showBulkDelete = onBulkDelete && approvedEmissions.length > 0;
   const showCheckboxColumn = showBulkApprove || showBulkDelete;
 
-
   return (
     <div>
       {/* Bulk Actions Bar for Pending (Approve + Reject) */}
@@ -412,18 +471,32 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                 type="checkbox"
                 checked={allPendingSelected}
                 ref={(el) => {
-                  if (el) el.indeterminate = somePendingSelected && !allPendingSelected;
+                  if (el)
+                    el.indeterminate =
+                      somePendingSelected && !allPendingSelected;
                 }}
                 onChange={toggleSelectAllPending}
                 className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
               />
-              <span className={`text-sm font-medium ${isDark ? "text-green-400" : "text-green-700"}`}>Select All Pending</span>
+              <span
+                className={`text-sm font-medium ${isDark ? "text-green-400" : "text-green-700"}`}
+              >
+                Select All Pending
+              </span>
             </label>
-            <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+            <span
+              className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}
+            >
               {selectedPendingIds.size > 0 ? (
-                <>{selectedPendingIds.size} of {pendingEmissions.length} pending row{selectedPendingIds.size !== 1 ? "s" : ""} selected</>
+                <>
+                  {selectedPendingIds.size} of {pendingEmissions.length} pending
+                  row{selectedPendingIds.size !== 1 ? "s" : ""} selected
+                </>
               ) : (
-                <>{pendingEmissions.length} pending emission{pendingEmissions.length !== 1 ? "s" : ""}</>
+                <>
+                  {pendingEmissions.length} pending emission
+                  {pendingEmissions.length !== 1 ? "s" : ""}
+                </>
               )}
             </span>
           </div>
@@ -441,7 +514,9 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                   disabled={bulkLoading}
                   className="px-4 py-1.5 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 disabled:bg-gray-400"
                 >
-                  {bulkLoading ? "Approving..." : `Approve Selected (${selectedPendingIds.size})`}
+                  {bulkLoading
+                    ? "Approving..."
+                    : `Approve Selected (${selectedPendingIds.size})`}
                 </button>
                 {onBulkReject && (
                   <button
@@ -449,7 +524,9 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                     disabled={bulkRejectLoading}
                     className="px-4 py-1.5 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700 disabled:bg-gray-400"
                   >
-                    {bulkRejectLoading ? "Rejecting..." : `Reject Selected (${selectedPendingIds.size})`}
+                    {bulkRejectLoading
+                      ? "Rejecting..."
+                      : `Reject Selected (${selectedPendingIds.size})`}
                   </button>
                 )}
               </>
@@ -467,18 +544,33 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                 type="checkbox"
                 checked={allApprovedSelected}
                 ref={(el) => {
-                  if (el) el.indeterminate = someApprovedSelected && !allApprovedSelected;
+                  if (el)
+                    el.indeterminate =
+                      someApprovedSelected && !allApprovedSelected;
                 }}
                 onChange={toggleSelectAllApproved}
                 className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
               />
-              <span className={`text-sm font-medium ${isDark ? "text-red-400" : "text-red-700"}`}>Select All Approved</span>
+              <span
+                className={`text-sm font-medium ${isDark ? "text-red-400" : "text-red-700"}`}
+              >
+                Select All Approved
+              </span>
             </label>
-            <span className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+            <span
+              className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}
+            >
               {selectedApprovedIds.size > 0 ? (
-                <>{selectedApprovedIds.size} of {approvedEmissions.length} approved row{selectedApprovedIds.size !== 1 ? "s" : ""} selected</>
+                <>
+                  {selectedApprovedIds.size} of {approvedEmissions.length}{" "}
+                  approved row{selectedApprovedIds.size !== 1 ? "s" : ""}{" "}
+                  selected
+                </>
               ) : (
-                <>{approvedEmissions.length} approved emission{approvedEmissions.length !== 1 ? "s" : ""}</>
+                <>
+                  {approvedEmissions.length} approved emission
+                  {approvedEmissions.length !== 1 ? "s" : ""}
+                </>
               )}
             </span>
           </div>
@@ -496,7 +588,9 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
                   disabled={deleteLoading}
                   className="px-4 py-1.5 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700 disabled:bg-gray-400"
                 >
-                  {deleteLoading ? "Deleting..." : `Delete Selected (${selectedApprovedIds.size})`}
+                  {deleteLoading
+                    ? "Deleting..."
+                    : `Delete Selected (${selectedApprovedIds.size})`}
                 </button>
               </>
             )}
@@ -511,7 +605,11 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
               {/* Checkbox column for bulk selection */}
               {showCheckboxColumn && (
                 <th className={`${thClass} text-center w-12`}>
-                  <span className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}>Select</span>
+                  <span
+                    className={`text-xs ${isDark ? "text-slate-400" : "text-gray-500"}`}
+                  >
+                    Select
+                  </span>
                 </th>
               )}
               <th className={thClass}>Category</th>
@@ -523,162 +621,177 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
               <th className={thClass}>Submitted By</th>
               <th className={thClass}>Submitted At</th>
               <th className={thClass}>Documents</th>
-            {showActions && (
-              <th className={thClass}>Actions</th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {emissions.map((emission) => {
-            const isLoading = actionLoadingId === emission.pk_id;
-            const isPending = emission.status === "pending";
-            const isApproved = emission.status === "approved";
+              {showActions && <th className={thClass}>Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {emissions.map((emission) => {
+              const isLoading = actionLoadingId === emission.pk_id;
+              const isPending = emission.status === "pending";
+              const isApproved = emission.status === "approved";
 
-            const isPendingSelected = selectedPendingIds.has(emission.pk_id);
-            const isApprovedSelected = selectedApprovedIds.has(emission.pk_id);
-            const activityRows = resolveActivityData(emission);
+              const isPendingSelected = selectedPendingIds.has(emission.pk_id);
+              const isApprovedSelected = selectedApprovedIds.has(
+                emission.pk_id,
+              );
+              const activityRows = resolveActivityData(emission);
 
-
-            return (
-              <tr key={emission.pk_id} className={getRowClass(isPendingSelected, isApprovedSelected)}>
-                {/* Checkbox for selection */}
-                {showCheckboxColumn && (
-                  <td className={`${tdClass} text-center`}>
-                    {isPending && showBulkApprove ? (
-                      <input
-                        type="checkbox"
-                        checked={isPendingSelected}
-                        onChange={() => togglePendingRowSelection(emission.pk_id)}
-                        className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                        title="Select for approval"
-                      />
-                    ) : isApproved && showBulkDelete ? (
-                      <input
-                        type="checkbox"
-                        checked={isApprovedSelected}
-                        onChange={() => toggleApprovedRowSelection(emission.pk_id)}
-                        className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                        title="Select for deletion"
-                      />
-                    ) : (
-                      <span className={isDark ? "text-slate-600" : "text-gray-300"}>-</span>
-                    )}
+              return (
+                <tr
+                  key={emission.pk_id}
+                  className={getRowClass(isPendingSelected, isApprovedSelected)}
+                >
+                  {/* Checkbox for selection */}
+                  {showCheckboxColumn && (
+                    <td className={`${tdClass} text-center`}>
+                      {isPending && showBulkApprove ? (
+                        <input
+                          type="checkbox"
+                          checked={isPendingSelected}
+                          onChange={() =>
+                            togglePendingRowSelection(emission.pk_id)
+                          }
+                          className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                          title="Select for approval"
+                        />
+                      ) : isApproved && showBulkDelete ? (
+                        <input
+                          type="checkbox"
+                          checked={isApprovedSelected}
+                          onChange={() =>
+                            toggleApprovedRowSelection(emission.pk_id)
+                          }
+                          className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                          title="Select for deletion"
+                        />
+                      ) : (
+                        <span
+                          className={
+                            isDark ? "text-slate-600" : "text-gray-300"
+                          }
+                        >
+                          -
+                        </span>
+                      )}
+                    </td>
+                  )}
+                  <td className={tdClass}>
+                    {emission.category?.category_name || "-"}
                   </td>
-                )}
-                <td className={tdClass}>
-                  {emission.category?.category_name || "-"}
-                </td>
-                <td className={tdClass}>
+                  <td className={tdClass}>
                     <div className="max-w-xs">
                       {activityRows.map(({ key, displayValue }) => (
                         <div key={key} className="text-sm">
-                          <span className="font-medium">{key}:</span> {displayValue}
+                          <span className="font-medium">{key}:</span>{" "}
+                          {displayValue}
                         </div>
                       ))}
                     </div>
                   </td>
-                <td className={tdClass}>
-                  {emission.activity_data_unit || "-"}
-                </td>
-                <td className={tdClass}>
-                  {Number(emission.total_emission).toFixed(2)}
-                </td>
-                <td className={tdClass}>
-                  {formatDate(emission.date_of_reporting)}
-                </td>
-                <td className={tdClass}>
-                  <StatusBadge status={emission.status} isDark={isDark} />
-                  {emission.status === "rejected" && emission.review_comment && (
-                    <div className={rejectReasonClass}>
-                      {emission.review_comment}
-                    </div>
-                  )}
-                  {emission.status !== "pending" && emission.reviewed_by && (
-                    <div className={reviewTextClass}>
-                      by {emission.reviewed_by.name}
-                    </div>
-                  )}
-                </td>
-                <td className={tdClass}>
-                  {emission.created_by?.name || "-"}
-                </td>
-                <td className={tdClass}>
-                  {formatDate(emission.created_at)}
-                </td>
-                <td className={tdClass}>
-                  <button
-                    onClick={() => handleViewDocuments(emission.pk_id)}
-                    disabled={loadingDocs}
-                    className={viewDocsClass}
-                  >
-                    View Docs
-                  </button>
-                </td>
-                {showActions && (
                   <td className={tdClass}>
-                    <div className="flex gap-1">
-                      {isPending && (
-                        <>
-                          {onApprove && (
-                            <button
-                              onClick={() => handleApprove(emission.pk_id)}
-                              disabled={isLoading}
-                              className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-400"
-                            >
-                              {isLoading ? "..." : "Approve"}
-                            </button>
-                          )}
-                          {onReject && (
-                            <button
-                              onClick={() => handleRejectClick(emission.pk_id)}
-                              disabled={isLoading}
-                              className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 disabled:bg-gray-400"
-                            >
-                              Reject
-                            </button>
-                          )}
-                        </>
-                      )}
-                      {onManagerEdit && (
-                        <button
-                          onClick={() => handleEditClick(emission)}
-                          className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                        >
-                          Edit
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          setAuditEntityId(emission.pk_id);
-                          setAuditModalOpen(true);
-                        }}
-                        className={`px-2 py-1 text-xs rounded ${isDark ? "bg-slate-600 text-slate-300 hover:bg-slate-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
-                        title="View edit history"
-                      >
-                        History
-                      </button>
-                    </div>
+                    {emission.activity_data_unit || "-"}
                   </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
+                  <td className={tdClass}>
+                    {Number(emission.total_emission).toFixed(2)}
+                  </td>
+                  <td className={tdClass}>
+                    {formatDate(emission.date_of_reporting)}
+                  </td>
+                  <td className={tdClass}>
+                    <StatusBadge status={emission.status} isDark={isDark} />
+                    {emission.status === "rejected" &&
+                      emission.review_comment && (
+                        <div className={rejectReasonClass}>
+                          {emission.review_comment}
+                        </div>
+                      )}
+                    {emission.status !== "pending" && emission.reviewed_by && (
+                      <div className={reviewTextClass}>
+                        by {emission.reviewed_by.name}
+                      </div>
+                    )}
+                  </td>
+                  <td className={tdClass}>
+                    {emission.created_by?.name || "-"}
+                  </td>
+                  <td className={tdClass}>{formatDate(emission.created_at)}</td>
+                  <td className={tdClass}>
+                    <button
+                      onClick={() => handleViewDocuments(emission.pk_id)}
+                      disabled={loadingDocs}
+                      className={viewDocsClass}
+                    >
+                      View Docs
+                    </button>
+                  </td>
+                  {showActions && (
+                    <td className={tdClass}>
+                      <div className="flex gap-1">
+                        {isPending && (
+                          <>
+                            {onApprove && (
+                              <button
+                                onClick={() => handleApprove(emission.pk_id)}
+                                disabled={isLoading}
+                                className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-400"
+                              >
+                                {isLoading ? "..." : "Approve"}
+                              </button>
+                            )}
+                            {onReject && (
+                              <button
+                                onClick={() =>
+                                  handleRejectClick(emission.pk_id)
+                                }
+                                disabled={isLoading}
+                                className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 disabled:bg-gray-400"
+                              >
+                                Reject
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {onManagerEdit && (
+                          <button
+                            onClick={() => handleEditClick(emission)}
+                            className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            setAuditEntityId(emission.pk_id);
+                            setAuditModalOpen(true);
+                          }}
+                          className={`px-2 py-1 text-xs rounded ${isDark ? "bg-slate-600 text-slate-300 hover:bg-slate-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                          title="View edit history"
+                        >
+                          History
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
         </table>
       </div>
-
 
       {/* Reject Modal */}
       <Modal
         isOpen={rejectModalOpen}
         onClose={handleRejectCancel}
-        title={bulkRejectMode ? `Reject ${selectedPendingIds.size} Emission${selectedPendingIds.size !== 1 ? "s" : ""}` : "Reject Emission"}
+        title={
+          bulkRejectMode
+            ? `Reject ${selectedPendingIds.size} Emission${selectedPendingIds.size !== 1 ? "s" : ""}`
+            : "Reject Emission"
+        }
         isDark={isDark}
       >
         <div className="mb-4">
-          <label className={labelClass}>
-            Rejection Reason (Required)
-          </label>
+          <label className={labelClass}>Rejection Reason (Required)</label>
           <textarea
             value={rejectComment}
             onChange={(e) => setRejectComment(e.target.value)}
@@ -688,10 +801,7 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
           />
         </div>
         <div className="flex justify-end gap-2">
-          <button
-            onClick={handleRejectCancel}
-            className={cancelBtnClass}
-          >
+          <button onClick={handleRejectCancel} className={cancelBtnClass}>
             Cancel
           </button>
           <button
@@ -726,10 +836,15 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
               <input
                 type="text"
                 value={String(value)}
-                onChange={(e) => setEditForm({
-                  ...editForm,
-                  activity_data: { ...editForm.activity_data, [key]: e.target.value }
-                })}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    activity_data: {
+                      ...editForm.activity_data,
+                      [key]: e.target.value,
+                    },
+                  })
+                }
                 className={modalInputClass}
               />
             </div>
@@ -739,7 +854,9 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
             <input
               type="date"
               value={editForm.date_of_reporting}
-              onChange={(e) => setEditForm({ ...editForm, date_of_reporting: e.target.value })}
+              onChange={(e) =>
+                setEditForm({ ...editForm, date_of_reporting: e.target.value })
+              }
               className={modalInputClass}
             />
           </div>
@@ -781,7 +898,10 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
       >
         <div>
           <p className={isDark ? "text-slate-300 mb-4" : "text-gray-700 mb-4"}>
-            Are you sure you want to delete <strong>{selectedApprovedIds.size}</strong> approved emission{selectedApprovedIds.size !== 1 ? "s" : ""}? This action cannot be undone.
+            Are you sure you want to delete{" "}
+            <strong>{selectedApprovedIds.size}</strong> approved emission
+            {selectedApprovedIds.size !== 1 ? "s" : ""}? This action cannot be
+            undone.
           </p>
           <div className="flex justify-end gap-2">
             <button
@@ -825,11 +945,17 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
 
       {/* Notification Toast */}
       {notification && (
-        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium transition-opacity ${
-          notification.type === "error"
-            ? (isDark ? "bg-red-900/90 text-red-200 border border-red-700" : "bg-red-100 text-red-800 border border-red-300")
-            : (isDark ? "bg-slate-700 text-slate-200 border border-slate-600" : "bg-gray-100 text-gray-800 border border-gray-300")
-        }`}>
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium transition-opacity ${
+            notification.type === "error"
+              ? isDark
+                ? "bg-red-900/90 text-red-200 border border-red-700"
+                : "bg-red-100 text-red-800 border border-red-300"
+              : isDark
+                ? "bg-slate-700 text-slate-200 border border-slate-600"
+                : "bg-gray-100 text-gray-800 border border-gray-300"
+          }`}
+        >
           {notification.message}
           <button
             onClick={() => setNotification(null)}
@@ -841,6 +967,6 @@ const EmissionsTable = ({ emissions, loading, onApprove, onReject, onBulkApprove
       )}
     </div>
   );
-}
+};
 
 export default EmissionsTable;

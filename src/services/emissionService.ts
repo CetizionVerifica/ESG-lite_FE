@@ -71,6 +71,7 @@ export const getEmissionsBySite = async (siteId: string | number) => {
 export const getEmissionsPaginated = async (params: {
   siteId: number;
   categoryId?: number | null;
+  scope?: string | null;
   year?: number | null;
   month?: number | null;
   status?: string | null;
@@ -83,6 +84,7 @@ export const getEmissionsPaginated = async (params: {
     limit: params.limit,
   };
   if (params.categoryId != null) query.categoryId = params.categoryId;
+  if (params.scope) query.scope = params.scope;
   if (params.year != null) query.year = params.year;
   if (params.month != null) query.month = params.month;
   if (params.status) query.status = params.status;

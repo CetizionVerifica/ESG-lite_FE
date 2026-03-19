@@ -13,6 +13,7 @@ import {
   deleteProductionData,
   ProductionData,
 } from "../services/productionDataService";
+import ProductionDataBulkUpload from "./ProductionDataBulkUpload";
 
 interface Site {
   site_id: number;
@@ -41,6 +42,10 @@ const ProductionDataPage = () => {
   const currentSite = availableSites.find((s) => s.site_id === selectedSite);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [filterProduct, setFilterProduct] = useState<number | null>(null);
+  const [filterStartDate, setFilterStartDate] = useState<string>("");
+  const [filterEndDate, setFilterEndDate] = useState<string>("");
   const [auditModalOpen, setAuditModalOpen] = useState(false);
   const [auditEntityId, setAuditEntityId] = useState<number | null>(null);
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
@@ -103,8 +108,13 @@ const ProductionDataPage = () => {
 
     try {
       setLoading(true);
+      const params: { startDate?: string; endDate?: string; productId?: number } = {};
+      if (filterProduct) params.productId = filterProduct;
+      if (filterStartDate) params.startDate = filterStartDate;
+      if (filterEndDate) params.endDate = filterEndDate;
+
       const [dataResult, productsResult] = await Promise.all([
-        getProductionDataBySite(siteId),
+        getProductionDataBySite(siteId, Object.keys(params).length > 0 ? params : undefined),
         getProductsBySite(siteId),
       ]);
       setProductionData(dataResult);
@@ -114,7 +124,7 @@ const ProductionDataPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [siteId]);
+  }, [siteId, filterProduct, filterStartDate, filterEndDate]);
 
   const handleEdit = async (row: ProductionData, updates: Partial<ProductionData>) => {
     try {
@@ -278,18 +288,34 @@ const ProductionDataPage = () => {
         <h1 className="text-2xl font-bold">
           Production Data Entry {currentSite ? `- ${currentSite.name}` : ""}
         </h1>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          disabled={products.length === 0}
-        >
-          Add Production Data
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setBulkUploadOpen(true)}
+            disabled={products.length === 0}
+            className={`px-4 py-2 rounded flex items-center gap-2 ${isDark
+              ? "bg-slate-700 border border-slate-600 text-slate-200 hover:bg-slate-600"
+              : "bg-white border border-blue-600 text-blue-600 hover:bg-blue-50"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Upload Excel
+          </button>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            disabled={products.length === 0}
+          >
+            Add Production Data
+          </button>
+        </div>
       </div>
 
       {/* Site Selector - only show when user has multiple sites */}
       {hasMultipleSites && (
-        <div className="mb-6">
+        <div className="mb-4">
           <label className={labelClass}>Select Site</label>
           <div className="w-64">
             <Dropdown
@@ -302,6 +328,39 @@ const ProductionDataPage = () => {
           </div>
         </div>
       )}
+
+      {/* Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div>
+          <label className={labelClass}>Product</label>
+          <Dropdown
+            options={productOptions}
+            placeholder="All Products"
+            value={filterProduct}
+            onChange={(option) => setFilterProduct(option ? (option.id as number) : null)}
+            searchable={true}
+            clearable={true}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>Start Date</label>
+          <input
+            type="date"
+            value={filterStartDate}
+            onChange={(e) => setFilterStartDate(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>End Date</label>
+          <input
+            type="date"
+            value={filterEndDate}
+            onChange={(e) => setFilterEndDate(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      </div>
 
       {products.length === 0 && !loading && (
         <div className={warningClass}>
@@ -434,6 +493,16 @@ const ProductionDataPage = () => {
           isDark={isDark}
         />
       )}
+
+      {/* Bulk Upload Modal */}
+      <ProductionDataBulkUpload
+        isOpen={bulkUploadOpen}
+        onClose={() => setBulkUploadOpen(false)}
+        products={products}
+        siteId={siteId}
+        isDark={isDark}
+        onImportComplete={() => handleLoadData()}
+      />
     </div>
   );
 };
