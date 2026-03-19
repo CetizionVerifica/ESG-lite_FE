@@ -107,6 +107,8 @@ const UserDataEntryPage = () => {
         null,
     );
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
+    const [selectedScope, setSelectedScope] = useState<string | null>(null);
+    const [selectedYear, setSelectedYear] = useState<number | null>(null);
     const [dynamicColumns, setDynamicColumns] = useState<ColumnEntity[]>([]);
     const [emissions, setEmissions] = useState<EmissionRow[]>([]);
     const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>([]);
@@ -279,7 +281,44 @@ const UserDataEntryPage = () => {
             label: category.category_name,
         }));
 
+    // Scope filter options — derived from unique scopes of non-FERA categories
+    const scopeOptions: DropdownOption[] = useMemo(() => {
+        const scopes = new Set(
+            categories
+                .filter((c) => c.category_id !== feraCategoryId)
+                .map((c) => c.scope)
+                .filter(Boolean),
+        );
+        return Array.from(scopes)
+            .sort()
+            .map((s) => ({ id: s, label: s }));
+    }, [categories, feraCategoryId]);
+
+    // Filter category options by selected scope
+    const filteredCategoryOptions: DropdownOption[] = useMemo(() => {
+        if (!selectedScope) return categoryOptions;
+        return categories
+            .filter((c) => c.category_id !== feraCategoryId && c.scope === selectedScope)
+            .map((c) => ({ id: c.category_id, label: c.category_name }));
+    }, [categories, feraCategoryId, selectedScope, categoryOptions]);
+
+    // Year filter options (2030 down to 2018)
+    const yearOptions: DropdownOption[] = useMemo(() => {
+        return Array.from({ length: 13 }, (_, i) => ({
+            id: 2030 - i,
+            label: String(2030 - i),
+        }));
+    }, []);
+
     const dateOptions = generateDateOptions();
+
+    // Filter date options by selected year
+    const filteredDateOptions: DropdownOption[] = useMemo(() => {
+        if (!selectedYear) return dateOptions;
+        return dateOptions.filter(
+            (opt) => parseInt(String(opt.id).substring(0, 4)) === selectedYear,
+        );
+    }, [dateOptions, selectedYear]);
 
     // Set initial site when availableSites becomes available
     useEffect(() => {
@@ -288,10 +327,42 @@ const UserDataEntryPage = () => {
         }
     }, [availableSites, selectedSite]);
 
-    // Reset category when site changes
+    // Reset filters when site changes
     useEffect(() => {
         setSelectedCategory(null);
+        setSelectedScope(null);
+        setSelectedYear(null);
     }, [selectedSite]);
+
+    // When scope changes, clear category if it doesn't belong to the new scope
+    useEffect(() => {
+        if (selectedScope && selectedCategory) {
+            const cat = categories.find((c) => c.category_id === selectedCategory);
+            if (cat && cat.scope !== selectedScope) {
+                setSelectedCategory(null);
+            }
+        }
+    }, [selectedScope]);
+
+    // When category is selected, auto-set scope to match
+    useEffect(() => {
+        if (selectedCategory) {
+            const cat = categories.find((c) => c.category_id === selectedCategory);
+            if (cat && cat.scope && cat.scope !== selectedScope) {
+                setSelectedScope(cat.scope);
+            }
+        }
+    }, [selectedCategory, categories]);
+
+    // When year changes, clear date if it doesn't match
+    useEffect(() => {
+        if (selectedYear && selectedDate) {
+            const dateYear = parseInt(selectedDate.substring(0, 4));
+            if (dateYear !== selectedYear) {
+                setSelectedDate(null);
+            }
+        }
+    }, [selectedYear]);
 
     const filteredColumns = dynamicColumns.filter(
         (col) => col.column_name.toLowerCase() !== "emission_category",
@@ -301,7 +372,7 @@ const UserDataEntryPage = () => {
     // Data Fetching
     // ---------------------------------------------------------------------------
     const fetchData = useCallback(async (page?: number) => {
-        if (!selectedCategory || !selectedDate || !siteId) {
+        if (!siteId) {
             setDynamicColumns([]);
             setExtraFields([]);
             setEmissions([]);
@@ -315,99 +386,130 @@ const UserDataEntryPage = () => {
         }
 
         const pageToFetch = page ?? currentPage;
+        const hasFullFilters = selectedCategory && selectedDate;
 
         try {
             setLoading(true);
 
-            // Calculate target year for emission factors (reporting year - 1)
-            const factorYear = parseInt(selectedDate.substring(0, 4)) - 1;
-            const dateYear = parseInt(selectedDate.substring(0, 4));
-            const dateMonth = parseInt(selectedDate.substring(5, 7));
+            // Parse year/month from selectedDate if available, else use selectedYear
+            const dateYear = selectedDate
+                ? parseInt(selectedDate.substring(0, 4))
+                : selectedYear ?? null;
+            const dateMonth = selectedDate
+                ? parseInt(selectedDate.substring(5, 7))
+                : null;
+            const factorYear = dateYear ? dateYear - 1 : undefined;
 
-            const [configs, paginatedResult, factors, unitsData] =
-                await Promise.all([
-                    getUserColumnConfigsBySiteAndCategory(
-                        siteId,
-                        selectedCategory,
-                    ),
-                    getEmissionsPaginated({
-                        siteId,
-                        categoryId: selectedCategory,
-                        year: dateYear,
-                        month: dateMonth,
-                        page: pageToFetch,
-                        limit: PAGE_LIMIT,
-                    }),
-                    getUserEmissionFactorsBySiteAndCategory(
-                        siteId,
-                        selectedCategory,
-                        factorYear,
-                    ),
-                    getUserUnitsBySiteAndCategory(siteId, selectedCategory),
-                ]);
+            // When category + date are both selected, fetch full config (columns, factors, units)
+            // Otherwise, only fetch the emissions list with available filters
+            if (hasFullFilters) {
+                const [configs, paginatedResult, factors, unitsData] =
+                    await Promise.all([
+                        getUserColumnConfigsBySiteAndCategory(
+                            siteId,
+                            selectedCategory,
+                        ),
+                        getEmissionsPaginated({
+                            siteId,
+                            categoryId: selectedCategory,
+                            scope: selectedScope,
+                            year: dateYear,
+                            month: dateMonth,
+                            page: pageToFetch,
+                            limit: PAGE_LIMIT,
+                        }),
+                        getUserEmissionFactorsBySiteAndCategory(
+                            siteId,
+                            selectedCategory,
+                            factorYear!,
+                        ),
+                        getUserUnitsBySiteAndCategory(siteId, selectedCategory),
+                    ]);
 
-            const config = configs[0] as ColumnConfig | undefined;
-            setDynamicColumns(config?.columns || []);
-            setColumnOptions(config?.column_options || {});
-            setColumnDependencies(config?.column_dependencies || {});
-            setDependentOptions(config?.dependent_options || {});
-            setEmissionCategoryMapping(config?.emission_category_mapping || {});
-            setExtraFields(config?.extra_fields || []);
-            setEmissionFactors(factors);
-            setUnits(unitsData);
+                const config = configs[0] as ColumnConfig | undefined;
+                setDynamicColumns(config?.columns || []);
+                setColumnOptions(config?.column_options || {});
+                setColumnDependencies(config?.column_dependencies || {});
+                setDependentOptions(config?.dependent_options || {});
+                setEmissionCategoryMapping(config?.emission_category_mapping || {});
+                setExtraFields(config?.extra_fields || []);
+                setEmissionFactors(factors);
+                setUnits(unitsData);
 
-            const mainEmissions = flattenEmissions(paginatedResult.data);
-            setTotalCount(paginatedResult.total);
-            setTotalPages(Math.max(1, Math.ceil(paginatedResult.total / PAGE_LIMIT)));
+                const mainEmissions = flattenEmissions(paginatedResult.data);
+                setTotalCount(paginatedResult.total);
+                setTotalPages(Math.max(1, Math.ceil(paginatedResult.total / PAGE_LIMIT)));
 
-            // Fetch FERA emissions + factors + units if the site has a FERA category
-            if (feraCategoryId) {
-                const [feraFactorsData, feraEmissionsData, feraUnitsData] = await Promise.all([
-                    getUserEmissionFactorsBySiteAndCategory(siteId, feraCategoryId, factorYear).catch(() => []),
-                    getEmissionsBySiteAndCategory(siteId, feraCategoryId, selectedDate).catch(() => []),
-                    getUserUnitsBySiteAndCategory(siteId, feraCategoryId).catch((): UnitData[] => []),
-                ]);
-                setFeraEmissionFactors(feraFactorsData);
-                // Merge regular + FERA emissions, marking FERA rows
-                const feraRows = flattenEmissions(feraEmissionsData).map((r) => ({ ...r, _isFeraRow: true }));
-                setEmissions([...mainEmissions, ...feraRows]);
-                // Merge FERA units into the unit list (deduplicated by unit_name)
-                const existingNames = new Set(unitsData.map((u: UnitData) => u.unit_name.toLowerCase()));
-                const newFeraUnits = feraUnitsData.filter((u: UnitData) => !existingNames.has(u.unit_name.toLowerCase()));
-                if (newFeraUnits.length > 0) {
-                    setUnits([...unitsData, ...newFeraUnits]);
+                // Fetch FERA emissions + factors + units if the site has a FERA category
+                if (feraCategoryId) {
+                    const [feraFactorsData, feraEmissionsData, feraUnitsData] = await Promise.all([
+                        getUserEmissionFactorsBySiteAndCategory(siteId, feraCategoryId, factorYear!).catch(() => []),
+                        getEmissionsBySiteAndCategory(siteId, feraCategoryId, selectedDate).catch(() => []),
+                        getUserUnitsBySiteAndCategory(siteId, feraCategoryId).catch((): UnitData[] => []),
+                    ]);
+                    setFeraEmissionFactors(feraFactorsData);
+                    const feraRows = flattenEmissions(feraEmissionsData).map((r) => ({ ...r, _isFeraRow: true }));
+                    setEmissions([...mainEmissions, ...feraRows]);
+                    const existingNames = new Set(unitsData.map((u: UnitData) => u.unit_name.toLowerCase()));
+                    const newFeraUnits = feraUnitsData.filter((u: UnitData) => !existingNames.has(u.unit_name.toLowerCase()));
+                    if (newFeraUnits.length > 0) {
+                        setUnits([...unitsData, ...newFeraUnits]);
+                    }
+                } else {
+                    setFeraEmissionFactors([]);
+                    setEmissions(mainEmissions);
+                }
+
+                // Fetch company category mappings
+                if (companyId) {
+                    try {
+                        const mappings = await getMappingsByCompany(companyId, siteId, selectedCategory!);
+                        setCompanyMappings(mappings);
+                    } catch {
+                        setCompanyMappings([]);
+                    }
+                } else {
+                    setCompanyMappings([]);
                 }
             } else {
+                // Partial filters: fetch only the emissions list (no column config/factors/units needed)
+                const paginatedResult = await getEmissionsPaginated({
+                    siteId,
+                    categoryId: selectedCategory,
+                    scope: selectedScope,
+                    year: dateYear,
+                    month: dateMonth,
+                    page: pageToFetch,
+                    limit: PAGE_LIMIT,
+                });
+
+                setDynamicColumns([]);
+                setExtraFields([]);
+                setEmissionFactors([]);
                 setFeraEmissionFactors([]);
+                setUnits([]);
+                setCompanyMappings([]);
+
+                const mainEmissions = flattenEmissions(paginatedResult.data);
+                setTotalCount(paginatedResult.total);
+                setTotalPages(Math.max(1, Math.ceil(paginatedResult.total / PAGE_LIMIT)));
                 setEmissions(mainEmissions);
             }
 
             // Clear stale selections after data reload
             setSelectedEmissionIds(new Set());
-
-            // Fetch company category mappings (company_category_name → emission_category_name)
-            if (companyId) {
-                try {
-                    const mappings = await getMappingsByCompany(companyId, siteId, selectedCategory);
-                    setCompanyMappings(mappings);
-                } catch {
-                    setCompanyMappings([]);
-                }
-            } else {
-                setCompanyMappings([]);
-            }
         } catch (error) {
             console.error("Error fetching data:", error);
             resetDataState();
         } finally {
             setLoading(false);
         }
-    }, [selectedCategory, selectedDate, siteId, companyId, feraCategoryId, currentPage]);
+    }, [selectedCategory, selectedDate, selectedScope, selectedYear, siteId, companyId, feraCategoryId, currentPage]);
 
     // Reset to page 1 when filters change
     useEffect(() => {
         setCurrentPage(1);
-    }, [selectedCategory, selectedDate, siteId]);
+    }, [selectedCategory, selectedDate, selectedScope, selectedYear, siteId]);
 
     // Fetch data when page or filters change
     useEffect(() => {
@@ -1945,7 +2047,9 @@ const UserDataEntryPage = () => {
             {/* Filters */}
             <div
                 className={`grid grid-cols-1 gap-4 mb-6 ${
-                    hasMultipleSites ? "md:grid-cols-4" : "md:grid-cols-3"
+                    hasMultipleSites
+                        ? "md:grid-cols-3 lg:grid-cols-5"
+                        : "md:grid-cols-2 lg:grid-cols-4"
                 }`}>
                 {/* Site Selector - only show when user has multiple sites */}
                 {hasMultipleSites && (
@@ -1966,10 +2070,26 @@ const UserDataEntryPage = () => {
                 )}
                 <div>
                     <label className="block text-sm font-medium mb-1">
+                        Scope
+                    </label>
+                    <Dropdown
+                        options={scopeOptions}
+                        placeholder="All Scopes"
+                        value={selectedScope}
+                        onChange={(option) =>
+                            setSelectedScope(
+                                option ? (option.id as string) : null,
+                            )
+                        }
+                        clearable={true}
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium mb-1">
                         Category
                     </label>
                     <Dropdown
-                        options={categoryOptions}
+                        options={filteredCategoryOptions}
                         placeholder="Select Category"
                         value={selectedCategory}
                         onChange={(option) =>
@@ -1980,10 +2100,26 @@ const UserDataEntryPage = () => {
                 </div>
                 <div>
                     <label className="block text-sm font-medium mb-1">
+                        Year
+                    </label>
+                    <Dropdown
+                        options={yearOptions}
+                        placeholder="All Years"
+                        value={selectedYear}
+                        onChange={(option) =>
+                            setSelectedYear(
+                                option ? (option.id as number) : null,
+                            )
+                        }
+                        clearable={true}
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium mb-1">
                         Date
                     </label>
                     <Dropdown
-                        options={dateOptions}
+                        options={filteredDateOptions}
                         placeholder="Select Date"
                         value={selectedDate}
                         onChange={(option) =>
@@ -2600,7 +2736,7 @@ const UserDataEntryPage = () => {
             )}
 
             {/* Emissions Table */}
-            {selectedCategory && selectedDate && (
+            {selectedCategory && selectedDate ? (
                 <div>
                     {loading ? (
                         <div className="text-center py-4">Loading data...</div>
@@ -2743,6 +2879,71 @@ const UserDataEntryPage = () => {
                     ) : (
                         <div className="text-center py-4 text-gray-500">
                             No columns configured for this category.
+                        </div>
+                    )}
+                </div>
+            ) : (selectedScope || selectedYear) && (
+                <div>
+                    {loading ? (
+                        <div className="text-center py-4">Loading data...</div>
+                    ) : paginatedEmissions.length > 0 ? (
+                        <>
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr>
+                                            <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700 bg-gray-100">Category</th>
+                                            <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700 bg-gray-100">Scope</th>
+                                            <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700 bg-gray-100">Activity Unit</th>
+                                            <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700 bg-gray-100">Total Emission (tCO2e)</th>
+                                            <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700 bg-gray-100">Date of Reporting</th>
+                                            <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700 bg-gray-100">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {paginatedEmissions.map((row) => (
+                                            <tr key={row.pk_id} className="hover:bg-gray-50">
+                                                <td className="border border-gray-300 px-4 py-3 text-gray-900">{row.category_name || "-"}</td>
+                                                <td className="border border-gray-300 px-4 py-3 text-gray-900">{row.category_scope || "-"}</td>
+                                                <td className="border border-gray-300 px-4 py-3 text-gray-900">{row.activity_data_unit || "-"}</td>
+                                                <td className="border border-gray-300 px-4 py-3 text-gray-900">{Number(row.total_emission).toFixed(2)}</td>
+                                                <td className="border border-gray-300 px-4 py-3 text-gray-900">{new Date(row.date_of_reporting).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
+                                                <td className="border border-gray-300 px-4 py-3">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
+                                                        row.status === "approved" ? "bg-green-100 text-green-800" :
+                                                        row.status === "rejected" ? "bg-red-100 text-red-800" :
+                                                        "bg-yellow-100 text-yellow-800"
+                                                    }`}>{row.status}</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {totalPages > 1 && (
+                                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white mt-2 rounded-b-lg">
+                                    <p className="text-sm text-gray-600">
+                                        Showing <span className="font-medium">{(currentPage - 1) * PAGE_LIMIT + 1}</span> to{" "}
+                                        <span className="font-medium">{Math.min(currentPage * PAGE_LIMIT, totalCount)}</span> of{" "}
+                                        <span className="font-medium">{totalCount}</span> entries
+                                    </p>
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1}
+                                            className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">&laquo;</button>
+                                        <button onClick={() => setCurrentPage((p) => p - 1)} disabled={currentPage === 1}
+                                            className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">&lsaquo;</button>
+                                        <span className="px-3 py-1 text-sm text-gray-700">Page {currentPage} of {totalPages}</span>
+                                        <button onClick={() => setCurrentPage((p) => p + 1)} disabled={currentPage === totalPages}
+                                            className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">&rsaquo;</button>
+                                        <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}
+                                            className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">&raquo;</button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div className="text-center py-4 text-gray-500">
+                            No emissions found for the selected filters.
                         </div>
                     )}
                 </div>
@@ -3596,6 +3797,9 @@ function flattenEmission(emission: EmissionData): EmissionRow {
         reviewed_by: emission.reviewed_by,
         review_comment: emission.review_comment,
         _extra_data: emission.extra_data || {},
+        category_name: emission.category?.category_name || "",
+        category_scope: emission.category?.scope || "",
+        date_of_reporting: emission.date_of_reporting || "",
     };
 }
 

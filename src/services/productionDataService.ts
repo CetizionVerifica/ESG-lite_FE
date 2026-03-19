@@ -139,6 +139,21 @@ export const getEmissionIntensityComparison = async (
   return response.data;
 };
 
+export const bulkCreateProductionData = async (
+  entries: Array<{
+    product_id: number;
+    site_id: number;
+    quantity: number;
+    unit: string;
+    start_date: string;
+    end_date: string;
+    notes?: string;
+  }>
+): Promise<{ message: string; created: number; errors: { row: number; message: string }[] }> => {
+  const response = await api.post("/user/production-data/bulk-create", { entries });
+  return response.data;
+};
+
 // Manager APIs for production data
 export const getProductionDataForManager = async (params?: {
   siteId?: number | string;
