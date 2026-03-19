@@ -920,6 +920,22 @@ const UserDataEntryPage = () => {
             }
         }
 
+        // Progressive sub-key fallback: if the full chain doesn't match,
+        // try dropping leading dimensions (e.g. "Air|Flight|International" → "Flight|International")
+        // This handles configs where columns have more dimensions than the mapping keys.
+        for (let start = 1; start < keyParts.length; start++) {
+            const subKey = keyParts.slice(start).join("|");
+            if (emissionCategoryMapping[subKey]) {
+                return { key: subKey, category: emissionCategoryMapping[subKey] };
+            }
+            const subKeyLower = subKey.toLowerCase();
+            for (const [key, value] of Object.entries(emissionCategoryMapping)) {
+                if (key.toLowerCase() === subKeyLower) {
+                    return { key, category: value };
+                }
+            }
+        }
+
         return null;
     };
 

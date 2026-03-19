@@ -1,50 +1,29 @@
-import { useEffect, useRef, useMemo } from "react";
+
+import { useEffect, useMemo, useRef } from "react";
 import {
-  MapContainer,
-  TileLayer,
+  GoogleMap,
   Marker,
   Polyline,
-  Popup,
-  useMap,
-} from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+  useJsApiLoader,
+} from "@react-google-maps/api";
+import { GOOGLE_MAPS_LOADER_OPTIONS } from "../../../utils/googleMapsLoader";
 
-// SVG-based colored markers — no external CDN dependency
-function createSvgIcon(color: string, label: string) {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="42" viewBox="0 0 28 42">
-      <path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 28 14 28s14-17.5 14-28C28 6.3 21.7 0 14 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/>
-      <circle cx="14" cy="14" r="6" fill="#fff"/>
-      <text x="14" y="18" text-anchor="middle" font-size="11" font-weight="bold" fill="${color}">${label}</text>
-    </svg>`;
-  return new L.Icon({
-    iconUrl: `data:image/svg+xml;base64,${btoa(svg)}`,
-    iconSize: [28, 42],
-    iconAnchor: [14, 42],
-    popupAnchor: [0, -42],
-  });
-}
-
-const startMarkerIcon = createSvgIcon("#16a34a", "A");
-const endMarkerIcon = createSvgIcon("#dc2626", "B");
-
-const DEFAULT_CENTER: [number, number] = [20, 0];
+const DEFAULT_CENTER = { lat: 20, lng: 0 };
 const DEFAULT_ZOOM = 2;
+
+interface SeaGeometry {
+  type?: string;
+  coordinates?: number[][];
+}
 
 interface MapViewProps {
   startPoint: [number, number] | null;
   endPoint: [number, number] | null;
-  routeGeometry: GeoJSON.LineString | null;
-  startLabel?: string;
-  endLabel?: string;
+  encodedPolyline?: string | null;
+  seaGeometry?: SeaGeometry | null;
   travelMode?: "road" | "air" | "sea";
 }
 
-/**
- * Generate intermediate points along a great-circle arc between two coordinates.
- * This produces a curved line on a Mercator map projection.
- */
 function greatCircleArc(
   start: [number, number],
   end: [number, number],
@@ -58,12 +37,16 @@ function greatCircleArc(
   const lat2 = toRad(end[0]);
   const lon2 = toRad(end[1]);
 
-  const d = 2 * Math.asin(
-    Math.sqrt(
-      Math.sin((lat2 - lat1) / 2) ** 2 +
-      Math.cos(lat1) * Math.cos(lat2) * Math.sin((lon2 - lon1) / 2) ** 2,
-    ),
-  );
+  const d =
+    2 *
+    Math.asin(
+      Math.sqrt(
+        Math.sin((lat2 - lat1) / 2) ** 2 +
+          Math.cos(lat1) *
+            Math.cos(lat2) *
+            Math.sin((lon2 - lon1) / 2) ** 2,
+      ),
+    );
 
   if (d < 1e-10) return [start, end];
 
@@ -72,148 +55,226 @@ function greatCircleArc(
     const f = i / numPoints;
     const A = Math.sin((1 - f) * d) / Math.sin(d);
     const B = Math.sin(f * d) / Math.sin(d);
-    const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
-    const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
+
+    const x =
+      A * Math.cos(lat1) * Math.cos(lon1) +
+      B * Math.cos(lat2) * Math.cos(lon2);
+    const y =
+      A * Math.cos(lat1) * Math.sin(lon1) +
+      B * Math.cos(lat2) * Math.sin(lon2);
     const z = A * Math.sin(lat1) + B * Math.sin(lat2);
-    points.push([toDeg(Math.atan2(z, Math.sqrt(x * x + y * y))), toDeg(Math.atan2(y, x))]);
+
+    points.push([
+      toDeg(Math.atan2(z, Math.sqrt(x * x + y * y))),
+      toDeg(Math.atan2(y, x)),
+    ]);
   }
+
   return points;
 }
 
-function MapController({
-  startPoint,
-  endPoint,
-  routePositions,
-}: {
-  startPoint: [number, number] | null;
-  endPoint: [number, number] | null;
-  routePositions: [number, number][];
-}) {
-  const map = useMap();
-  const prevStartRef = useRef<string | null>(null);
-  const prevEndRef = useRef<string | null>(null);
-  const prevRouteLen = useRef(0);
-
-  useEffect(() => {
-    const startKey = startPoint ? `${startPoint[0]},${startPoint[1]}` : null;
-    const endKey = endPoint ? `${endPoint[0]},${endPoint[1]}` : null;
-    const startChanged = startKey !== prevStartRef.current;
-    const endChanged = endKey !== prevEndRef.current;
-    const routeArrived =
-      routePositions.length > 0 && prevRouteLen.current === 0;
-
-    prevStartRef.current = startKey;
-    prevEndRef.current = endKey;
-    prevRouteLen.current = routePositions.length;
-
-    if (!startChanged && !endChanged && !routeArrived) return;
-
-    // Route just arrived — fit to full route polyline (may extend beyond endpoints)
-    if (routeArrived && routePositions.length > 1) {
-      const bounds = L.latLngBounds(routePositions);
-      map.flyToBounds(bounds, { padding: [50, 50], duration: 0.8 });
-      return;
-    }
-
-    // Both points set — fit to both markers
-    if (startPoint && endPoint) {
-      const bounds = L.latLngBounds([startPoint, endPoint]);
-      map.flyToBounds(bounds, { padding: [50, 50], duration: 0.8 });
-      return;
-    }
-
-    // Single point — fly to it
-    if (startPoint) {
-      map.flyTo(startPoint, 13, { duration: 0.8 });
-      return;
-    }
-    if (endPoint) {
-      map.flyTo(endPoint, 13, { duration: 0.8 });
-      return;
-    }
-
-    // Both cleared — zoom back out to world view
-    map.flyTo(DEFAULT_CENTER, DEFAULT_ZOOM, { duration: 0.6 });
-  }, [map, startPoint, endPoint, routePositions]);
-
-  return null;
-}
+const mapContainerStyle = {
+  width: "100%",
+  height: "300px",
+  borderRadius: "0.75rem",
+};
 
 const MapView = ({
   startPoint,
   endPoint,
-  routeGeometry,
-  startLabel,
-  endLabel,
+  encodedPolyline,
+  seaGeometry,
   travelMode,
 }: MapViewProps) => {
-  const routePositions = useMemo<[number, number][]>(() => {
-    if (!routeGeometry) return [];
-    return routeGeometry.coordinates.map(
-      (coord) => [coord[1], coord[0]] as [number, number],
-    );
-  }, [routeGeometry]);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
-  // Great-circle arc for sea mode
-  const seaArcPositions = useMemo<[number, number][]>(() => {
+  const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
+
+  const roadPath = useMemo(() => {
+    if (!isLoaded || !encodedPolyline || !window.google?.maps?.geometry) {
+      return [];
+    }
+
+    const decoded = google.maps.geometry.encoding.decodePath(encodedPolyline);
+
+    return decoded.map((p) => ({
+      lat: p.lat(),
+      lng: p.lng(),
+    }));
+  }, [isLoaded, encodedPolyline]);
+
+  const apiSeaPath = useMemo(() => {
+    if (travelMode !== "sea" || !seaGeometry?.coordinates?.length) return [];
+
+    return seaGeometry.coordinates
+      .filter(
+        (coord): coord is [number, number] =>
+          Array.isArray(coord) &&
+          coord.length >= 2 &&
+          typeof coord[0] === "number" &&
+          typeof coord[1] === "number",
+      )
+      .map(([lng, lat]) => ({
+        lat,
+        lng,
+      }));
+  }, [travelMode, seaGeometry]);
+
+  const fallbackSeaArcPath = useMemo(() => {
     if (travelMode !== "sea" || !startPoint || !endPoint) return [];
-    return greatCircleArc(startPoint, endPoint);
+
+    return greatCircleArc(startPoint, endPoint).map(([lat, lng]) => ({
+      lat,
+      lng,
+    }));
   }, [travelMode, startPoint, endPoint]);
 
-  // Dashed straight line between points (shown for air mode or before road route loads)
-  const showStraightLine =
-    startPoint && endPoint && routePositions.length === 0 && travelMode !== "sea";
+  const seaPath =
+    apiSeaPath.length > 0 ? apiSeaPath : fallbackSeaArcPath;
+
+  const straightLinePath = useMemo(() => {
+    if (!startPoint || !endPoint) return [];
+    if (travelMode === "sea") return [];
+    if (travelMode === "road" && roadPath.length > 0) return [];
+
+    return [
+      { lat: startPoint[0], lng: startPoint[1] },
+      { lat: endPoint[0], lng: endPoint[1] },
+    ];
+  }, [startPoint, endPoint, travelMode, roadPath]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (travelMode === "road" && roadPath.length > 1) {
+      const bounds = new google.maps.LatLngBounds();
+      roadPath.forEach((p) => bounds.extend(p));
+      map.fitBounds(bounds, 60);
+      return;
+    }
+
+    if (travelMode === "sea" && seaPath.length > 1) {
+      const bounds = new google.maps.LatLngBounds();
+      seaPath.forEach((p) => bounds.extend(p));
+      map.fitBounds(bounds, 60);
+      return;
+    }
+
+    if (startPoint && endPoint) {
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend({ lat: startPoint[0], lng: startPoint[1] });
+      bounds.extend({ lat: endPoint[0], lng: endPoint[1] });
+      map.fitBounds(bounds, 60);
+      return;
+    }
+
+    if (startPoint) {
+      map.panTo({ lat: startPoint[0], lng: startPoint[1] });
+      map.setZoom(13);
+      return;
+    }
+
+    if (endPoint) {
+      map.panTo({ lat: endPoint[0], lng: endPoint[1] });
+      map.setZoom(13);
+      return;
+    }
+
+    map.panTo(DEFAULT_CENTER);
+    map.setZoom(DEFAULT_ZOOM);
+  }, [startPoint, endPoint, roadPath, seaPath, travelMode]);
+
+  if (loadError) {
+    return (
+      <div className="h-75 w-full rounded-lg border border-red-200 bg-red-50 flex items-center justify-center text-sm text-red-600">
+        Failed to load Google Maps
+      </div>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="h-75 w-full rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center text-sm text-gray-500">
+        Loading map...
+      </div>
+    );
+  }
 
   return (
-    <MapContainer
-      center={DEFAULT_CENTER}
-      zoom={DEFAULT_ZOOM}
-      style={{ height: "300px", width: "100%" }}
-      className="rounded-lg border border-gray-200"
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <MapController
-        startPoint={startPoint}
-        endPoint={endPoint}
-        routePositions={routePositions}
-      />
+    <div className="rounded-lg border border-gray-200 overflow-hidden">
+      <GoogleMap
+        mapContainerStyle={mapContainerStyle}
+        center={DEFAULT_CENTER}
+        zoom={DEFAULT_ZOOM}
+        onLoad={(map) => {
+          mapRef.current = map;
+        }}
+        options={{
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+        }}
+      >
+        {startPoint && (
+          <Marker
+            position={{ lat: startPoint[0], lng: startPoint[1] }}
+            label="A"
+          />
+        )}
 
-      {startPoint && (
-        <Marker position={startPoint} icon={startMarkerIcon}>
-          {startLabel && <Popup>{startLabel}</Popup>}
-        </Marker>
-      )}
-      {endPoint && (
-        <Marker position={endPoint} icon={endMarkerIcon}>
-          {endLabel && <Popup>{endLabel}</Popup>}
-        </Marker>
-      )}
+        {endPoint && (
+          <Marker
+            position={{ lat: endPoint[0], lng: endPoint[1] }}
+            label="B"
+          />
+        )}
 
-      {showStraightLine && (
-        <Polyline
-          positions={[startPoint!, endPoint!]}
-          color="#9ca3af"
-          weight={2}
-          dashArray="8 6"
-        />
-      )}
+        {straightLinePath.length > 0 && (
+          <Polyline
+            path={straightLinePath}
+            options={{
+              strokeColor: "#9ca3af",
+              strokeOpacity: 0,
+              strokeWeight: 2,
+              icons: [
+                {
+                  icon: {
+                    path: "M 0,-1 0,1",
+                    strokeOpacity: 1,
+                    scale: 3,
+                  },
+                  offset: "0",
+                  repeat: "12px",
+                },
+              ],
+            }}
+          />
+        )}
 
-      {seaArcPositions.length > 0 && (
-        <Polyline
-          positions={seaArcPositions}
-          color="#0ea5e9"
-          weight={3}
-          dashArray="6 4"
-        />
-      )}
+        {seaPath.length > 0 && travelMode === "sea" && (
+          <Polyline
+            path={seaPath}
+            options={{
+              strokeColor: "#0ea5e9",
+              strokeWeight: 3,
+              strokeOpacity: 1,
+            }}
+          />
+        )}
 
-      {routePositions.length > 0 && (
-        <Polyline positions={routePositions} color="#3b82f6" weight={4} />
-      )}
-    </MapContainer>
+        {roadPath.length > 0 && travelMode === "road" && (
+          <Polyline
+            path={roadPath}
+            options={{
+              strokeColor: "#2563eb",
+              strokeWeight: 4,
+              strokeOpacity: 1,
+            }}
+          />
+        )}
+      </GoogleMap>
+    </div>
   );
 };
 
