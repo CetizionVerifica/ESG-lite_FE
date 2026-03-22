@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { EmissionData, EmissionStatus } from "../../services/emissionService";
 import {
   getDocumentsByEmission,
@@ -96,6 +96,12 @@ const EmissionsTable = ({
   );
   const [bulkLoading, setBulkLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Clear stale selections when emissions data changes
+  useEffect(() => {
+    setSelectedPendingIds(new Set());
+    setSelectedApprovedIds(new Set());
+  }, [emissions]);
 
   // Reject modal state
   const [rejectModalOpen, setRejectModalOpen] = useState(false);

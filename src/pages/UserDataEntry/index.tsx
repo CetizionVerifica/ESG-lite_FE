@@ -741,8 +741,37 @@ const UserDataEntryPage = () => {
                 }
 
                 // Try multiple lookup strategies:
-                // 1. Exact match with converted label
-                let depOptions = childDeps[parentLabel];
+
+                // 0. Composite key: "grandparent|parent" for 3-dim scoped dep options
+                //    e.g., "Road|Van" → fuels specific to Road+Van, not all Van fuels
+                let depOptions: DropdownOptionValue[] | undefined;
+                if (parentColName) {
+                    const gpColName = getParentColumnName(parentColName);
+                    if (gpColName && isDependentColumn(parentColName)) {
+                        const gpColNameLower = gpColName.toLowerCase();
+                        const gpColEntity = dynamicColumns.find(
+                            (col) => col.column_name.toLowerCase() === gpColNameLower,
+                        );
+                        if (gpColEntity) {
+                            const gpOptions = columnOptions[gpColEntity.pk_id.toString()];
+                            if (gpOptions) {
+                                for (const gpOpt of gpOptions) {
+                                    const compositeKey = `${gpOpt.label}|${parentLabel}`;
+                                    const matched = childDeps[compositeKey];
+                                    if (matched && matched.length > 0) {
+                                        depOptions = matched;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 1. Exact match with converted label (backward compat)
+                if (!depOptions || depOptions.length === 0) {
+                    depOptions = childDeps[parentLabel];
+                }
 
                 // 2. Case-insensitive match with converted label
                 if (!depOptions || depOptions.length === 0) {

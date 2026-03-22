@@ -396,7 +396,8 @@ const DistanceCalculatorModal = ({
 
             {finalSeaDistance !== null &&
               finalSeaNauticalMiles !== null &&
-              !isCalculating && (
+              !isCalculating &&
+              !error && (
                 <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
                   <Anchor size={18} className="text-green-500 shrink-0" />
                   <div className="flex-1">
@@ -406,11 +407,6 @@ const DistanceCalculatorModal = ({
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
                       {finalSeaNauticalMiles.toLocaleString()} nautical miles
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      {seaResult
-                        ? "Calculated via sea route service"
-                        : "Estimated from straight-line distance"}
                     </div>
                   </div>
                 </div>
@@ -434,7 +430,7 @@ const DistanceCalculatorModal = ({
 
           <button
             onClick={handleUseDistance}
-            disabled={currentDistance === null || isCalculating}
+            disabled={currentDistance === null || isCalculating || !!error}
             className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium transition-colors"
           >
             Use Distance
