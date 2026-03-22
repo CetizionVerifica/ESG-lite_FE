@@ -299,7 +299,7 @@ const ProductionDataBulkUpload = ({ isOpen, onClose, products, siteId, isDark, o
                         return {
                             rowIndex: i + 1,
                             product: String(row[headerMap["product"]] || "").trim(),
-                            quantity: parseFloat(row[headerMap["quantity"]]) || null,
+                            quantity: isNaN(parseFloat(row[headerMap["quantity"]])) ? null : parseFloat(row[headerMap["quantity"]]),
                             unit: String(row[headerMap["unit"]] || "").trim(),
                             dateRaw,
                             month,

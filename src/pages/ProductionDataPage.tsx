@@ -97,12 +97,6 @@ const ProductionDataPage = () => {
     null
   );
 
-  useEffect(() => {
-    if (siteId) {
-      handleLoadData();
-    }
-  }, [siteId]);
-
   const handleLoadData = useCallback(async () => {
     if (!siteId) return;
 
@@ -125,6 +119,12 @@ const ProductionDataPage = () => {
       setLoading(false);
     }
   }, [siteId, filterProduct, filterStartDate, filterEndDate]);
+
+  useEffect(() => {
+    if (siteId) {
+      handleLoadData();
+    }
+  }, [siteId, handleLoadData]);
 
   const handleEdit = async (row: ProductionData, updates: Partial<ProductionData>) => {
     try {
@@ -402,6 +402,7 @@ const ProductionDataPage = () => {
           <div className="mb-4">
             <label className={labelClass}>Unit</label>
             <input
+              key={selectedProduct}
               type="text"
               name="unit"
               required
