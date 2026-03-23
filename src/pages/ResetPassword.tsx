@@ -12,7 +12,10 @@ const ResetPassword = () => {
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(true);
   const [tokenValid, setTokenValid] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
   const [resetComplete, setResetComplete] = useState(false);
 
   // Verify token on mount
@@ -43,7 +46,10 @@ const ResetPassword = () => {
 
     // Validate passwords
     if (password.length < 8) {
-      setMessage({ type: "error", text: "Password must be at least 8 characters long" });
+      setMessage({
+        type: "error",
+        text: "Password must be at least 8 characters long",
+      });
       return;
     }
 
@@ -66,7 +72,9 @@ const ResetPassword = () => {
     } catch (error: any) {
       setMessage({
         type: "error",
-        text: error.response?.data?.message || "Failed to reset password. Please try again.",
+        text:
+          error.response?.data?.message ||
+          "Failed to reset password. Please try again.",
       });
     } finally {
       setLoading(false);
@@ -91,13 +99,26 @@ const ResetPassword = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="bg-white p-8 rounded-lg shadow w-full max-w-md text-center">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-8 h-8 text-red-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold mb-2">Invalid or Expired Link</h2>
+          <h2 className="text-xl font-semibold mb-2">
+            Invalid or Expired Link
+          </h2>
           <p className="text-gray-600 mb-6">
-            This password reset link is invalid or has expired. Please request a new one.
+            This password reset link is invalid or has expired. Please request a
+            new one.
           </p>
           <Link
             to="/"
@@ -116,13 +137,26 @@ const ResetPassword = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="bg-white p-8 rounded-lg shadow w-full max-w-md text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            <svg
+              className="w-8 h-8 text-green-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 13l4 4L19 7"
+              />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold mb-2">Password Reset Successful</h2>
+          <h2 className="text-xl font-semibold mb-2">
+            Password Reset Successful
+          </h2>
           <p className="text-gray-600 mb-6">
-            Your password has been reset successfully. You can now log in with your new password.
+            Your password has been reset successfully. You can now log in with
+            your new password.
           </p>
           <button
             onClick={() => navigate("/")}
@@ -139,14 +173,18 @@ const ResetPassword = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow w-full max-w-md">
-        <h2 className="text-2xl font-semibold text-center mb-2">Reset Password</h2>
+        <h2 className="text-2xl font-semibold text-center mb-2">
+          Reset Password
+        </h2>
         <p className="text-gray-600 text-center text-sm mb-6">
           Enter your new password below.
         </p>
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">New Password</label>
+            <label className="block text-sm font-medium mb-1">
+              New Password
+            </label>
             <input
               type="password"
               value={password}
@@ -156,11 +194,15 @@ const ResetPassword = () => {
               required
               minLength={8}
             />
-            <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Must be at least 8 characters
+            </p>
           </div>
 
           <div className="mb-6">
-            <label className="block text-sm font-medium mb-1">Confirm Password</label>
+            <label className="block text-sm font-medium mb-1">
+              Confirm Password
+            </label>
             <input
               type="password"
               value={confirmPassword}
