@@ -4,6 +4,11 @@ import {
   getDocumentsByEmission,
   EmissionDocument,
 } from "../../services/documentService";
+import {
+  ColumnOptionsMap,
+  DependentOptionsMap,
+  ColumnDependencies,
+} from "../../services/columnConfigService";
 import DocumentViewerModal from "../../components/DocumentViewerModal";
 import Modal from "../../components/Modal";
 import AuditTrailTimeline, {
@@ -20,13 +25,17 @@ interface EmissionsTableProps {
   onBulkDelete?: (ids: number[]) => Promise<void>;
   onManagerEdit?: (
     id: number,
-    data: { activity_data?: Record<string, any>; date_of_reporting?: string },
+    data: { activity_data?: Record<string, any>; date_of_reporting?: string; reason?: string },
   ) => Promise<void>;
   isDark?: boolean;
   formatActivityData?: (
     activityData: Record<string, unknown>,
     categoryId: number,
   ) => { key: string; displayValue: string }[];
+  columnOptionsMap?: Record<number, ColumnOptionsMap>;
+  dependentOptionsMap?: Record<number, DependentOptionsMap>;
+  columnDependenciesMap?: Record<number, ColumnDependencies>;
+  columnsMap?: Record<number, { pk_id: number; column_name: string }[]>;
 }
 
 function formatDate(dateString: string): string {
@@ -86,6 +95,10 @@ const EmissionsTable = ({
   onManagerEdit,
   isDark = false,
   formatActivityData,
+  columnOptionsMap,
+  dependentOptionsMap,
+  columnDependenciesMap,
+  columnsMap,
 }: EmissionsTableProps) => {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<number>>(
@@ -118,7 +131,8 @@ const EmissionsTable = ({
   const [editForm, setEditForm] = useState<{
     activity_data: Record<string, any>;
     date_of_reporting: string;
-  }>({ activity_data: {}, date_of_reporting: "" });
+    reason: string;
+  }>({ activity_data: {}, date_of_reporting: "", reason: "" });
   const [editLoading, setEditLoading] = useState(false);
 
   // Delete confirmation modal state
@@ -303,12 +317,79 @@ const EmissionsTable = ({
     setBulkRejectMode(false);
   };
 
+  // Get dropdown options for a field in the edit modal
+  const getEditFieldOptions = (
+    key: string,
+    categoryId: number,
+  ): { id: string | number; label: string }[] | null => {
+    if (!columnOptionsMap || !columnsMap) return null;
+
+    const columns = columnsMap[categoryId];
+    const columnOptions = columnOptionsMap[categoryId];
+    const depOptions = dependentOptionsMap?.[categoryId];
+    const depChain = columnDependenciesMap?.[categoryId];
+
+    if (!columns || !columnOptions) return null;
+
+    // Find parent column name for this key (case-insensitive)
+    const parentColName = depChain
+      ? (() => {
+          const match = Object.keys(depChain).find(
+            (k) => k.toLowerCase() === key.toLowerCase(),
+          );
+          return match ? depChain[match] : undefined;
+        })()
+      : undefined;
+
+    // If this field is a dependent column, get filtered options based on parent value
+    if (parentColName && depOptions?.[key]) {
+      const parentValue = editForm.activity_data[parentColName];
+      if (parentValue) {
+        // Resolve parent value to label for lookup
+        const parentCol = columns.find(
+          (c) => c.column_name.toLowerCase() === parentColName.toLowerCase(),
+        );
+        let parentLabel = String(parentValue);
+        if (parentCol) {
+          const parentOpts = columnOptions[parentCol.pk_id.toString()];
+          const parentOpt = parentOpts?.find(
+            (o) =>
+              String(o.id) === String(parentValue) ||
+              o.label.toLowerCase() === String(parentValue).toLowerCase(),
+          );
+          if (parentOpt) parentLabel = parentOpt.label;
+        }
+
+        const matchingKey = Object.keys(depOptions[key]).find(
+          (k) => k.toLowerCase() === parentLabel.toLowerCase(),
+        );
+        if (matchingKey) {
+          return depOptions[key][matchingKey];
+        }
+      }
+      // If no parent value selected yet, show all options flattened
+      return Object.values(depOptions[key]).flat();
+    }
+
+    // Check if this field has direct column options
+    const col = columns.find(
+      (c) => c.column_name.toLowerCase() === key.toLowerCase(),
+    );
+    if (col) {
+      const opts = columnOptions[col.pk_id.toString()];
+      if (opts && opts.length > 0) return opts;
+    }
+
+    return null;
+  };
+
   // Edit handlers
   const handleEditClick = (emission: EmissionData) => {
     setEditingEmission(emission);
     setEditForm({
       activity_data: { ...emission.activity_data },
       date_of_reporting: emission.date_of_reporting.split("T")[0],
+      reason: "",
     });
     setEditModalOpen(true);
   };
@@ -320,6 +401,7 @@ const EmissionsTable = ({
       await onManagerEdit(editingEmission.pk_id, {
         activity_data: editForm.activity_data,
         date_of_reporting: editForm.date_of_reporting,
+        reason: editForm.reason || undefined,
       });
       setEditModalOpen(false);
       setEditingEmission(null);
@@ -836,25 +918,53 @@ const EmissionsTable = ({
           </div>
         )}
         <div className="space-y-4">
-          {Object.entries(editForm.activity_data).map(([key, value]) => (
-            <div key={key}>
-              <label className={labelClass}>{key}</label>
-              <input
-                type="text"
-                value={String(value)}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    activity_data: {
-                      ...editForm.activity_data,
-                      [key]: e.target.value,
-                    },
-                  })
-                }
-                className={modalInputClass}
-              />
-            </div>
-          ))}
+          {Object.entries(editForm.activity_data).map(([key, value]) => {
+            const categoryId = editingEmission?.category?.category_id || 0;
+            const options = getEditFieldOptions(key, categoryId);
+
+            return (
+              <div key={key}>
+                <label className={labelClass}>{key}</label>
+                {options && options.length > 0 ? (
+                  <select
+                    value={String(value)}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        activity_data: {
+                          ...editForm.activity_data,
+                          [key]: e.target.value,
+                        },
+                      })
+                    }
+                    className={modalInputClass}
+                  >
+                    <option value="">-- Select --</option>
+                    {options.map((opt) => (
+                      <option key={opt.id} value={opt.label}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={String(value)}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        activity_data: {
+                          ...editForm.activity_data,
+                          [key]: e.target.value,
+                        },
+                      })
+                    }
+                    className={modalInputClass}
+                  />
+                )}
+              </div>
+            );
+          })}
           <div>
             <label className={labelClass}>Date of Reporting</label>
             <input
@@ -863,6 +973,18 @@ const EmissionsTable = ({
               onChange={(e) =>
                 setEditForm({ ...editForm, date_of_reporting: e.target.value })
               }
+              className={modalInputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Reason for Edit</label>
+            <textarea
+              value={editForm.reason}
+              onChange={(e) =>
+                setEditForm({ ...editForm, reason: e.target.value })
+              }
+              placeholder="Why is this data being modified?"
+              rows={2}
               className={modalInputClass}
             />
           </div>

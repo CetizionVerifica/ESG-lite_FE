@@ -462,7 +462,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
   // Handle manager edit emission
   const handleManagerEdit = useCallback(async (
     id: number,
-    data: { activity_data?: Record<string, any>; date_of_reporting?: string }
+    data: { activity_data?: Record<string, any>; date_of_reporting?: string; reason?: string }
   ) => {
     const response = await managerUpdateEmission(id, data);
     setEmissions((prev) =>
@@ -677,6 +677,10 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         onManagerEdit={handleManagerEdit}
         isDark={isDark}
         formatActivityData={formatActivityData}
+        columnOptionsMap={columnOptionsMap}
+        dependentOptionsMap={dependentOptionsMap}
+        columnDependenciesMap={columnDependenciesMap}
+        columnsMap={columnsMap}
       />
 
       {/* Batch Approve Confirmation Modal */}

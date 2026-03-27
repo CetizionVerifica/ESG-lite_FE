@@ -6,6 +6,7 @@ export interface AuditLogEntry {
   entity_id: number;
   action: string;
   changed_fields: Record<string, { old: any; new: any }>;
+  reason?: string | null;
   changed_by: { user_id: number; name: string; email: string; role: string } | null;
   changed_at: string;
 }

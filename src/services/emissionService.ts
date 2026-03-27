@@ -106,17 +106,21 @@ export const getEmissionsBySiteAndCategory = async (
   return response.data;
 };
 
-export const createEmission = async (data: {
-  site_id: number;
-  category_id: number;
-  activity_data: Record<string, any>;
-  extra_data?: Record<string, any>;
-  total_emission?: number;
-  unit?: string;
-  date_of_reporting: string;
-  activity_data_unit?: string;
-}) => {
-  const response = await api.post("/user/emissions", data);
+export const createEmission = async (
+  data: {
+    site_id: number;
+    category_id: number;
+    activity_data: Record<string, any>;
+    extra_data?: Record<string, any>;
+    total_emission?: number;
+    unit?: string;
+    date_of_reporting: string;
+    activity_data_unit?: string;
+  },
+  replace?: boolean
+) => {
+  const params = replace ? { replace: "true" } : {};
+  const response = await api.post("/user/emissions", data, { params });
   return response.data;
 };
 
@@ -207,7 +211,7 @@ export const rejectEmissionsByBatch = async (batchId: string, comment?: string) 
 
 export const managerUpdateEmission = async (
   id: string | number,
-  data: { activity_data?: any; date_of_reporting?: string }
+  data: { activity_data?: any; date_of_reporting?: string; reason?: string }
 ) => {
   const response = await api.put(`/user/emissions/manager-edit/${id}`, data);
   return response.data;
