@@ -28,6 +28,8 @@ import SbtiMain from "../pages/sbti/SbtiMain";
 import GhgReport from "../pages/GhgReport/GhgReport";
 import CategoryMappingPage from "../pages/CategoryMappingPage";
 import ManagerUsersPage from "../pages/ManagerUsers";
+import NotificationsPage from "../pages/NotificationsPage";
+import SettingsPage from "../pages/SettingsPage";
 
 const routes = [
   {
@@ -157,6 +159,14 @@ const routes = [
           {
             path: "manage-users",
             element: <ManagerUsersPage />
+          },
+          {
+            path: "notifications",
+            element: <NotificationsPage />
+          },
+          {
+            path: "settings",
+            element: <SettingsPage />
           }
         ],
       },

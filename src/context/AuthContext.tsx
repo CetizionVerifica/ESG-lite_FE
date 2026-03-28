@@ -6,6 +6,7 @@ import {
   ReactNode,
 } from "react";
 import axios from "axios";
+import api from "../api/axios";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -65,6 +66,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(token);
     setRole(role);
     setUser(user);
+
+    // Auto-detect and save timezone (fire-and-forget)
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      api.put("/notifications/preferences", { timezone: tz }).catch(() => {});
+    } catch {
+      // Ignore — timezone detection is best-effort
+    }
 
     return role;
   };
