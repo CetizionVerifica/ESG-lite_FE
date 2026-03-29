@@ -32,6 +32,7 @@ export interface EmissionData {
     user_id: number;
     name: string;
   };
+  fera_linked_id?: number | null;
 }
 
 export type ReportFrequency = "yearly" | "monthly";
@@ -106,17 +107,21 @@ export const getEmissionsBySiteAndCategory = async (
   return response.data;
 };
 
-export const createEmission = async (data: {
-  site_id: number;
-  category_id: number;
-  activity_data: Record<string, any>;
-  extra_data?: Record<string, any>;
-  total_emission?: number;
-  unit?: string;
-  date_of_reporting: string;
-  activity_data_unit?: string;
-}) => {
-  const response = await api.post("/user/emissions", data);
+export const createEmission = async (
+  data: {
+    site_id: number;
+    category_id: number;
+    activity_data: Record<string, any>;
+    extra_data?: Record<string, any>;
+    total_emission?: number;
+    unit?: string;
+    date_of_reporting: string;
+    activity_data_unit?: string;
+  },
+  replace?: boolean
+) => {
+  const params = replace ? { replace: "true" } : {};
+  const response = await api.post("/user/emissions", data, { params });
   return response.data;
 };
 
@@ -207,7 +212,7 @@ export const rejectEmissionsByBatch = async (batchId: string, comment?: string) 
 
 export const managerUpdateEmission = async (
   id: string | number,
-  data: { activity_data?: any; date_of_reporting?: string }
+  data: { activity_data?: any; date_of_reporting?: string; reason?: string }
 ) => {
   const response = await api.put(`/user/emissions/manager-edit/${id}`, data);
   return response.data;
@@ -268,6 +273,34 @@ export const downloadEmissions = async (params: {
   const link = document.createElement("a");
   link.href = url;
   link.setAttribute("download", "emissions_export.xlsx");
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+// Export monthly emissions as Excel with status filter
+export const exportMonthlyEmissions = async (params: {
+  siteId: number;
+  year: number;
+  month: number;
+  categoryId?: number;
+  status?: string;
+}) => {
+  const response = await api.get("/user/emissions/export", {
+    params,
+    responseType: "blob",
+  });
+
+  // Extract filename from Content-Disposition header or use default
+  const disposition = response.headers["content-disposition"];
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  const fileName = match?.[1] || `emissions_${params.year}_${params.month}.xlsx`;
+
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", fileName);
   document.body.appendChild(link);
   link.click();
   link.remove();

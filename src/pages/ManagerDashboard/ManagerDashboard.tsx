@@ -11,6 +11,7 @@ import { useChartOptions } from "./hooks/useChartOptions";
 import { useEmissionIntensity } from "./hooks/useEmissionIntensity";
 import PendingEmissionsList from "./components/PendingEmissionsList";
 import EmissionIntensityCard from "./components/EmissionIntensityCard";
+import SubmissionStatusWidget from "../../components/SubmissionStatusWidget";
 
 
 const ManagerDashboard = () => {
@@ -420,6 +421,9 @@ const ManagerDashboard = () => {
                 </div>
               )}
             </div>
+
+            {/* Submission Status */}
+            <SubmissionStatusWidget />
 
             {/* Pending Emissions */}
             <PendingEmissionsList

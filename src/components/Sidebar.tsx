@@ -22,6 +22,7 @@ import {
   Sun,
   Moon,
   ArrowLeftRight,
+  Bell,
 } from "lucide-react";
 
 interface NavItem {
@@ -83,6 +84,8 @@ const Sidebar = () => {
     { to: "data-entry", label: "Data Entry", icon: <ClipboardEdit size={20} /> },
     { to: "my-emissions", label: "My Emissions", icon: <FileSpreadsheet size={20} /> },
     { to: "production-data", label: "Production Data", icon: <Factory size={20} /> },
+    { to: "notifications", label: "Notifications", icon: <Bell size={20} /> },
+    { to: "settings", label: "Settings", icon: <Settings size={20} /> },
   ];
 
   const managerLinks: NavItem[] = [
@@ -92,7 +95,9 @@ const Sidebar = () => {
     { to: "manage-users", label: "User Access", icon: <Users size={20} /> },
     { to : "ede-reports", label: "EDE Report", icon: <FolderTree size={20} /> },
     { to :"sbti-commitment", label : "SBTi Commitment", icon : <FolderTree size={20} />},
-    { to : "ghg-reports", label : "GHG Report", icon : <FolderTree size={20} />}
+    { to : "ghg-reports", label : "GHG Report", icon : <FolderTree size={20} />},
+    { to: "notifications", label: "Notifications", icon: <Bell size={20} /> },
+    { to: "settings", label: "Settings", icon: <Settings size={20} /> },
   ];
 
   const getNavLinks = (): NavItem[] => {

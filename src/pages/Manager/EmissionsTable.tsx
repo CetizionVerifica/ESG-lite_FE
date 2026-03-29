@@ -1,9 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { EmissionData, EmissionStatus } from "../../services/emissionService";
 import {
   getDocumentsByEmission,
   EmissionDocument,
 } from "../../services/documentService";
+import {
+  ColumnOptionsMap,
+  DependentOptionsMap,
+  ColumnDependencies,
+} from "../../services/columnConfigService";
 import DocumentViewerModal from "../../components/DocumentViewerModal";
 import Modal from "../../components/Modal";
 import AuditTrailTimeline, {
@@ -20,13 +25,17 @@ interface EmissionsTableProps {
   onBulkDelete?: (ids: number[]) => Promise<void>;
   onManagerEdit?: (
     id: number,
-    data: { activity_data?: Record<string, any>; date_of_reporting?: string },
+    data: { activity_data?: Record<string, any>; date_of_reporting?: string; reason?: string },
   ) => Promise<void>;
   isDark?: boolean;
   formatActivityData?: (
     activityData: Record<string, unknown>,
     categoryId: number,
   ) => { key: string; displayValue: string }[];
+  columnOptionsMap?: Record<number, ColumnOptionsMap>;
+  dependentOptionsMap?: Record<number, DependentOptionsMap>;
+  columnDependenciesMap?: Record<number, ColumnDependencies>;
+  columnsMap?: Record<number, { pk_id: number; column_name: string }[]>;
 }
 
 function formatDate(dateString: string): string {
@@ -86,6 +95,10 @@ const EmissionsTable = ({
   onManagerEdit,
   isDark = false,
   formatActivityData,
+  columnOptionsMap,
+  dependentOptionsMap,
+  columnDependenciesMap,
+  columnsMap,
 }: EmissionsTableProps) => {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<number>>(
@@ -118,7 +131,8 @@ const EmissionsTable = ({
   const [editForm, setEditForm] = useState<{
     activity_data: Record<string, any>;
     date_of_reporting: string;
-  }>({ activity_data: {}, date_of_reporting: "" });
+    reason: string;
+  }>({ activity_data: {}, date_of_reporting: "", reason: "" });
   const [editLoading, setEditLoading] = useState(false);
 
   // Delete confirmation modal state
@@ -143,9 +157,29 @@ const EmissionsTable = ({
     type: "info" | "error";
   } | null>(null);
 
-  // Get pending and approved emissions
-  const pendingEmissions = emissions.filter((e) => e.status === "pending");
-  const approvedEmissions = emissions.filter((e) => e.status === "approved");
+  // Build parent→FERA map for inline display
+  const isFeraRow = (e: EmissionData) =>
+    e.category?.category_name?.toLowerCase() === "fera";
+
+  const feraMap = useMemo(() => {
+    const fera = emissions.filter((e) => isFeraRow(e));
+    const map = new Map<number, EmissionData>();
+    for (const em of emissions) {
+      if (isFeraRow(em)) continue;
+      const linked = fera.find(
+        (f) => f.pk_id === em.fera_linked_id || f.fera_linked_id === em.pk_id
+      );
+      if (linked) map.set(em.pk_id, linked);
+    }
+    return map;
+  }, [emissions]);
+
+  // Only show regular emissions (FERA is merged inline)
+  const displayEmissions = useMemo(() => emissions.filter((e) => !isFeraRow(e)), [emissions]);
+
+  // Get pending and approved emissions (exclude FERA from selectable lists)
+  const pendingEmissions = emissions.filter((e) => e.status === "pending" && !isFeraRow(e));
+  const approvedEmissions = emissions.filter((e) => e.status === "approved" && !isFeraRow(e));
   const pendingIds = pendingEmissions.map((e) => e.pk_id);
   const approvedIds = approvedEmissions.map((e) => e.pk_id);
 
@@ -303,12 +337,79 @@ const EmissionsTable = ({
     setBulkRejectMode(false);
   };
 
+  // Get dropdown options for a field in the edit modal
+  const getEditFieldOptions = (
+    key: string,
+    categoryId: number,
+  ): { id: string | number; label: string }[] | null => {
+    if (!columnOptionsMap || !columnsMap) return null;
+
+    const columns = columnsMap[categoryId];
+    const columnOptions = columnOptionsMap[categoryId];
+    const depOptions = dependentOptionsMap?.[categoryId];
+    const depChain = columnDependenciesMap?.[categoryId];
+
+    if (!columns || !columnOptions) return null;
+
+    // Find parent column name for this key (case-insensitive)
+    const parentColName = depChain
+      ? (() => {
+          const match = Object.keys(depChain).find(
+            (k) => k.toLowerCase() === key.toLowerCase(),
+          );
+          return match ? depChain[match] : undefined;
+        })()
+      : undefined;
+
+    // If this field is a dependent column, get filtered options based on parent value
+    if (parentColName && depOptions?.[key]) {
+      const parentValue = editForm.activity_data[parentColName];
+      if (parentValue) {
+        // Resolve parent value to label for lookup
+        const parentCol = columns.find(
+          (c) => c.column_name.toLowerCase() === parentColName.toLowerCase(),
+        );
+        let parentLabel = String(parentValue);
+        if (parentCol) {
+          const parentOpts = columnOptions[parentCol.pk_id.toString()];
+          const parentOpt = parentOpts?.find(
+            (o) =>
+              String(o.id) === String(parentValue) ||
+              o.label.toLowerCase() === String(parentValue).toLowerCase(),
+          );
+          if (parentOpt) parentLabel = parentOpt.label;
+        }
+
+        const matchingKey = Object.keys(depOptions[key]).find(
+          (k) => k.toLowerCase() === parentLabel.toLowerCase(),
+        );
+        if (matchingKey) {
+          return depOptions[key][matchingKey];
+        }
+      }
+      // If no parent value selected yet, show all options flattened
+      return Object.values(depOptions[key]).flat();
+    }
+
+    // Check if this field has direct column options
+    const col = columns.find(
+      (c) => c.column_name.toLowerCase() === key.toLowerCase(),
+    );
+    if (col) {
+      const opts = columnOptions[col.pk_id.toString()];
+      if (opts && opts.length > 0) return opts;
+    }
+
+    return null;
+  };
+
   // Edit handlers
   const handleEditClick = (emission: EmissionData) => {
     setEditingEmission(emission);
     setEditForm({
       activity_data: { ...emission.activity_data },
       date_of_reporting: emission.date_of_reporting.split("T")[0],
+      reason: "",
     });
     setEditModalOpen(true);
   };
@@ -320,6 +421,7 @@ const EmissionsTable = ({
       await onManagerEdit(editingEmission.pk_id, {
         activity_data: editForm.activity_data,
         date_of_reporting: editForm.date_of_reporting,
+        reason: editForm.reason || undefined,
       });
       setEditModalOpen(false);
       setEditingEmission(null);
@@ -631,10 +733,11 @@ const EmissionsTable = ({
             </tr>
           </thead>
           <tbody>
-            {emissions.map((emission) => {
+            {displayEmissions.map((emission) => {
               const isLoading = actionLoadingId === emission.pk_id;
               const isPending = emission.status === "pending";
               const isApproved = emission.status === "approved";
+              const feraEntry = feraMap.get(emission.pk_id);
 
               const isPendingSelected = selectedPendingIds.has(emission.pk_id);
               const isApprovedSelected = selectedApprovedIds.has(
@@ -698,7 +801,13 @@ const EmissionsTable = ({
                     {emission.activity_data_unit || "-"}
                   </td>
                   <td className={tdClass}>
-                    {Number(emission.total_emission).toFixed(2)}
+                    <div>{Number(emission.total_emission).toFixed(2)}</div>
+                    {feraEntry && (
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${isDark ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-700"}`}>FERA</span>
+                        <span className={`text-sm font-medium ${isDark ? "text-purple-400" : "text-purple-600"}`}>{Number(feraEntry.total_emission).toFixed(2)}</span>
+                      </div>
+                    )}
                   </td>
                   <td className={tdClass}>
                     {formatDate(emission.date_of_reporting)}
@@ -836,25 +945,53 @@ const EmissionsTable = ({
           </div>
         )}
         <div className="space-y-4">
-          {Object.entries(editForm.activity_data).map(([key, value]) => (
-            <div key={key}>
-              <label className={labelClass}>{key}</label>
-              <input
-                type="text"
-                value={String(value)}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    activity_data: {
-                      ...editForm.activity_data,
-                      [key]: e.target.value,
-                    },
-                  })
-                }
-                className={modalInputClass}
-              />
-            </div>
-          ))}
+          {Object.entries(editForm.activity_data).map(([key, value]) => {
+            const categoryId = editingEmission?.category?.category_id || 0;
+            const options = getEditFieldOptions(key, categoryId);
+
+            return (
+              <div key={key}>
+                <label className={labelClass}>{key}</label>
+                {options && options.length > 0 ? (
+                  <select
+                    value={String(value)}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        activity_data: {
+                          ...editForm.activity_data,
+                          [key]: e.target.value,
+                        },
+                      })
+                    }
+                    className={modalInputClass}
+                  >
+                    <option value="">-- Select --</option>
+                    {options.map((opt) => (
+                      <option key={opt.id} value={opt.label}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={String(value)}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        activity_data: {
+                          ...editForm.activity_data,
+                          [key]: e.target.value,
+                        },
+                      })
+                    }
+                    className={modalInputClass}
+                  />
+                )}
+              </div>
+            );
+          })}
           <div>
             <label className={labelClass}>Date of Reporting</label>
             <input
@@ -863,6 +1000,18 @@ const EmissionsTable = ({
               onChange={(e) =>
                 setEditForm({ ...editForm, date_of_reporting: e.target.value })
               }
+              className={modalInputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Reason for Edit</label>
+            <textarea
+              value={editForm.reason}
+              onChange={(e) =>
+                setEditForm({ ...editForm, reason: e.target.value })
+              }
+              placeholder="Why is this data being modified?"
+              rows={2}
               className={modalInputClass}
             />
           </div>

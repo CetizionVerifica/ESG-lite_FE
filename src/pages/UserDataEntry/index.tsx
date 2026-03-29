@@ -189,6 +189,15 @@ const UserDataEntryPage = () => {
     const [selectedEmissionIds, setSelectedEmissionIds] = useState<Set<number>>(new Set());
     const [bulkDeleting, setBulkDeleting] = useState(false);
 
+    // Duplicate emission confirmation
+    const [duplicateConfirm, setDuplicateConfirm] = useState<{
+        existingEmission: any;
+        pendingData: any;
+        rowIndex: number;
+        context: "manual" | "invoice";
+        resolve: (action: "replace" | "skip") => void;
+    } | null>(null);
+
     // Emission factor viewer
     const [factorModalOpen, setFactorModalOpen] = useState(false);
     const [factorModalData, setFactorModalData] = useState<EmissionFactorDetails | null>(null);
@@ -493,7 +502,19 @@ const UserDataEntryPage = () => {
                 const mainEmissions = flattenEmissions(paginatedResult.data);
                 setTotalCount(paginatedResult.total);
                 setTotalPages(Math.max(1, Math.ceil(paginatedResult.total / PAGE_LIMIT)));
-                setEmissions(mainEmissions);
+
+                // Also fetch FERA emissions so feraMap can link them
+                if (feraCategoryId && siteId) {
+                    try {
+                        const feraData = await getEmissionsBySiteAndCategory(siteId, feraCategoryId);
+                        const feraRows = flattenEmissions(feraData).map((r) => ({ ...r, _isFeraRow: true }));
+                        setEmissions([...mainEmissions, ...feraRows]);
+                    } catch {
+                        setEmissions(mainEmissions);
+                    }
+                } else {
+                    setEmissions(mainEmissions);
+                }
             }
 
             // Clear stale selections after data reload
@@ -1228,6 +1249,24 @@ const UserDataEntryPage = () => {
         return { valid: errors.length === 0, errors };
     };
 
+    // Helper: prompt user on duplicate and return their choice
+    const promptDuplicateAction = (
+        existingEmission: any,
+        pendingData: any,
+        rowIndex: number,
+        context: "manual" | "invoice",
+    ): Promise<"replace" | "skip"> => {
+        return new Promise((resolve) => {
+            setDuplicateConfirm({
+                existingEmission,
+                pendingData,
+                rowIndex,
+                context,
+                resolve,
+            });
+        });
+    };
+
     const handleSaveAll = async () => {
         const allRowsHaveDates = modalRows.every(
             (row) => row.date_of_reporting,
@@ -1256,7 +1295,8 @@ const UserDataEntryPage = () => {
 
             const newEmissions: EmissionRow[] = [];
 
-            for (const row of modalRows) {
+            for (let i = 0; i < modalRows.length; i++) {
+                const row = modalRows[i];
                 const {
                     id,
                     activity_data_unit,
@@ -1285,7 +1325,7 @@ const UserDataEntryPage = () => {
                 // Skip FERA rows — backend auto-creates them
                 if (row._isFeraRow) continue;
 
-                const result = await createEmission({
+                const payload = {
                     site_id: siteId,
                     category_id: selectedCategory,
                     activity_data: activityData,
@@ -1294,14 +1334,37 @@ const UserDataEntryPage = () => {
                     unit: "kg CO2e",
                     date_of_reporting: rowDate || dateOfReporting,
                     activity_data_unit: activity_data_unit || undefined,
-                });
+                };
 
-                newEmissions.push(flattenEmission(result.emission));
-                // If backend auto-created a FERA entry, add it too
-                if (result.fera_emission) {
-                    const feraFlat = flattenEmission(result.fera_emission);
-                    feraFlat._isFeraRow = true;
-                    newEmissions.push(feraFlat);
+                try {
+                    const result = await createEmission(payload);
+                    newEmissions.push(flattenEmission(result.emission));
+                    if (result.fera_emission) {
+                        const feraFlat = flattenEmission(result.fera_emission);
+                        feraFlat._isFeraRow = true;
+                        newEmissions.push(feraFlat);
+                    }
+                } catch (err: any) {
+                    if (err?.response?.status === 409 && err?.response?.data?.duplicate) {
+                        const action = await promptDuplicateAction(
+                            err.response.data.existing_emission,
+                            payload,
+                            i + 1,
+                            "manual",
+                        );
+                        if (action === "replace") {
+                            const result = await createEmission(payload, true);
+                            newEmissions.push(flattenEmission(result.emission));
+                            if (result.fera_emission) {
+                                const feraFlat = flattenEmission(result.fera_emission);
+                                feraFlat._isFeraRow = true;
+                                newEmissions.push(feraFlat);
+                            }
+                        }
+                        // skip: just continue to next row
+                    } else {
+                        throw err;
+                    }
                 }
             }
 
@@ -1541,7 +1604,8 @@ const UserDataEntryPage = () => {
             setSaveError(null);
             const newEmissions: EmissionRow[] = [];
 
-            for (const row of invoiceRows) {
+            for (let i = 0; i < invoiceRows.length; i++) {
+                const row = invoiceRows[i];
                 const {
                     id,
                     date_of_reporting,
@@ -1563,7 +1627,7 @@ const UserDataEntryPage = () => {
                 delete activityData._ecmKey;
                 delete activityData._isFeraRow;
 
-                const result = await createEmission({
+                const payload = {
                     site_id: siteId,
                     category_id: selectedCategory,
                     activity_data: activityData,
@@ -1572,9 +1636,27 @@ const UserDataEntryPage = () => {
                     unit: "kg CO2e",
                     date_of_reporting: date_of_reporting || selectedDate || "",
                     activity_data_unit: activity_data_unit || undefined,
-                });
+                };
 
-                newEmissions.push(flattenEmission(result.emission));
+                try {
+                    const result = await createEmission(payload);
+                    newEmissions.push(flattenEmission(result.emission));
+                } catch (err: any) {
+                    if (err?.response?.status === 409 && err?.response?.data?.duplicate) {
+                        const action = await promptDuplicateAction(
+                            err.response.data.existing_emission,
+                            payload,
+                            i + 1,
+                            "invoice",
+                        );
+                        if (action === "replace") {
+                            const result = await createEmission(payload, true);
+                            newEmissions.push(flattenEmission(result.emission));
+                        }
+                    } else {
+                        throw err;
+                    }
+                }
             }
 
             setEmissions((prev) => [...newEmissions, ...prev]);
@@ -2022,6 +2104,20 @@ const UserDataEntryPage = () => {
             label: "Total Emission (tCO2e)",
             editable: false,
             type: "number" as const,
+            render: (_value: any, row: EmissionRow) => {
+                const feraEntry = feraMap.get(row.pk_id);
+                return (
+                    <div>
+                        <div>{Number(row.total_emission).toFixed(2)}</div>
+                        {feraEntry && (
+                            <div className="mt-1 flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold px-1 py-0.5 rounded bg-purple-100 text-purple-700">FERA</span>
+                                <span className="text-sm text-purple-600 font-medium">{Number(feraEntry.total_emission).toFixed(2)}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            },
         },
         {
             key: "status",
@@ -2065,7 +2161,28 @@ const UserDataEntryPage = () => {
     // Render
     // ---------------------------------------------------------------------------
 
-    const paginatedEmissions = emissions;
+    // Detect FERA by flag OR category name (summary view doesn't have _isFeraRow)
+    const isFera = useCallback((e: EmissionRow) =>
+        e._isFeraRow || e.category_name?.toLowerCase() === "fera",
+    []);
+
+    // Build FERA lookup and filter FERA rows out — show inline in Total Emission cell
+    const feraMap = useMemo(() => {
+        const map = new Map<number, EmissionRow>();
+        const feraRows = emissions.filter((e) => isFera(e));
+        for (const em of emissions) {
+            if (isFera(em)) continue;
+            const linked = feraRows.find(
+                (f) => f.pk_id === (em as any).fera_linked_id || (f as any).fera_linked_id === em.pk_id
+            );
+            if (linked) map.set(em.pk_id, linked);
+        }
+        return map;
+    }, [emissions, isFera]);
+
+    const paginatedEmissions = useMemo(() =>
+        emissions.filter((e) => !isFera(e)),
+    [emissions, isFera]);
 
     return (
         <div className="p-6">
@@ -2111,6 +2228,7 @@ const UserDataEntryPage = () => {
                             )
                         }
                         clearable={true}
+                        searchable={true}
                     />
                 </div>
                 <div>
@@ -2141,6 +2259,7 @@ const UserDataEntryPage = () => {
                             )
                         }
                         clearable={true}
+                        searchable={true}
                     />
                 </div>
                 <div>
@@ -2935,7 +3054,15 @@ const UserDataEntryPage = () => {
                                                 <td className="border border-gray-300 px-4 py-3 text-gray-900">{row.category_name || "-"}</td>
                                                 <td className="border border-gray-300 px-4 py-3 text-gray-900">{row.category_scope || "-"}</td>
                                                 <td className="border border-gray-300 px-4 py-3 text-gray-900">{row.activity_data_unit || "-"}</td>
-                                                <td className="border border-gray-300 px-4 py-3 text-gray-900">{Number(row.total_emission).toFixed(2)}</td>
+                                                <td className="border border-gray-300 px-4 py-3 text-gray-900">
+                                                    <div>{Number(row.total_emission).toFixed(2)}</div>
+                                                    {feraMap.get(row.pk_id) && (
+                                                        <div className="mt-1 flex items-center gap-1.5">
+                                                            <span className="text-[10px] font-bold px-1 py-0.5 rounded bg-purple-100 text-purple-700">FERA</span>
+                                                            <span className="text-sm text-purple-600 font-medium">{Number(feraMap.get(row.pk_id)!.total_emission).toFixed(2)}</span>
+                                                        </div>
+                                                    )}
+                                                </td>
                                                 <td className="border border-gray-300 px-4 py-3 text-gray-900">{new Date(row.date_of_reporting).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
                                                 <td className="border border-gray-300 px-4 py-3">
                                                     <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
@@ -3756,6 +3883,58 @@ const UserDataEntryPage = () => {
                 </div>
             )}
             {/* Portal tooltip — renders outside overflow containers */}
+            {/* Duplicate Emission Confirmation Dialog */}
+            {duplicateConfirm && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-200 bg-amber-50">
+                            <div className="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-600">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                    <line x1="12" y1="9" x2="12" y2="13"/>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                </svg>
+                                <h3 className="text-base font-semibold text-gray-900">Duplicate Entry Found</h3>
+                            </div>
+                        </div>
+                        <div className="px-6 py-4">
+                            <p className="text-sm text-gray-700 mb-3">
+                                Row {duplicateConfirm.rowIndex} has a duplicate entry that already exists for this site, category
+                                {duplicateConfirm.existingEmission?.activity_data?.emission_category
+                                    ? ` (${duplicateConfirm.existingEmission.activity_data.emission_category})`
+                                    : ""}{" "}
+                                and date.
+                            </p>
+                            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1">
+                                <div><span className="font-medium">Existing emission:</span> {Number(duplicateConfirm.existingEmission?.total_emission || 0).toFixed(4)} tCO2e</div>
+                                <div><span className="font-medium">Date:</span> {duplicateConfirm.existingEmission?.date_of_reporting ? new Date(duplicateConfirm.existingEmission.date_of_reporting).toLocaleDateString() : "—"}</div>
+                                <div><span className="font-medium">Status:</span> {duplicateConfirm.existingEmission?.status || "—"}</div>
+                            </div>
+                        </div>
+                        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
+                            <button
+                                onClick={() => {
+                                    duplicateConfirm.resolve("skip");
+                                    setDuplicateConfirm(null);
+                                }}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                            >
+                                Skip
+                            </button>
+                            <button
+                                onClick={() => {
+                                    duplicateConfirm.resolve("replace");
+                                    setDuplicateConfirm(null);
+                                }}
+                                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors cursor-pointer"
+                            >
+                                Replace Existing
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {tooltip && createPortal(
                 <div
                     className="px-2.5 py-1.5 bg-gray-800 text-white text-xs rounded-md shadow-lg whitespace-normal max-w-xs pointer-events-none"
@@ -3829,6 +4008,7 @@ function flattenEmission(emission: EmissionData): EmissionRow {
         category_name: emission.category?.category_name || "",
         category_scope: emission.category?.scope || "",
         date_of_reporting: emission.date_of_reporting || "",
+        fera_linked_id: emission.fera_linked_id || null,
     };
 }
 

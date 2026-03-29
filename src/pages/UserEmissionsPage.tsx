@@ -546,7 +546,23 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
               </tr>
             </thead>
             <tbody>
-              {emissions.map((emission) => (
+              {(() => {
+                // Build parent→FERA map, skip standalone FERA rows
+                const isFera = (e: EmissionData) => e.category?.category_name?.toLowerCase() === "fera";
+                const regular = emissions.filter((e) => !isFera(e));
+                const fera = emissions.filter((e) => isFera(e));
+                const feraMap = new Map<number, EmissionData>();
+                for (const em of regular) {
+                  const linked = fera.find(
+                    (f) => f.pk_id === em.fera_linked_id || f.fera_linked_id === em.pk_id
+                  );
+                  if (linked) feraMap.set(em.pk_id, linked);
+                }
+                return regular.map((emission) => {
+                  const feraEntry = feraMap.get(emission.pk_id);
+                  return { emission, feraEntry };
+                });
+              })().map(({ emission, feraEntry }) => (
                 <tr key={emission.pk_id} className="hover:bg-gray-50">
                   <td className="border border-gray-300 px-4 py-3">
                     {emission.category?.category_name || "-"}
@@ -567,7 +583,13 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                     {emission.activity_data_unit || "-"}
                   </td>
                   <td className="border border-gray-300 px-4 py-3">
-                    {Number(emission.total_emission).toFixed(2)}
+                    <div>{Number(emission.total_emission).toFixed(2)}</div>
+                    {feraEntry && (
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold px-1 py-0.5 rounded bg-purple-100 text-purple-700">FERA</span>
+                        <span className="text-sm text-purple-600 font-medium">{Number(feraEntry.total_emission).toFixed(2)}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="border border-gray-300 px-4 py-3">
                     {formatDate(emission.date_of_reporting)}

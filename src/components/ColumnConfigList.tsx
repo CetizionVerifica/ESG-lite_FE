@@ -15,6 +15,7 @@ import { getColumns, DropdownOptionValue } from "../services/columnService";
 import { Table, Column } from "./Table";
 import { DropdownOption } from "./Dropdown";
 import Modal from "./Modal";
+import EditColumnConfigModal from "./EditColumnConfigModal";
 import { useTheme } from "../context/ThemeContext";
 
 interface ColumnEntity {
@@ -87,6 +88,10 @@ const ColumnConfigList = ({
   const [editingExtraFields, setEditingExtraFields] = useState<ExtraFieldDefinition[]>([]);
   const [savingExtraFields, setSavingExtraFields] = useState(false);
 
+  // Unified edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editModalConfig, setEditModalConfig] = useState<ColumnConfigEntity | null>(null);
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -114,55 +119,7 @@ const ColumnConfigList = ({
     loadData();
   }, [loadData, refreshTrigger]);
 
-  const handleEdit = async (
-    row: ColumnConfigEntity,
-    updates: Partial<ColumnConfigEntity>
-  ) => {
-    try {
-      const updatePayload: any = {
-        config_name: updates.config_name,
-      };
 
-      // If columns were updated, they come as an array of IDs from the multiselect
-      if (updates.columns !== undefined) {
-        // When editing multiselect, the value is already an array of IDs
-        const columnIds = Array.isArray(updates.columns)
-          ? (updates.columns as any)
-          : [];
-        updatePayload.column_ids = columnIds;
-      }
-
-      await updateColumnConfig(row.pk_id, updatePayload);
-
-      // Fetch the updated config to get the full column objects
-      const columnsData = await getColumns();
-      setAllColumns(columnsData);
-
-      // Build the proper updates with full column objects instead of just IDs
-      const properUpdates: Partial<ColumnConfigEntity> = {
-        config_name: updates.config_name,
-      };
-
-      if (updates.columns !== undefined) {
-        const columnIds = Array.isArray(updates.columns)
-          ? (updates.columns as unknown as number[])
-          : [];
-        // Map IDs back to full column objects
-        properUpdates.columns = columnIds
-          .map((id) => columnsData.find((col: ColumnEntity) => col.pk_id === id))
-          .filter((col): col is ColumnEntity => col !== undefined);
-      }
-
-      setColumnConfigs((prev) =>
-        prev.map((item) =>
-          item.pk_id === row.pk_id ? { ...item, ...properUpdates } : item
-        )
-      );
-    } catch (error) {
-      console.error("Error updating column config:", error);
-      throw error;
-    }
-  };
 
   const handleDelete = async (row: ColumnConfigEntity) => {
     try {
@@ -612,10 +569,23 @@ const ColumnConfigList = ({
         data={columnConfigs}
         columns={tableColumns}
         keyField="pk_id"
-        onEdit={handleEdit}
         onDelete={handleDelete}
         loading={loading}
         showActions={true}
+        renderActions={(row, defaultActions) => (
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setEditModalConfig(row);
+                setEditModalOpen(true);
+              }}
+              className={`px-3 py-1 rounded text-sm cursor-pointer ${isDark ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+            >
+              Edit
+            </button>
+            {defaultActions.deleteButton}
+          </div>
+        )}
       />
 
       {/* Dropdown Options Modal */}
@@ -1183,6 +1153,29 @@ const ColumnConfigList = ({
           </div>
         </div>
       </Modal>
+
+      {/* Unified Edit Column Config Modal */}
+      {editModalConfig && (
+        <EditColumnConfigModal
+          isOpen={editModalOpen}
+          onClose={() => {
+            setEditModalOpen(false);
+            setEditModalConfig(null);
+          }}
+          config={editModalConfig}
+          allColumns={allColumns}
+          isDark={isDark}
+          onSave={(updatedConfig) => {
+            setColumnConfigs((prev) =>
+              prev.map((c) =>
+                c.pk_id === updatedConfig.pk_id ? updatedConfig : c
+              )
+            );
+            setEditModalOpen(false);
+            setEditModalConfig(null);
+          }}
+        />
+      )}
     </>
   );
 };

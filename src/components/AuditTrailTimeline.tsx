@@ -149,6 +149,11 @@ const TimelineContent = ({
                   )
                 )}
               </div>
+              {log.reason && (
+                <div className={`mt-2 text-xs rounded border px-2.5 py-1.5 ${isDark ? "bg-amber-900/20 text-amber-400 border-amber-800/30" : "bg-amber-50 text-amber-800 border-amber-200"}`}>
+                  <span className="font-medium">Reason:</span> {log.reason}
+                </div>
+              )}
             </div>
           </div>
         ))}
