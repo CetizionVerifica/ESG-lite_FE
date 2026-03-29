@@ -52,7 +52,15 @@ const Dropdown = ({
     const updatePos = () => {
       if (dropdownRef.current) {
         const rect = dropdownRef.current.getBoundingClientRect();
-        setMenuPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+        const menuHeight = 260; // approximate max menu height
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const openUpward = spaceBelow < menuHeight && rect.top > menuHeight;
+
+        setMenuPos({
+          top: openUpward ? rect.top - menuHeight - 4 : rect.bottom + 4,
+          left: rect.left,
+          width: rect.width,
+        });
       }
     };
     updatePos();
