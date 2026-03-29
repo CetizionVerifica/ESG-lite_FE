@@ -14,20 +14,14 @@ const NotificationContext = createContext<NotificationContextType>({
   refresh: () => {},
 });
 
-const POLL_INTERVAL = 10_000; // 10 seconds — fast polling as primary, SSE as upgrade
-const API_URL = import.meta.env.VITE_API_URL;
-const MAX_RECONNECT = 2; // Fewer SSE retries — fall back to polling quickly
+const POLL_INTERVAL = 10_000; // 10 seconds
 
 export const NotificationProvider = ({ children }: { children: ReactNode }) => {
-  const { isAuthenticated, token } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const [latestNotification, setLatestNotification] = useState<NotificationItem | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimerRef = useRef<number | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const mountedRef = useRef(true);
-
   const prevCountRef = useRef(-1);
+  const mountedRef = useRef(true);
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -52,85 +46,23 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [isAuthenticated]);
 
-  // SSE connection with auto-reconnect
   useEffect(() => {
     mountedRef.current = true;
 
-    if (!isAuthenticated || !token) {
+    if (!isAuthenticated) {
       setUnreadCount(0);
       setLatestNotification(null);
-      // Cleanup any existing connection
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
+      prevCountRef.current = -1;
       return;
     }
 
-    const connect = () => {
-      if (!mountedRef.current) return;
-
-      const url = `${API_URL}/notifications/stream?token=${encodeURIComponent(token)}`;
-      const es = new EventSource(url);
-      eventSourceRef.current = es;
-
-      es.addEventListener("unread", (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (mountedRef.current) setUnreadCount(data.count);
-          reconnectAttemptsRef.current = 0; // Connected successfully
-        } catch { /* ignore */ }
-      });
-
-      es.addEventListener("notification", (e) => {
-        try {
-          const data = JSON.parse(e.data) as NotificationItem;
-          if (mountedRef.current) setLatestNotification(data);
-        } catch { /* ignore */ }
-      });
-
-      es.onerror = () => {
-        es.close();
-        eventSourceRef.current = null;
-
-        // Reconnect with exponential backoff
-        if (mountedRef.current && reconnectAttemptsRef.current < MAX_RECONNECT) {
-          const delay = 1000 * Math.pow(2, reconnectAttemptsRef.current);
-          reconnectAttemptsRef.current++;
-          reconnectTimerRef.current = window.setTimeout(connect, delay);
-        }
-      };
-    };
-
-    connect();
+    refresh();
+    const interval = setInterval(refresh, POLL_INTERVAL);
 
     return () => {
       mountedRef.current = false;
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
+      clearInterval(interval);
     };
-  }, [isAuthenticated, token]);
-
-  // Polling — always runs as primary notification mechanism
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    refresh();
-    const interval = setInterval(() => {
-      {
-        refresh();
-      }
-    }, POLL_INTERVAL);
-    return () => clearInterval(interval);
   }, [isAuthenticated, refresh]);
 
   return (
