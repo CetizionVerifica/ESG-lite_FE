@@ -14,9 +14,9 @@ const NotificationContext = createContext<NotificationContextType>({
   refresh: () => {},
 });
 
-const POLL_INTERVAL = 60_000;
+const POLL_INTERVAL = 10_000; // 10 seconds — fast polling as primary, SSE as upgrade
 const API_URL = import.meta.env.VITE_API_URL;
-const MAX_RECONNECT = 5;
+const MAX_RECONNECT = 2; // Fewer SSE retries — fall back to polling quickly
 
 export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated, token } = useAuth();
@@ -106,12 +106,12 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [isAuthenticated, token]);
 
-  // Fallback polling when SSE is disconnected
+  // Polling — always runs as primary notification mechanism
   useEffect(() => {
     if (!isAuthenticated) return;
     refresh();
     const interval = setInterval(() => {
-      if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
+      {
         refresh();
       }
     }, POLL_INTERVAL);
