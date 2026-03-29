@@ -13,6 +13,7 @@ import {
   approveEmissionsByBatch,
   rejectEmissionsByBatch,
   managerUpdateEmission,
+  exportMonthlyEmissions,
   EmissionData,
   EmissionStatus,
   type EmissionUploadBatch,
@@ -86,6 +87,7 @@ const ManagerPage = () => {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<EmissionStatus | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -537,12 +539,39 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             clearable={true}
           />
         </div>
-        <div className="flex items-end">
+        <div className="flex items-end gap-2">
           <button
             onClick={() => fetchEmissions()}
             className={isDark ? "px-4 py-2 bg-slate-700 text-slate-200 rounded hover:bg-slate-600" : "px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"}
           >
             Refresh
+          </button>
+          <button
+            onClick={async () => {
+              if (!selectedSite || !selectedDate) return;
+              const [y, m] = selectedDate.split("-");
+              setExporting(true);
+              try {
+                await exportMonthlyEmissions({
+                  siteId: selectedSite,
+                  year: parseInt(y),
+                  month: parseInt(m),
+                  categoryId: selectedCategory || undefined,
+                  status: selectedStatus || undefined,
+                });
+              } catch (err: any) {
+                const msg = err?.response?.status === 404
+                  ? "No emissions found for the selected filters"
+                  : "Failed to export data. Please try again.";
+                alert(msg);
+              }
+              finally { setExporting(false); }
+            }}
+            disabled={!selectedSite || !selectedDate || exporting}
+            title={!selectedDate ? "Select a date first" : "Download filtered emissions as Excel"}
+            className={`px-4 py-2 rounded disabled:opacity-40 ${isDark ? "bg-emerald-700 text-white hover:bg-emerald-600" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}
+          >
+            {exporting ? "Exporting..." : "Download Excel"}
           </button>
         </div>
       </div>

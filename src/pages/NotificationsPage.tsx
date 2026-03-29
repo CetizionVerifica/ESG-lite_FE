@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Check, CheckCheck, BellOff, Filter, CheckCircle, XCircle, Clock, AlertTriangle } from "lucide-react";
+import { Bell, Check, CheckCheck, BellOff, Filter, CheckCircle, XCircle, Clock, AlertTriangle, ChevronDown, ExternalLink } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
 import {
   getNotifications,
@@ -89,6 +90,7 @@ type TypeFilter = "all" | "approved" | "rejected" | "reminder";
 
 const NotificationsPage = () => {
   const { isDark: d } = useTheme();
+  const { role } = useAuth();
   const { refresh } = useNotifications();
   const navigate = useNavigate();
 
@@ -98,6 +100,7 @@ const NotificationsPage = () => {
   const [loading, setLoading] = useState(false);
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const limit = 30;
 
@@ -127,7 +130,7 @@ const NotificationsPage = () => {
 
   const handleClick = async (n: NotificationItem) => {
     if (!n.read) await handleMarkRead(n.id);
-    if (n.link) navigate(n.link);
+    setExpandedId(expandedId === n.id ? null : n.id);
   };
 
   // Filters
@@ -203,15 +206,21 @@ const NotificationsPage = () => {
               </button>
             ))}
           </div>
-          <span className={`w-px h-5 ${d ? "bg-[#1e2d40]" : "bg-gray-200"}`} />
-          <div className="flex items-center gap-1.5">
-            <Filter size={14} className={d ? "text-[#475569]" : "text-gray-400"} />
-            {(["all", "approved", "rejected", "reminder"] as TypeFilter[]).map((f) => (
-              <button key={f} onClick={() => setTypeFilter(f)} className={filterBtn(typeFilter === f)}>
-                {f === "all" ? "All types" : f === "approved" ? "Approvals" : f === "rejected" ? "Rejections" : "Reminders"}
-              </button>
-            ))}
-          </div>
+          {role !== "Manager" && (
+            <>
+            <span className={`w-px h-5 ${d ? "bg-[#1e2d40]" : "bg-gray-200"}`} />
+            <div className="flex items-center gap-1.5">
+              <>
+                <Filter size={14} className={d ? "text-[#475569]" : "text-gray-400"} />
+                {(["all", "approved", "rejected", "reminder"] as TypeFilter[]).map((f) => (
+                  <button key={f} onClick={() => setTypeFilter(f)} className={filterBtn(typeFilter === f)}>
+                    {f === "all" ? "All types" : f === "approved" ? "Approvals" : f === "rejected" ? "Rejections" : "Reminders"}
+                  </button>
+                ))}
+              </>
+            </div>
+            </>
+          )}
         </div>
 
         {/* Content */}
@@ -248,63 +257,136 @@ const NotificationsPage = () => {
                 <div className="space-y-2.5">
                   {group.items.map((n) => {
                     const ts = getTypeStyle(n.type);
+                    const isExpanded = expandedId === n.id;
+                    // Parse message for structured display
+                    const msgParts = n.message.split(". Reason: ");
+                    const mainMsg = msgParts[0];
+                    const reason = msgParts.length > 1 ? msgParts[1] : null;
+                    // Extract "by ManagerName" from message
+                    const byMatch = mainMsg.match(/by (.+)$/);
+                    const managerName = byMatch ? byMatch[1] : null;
+                    const cleanMsg = managerName ? mainMsg.substring(0, mainMsg.lastIndexOf(` by ${managerName}`)) || mainMsg : mainMsg;
+
                     return (
-                      <button
+                      <div
                         key={n.id}
-                        onClick={() => handleClick(n)}
-                        className={`w-full flex items-start gap-4 px-5 py-4 text-left rounded-2xl border-l-[3px] transition-all duration-150 cursor-pointer group ${
+                        className={`rounded-2xl border-l-[3px] transition-all duration-200 overflow-hidden ${
                           d ? ts.darkBorder : ts.border
                         } ${
                           !n.read
                             ? d
-                              ? "bg-[#131c2a] hover:bg-[#1a2332] ring-1 ring-[#1e2d40]"
-                              : "bg-white hover:bg-blue-50/30 ring-1 ring-gray-200 shadow-sm"
+                              ? "bg-[#131c2a] ring-1 ring-[#1e2d40]"
+                              : "bg-white ring-1 ring-gray-200 shadow-sm"
                             : d
-                              ? "bg-[#0f1923] hover:bg-[#131c2a] ring-1 ring-[#1a2332]/50"
-                              : "bg-gray-50/80 hover:bg-white ring-1 ring-gray-100"
+                              ? "bg-[#0f1923] ring-1 ring-[#1a2332]/50"
+                              : "bg-gray-50/80 ring-1 ring-gray-100"
                         }`}
                       >
-                        {/* Icon */}
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                          d ? `${ts.darkBg} ${ts.darkColor}` : `${ts.bg} ${ts.color}`
-                        }`}>
-                          {ts.icon}
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className={`text-sm font-bold ${d ? "text-white" : "text-gray-900"}`}>
-                              {n.title}
-                            </span>
-                            {!n.read && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
-                            <span className={`ml-auto text-[11px] font-medium shrink-0 ${d ? "text-[#475569]" : "text-gray-400"}`}>
-                              {timeAgo(n.created_at)}
-                            </span>
+                        {/* Main row — clickable */}
+                        <button
+                          onClick={() => handleClick(n)}
+                          className={`w-full flex items-start gap-4 px-5 py-4 text-left cursor-pointer group transition-colors ${
+                            d ? "hover:bg-[#1a2332]" : "hover:bg-blue-50/30"
+                          }`}
+                        >
+                          {/* Icon */}
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            d ? `${ts.darkBg} ${ts.darkColor}` : `${ts.bg} ${ts.color}`
+                          }`}>
+                            {ts.icon}
                           </div>
-                          <p className={`text-[13px] leading-relaxed ${d ? "text-[#94a3b8]" : "text-gray-600"}`}>
-                            {n.message}
-                          </p>
-                          <span className={`text-[11px] mt-1.5 block opacity-0 group-hover:opacity-100 transition-opacity ${d ? "text-[#475569]" : "text-gray-400"}`}>
-                            {formatDate(n.created_at)}
-                          </span>
-                        </div>
 
-                        {/* Mark read */}
-                        {!n.read && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
-                            className={`p-1.5 rounded-lg shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${
-                              d
-                                ? "text-[#475569] hover:text-[#94a3b8] hover:bg-[#1e2d40]"
-                                : "text-gray-300 hover:text-blue-600 hover:bg-blue-50"
-                            }`}
-                            title="Mark as read"
-                          >
-                            <Check size={16} />
-                          </button>
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className={`text-sm font-bold ${d ? "text-white" : "text-gray-900"}`}>
+                                {n.title}
+                              </span>
+                              {!n.read && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
+                              <span className={`ml-auto text-[11px] font-medium shrink-0 ${d ? "text-[#475569]" : "text-gray-400"}`}>
+                                {timeAgo(n.created_at)}
+                              </span>
+                            </div>
+                            <p className={`text-[13px] leading-relaxed ${d ? "text-[#94a3b8]" : "text-gray-600"} ${isExpanded ? "" : "line-clamp-1"}`}>
+                              {cleanMsg}
+                            </p>
+                          </div>
+
+                          {/* Expand chevron + mark read */}
+                          <div className="flex items-center gap-1 shrink-0 mt-1">
+                            {!n.read && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
+                                className={`p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${
+                                  d
+                                    ? "text-[#475569] hover:text-[#94a3b8] hover:bg-[#1e2d40]"
+                                    : "text-gray-300 hover:text-blue-600 hover:bg-blue-50"
+                                }`}
+                                title="Mark as read"
+                              >
+                                <Check size={16} />
+                              </button>
+                            )}
+                            <ChevronDown size={16} className={`transition-transform duration-200 ${isExpanded ? "rotate-180" : ""} ${d ? "text-[#475569]" : "text-gray-400"}`} />
+                          </div>
+                        </button>
+
+                        {/* Expanded details */}
+                        {isExpanded && (
+                          <div className={`px-5 pb-4 pt-0 ml-14 space-y-3 ${d ? "border-t border-[#1e2d40]" : "border-t border-gray-100"}`}>
+                            <div className="pt-3 space-y-2">
+                              {/* Full message */}
+                              <div>
+                                <span className={`text-[11px] font-semibold uppercase tracking-wider ${d ? "text-[#475569]" : "text-gray-400"}`}>Details</span>
+                                <p className={`text-sm mt-1 leading-relaxed ${d ? "text-[#e2e8f0]" : "text-gray-700"}`}>
+                                  {cleanMsg}
+                                </p>
+                              </div>
+
+                              {/* Manager */}
+                              {managerName && (
+                                <div>
+                                  <span className={`text-[11px] font-semibold uppercase tracking-wider ${d ? "text-[#475569]" : "text-gray-400"}`}>
+                                    {n.type.includes("APPROVED") ? "Approved by" : n.type.includes("REJECTED") ? "Rejected by" : "By"}
+                                  </span>
+                                  <p className={`text-sm mt-1 font-medium ${d ? "text-[#e2e8f0]" : "text-gray-800"}`}>
+                                    {managerName}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Reason */}
+                              {reason && (
+                                <div className={`rounded-lg p-3 ${d ? "bg-red-500/10 border border-red-500/20" : "bg-red-50 border border-red-100"}`}>
+                                  <span className={`text-[11px] font-semibold uppercase tracking-wider ${d ? "text-red-400" : "text-red-500"}`}>Reason</span>
+                                  <p className={`text-sm mt-1 leading-relaxed ${d ? "text-red-300" : "text-red-700"}`}>
+                                    {reason}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Timestamp */}
+                              <div>
+                                <span className={`text-[11px] font-semibold uppercase tracking-wider ${d ? "text-[#475569]" : "text-gray-400"}`}>Date & Time</span>
+                                <p className={`text-sm mt-1 ${d ? "text-[#94a3b8]" : "text-gray-600"}`}>
+                                  {formatDate(n.created_at)}
+                                </p>
+                              </div>
+
+                              {/* Link */}
+                              {n.link && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); navigate(n.link!); }}
+                                  className={`flex items-center gap-1.5 text-sm font-medium mt-1 cursor-pointer ${d ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
+                                >
+                                  <ExternalLink size={14} />
+                                  View in app
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

@@ -15,10 +15,12 @@ export interface NotificationPreferences {
   timezone: string | null;
 }
 
-export const getNotifications = async (page = 1, limit = 20) => {
+export const getNotifications = async (page = 1, limit = 20, unreadOnly = false) => {
+  const params: any = { page, limit };
+  if (unreadOnly) params.unread = "true";
   const response = await api.get<{ notifications: NotificationItem[]; total: number }>(
     "/notifications",
-    { params: { page, limit } }
+    { params }
   );
   return response.data;
 };

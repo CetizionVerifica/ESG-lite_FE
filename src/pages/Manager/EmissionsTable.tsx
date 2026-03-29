@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { EmissionData, EmissionStatus } from "../../services/emissionService";
 import {
   getDocumentsByEmission,
@@ -157,9 +157,29 @@ const EmissionsTable = ({
     type: "info" | "error";
   } | null>(null);
 
-  // Get pending and approved emissions
-  const pendingEmissions = emissions.filter((e) => e.status === "pending");
-  const approvedEmissions = emissions.filter((e) => e.status === "approved");
+  // Build parent→FERA map for inline display
+  const isFeraRow = (e: EmissionData) =>
+    e.category?.category_name?.toLowerCase() === "fera";
+
+  const feraMap = useMemo(() => {
+    const fera = emissions.filter((e) => isFeraRow(e));
+    const map = new Map<number, EmissionData>();
+    for (const em of emissions) {
+      if (isFeraRow(em)) continue;
+      const linked = fera.find(
+        (f) => f.pk_id === em.fera_linked_id || f.fera_linked_id === em.pk_id
+      );
+      if (linked) map.set(em.pk_id, linked);
+    }
+    return map;
+  }, [emissions]);
+
+  // Only show regular emissions (FERA is merged inline)
+  const displayEmissions = useMemo(() => emissions.filter((e) => !isFeraRow(e)), [emissions]);
+
+  // Get pending and approved emissions (exclude FERA from selectable lists)
+  const pendingEmissions = emissions.filter((e) => e.status === "pending" && !isFeraRow(e));
+  const approvedEmissions = emissions.filter((e) => e.status === "approved" && !isFeraRow(e));
   const pendingIds = pendingEmissions.map((e) => e.pk_id);
   const approvedIds = approvedEmissions.map((e) => e.pk_id);
 
@@ -713,10 +733,11 @@ const EmissionsTable = ({
             </tr>
           </thead>
           <tbody>
-            {emissions.map((emission) => {
+            {displayEmissions.map((emission) => {
               const isLoading = actionLoadingId === emission.pk_id;
               const isPending = emission.status === "pending";
               const isApproved = emission.status === "approved";
+              const feraEntry = feraMap.get(emission.pk_id);
 
               const isPendingSelected = selectedPendingIds.has(emission.pk_id);
               const isApprovedSelected = selectedApprovedIds.has(
@@ -780,7 +801,13 @@ const EmissionsTable = ({
                     {emission.activity_data_unit || "-"}
                   </td>
                   <td className={tdClass}>
-                    {Number(emission.total_emission).toFixed(2)}
+                    <div>{Number(emission.total_emission).toFixed(2)}</div>
+                    {feraEntry && (
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${isDark ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-700"}`}>FERA</span>
+                        <span className={`text-sm font-medium ${isDark ? "text-purple-400" : "text-purple-600"}`}>{Number(feraEntry.total_emission).toFixed(2)}</span>
+                      </div>
+                    )}
                   </td>
                   <td className={tdClass}>
                     {formatDate(emission.date_of_reporting)}

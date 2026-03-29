@@ -149,12 +149,8 @@ const TopBar = () => {
 
   const handleToastClick = async () => {
     if (!toast) return;
-    if (!toast.read) {
-      await markAsRead(toast.id);
-      refresh();
-    }
     dismissToast();
-    if (toast.link) navigate(toast.link);
+    navigate("/notifications");
   };
 
   // Close dropdown on outside click
@@ -172,10 +168,9 @@ const TopBar = () => {
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    getNotifications(1, 20)
+    getNotifications(1, 8, true)
       .then((res) => {
-        // Only show unread in dropdown
-        setNotifications(res.notifications.filter((n) => !n.read).slice(0, 8));
+        setNotifications(res.notifications);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -255,7 +250,7 @@ const TopBar = () => {
           {/* Dropdown */}
           {open && (
             <div
-              className={`absolute right-0 top-full mt-2 w-100 rounded-2xl shadow-2xl border z-50 overflow-hidden ${
+              className={`absolute right-0 top-full mt-2 w-100 rounded-2xl shadow-2xl border z-50 overflow-hidden animate-[dropdown-in_0.15s_ease-out] origin-top-right ${
                 isDark
                   ? "bg-[#131c2a] border-[#1e2d40] shadow-black/50"
                   : "bg-white border-gray-200 shadow-gray-300/50"
@@ -433,6 +428,10 @@ const TopBar = () => {
 
       {/* Keyframe styles — injected once */}
       <style>{`
+        @keyframes dropdown-in {
+          0% { opacity: 0; transform: scale(0.95) translateY(-4px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
         @keyframes bell-shake {
           0% { transform: rotate(0deg); }
           15% { transform: rotate(14deg); }

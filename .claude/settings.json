@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/hayyan/code/ESG/ESG-lite/**)",
+      "Read(//Users/hayyan/code/ESG/prod tables/**)",
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d emissions_db -c \"SELECT * FROM column_entity ORDER BY pk_id;\")",
+      "Bash(# Check what columns exist in prod dump SQL files grep -i ''column_entity'' \"\"../prod tables/dump-Emission_lite-202602281512.sql\"\")",
+      "Bash(# It''s a binary dump. Let me use pg_restore to extract /opt/homebrew/opt/postgresql@18/bin/pg_restore -l \"\"../prod tables/dump-Emission_lite-202602281516.sql\"\")",
+      "Bash(/opt/homebrew/opt/postgresql@18/bin/pg_restore -a -t column_entity \"../prod tables/dump-Emission_lite-202602281516.sql\")",
+      "Bash(/opt/homebrew/opt/postgresql@18/bin/pg_restore --data-only --table=column_entity \"../prod tables/dump-Emission_lite-202602281516.sql\")"
+    ]
+  }
+}

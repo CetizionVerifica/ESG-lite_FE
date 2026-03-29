@@ -8,8 +8,8 @@ import {
 } from "../services/notificationService";
 
 const PREF_OPTIONS: { key: string; label: string; description: string; roles: string[] }[] = [
-  { key: "email_approvals", label: "Approval Notifications", description: "Receive emails when your submissions are approved", roles: ["User", "Manager"] },
-  { key: "email_rejections", label: "Rejection Notifications", description: "Receive emails when your submissions are rejected", roles: ["User", "Manager"] },
+  { key: "email_approvals", label: "Approval Notifications", description: "Receive emails when your submissions are approved", roles: ["User"] },
+  { key: "email_rejections", label: "Rejection Notifications", description: "Receive emails when your submissions are rejected", roles: ["User"] },
   { key: "email_reminders", label: "Deadline Reminders", description: "Monthly reminders if you haven't submitted data by the 10th", roles: ["User"] },
   { key: "email_escalations", label: "Escalation Alerts", description: "Alerts when users under you haven't submitted data by the 15th", roles: ["Manager"] },
 ];

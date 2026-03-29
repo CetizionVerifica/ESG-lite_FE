@@ -502,7 +502,19 @@ const UserDataEntryPage = () => {
                 const mainEmissions = flattenEmissions(paginatedResult.data);
                 setTotalCount(paginatedResult.total);
                 setTotalPages(Math.max(1, Math.ceil(paginatedResult.total / PAGE_LIMIT)));
-                setEmissions(mainEmissions);
+
+                // Also fetch FERA emissions so feraMap can link them
+                if (feraCategoryId && siteId) {
+                    try {
+                        const feraData = await getEmissionsBySiteAndCategory(siteId, feraCategoryId);
+                        const feraRows = flattenEmissions(feraData).map((r) => ({ ...r, _isFeraRow: true }));
+                        setEmissions([...mainEmissions, ...feraRows]);
+                    } catch {
+                        setEmissions(mainEmissions);
+                    }
+                } else {
+                    setEmissions(mainEmissions);
+                }
             }
 
             // Clear stale selections after data reload
@@ -2092,6 +2104,20 @@ const UserDataEntryPage = () => {
             label: "Total Emission (tCO2e)",
             editable: false,
             type: "number" as const,
+            render: (_value: any, row: EmissionRow) => {
+                const feraEntry = feraMap.get(row.pk_id);
+                return (
+                    <div>
+                        <div>{Number(row.total_emission).toFixed(2)}</div>
+                        {feraEntry && (
+                            <div className="mt-1 flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold px-1 py-0.5 rounded bg-purple-100 text-purple-700">FERA</span>
+                                <span className="text-sm text-purple-600 font-medium">{Number(feraEntry.total_emission).toFixed(2)}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            },
         },
         {
             key: "status",
@@ -2135,7 +2161,28 @@ const UserDataEntryPage = () => {
     // Render
     // ---------------------------------------------------------------------------
 
-    const paginatedEmissions = emissions;
+    // Detect FERA by flag OR category name (summary view doesn't have _isFeraRow)
+    const isFera = useCallback((e: EmissionRow) =>
+        e._isFeraRow || e.category_name?.toLowerCase() === "fera",
+    []);
+
+    // Build FERA lookup and filter FERA rows out — show inline in Total Emission cell
+    const feraMap = useMemo(() => {
+        const map = new Map<number, EmissionRow>();
+        const feraRows = emissions.filter((e) => isFera(e));
+        for (const em of emissions) {
+            if (isFera(em)) continue;
+            const linked = feraRows.find(
+                (f) => f.pk_id === (em as any).fera_linked_id || (f as any).fera_linked_id === em.pk_id
+            );
+            if (linked) map.set(em.pk_id, linked);
+        }
+        return map;
+    }, [emissions, isFera]);
+
+    const paginatedEmissions = useMemo(() =>
+        emissions.filter((e) => !isFera(e)),
+    [emissions, isFera]);
 
     return (
         <div className="p-6">
@@ -2181,6 +2228,7 @@ const UserDataEntryPage = () => {
                             )
                         }
                         clearable={true}
+                        searchable={true}
                     />
                 </div>
                 <div>
@@ -2211,6 +2259,7 @@ const UserDataEntryPage = () => {
                             )
                         }
                         clearable={true}
+                        searchable={true}
                     />
                 </div>
                 <div>
@@ -3005,7 +3054,15 @@ const UserDataEntryPage = () => {
                                                 <td className="border border-gray-300 px-4 py-3 text-gray-900">{row.category_name || "-"}</td>
                                                 <td className="border border-gray-300 px-4 py-3 text-gray-900">{row.category_scope || "-"}</td>
                                                 <td className="border border-gray-300 px-4 py-3 text-gray-900">{row.activity_data_unit || "-"}</td>
-                                                <td className="border border-gray-300 px-4 py-3 text-gray-900">{Number(row.total_emission).toFixed(2)}</td>
+                                                <td className="border border-gray-300 px-4 py-3 text-gray-900">
+                                                    <div>{Number(row.total_emission).toFixed(2)}</div>
+                                                    {feraMap.get(row.pk_id) && (
+                                                        <div className="mt-1 flex items-center gap-1.5">
+                                                            <span className="text-[10px] font-bold px-1 py-0.5 rounded bg-purple-100 text-purple-700">FERA</span>
+                                                            <span className="text-sm text-purple-600 font-medium">{Number(feraMap.get(row.pk_id)!.total_emission).toFixed(2)}</span>
+                                                        </div>
+                                                    )}
+                                                </td>
                                                 <td className="border border-gray-300 px-4 py-3 text-gray-900">{new Date(row.date_of_reporting).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
                                                 <td className="border border-gray-300 px-4 py-3">
                                                     <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
@@ -3951,6 +4008,7 @@ function flattenEmission(emission: EmissionData): EmissionRow {
         category_name: emission.category?.category_name || "",
         category_scope: emission.category?.scope || "",
         date_of_reporting: emission.date_of_reporting || "",
+        fera_linked_id: emission.fera_linked_id || null,
     };
 }
 
