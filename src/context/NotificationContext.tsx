@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
-import { getUnreadCount, NotificationItem } from "../services/notificationService";
+import { getUnreadCount, getNotifications, NotificationItem } from "../services/notificationService";
 import { useAuth } from "./AuthContext";
 
 interface NotificationContextType {
@@ -27,11 +27,26 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   const reconnectAttemptsRef = useRef(0);
   const mountedRef = useRef(true);
 
+  const prevCountRef = useRef(-1);
+
   const refresh = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
       const count = await getUnreadCount();
-      if (mountedRef.current) setUnreadCount(count);
+      if (!mountedRef.current) return;
+
+      // If count increased (and not first load), fetch latest for toast
+      if (count > prevCountRef.current && prevCountRef.current >= 0) {
+        try {
+          const res = await getNotifications(1, 1, true);
+          if (res.notifications.length > 0 && mountedRef.current) {
+            setLatestNotification(res.notifications[0]);
+          }
+        } catch { /* silent */ }
+      }
+
+      prevCountRef.current = count;
+      setUnreadCount(count);
     } catch {
       // silent
     }
