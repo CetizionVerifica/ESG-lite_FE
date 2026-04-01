@@ -37,8 +37,8 @@ function formatValue(value: any): string {
   if (value === null || value === undefined) return "-";
   if (typeof value === "object") {
     return Object.entries(value)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join(", ");
+      .map(([k, v]) => `${formatFieldName(k)}: ${v}`)
+      .join("\n");
   }
   if (typeof value === "string" && value.includes("T")) {
     const date = new Date(value);
@@ -51,6 +51,34 @@ function formatValue(value: any): string {
     }
   }
   return String(value);
+}
+
+function formatAction(action: string): string {
+  return action
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getActionBadgeStyle(action: string, isDark: boolean): string {
+  const a = action.toLowerCase();
+  if (a.includes("approved") || a.includes("approve")) {
+    return isDark
+      ? "bg-green-900/30 text-green-400 border-green-800/40"
+      : "bg-green-50 text-green-700 border-green-200";
+  }
+  if (a.includes("rejected") || a.includes("reject")) {
+    return isDark
+      ? "bg-red-900/30 text-red-400 border-red-800/40"
+      : "bg-red-50 text-red-700 border-red-200";
+  }
+  if (a.includes("manager")) {
+    return isDark
+      ? "bg-purple-900/30 text-purple-400 border-purple-800/40"
+      : "bg-purple-50 text-purple-700 border-purple-200";
+  }
+  return isDark
+    ? "bg-slate-600/50 text-slate-300 border-slate-500/50"
+    : "bg-gray-100 text-gray-600 border-gray-300";
 }
 
 // Shared timeline rendering used by both inline and modal variants
@@ -80,7 +108,7 @@ const TimelineContent = ({
   return (
     <div className="ml-2 relative">
       <div className={`absolute left-[7px] top-2 bottom-2 w-[2px] ${timelineLine}`} />
-      <div className="space-y-3">
+      <div className="space-y-4">
         {logs.map((log, index) => (
           <div key={log.id} className="relative flex gap-3">
             <div className="relative z-10 flex-shrink-0 mt-1.5">
@@ -88,9 +116,10 @@ const TimelineContent = ({
                 className={`w-4 h-4 rounded-full bg-blue-500 ring-2 ${dotRing} ${index === 0 ? "ring-4 ring-blue-500/20" : ""}`}
               />
             </div>
-            <div className={`flex-1 rounded-lg border p-3 ${cardBg} ${cardShadow}`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2 min-w-0">
+            <div className={`flex-1 rounded-lg border p-4 ${cardBg} ${cardShadow}`}>
+              {/* Header: user info + action badge + timestamp */}
+              <div className="flex items-start justify-between mb-2 gap-2">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
                   <span className={`text-sm font-medium ${userText}`}>
                     {log.changed_by?.name || "Unknown"}
                   </span>
@@ -99,58 +128,55 @@ const TimelineContent = ({
                       {log.changed_by.role}
                     </span>
                   )}
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${getActionBadgeStyle(log.action, isDark)}`}>
+                    {formatAction(log.action)}
+                  </span>
                 </div>
                 <span className={`text-xs whitespace-nowrap ${timeText}`}>
                   {formatTimestamp(log.changed_at)}
                 </span>
               </div>
               {log.changed_by?.email && (
-                <div className={`text-xs mb-2 ${metaText}`}>
+                <div className={`text-xs mb-3 ${metaText}`}>
                   {log.changed_by.email}
                 </div>
               )}
-              <div className="space-y-2">
+              {/* Changed fields */}
+              <div className="space-y-3">
                 {Object.entries(log.changed_fields).map(
                   ([field, { old: oldVal, new: newVal }]) => (
                     <div key={field}>
-                      <div className={`text-xs font-medium mb-1 ${fieldLabel}`}>
+                      <div className={`text-xs font-medium mb-1.5 ${fieldLabel}`}>
                         {formatFieldName(field)}
                       </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded border ${oldValueBg} max-w-[45%] truncate`}
-                          title={formatValue(oldVal)}
-                        >
-                          {formatValue(oldVal)}
-                        </span>
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className={`flex-shrink-0 ${isDark ? "text-slate-500" : "text-gray-400"}`}
-                        >
-                          <line x1="5" y1="12" x2="19" y2="12" />
-                          <polyline points="12 5 19 12 12 19" />
-                        </svg>
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded border ${newValueBg} max-w-[45%] truncate`}
-                          title={formatValue(newVal)}
-                        >
-                          {formatValue(newVal)}
-                        </span>
+                      <div className="space-y-1.5">
+                        <div className="flex items-start gap-2 text-sm">
+                          <span className={`text-xs font-medium mt-0.5 w-12 flex-shrink-0 ${isDark ? "text-red-400" : "text-red-600"}`}>
+                            Before:
+                          </span>
+                          <span
+                            className={`inline-block px-2.5 py-1 rounded border whitespace-pre-wrap break-words ${oldValueBg}`}
+                          >
+                            {formatValue(oldVal)}
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-2 text-sm">
+                          <span className={`text-xs font-medium mt-0.5 w-12 flex-shrink-0 ${isDark ? "text-green-400" : "text-green-600"}`}>
+                            After:
+                          </span>
+                          <span
+                            className={`inline-block px-2.5 py-1 rounded border whitespace-pre-wrap break-words ${newValueBg}`}
+                          >
+                            {formatValue(newVal)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   )
                 )}
               </div>
               {log.reason && (
-                <div className={`mt-2 text-xs rounded border px-2.5 py-1.5 ${isDark ? "bg-amber-900/20 text-amber-400 border-amber-800/30" : "bg-amber-50 text-amber-800 border-amber-200"}`}>
+                <div className={`mt-3 text-sm rounded border px-3 py-2 ${isDark ? "bg-amber-900/20 text-amber-400 border-amber-800/30" : "bg-amber-50 text-amber-800 border-amber-200"}`}>
                   <span className="font-medium">Reason:</span> {log.reason}
                 </div>
               )}

@@ -9,6 +9,8 @@ import {
   DependentOptionsMap,
   ColumnDependencies,
 } from "../../services/columnConfigService";
+import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
+import { getUserUnitsBySiteAndCategory, UnitData } from "../../services/unitService";
 import DocumentViewerModal from "../../components/DocumentViewerModal";
 import Modal from "../../components/Modal";
 import AuditTrailTimeline, {
@@ -25,8 +27,9 @@ interface EmissionsTableProps {
   onBulkDelete?: (ids: number[]) => Promise<void>;
   onManagerEdit?: (
     id: number,
-    data: { activity_data?: Record<string, any>; date_of_reporting?: string; reason?: string },
+    data: { activity_data?: Record<string, any>; date_of_reporting?: string; activity_data_unit?: string; reason?: string },
   ) => Promise<void>;
+  siteId?: number | null;
   isDark?: boolean;
   formatActivityData?: (
     activityData: Record<string, unknown>,
@@ -93,6 +96,7 @@ const EmissionsTable = ({
   onBulkReject,
   onBulkDelete,
   onManagerEdit,
+  siteId,
   isDark = false,
   formatActivityData,
   columnOptionsMap,
@@ -134,6 +138,9 @@ const EmissionsTable = ({
     reason: string;
   }>({ activity_data: {}, date_of_reporting: "", reason: "" });
   const [editLoading, setEditLoading] = useState(false);
+  const [emissionCategoryOptions, setEmissionCategoryOptions] = useState<string[]>([]);
+  const [editUnits, setEditUnits] = useState<UnitData[]>([]);
+  const [editUnit, setEditUnit] = useState<string>("");
 
   // Delete confirmation modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -404,14 +411,38 @@ const EmissionsTable = ({
   };
 
   // Edit handlers
-  const handleEditClick = (emission: EmissionData) => {
+  const handleEditClick = async (emission: EmissionData) => {
     setEditingEmission(emission);
     setEditForm({
       activity_data: { ...emission.activity_data },
       date_of_reporting: emission.date_of_reporting.split("T")[0],
       reason: "",
     });
+    setEditUnit(emission.activity_data_unit || "");
     setEditModalOpen(true);
+
+    // Fetch emission category options and units for dropdowns
+    if (siteId && emission.category?.category_id) {
+      try {
+        const reportDate = new Date(emission.date_of_reporting);
+        const targetYear = reportDate.getFullYear() - 1;
+        const [factors, units] = await Promise.all([
+          getUserEmissionFactorsBySiteAndCategory(
+            siteId, emission.category.category_id, targetYear
+          ),
+          getUserUnitsBySiteAndCategory(siteId, emission.category.category_id),
+        ]);
+        const categoryNames = [...new Set(
+          factors.map((f: any) => f.emission_category_name).filter(Boolean)
+        )] as string[];
+        setEmissionCategoryOptions(categoryNames);
+        setEditUnits(units);
+      } catch (error) {
+        console.error("Error fetching edit options:", error);
+        setEmissionCategoryOptions([]);
+        setEditUnits([]);
+      }
+    }
   };
 
   const handleEditSave = async () => {
@@ -421,6 +452,7 @@ const EmissionsTable = ({
       await onManagerEdit(editingEmission.pk_id, {
         activity_data: editForm.activity_data,
         date_of_reporting: editForm.date_of_reporting,
+        activity_data_unit: editUnit || undefined,
         reason: editForm.reason || undefined,
       });
       setEditModalOpen(false);
@@ -944,54 +976,134 @@ const EmissionsTable = ({
             This entry is approved. Changes will be logged in the audit trail.
           </div>
         )}
-        <div className="space-y-4">
-          {Object.entries(editForm.activity_data).map(([key, value]) => {
-            const categoryId = editingEmission?.category?.category_id || 0;
-            const options = getEditFieldOptions(key, categoryId);
 
-            return (
-              <div key={key}>
-                <label className={labelClass}>{key}</label>
-                {options && options.length > 0 ? (
-                  <select
-                    value={String(value)}
-                    onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        activity_data: {
-                          ...editForm.activity_data,
-                          [key]: e.target.value,
-                        },
-                      })
-                    }
-                    className={modalInputClass}
-                  >
-                    <option value="">-- Select --</option>
-                    {options.map((opt) => (
-                      <option key={opt.id} value={opt.label}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={String(value)}
-                    onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        activity_data: {
-                          ...editForm.activity_data,
-                          [key]: e.target.value,
-                        },
-                      })
-                    }
-                    className={modalInputClass}
-                  />
-                )}
-              </div>
-            );
+        {/* Category Info */}
+        <div className={`mb-4 p-3 rounded-lg border ${isDark ? "bg-slate-700/50 border-slate-600" : "bg-gray-50 border-gray-200"}`}>
+          <div className="text-sm">
+            <span className={isDark ? "text-slate-400" : "text-gray-500"}>Category:</span>{" "}
+            <span className="font-medium">{editingEmission?.category?.category_name || "-"}</span>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Emission Category - dropdown from emission factors */}
+          {editForm.activity_data.emission_category !== undefined && (
+            <div>
+              <label className={labelClass}>Emission Category</label>
+              {emissionCategoryOptions.length > 0 ? (
+                <select
+                  value={String(editForm.activity_data.emission_category)}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      activity_data: {
+                        ...editForm.activity_data,
+                        emission_category: e.target.value,
+                      },
+                    })
+                  }
+                  className={modalInputClass}
+                >
+                  <option value="">-- Select Emission Category --</option>
+                  {emissionCategoryOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={String(editForm.activity_data.emission_category)}
+                  readOnly
+                  className={modalInputClass}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Other Activity Data Fields */}
+          {Object.entries(editForm.activity_data)
+            .filter(([key]) => key !== "emission_category")
+            .map(([key, value]) => {
+              const categoryId = editingEmission?.category?.category_id || 0;
+              const options = getEditFieldOptions(key, categoryId);
+              const isNumeric = !isNaN(Number(value)) && value !== "" && value !== null;
+              const formattedLabel = key
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, (c) => c.toUpperCase());
+
+              return (
+                <div key={key}>
+                  <label className={labelClass}>{formattedLabel}</label>
+                  {options && options.length > 0 ? (
+                    <select
+                      value={String(value)}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          activity_data: {
+                            ...editForm.activity_data,
+                            [key]: e.target.value,
+                          },
+                        })
+                      }
+                      className={modalInputClass}
+                    >
+                      <option value="">-- Select --</option>
+                      {options.map((opt) => (
+                        <option key={opt.id} value={opt.label}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={isNumeric ? "number" : "text"}
+                      step={isNumeric ? "any" : undefined}
+                      value={String(value)}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          activity_data: {
+                            ...editForm.activity_data,
+                            [key]: e.target.value,
+                          },
+                        })
+                      }
+                      className={modalInputClass}
+                    />
+                  )}
+                </div>
+              );
           })}
+
+          {/* Unit Dropdown */}
+          <div>
+            <label className={labelClass}>Unit</label>
+            {editUnits.length > 0 ? (
+              <select
+                value={editUnit}
+                onChange={(e) => setEditUnit(e.target.value)}
+                className={modalInputClass}
+              >
+                <option value="">-- Select Unit --</option>
+                {editUnits.map((unit) => (
+                  <option key={unit.unit_id} value={unit.unit_name}>
+                    {unit.unit_name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={editUnit}
+                readOnly
+                className={modalInputClass}
+              />
+            )}
+          </div>
+
           <div>
             <label className={labelClass}>Date of Reporting</label>
             <input
