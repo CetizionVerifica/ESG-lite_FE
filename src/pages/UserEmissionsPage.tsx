@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
-import { AuditTrailModal } from "../components/AuditTrailTimeline";
+import AuditTrailTimeline, { AuditTrailModal } from "../components/AuditTrailTimeline";
+import Modal from "../components/Modal";
 import { useAuth } from "../context/AuthContext";
-import { getEmissionsPaginated, EmissionData, EmissionStatus, EmissionsSummary } from "../services/emissionService";
+import { getEmissionsPaginated, updateEmission, EmissionData, EmissionStatus, EmissionsSummary } from "../services/emissionService";
+import { getUserEmissionFactorsBySiteAndCategory } from "../services/emissionFactorService";
+import { getUserUnitsBySiteAndCategory, UnitData } from "../services/unitService";
 import DocumentViewerModal from "../components/DocumentViewerModal";
 import { getDocumentsByEmission, EmissionDocument } from "../services/documentService";
 import {
@@ -111,6 +114,19 @@ const UserEmissionsPage = () => {
   const [viewerDocuments, setViewerDocuments] = useState<EmissionDocument[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<EmissionDocument | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
+
+  // Edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingEmission, setEditingEmission] = useState<EmissionData | null>(null);
+  const [editForm, setEditForm] = useState<{
+    activity_data: Record<string, any>;
+    date_of_reporting: string;
+    reason: string;
+  }>({ activity_data: {}, date_of_reporting: "", reason: "" });
+  const [editLoading, setEditLoading] = useState(false);
+  const [emissionCategoryOptions, setEmissionCategoryOptions] = useState<string[]>([]);
+  const [editUnits, setEditUnits] = useState<UnitData[]>([]);
+  const [editUnit, setEditUnit] = useState<string>("");
 
   // Column config state for ID-to-label conversion
   const [columnOptionsMap, setColumnOptionsMap] = useState<Record<number, ColumnOptionsMap>>({});
@@ -335,6 +351,123 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     [getOptionLabel]
   );
 
+  // Get dropdown options for a field in the edit modal
+  const getEditFieldOptions = (
+    key: string,
+    categoryId: number,
+  ): { id: string | number; label: string }[] | null => {
+    if (!columnOptionsMap || !columnsMap) return null;
+
+    const columns = columnsMap[categoryId];
+    const columnOptions = columnOptionsMap[categoryId];
+    const depOptions = dependentOptionsMap?.[categoryId];
+    const depChain = columnDependenciesMap?.[categoryId];
+
+    if (!columns || !columnOptions) return null;
+
+    const parentColName = depChain
+      ? (() => {
+          const match = Object.keys(depChain).find(
+            (k) => k.toLowerCase() === key.toLowerCase(),
+          );
+          return match ? depChain[match] : undefined;
+        })()
+      : undefined;
+
+    if (parentColName && depOptions?.[key]) {
+      const parentValue = editForm.activity_data[parentColName];
+      if (parentValue) {
+        const parentCol = columns.find(
+          (c) => c.column_name.toLowerCase() === parentColName.toLowerCase(),
+        );
+        let parentLabel = String(parentValue);
+        if (parentCol) {
+          const parentOpts = columnOptions[parentCol.pk_id.toString()];
+          const parentOpt = parentOpts?.find(
+            (o) =>
+              String(o.id) === String(parentValue) ||
+              o.label.toLowerCase() === String(parentValue).toLowerCase(),
+          );
+          if (parentOpt) parentLabel = parentOpt.label;
+        }
+
+        const matchingKey = Object.keys(depOptions[key]).find(
+          (k) => k.toLowerCase() === parentLabel.toLowerCase(),
+        );
+        if (matchingKey) {
+          return depOptions[key][matchingKey];
+        }
+      }
+      return Object.values(depOptions[key]).flat();
+    }
+
+    const col = columns.find(
+      (c) => c.column_name.toLowerCase() === key.toLowerCase(),
+    );
+    if (col) {
+      const opts = columnOptions[col.pk_id.toString()];
+      if (opts && opts.length > 0) return opts;
+    }
+
+    return null;
+  };
+
+  // Edit handlers
+  const handleEditClick = async (emission: EmissionData) => {
+    setEditingEmission(emission);
+    setEditForm({
+      activity_data: { ...emission.activity_data },
+      date_of_reporting: emission.date_of_reporting.split("T")[0],
+      reason: "",
+    });
+    setEditUnit(emission.activity_data_unit || "");
+    setEditModalOpen(true);
+
+    // Fetch emission category options and units for the dropdowns
+    if (siteId && emission.category?.category_id) {
+      try {
+        const reportDate = new Date(emission.date_of_reporting);
+        const targetYear = reportDate.getFullYear() - 1;
+        const [factors, units] = await Promise.all([
+          getUserEmissionFactorsBySiteAndCategory(
+            siteId, emission.category.category_id, targetYear
+          ),
+          getUserUnitsBySiteAndCategory(siteId, emission.category.category_id),
+        ]);
+        const categoryNames = [...new Set(
+          factors.map((f: any) => f.emission_category_name).filter(Boolean)
+        )] as string[];
+        setEmissionCategoryOptions(categoryNames);
+        setEditUnits(units);
+      } catch (error) {
+        console.error("Error fetching edit options:", error);
+        setEmissionCategoryOptions([]);
+        setEditUnits([]);
+      }
+    }
+  };
+
+  const handleEditSave = async () => {
+    if (!editingEmission) return;
+    setEditLoading(true);
+    try {
+      await updateEmission(editingEmission.pk_id, {
+        activity_data: editForm.activity_data,
+        date_of_reporting: editForm.date_of_reporting,
+        activity_data_unit: editUnit || undefined,
+        reason: editForm.reason || undefined,
+      });
+      setEditModalOpen(false);
+      setEditingEmission(null);
+      fetchPage(currentPage);
+    } catch (error) {
+      console.error("Error updating emission:", error);
+      alert("Failed to update emission. Please try again.");
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   // Fetch emissions with server-side filtering and pagination
   const fetchPage = useCallback(async (page: number) => {
     if (!siteId) return;
@@ -543,6 +676,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                 <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
                   History
                 </th>
+                <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -625,6 +761,17 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                     >
                       History
                     </button>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    {(emission.status === "pending" || emission.status === "rejected") && (
+                      <button
+                        onClick={() => handleEditClick(emission)}
+                        className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                        title="Edit emission"
+                      >
+                        Edit
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -716,6 +863,208 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
           entityId={auditEntityId}
         />
       )}
+
+      {/* Edit Emission Modal */}
+      <Modal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingEmission(null);
+        }}
+        title="Edit Emission Data"
+      >
+        {editingEmission?.status === "rejected" && editingEmission?.review_comment && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+            <span className="font-medium">Rejection Reason:</span> {editingEmission.review_comment}
+          </div>
+        )}
+
+        {/* Category Info (read-only context) */}
+        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <div className="text-sm">
+            <span className="text-gray-500">Category:</span>{" "}
+            <span className="font-medium">{editingEmission?.category?.category_name || "-"}</span>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Emission Category - always a dropdown */}
+          {editForm.activity_data.emission_category !== undefined && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Emission Category
+              </label>
+              {emissionCategoryOptions.length > 0 ? (
+                <select
+                  value={String(editForm.activity_data.emission_category)}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      activity_data: {
+                        ...editForm.activity_data,
+                        emission_category: e.target.value,
+                      },
+                    })
+                  }
+                  className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                >
+                  <option value="">-- Select Emission Category --</option>
+                  {emissionCategoryOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={String(editForm.activity_data.emission_category)}
+                  readOnly
+                  className="w-full border border-gray-200 bg-gray-50 px-3 py-2 rounded text-gray-600"
+                />
+              )}
+            </div>
+          )}
+
+          {/* Activity Data Fields - proper types based on column config */}
+          {Object.entries(editForm.activity_data)
+            .filter(([key]) => key !== "emission_category")
+            .map(([key, value]) => {
+              const categoryId = editingEmission?.category?.category_id || 0;
+              const options = getEditFieldOptions(key, categoryId);
+              const isNumeric = !isNaN(Number(value)) && value !== "" && value !== null;
+              const formattedLabel = key
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, (c) => c.toUpperCase());
+
+              return (
+                <div key={key}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {formattedLabel}
+                  </label>
+                  {options && options.length > 0 ? (
+                    <select
+                      value={String(value)}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          activity_data: {
+                            ...editForm.activity_data,
+                            [key]: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                    >
+                      <option value="">-- Select --</option>
+                      {options.map((opt) => (
+                        <option key={opt.id} value={opt.label}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={isNumeric ? "number" : "text"}
+                      step={isNumeric ? "any" : undefined}
+                      value={String(value)}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          activity_data: {
+                            ...editForm.activity_data,
+                            [key]: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                    />
+                  )}
+                </div>
+              );
+            })}
+
+          {/* Unit Dropdown */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+            {editUnits.length > 0 ? (
+              <select
+                value={editUnit}
+                onChange={(e) => setEditUnit(e.target.value)}
+                className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+              >
+                <option value="">-- Select Unit --</option>
+                {editUnits.map((unit) => (
+                  <option key={unit.unit_id} value={unit.unit_name}>
+                    {unit.unit_name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={editUnit}
+                readOnly
+                className="w-full border border-gray-200 bg-gray-50 px-3 py-2 rounded text-gray-600"
+              />
+            )}
+          </div>
+
+          {/* Date of Reporting */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date of Reporting</label>
+            <input
+              type="date"
+              value={editForm.date_of_reporting}
+              onChange={(e) =>
+                setEditForm({ ...editForm, date_of_reporting: e.target.value })
+              }
+              className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+            />
+          </div>
+
+          {/* Reason for Edit */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Edit (Optional)</label>
+            <textarea
+              value={editForm.reason}
+              onChange={(e) =>
+                setEditForm({ ...editForm, reason: e.target.value })
+              }
+              placeholder="Why is this data being modified?"
+              rows={2}
+              className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+            />
+          </div>
+        </div>
+
+        {/* Inline Edit History */}
+        {editingEmission && (
+          <AuditTrailTimeline
+            entityType="emission"
+            entityId={editingEmission.pk_id}
+          />
+        )}
+
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            onClick={() => {
+              setEditModalOpen(false);
+              setEditingEmission(null);
+            }}
+            className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleEditSave}
+            disabled={editLoading}
+            className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ${editLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            {editLoading ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </Modal>
 
       {/* Document Viewer Modal */}
       <DocumentViewerModal

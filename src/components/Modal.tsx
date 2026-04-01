@@ -40,7 +40,7 @@ const Modal = ({ isOpen, onClose, title, children, className = "", isDark = fals
                         &times;
                     </button>
                 </div>
-                <div className="overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">{children}</div>
+                <div className="overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-400">{children}</div>
             </div>
         </div>
     )
