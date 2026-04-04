@@ -33,11 +33,24 @@ function formatFieldName(field: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Internal/metadata keys that should be hidden in audit trail diffs
+const HIDDEN_ACTIVITY_KEYS = new Set([
+  "category_name", "category_scope", "fera_linked_id",
+  "date_of_reporting", "activity_data_unit", "_extra_data",
+  "_isFeraRow", "_ecmKey", "extra_data",
+]);
+
 function formatValue(value: any): string {
   if (value === null || value === undefined) return "-";
   if (typeof value === "object") {
     return Object.entries(value)
-      .map(([k, v]) => `${formatFieldName(k)}: ${v}`)
+      .filter(([k]) => !HIDDEN_ACTIVITY_KEYS.has(k))
+      .map(([k, v]) => {
+        const formatted = typeof v === "object" && v !== null
+          ? JSON.stringify(v)
+          : String(v ?? "-");
+        return `${formatFieldName(k)}: ${formatted}`;
+      })
       .join("\n");
   }
   if (typeof value === "string" && value.includes("T")) {
@@ -252,11 +265,15 @@ const AuditTrailTimeline = ({
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-      {expanded && (
-        <div className="mt-3">
-          <TimelineContent logs={logs} isDark={isDark} />
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+      >
+        <div className="overflow-hidden">
+          <div className="mt-3">
+            <TimelineContent logs={logs} isDark={isDark} />
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

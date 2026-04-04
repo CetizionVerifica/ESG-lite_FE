@@ -33,6 +33,7 @@ export interface EmissionData {
     name: string;
   };
   fera_linked_id?: number | null;
+  parent_category_name?: string | null;
 }
 
 export type ReportFrequency = "yearly" | "monthly";

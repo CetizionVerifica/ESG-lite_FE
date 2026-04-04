@@ -151,6 +151,7 @@ const UserDataEntryPage = () => {
     const [isAdding, setIsAdding] = useState(false);
     const [nextRowId, setNextRowId] = useState(1);
     const [saveError, setSaveError] = useState<string | null>(null);
+    const [editingEmissionId, setEditingEmissionId] = useState<number | null>(null);
 
     // Document modal state
     const [documentModalOpen, setDocumentModalOpen] = useState(false);
@@ -1124,6 +1125,7 @@ const UserDataEntryPage = () => {
     const closeModal = () => {
         setModalOpen(false);
         setSaveError(null);
+        setEditingEmissionId(null);
     };
 
     const handleAddModalRow = () => {
@@ -1293,6 +1295,52 @@ const UserDataEntryPage = () => {
             // selectedDate is now in YYYY-MM-DD format (last day of month)
             const dateOfReporting = selectedDate;
 
+            // --- EDIT MODE: update existing emission ---
+            if (editingEmissionId) {
+                const row = modalRows[0];
+                const {
+                    id,
+                    activity_data_unit,
+                    date_of_reporting: rowDate,
+                    ...activityData
+                } = row;
+
+                // Strip composite-unit helper keys
+                for (const key of Object.keys(activityData)) {
+                    if (key.endsWith("__multiplier") || key.endsWith("__distance")) {
+                        delete activityData[key];
+                    }
+                }
+                delete activityData._extra_data;
+                delete activityData._isFeraRow;
+                delete activityData._ecmKey;
+
+                const result = await updateEmission(editingEmissionId, {
+                    activity_data: activityData,
+                    date_of_reporting: rowDate || dateOfReporting,
+                    activity_data_unit: activity_data_unit || undefined,
+                });
+
+                setEmissions((prev) =>
+                    prev.map((item) => {
+                        if (item.pk_id === editingEmissionId) {
+                            return flattenEmission(result.emission);
+                        }
+                        if (result.fera_emission && item.pk_id === result.fera_emission.pk_id) {
+                            const feraFlat = flattenEmission(result.fera_emission);
+                            feraFlat._isFeraRow = true;
+                            return feraFlat;
+                        }
+                        return item;
+                    }),
+                );
+
+                closeModal();
+                setModalRows([]);
+                return;
+            }
+
+            // --- ADD MODE: create new emissions ---
             const newEmissions: EmissionRow[] = [];
 
             for (let i = 0; i < modalRows.length; i++) {
@@ -1386,51 +1434,153 @@ const UserDataEntryPage = () => {
     // ---------------------------------------------------------------------------
     // Table Handlers
     // ---------------------------------------------------------------------------
-    const handleEdit = async (
-        row: EmissionRow,
-        updates: Partial<EmissionRow>,
-    ) => {
-        try {
-            // Exclude non-activity fields from activity data
-            const {
-                total_emission: _te,
-                unit: _u,
-                pk_id: _pk,
-                status: _s,
-                reviewed_by: _rb,
-                review_comment: _rc,
-                ...existingActivityData
-            } = row;
-            const {
-                total_emission: _te2,
-                unit: _u2,
-                pk_id: _pk2,
-                status: _s2,
-                reviewed_by: _rb2,
-                review_comment: _rc2,
-                ...updateActivityData
-            } = updates as EmissionRow;
+    const handleEdit = async (row: EmissionRow) => {
+        // Open the modal pre-populated with existing emission data
+        const modalRow: ModalRow = { id: 1 };
 
-            const mergedActivityData = {
-                ...existingActivityData,
-                ...updateActivityData,
-            };
+        // Initialize all dynamic columns with empty values first
+        dynamicColumns.forEach((col) => {
+            modalRow[col.column_name] = "";
+        });
 
-            const result = await updateEmission(row.pk_id, {
-                activity_data: mergedActivityData,
-            });
-
-            setEmissions((prev) =>
-                prev.map((item) =>
-                    item.pk_id === row.pk_id
-                        ? flattenEmission(result.emission)
-                        : item,
-                ),
-            );
-        } catch (error) {
-            console.error("Error updating emission:", error);
-            throw error;
+        // Copy ALL activity data from the row (case-insensitive column matching)
+        // The flattened emission row has activity_data keys spread at top level
+        const skipKeys = new Set([
+            "pk_id", "total_emission", "unit", "status", "reviewed_by",
+            "review_comment", "_extra_data", "category_name", "category_scope",
+            "date_of_reporting", "fera_linked_id", "activity_data_unit",
+            "emission_category", "_isFeraRow", "_ecmKey",
+        ]);
+        for (const [key, value] of Object.entries(row)) {
+            if (skipKeys.has(key)) continue;
+            if (value !== undefined && value !== null) {
+                // Match against column names (case-insensitive)
+                const matchingCol = dynamicColumns.find(
+                    (c) => c.column_name.toLowerCase() === key.toLowerCase()
+                );
+                if (matchingCol) {
+                    modalRow[matchingCol.column_name] = String(value);
+                } else {
+                    // Keep it anyway — might be a column not in config
+                    modalRow[key] = String(value);
+                }
+            }
         }
+
+        // Set emission category and unit
+        modalRow.emission_category = row.emission_category || "";
+        modalRow.activity_data_unit = row.activity_data_unit || "";
+        modalRow.date_of_reporting = row.date_of_reporting
+            ? String(row.date_of_reporting).split("T")[0]
+            : "";
+
+        // Copy extra_data
+        modalRow._extra_data = row._extra_data || {};
+
+        // Reverse-map emission_category to pre-fill select columns
+        // When emissions are saved, select column IDs aren't stored in activity_data —
+        // only the resolved emission_category (e.g. "Diesel") is kept.
+        // We reverse-lookup: find which mapping key produces this emission_category,
+        // then match the key's labels back to option IDs for each select column.
+        const storedCategory = row.emission_category || "";
+        if (storedCategory && Object.keys(emissionCategoryMapping).length > 0) {
+            // Find the mapping key that maps to this emission_category
+            let matchedMappingKey: string | null = null;
+            const storedCategoryLower = storedCategory.toLowerCase();
+            for (const [key, value] of Object.entries(emissionCategoryMapping)) {
+                if (value === storedCategory || value.toLowerCase() === storedCategoryLower) {
+                    matchedMappingKey = key;
+                    break;
+                }
+            }
+
+            if (matchedMappingKey) {
+                const labels = matchedMappingKey.split("|");
+
+                // Build the dependency chain order: root → ... → leaf
+                const allChildCols = new Set(Object.keys(columnDependencies));
+                const allParentCols = new Set(Object.values(columnDependencies));
+                const rootCols = [...allParentCols].filter((col) => !allChildCols.has(col));
+
+                // Walk the chain to get ordered select column names
+                const orderedSelectCols: string[] = [];
+                const walkChainForCols = (colName: string) => {
+                    orderedSelectCols.push(colName);
+                    for (const [child, parent] of Object.entries(columnDependencies)) {
+                        if (parent === colName) walkChainForCols(child);
+                    }
+                };
+                if (rootCols.length > 0) {
+                    rootCols.forEach((root) => walkChainForCols(root));
+                } else {
+                    // No dependencies — use all select columns in order
+                    dynamicColumns
+                        .filter((col) => col.column_type === "select")
+                        .forEach((col) => orderedSelectCols.push(col.column_name));
+                }
+
+                // Match labels to columns and find option IDs
+                for (let i = 0; i < labels.length && i < orderedSelectCols.length; i++) {
+                    const colName = orderedSelectCols[i];
+                    const label = labels[i];
+                    const colEntity = dynamicColumns.find(
+                        (c) => c.column_name.toLowerCase() === colName.toLowerCase()
+                    );
+                    if (!colEntity) continue;
+
+                    // Only fill if the column is currently empty
+                    const currentVal = modalRow[colEntity.column_name];
+                    if (currentVal && currentVal !== "") continue;
+
+                    // Search for an option matching this label
+                    let matchedId: string | number | null = null;
+
+                    if (isDependentColumn(colName) && i > 0) {
+                        // For dependent columns, look up in dependentOptions using parent's value
+                        const parentColName = getParentColumnName(colName);
+                        if (parentColName) {
+                            const parentVal = modalRow[parentColName];
+                            if (parentVal) {
+                                // Get the parent's label to look up in dependentOptions
+                                const parentColEntity = dynamicColumns.find(
+                                    (c) => c.column_name.toLowerCase() === parentColName.toLowerCase()
+                                );
+                                let parentLabel = String(parentVal);
+                                if (parentColEntity) {
+                                    parentLabel = getOptionLabel(parentColName, parentColEntity.pk_id, String(parentVal));
+                                }
+
+                                const depOpts = dependentOptions[colName] || {};
+                                const opts = depOpts[parentLabel] || [];
+                                const match = opts.find(
+                                    (opt) => opt.label.toLowerCase() === label.toLowerCase()
+                                );
+                                if (match) matchedId = match.id;
+                            }
+                        }
+                    }
+
+                    if (matchedId === null) {
+                        // Try column_options (for root/non-dependent columns)
+                        const opts = columnOptions[colEntity.pk_id.toString()] || [];
+                        const match = opts.find(
+                            (opt) => opt.label.toLowerCase() === label.toLowerCase()
+                        );
+                        if (match) matchedId = match.id;
+                    }
+
+                    if (matchedId !== null) {
+                        modalRow[colEntity.column_name] = String(matchedId);
+                    }
+                }
+            }
+        }
+
+        setEditingEmissionId(row.pk_id);
+        setModalRows([modalRow]);
+        setNextRowId(2);
+        setSaveError(null);
+        setModalOpen(true);
     };
 
     const handleDelete = async (row: EmissionRow) => {
@@ -2041,48 +2191,77 @@ const UserDataEntryPage = () => {
         },
         ...filteredColumns.map((col) => {
             const isDropdown = isSelectColumn(col);
-            return {
+            const colDef: Column<EmissionRow> = {
                 key: col.column_name as keyof EmissionRow,
                 label: col.column_name,
                 editable: true,
-                type: (col.column_type === "number" ? "number" : "text") as
-                    | "number"
-                    | "text",
-                // For dropdown columns, render the label instead of the stored ID
-                ...(isDropdown && {
-                    render: (value: string, row: EmissionRow) => {
-                        if (!value) return "";
-                        // For dependent columns, we need the parent value to look up the correct label
-                        const parentColName = getParentColumnName(
-                            col.column_name,
-                        );
-                        // Use case-insensitive lookup to handle potential key mismatches
-                        const parentValue = parentColName
-                            ? getRowValue(row, parentColName)
-                            : undefined;
-                        // Convert parent ID to label if needed
-                        let parentLabel = parentValue;
-                        if (parentValue && parentColName) {
-                            const parentColEntity = dynamicColumns.find(
-                                (c) => c.column_name === parentColName,
-                            );
-                            if (parentColEntity) {
-                                parentLabel = getOptionLabel(
-                                    parentColName,
-                                    parentColEntity.pk_id,
-                                    parentValue,
-                                );
-                            }
-                        }
-                        return getOptionLabel(
-                            col.column_name,
-                            col.pk_id,
-                            String(value),
-                            parentLabel,
-                        );
-                    },
-                }),
+                type: isDropdown
+                    ? "dropdown" as const
+                    : (col.column_type === "number" ? "number" : "text") as "number" | "text",
             };
+
+            if (isDropdown) {
+                // Provide dynamic options for inline editing (handles dependent dropdowns)
+                colDef.getOptions = (_row: EmissionRow, editVals: Partial<EmissionRow>) => {
+                    const parentColName = getParentColumnName(col.column_name);
+                    const parentValue = parentColName ? (editVals[parentColName as keyof EmissionRow] as string) : undefined;
+                    return getColumnDropdownOptions(col.column_name, col.pk_id, parentValue).map(
+                        (opt) => ({ id: opt.id, label: opt.label }),
+                    );
+                };
+
+                // Clear dependent children when a parent dropdown value changes
+                if (isParentColumn(col.column_name)) {
+                    colDef.onEditChange = (value: any, _editVals: Partial<EmissionRow>, setEv: (updater: (prev: Partial<EmissionRow>) => Partial<EmissionRow>) => void) => {
+                        setEv((prev) => {
+                            const updated = { ...prev, [col.column_name]: value };
+                            // Clear children that depend on this column
+                            for (const [child, parent] of Object.entries(columnDependencies)) {
+                                if (parent === col.column_name || parent.toLowerCase() === col.column_name.toLowerCase()) {
+                                    updated[child as keyof EmissionRow] = "" as any;
+                                    // Clear grandchildren too
+                                    for (const [gc, gp] of Object.entries(columnDependencies)) {
+                                        if (gp === child || gp.toLowerCase() === child.toLowerCase()) {
+                                            updated[gc as keyof EmissionRow] = "" as any;
+                                        }
+                                    }
+                                }
+                            }
+                            return updated;
+                        });
+                    };
+                }
+
+                // Render label instead of stored ID in non-edit mode
+                colDef.render = (value: string, row: EmissionRow) => {
+                    if (!value) return "";
+                    const parentColName = getParentColumnName(col.column_name);
+                    const parentValue = parentColName
+                        ? getRowValue(row, parentColName)
+                        : undefined;
+                    let parentLabel = parentValue;
+                    if (parentValue && parentColName) {
+                        const parentColEntity = dynamicColumns.find(
+                            (c) => c.column_name === parentColName,
+                        );
+                        if (parentColEntity) {
+                            parentLabel = getOptionLabel(
+                                parentColName,
+                                parentColEntity.pk_id,
+                                parentValue,
+                            );
+                        }
+                    }
+                    return getOptionLabel(
+                        col.column_name,
+                        col.pk_id,
+                        String(value),
+                        parentLabel,
+                    );
+                };
+            }
+
+            return colDef;
         }),
         {
             key: "activity_data_unit" as keyof EmissionRow,
@@ -2454,7 +2633,7 @@ const UserDataEntryPage = () => {
             <Modal
                 isOpen={modalOpen}
                 onClose={closeModal}
-                title="Add New Entries"
+                title={editingEmissionId ? "Edit Entry" : "Add New Entries"}
                 className="max-w-4xl! max-h-[85vh]!">
                 <div className="space-y-4">
                     {modalRows.map((row, rowIdx) => {
@@ -2477,6 +2656,7 @@ const UserDataEntryPage = () => {
                                         <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">FERA</span>
                                     )}
                                 </div>
+                                {!editingEmissionId && (
                                 <button
                                     onClick={() => handleRemoveModalRow(row.id)}
                                     disabled={modalRows.length === 1}
@@ -2484,6 +2664,7 @@ const UserDataEntryPage = () => {
                                     title="Remove entry">
                                     Remove
                                 </button>
+                                )}
                             </div>
 
                             <div className="p-4 space-y-4">
@@ -2798,11 +2979,13 @@ const UserDataEntryPage = () => {
                 {/* Modal Actions */}
                 <div className="flex justify-between mt-4">
                     <div className="flex gap-2">
+                        {!editingEmissionId && (
                         <button
                             onClick={handleAddModalRow}
                             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
                             + Add Row
                         </button>
+                        )}
                         {isFeraCategory && feraEmissionFactors.length > 0 && (
                             <span className="px-3 py-2 text-sm text-purple-700 bg-purple-50 rounded border border-purple-200">
                                 FERA auto-calculated
@@ -2822,7 +3005,7 @@ const UserDataEntryPage = () => {
                             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400">
                             {isAdding
                                 ? "Saving..."
-                                : `Save All (${modalRows.length})`}
+                                : editingEmissionId ? "Save" : `Save All (${modalRows.length})`}
                         </button>
                     </div>
                 </div>
@@ -2896,6 +3079,7 @@ const UserDataEntryPage = () => {
                             keyField="pk_id"
                             onEdit={handleEdit}
                             onDelete={handleDelete}
+                            editMode="modal"
                             loading={loading}
                             showActions={true}
                             selectedIds={selectedEmissionIds}

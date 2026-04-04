@@ -133,7 +133,7 @@ const UserEmissionsPage = () => {
   const [dependentOptionsMap, setDependentOptionsMap] = useState<Record<number, DependentOptionsMap>>({});
   const [columnDependenciesMap, setColumnDependenciesMap] = useState<Record<number, ColumnDependencies>>({});
   // Store columns per category to map column names to IDs
-  const [columnsMap, setColumnsMap] = useState<Record<number, { pk_id: number; column_name: string }[]>>({});
+  const [columnsMap, setColumnsMap] = useState<Record<number, { pk_id: number; column_name: string; column_type?: string }[]>>({});
 
   // Get current site and its categories
   const currentSite = availableSites.find((s) => s.site_id === selectedSite);
@@ -193,9 +193,10 @@ const UserEmissionsPage = () => {
             }
             // Store columns for name-to-ID mapping
             if (config.columns && Array.isArray(config.columns)) {
-              newColumnsMap[category.category_id] = config.columns.map((col: { pk_id: number; column_name: string }) => ({
+              newColumnsMap[category.category_id] = config.columns.map((col: { pk_id: number; column_name: string; column_type?: string }) => ({
                 pk_id: col.pk_id,
                 column_name: col.column_name,
+                column_type: col.column_type,
               }));
             }
           }
@@ -351,7 +352,26 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     [getOptionLabel]
   );
 
-  // Get dropdown options for a field in the edit modal
+  // Check if a column is a dependent column (has a parent)
+  const isEditDependentColumn = (columnName: string, categoryId: number): boolean => {
+    const depChain = columnDependenciesMap?.[categoryId];
+    if (!depChain) return false;
+    return Object.keys(depChain).some(
+      (k) => k.toLowerCase() === columnName.toLowerCase()
+    );
+  };
+
+  // Get parent column name for a dependent column
+  const getEditParentColumnName = (columnName: string, categoryId: number): string | undefined => {
+    const depChain = columnDependenciesMap?.[categoryId];
+    if (!depChain) return undefined;
+    const match = Object.keys(depChain).find(
+      (k) => k.toLowerCase() === columnName.toLowerCase()
+    );
+    return match ? depChain[match] : undefined;
+  };
+
+  // Get dropdown options for a field in the edit modal — full dependency-aware version
   const getEditFieldOptions = (
     key: string,
     categoryId: number,
@@ -361,46 +381,88 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     const columns = columnsMap[categoryId];
     const columnOptions = columnOptionsMap[categoryId];
     const depOptions = dependentOptionsMap?.[categoryId];
-    const depChain = columnDependenciesMap?.[categoryId];
 
     if (!columns || !columnOptions) return null;
 
-    const parentColName = depChain
-      ? (() => {
-          const match = Object.keys(depChain).find(
-            (k) => k.toLowerCase() === key.toLowerCase(),
-          );
-          return match ? depChain[match] : undefined;
-        })()
-      : undefined;
+    const parentColName = getEditParentColumnName(key, categoryId);
 
-    if (parentColName && depOptions?.[key]) {
+    // Dependent column logic
+    if (parentColName && depOptions) {
+      // Case-insensitive lookup for child deps
+      const keyLower = key.toLowerCase();
+      let childDeps = depOptions[key];
+      if (!childDeps) {
+        for (const [k, v] of Object.entries(depOptions)) {
+          if (k.toLowerCase() === keyLower) { childDeps = v; break; }
+        }
+      }
+      if (!childDeps) return null;
+
       const parentValue = editForm.activity_data[parentColName];
-      if (parentValue) {
+      if (!parentValue) return null; // Parent not selected yet
+
+      // Convert parent stored value to label
+      let parentLabel = String(parentValue);
+
+      // Check if parent is also dependent (3-level chain)
+      const grandparentColName = getEditParentColumnName(parentColName, categoryId);
+      if (grandparentColName && isEditDependentColumn(parentColName, categoryId)) {
+        const parentDepOptions = depOptions[parentColName];
+        if (parentDepOptions) {
+          for (const [, options] of Object.entries(parentDepOptions)) {
+            const match = options.find((opt) => String(opt.id) === String(parentValue));
+            if (match) { parentLabel = match.label; break; }
+          }
+        }
+      }
+
+      // Fallback: try column options for parent label
+      if (parentLabel === String(parentValue)) {
         const parentCol = columns.find(
-          (c) => c.column_name.toLowerCase() === parentColName.toLowerCase(),
+          (c) => c.column_name.toLowerCase() === parentColName.toLowerCase()
         );
-        let parentLabel = String(parentValue);
         if (parentCol) {
           const parentOpts = columnOptions[parentCol.pk_id.toString()];
           const parentOpt = parentOpts?.find(
-            (o) =>
-              String(o.id) === String(parentValue) ||
-              o.label.toLowerCase() === String(parentValue).toLowerCase(),
+            (o) => String(o.id) === String(parentValue) ||
+                   o.label.toLowerCase() === String(parentValue).toLowerCase()
           );
           if (parentOpt) parentLabel = parentOpt.label;
         }
+      }
 
-        const matchingKey = Object.keys(depOptions[key]).find(
-          (k) => k.toLowerCase() === parentLabel.toLowerCase(),
+      // Try composite key (grandparent|parent) for 3-level deps
+      if (grandparentColName && isEditDependentColumn(parentColName, categoryId)) {
+        const gpCol = columns.find(
+          (c) => c.column_name.toLowerCase() === grandparentColName.toLowerCase()
         );
-        if (matchingKey) {
-          return depOptions[key][matchingKey];
+        if (gpCol) {
+          const gpOptions = columnOptions[gpCol.pk_id.toString()];
+          if (gpOptions) {
+            for (const gpOpt of gpOptions) {
+              const compositeKey = `${gpOpt.label}|${parentLabel}`;
+              const matched = childDeps[compositeKey];
+              if (matched && matched.length > 0) return matched;
+            }
+          }
         }
       }
-      return Object.values(depOptions[key]).flat();
+
+      // Try exact match, case-insensitive, and raw value
+      let result = childDeps[parentLabel];
+      if (!result) {
+        const lower = parentLabel.toLowerCase();
+        for (const [k, v] of Object.entries(childDeps)) {
+          if (k.toLowerCase() === lower) { result = v; break; }
+        }
+      }
+      if (!result) result = childDeps[String(parentValue)];
+      if (result && result.length > 0) return result;
+
+      return null;
     }
 
+    // Non-dependent: use column options by pk_id
     const col = columns.find(
       (c) => c.column_name.toLowerCase() === key.toLowerCase(),
     );
@@ -685,6 +747,16 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
               {(() => {
                 // Build parent→FERA map, skip standalone FERA rows
                 const isFera = (e: EmissionData) => e.category?.category_name?.toLowerCase() === "fera";
+
+                // If user explicitly filtered by FERA category, show FERA rows directly
+                const selectedCatIsFera = categories.find(
+                  (c) => c.category_id === selectedCategory
+                )?.category_name?.toLowerCase() === "fera";
+
+                if (selectedCatIsFera) {
+                  return emissions.map((emission) => ({ emission, feraEntry: undefined }));
+                }
+
                 const regular = emissions.filter((e) => !isFera(e));
                 const fera = emissions.filter((e) => isFera(e));
                 const feraMap = new Map<number, EmissionData>();
@@ -702,6 +774,11 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                 <tr key={emission.pk_id} className="hover:bg-gray-50">
                   <td className="border border-gray-300 px-4 py-3">
                     {emission.category?.category_name || "-"}
+                    {emission.parent_category_name && (
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        ({emission.parent_category_name})
+                      </div>
+                    )}
                   </td>
                   <td className="border border-gray-300 px-4 py-3">
                     <div className="max-w-xs">
@@ -926,16 +1003,57 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             </div>
           )}
 
-          {/* Activity Data Fields - proper types based on column config */}
-          {Object.entries(editForm.activity_data)
-            .filter(([key]) => key !== "emission_category")
-            .map(([key, value]) => {
-              const categoryId = editingEmission?.category?.category_id || 0;
+          {/* Activity Data Fields - rendered from column config with proper dropdowns */}
+          {(() => {
+            const categoryId = editingEmission?.category?.category_id || 0;
+            const configColumns = columnsMap[categoryId] || [];
+            // Build ordered list: config columns first, then any extra keys from activity_data
+            const configKeys = configColumns.map((c) => c.column_name);
+            const activityKeys = Object.keys(editForm.activity_data).filter(
+              (k) => k !== "emission_category"
+            );
+            const orderedKeys = [
+              ...configKeys.filter((k) => k !== "emission_category"),
+              ...activityKeys.filter(
+                (k) => !configKeys.some((ck) => ck.toLowerCase() === k.toLowerCase())
+              ),
+            ];
+
+            return orderedKeys.map((key) => {
+              const value = editForm.activity_data[key] ?? "";
               const options = getEditFieldOptions(key, categoryId);
-              const isNumeric = !isNaN(Number(value)) && value !== "" && value !== null;
+              const isDependent = isEditDependentColumn(key, categoryId);
+              const parentColName = getEditParentColumnName(key, categoryId);
+              const parentValue = parentColName ? editForm.activity_data[parentColName] : undefined;
+              const isDisabledDependent = isDependent && !parentValue;
+              const col = configColumns.find(
+                (c) => c.column_name.toLowerCase() === key.toLowerCase()
+              );
+              const isNumeric = col?.column_type === "number" ||
+                (!isNaN(Number(value)) && value !== "" && value !== null && !options);
               const formattedLabel = key
                 .replace(/_/g, " ")
                 .replace(/\b\w/g, (c) => c.toUpperCase());
+
+              const handleFieldChange = (newValue: string) => {
+                const updated = { ...editForm.activity_data, [key]: newValue };
+                // Clear dependent children when parent value changes
+                const depChain = columnDependenciesMap?.[categoryId];
+                if (depChain) {
+                  for (const [child, parent] of Object.entries(depChain)) {
+                    if (parent.toLowerCase() === key.toLowerCase()) {
+                      updated[child] = "";
+                      // Also clear grandchildren
+                      for (const [gc, gp] of Object.entries(depChain)) {
+                        if (gp.toLowerCase() === child.toLowerCase()) {
+                          updated[gc] = "";
+                        }
+                      }
+                    }
+                  }
+                }
+                setEditForm({ ...editForm, activity_data: updated });
+              };
 
               return (
                 <div key={key}>
@@ -945,44 +1063,40 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                   {options && options.length > 0 ? (
                     <select
                       value={String(value)}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          activity_data: {
-                            ...editForm.activity_data,
-                            [key]: e.target.value,
-                          },
-                        })
-                      }
-                      className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                      onChange={(e) => handleFieldChange(e.target.value)}
+                      disabled={isDisabledDependent}
+                      className={`w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300 ${
+                        isDisabledDependent ? "bg-gray-100 cursor-not-allowed" : ""
+                      }`}
                     >
-                      <option value="">-- Select --</option>
+                      <option value="">
+                        {isDisabledDependent
+                          ? `Select ${parentColName?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} first`
+                          : `-- Select ${formattedLabel} --`}
+                      </option>
                       {options.map((opt) => (
-                        <option key={opt.id} value={opt.label}>
+                        <option key={opt.id} value={opt.id}>
                           {opt.label}
                         </option>
                       ))}
+                    </select>
+                  ) : isDisabledDependent ? (
+                    <select disabled className="w-full border border-gray-300 px-3 py-2 rounded bg-gray-100 cursor-not-allowed">
+                      <option>Select {parentColName?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} first</option>
                     </select>
                   ) : (
                     <input
                       type={isNumeric ? "number" : "text"}
                       step={isNumeric ? "any" : undefined}
                       value={String(value)}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          activity_data: {
-                            ...editForm.activity_data,
-                            [key]: e.target.value,
-                          },
-                        })
-                      }
+                      onChange={(e) => handleFieldChange(e.target.value)}
                       className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
                     />
                   )}
                 </div>
               );
-            })}
+            });
+          })()}
 
           {/* Unit Dropdown */}
           <div>
