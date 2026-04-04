@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
-import { AuditTrailModal } from "../components/AuditTrailTimeline";
+import AuditTrailTimeline, { AuditTrailModal } from "../components/AuditTrailTimeline";
+import Modal from "../components/Modal";
 import { useAuth } from "../context/AuthContext";
-import { getEmissionsPaginated, EmissionData, EmissionStatus, EmissionsSummary } from "../services/emissionService";
+import { getEmissionsPaginated, updateEmission, EmissionData, EmissionStatus, EmissionsSummary } from "../services/emissionService";
+import { getUserEmissionFactorsBySiteAndCategory } from "../services/emissionFactorService";
+import { getUserUnitsBySiteAndCategory, UnitData } from "../services/unitService";
 import DocumentViewerModal from "../components/DocumentViewerModal";
 import { getDocumentsByEmission, EmissionDocument } from "../services/documentService";
 import {
@@ -112,12 +115,25 @@ const UserEmissionsPage = () => {
   const [selectedDocument, setSelectedDocument] = useState<EmissionDocument | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
 
+  // Edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingEmission, setEditingEmission] = useState<EmissionData | null>(null);
+  const [editForm, setEditForm] = useState<{
+    activity_data: Record<string, any>;
+    date_of_reporting: string;
+    reason: string;
+  }>({ activity_data: {}, date_of_reporting: "", reason: "" });
+  const [editLoading, setEditLoading] = useState(false);
+  const [emissionCategoryOptions, setEmissionCategoryOptions] = useState<string[]>([]);
+  const [editUnits, setEditUnits] = useState<UnitData[]>([]);
+  const [editUnit, setEditUnit] = useState<string>("");
+
   // Column config state for ID-to-label conversion
   const [columnOptionsMap, setColumnOptionsMap] = useState<Record<number, ColumnOptionsMap>>({});
   const [dependentOptionsMap, setDependentOptionsMap] = useState<Record<number, DependentOptionsMap>>({});
   const [columnDependenciesMap, setColumnDependenciesMap] = useState<Record<number, ColumnDependencies>>({});
   // Store columns per category to map column names to IDs
-  const [columnsMap, setColumnsMap] = useState<Record<number, { pk_id: number; column_name: string }[]>>({});
+  const [columnsMap, setColumnsMap] = useState<Record<number, { pk_id: number; column_name: string; column_type?: string }[]>>({});
 
   // Get current site and its categories
   const currentSite = availableSites.find((s) => s.site_id === selectedSite);
@@ -177,9 +193,10 @@ const UserEmissionsPage = () => {
             }
             // Store columns for name-to-ID mapping
             if (config.columns && Array.isArray(config.columns)) {
-              newColumnsMap[category.category_id] = config.columns.map((col: { pk_id: number; column_name: string }) => ({
+              newColumnsMap[category.category_id] = config.columns.map((col: { pk_id: number; column_name: string; column_type?: string }) => ({
                 pk_id: col.pk_id,
                 column_name: col.column_name,
+                column_type: col.column_type,
               }));
             }
           }
@@ -334,6 +351,184 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     },
     [getOptionLabel]
   );
+
+  // Check if a column is a dependent column (has a parent)
+  const isEditDependentColumn = (columnName: string, categoryId: number): boolean => {
+    const depChain = columnDependenciesMap?.[categoryId];
+    if (!depChain) return false;
+    return Object.keys(depChain).some(
+      (k) => k.toLowerCase() === columnName.toLowerCase()
+    );
+  };
+
+  // Get parent column name for a dependent column
+  const getEditParentColumnName = (columnName: string, categoryId: number): string | undefined => {
+    const depChain = columnDependenciesMap?.[categoryId];
+    if (!depChain) return undefined;
+    const match = Object.keys(depChain).find(
+      (k) => k.toLowerCase() === columnName.toLowerCase()
+    );
+    return match ? depChain[match] : undefined;
+  };
+
+  // Get dropdown options for a field in the edit modal — full dependency-aware version
+  const getEditFieldOptions = (
+    key: string,
+    categoryId: number,
+  ): { id: string | number; label: string }[] | null => {
+    if (!columnOptionsMap || !columnsMap) return null;
+
+    const columns = columnsMap[categoryId];
+    const columnOptions = columnOptionsMap[categoryId];
+    const depOptions = dependentOptionsMap?.[categoryId];
+
+    if (!columns || !columnOptions) return null;
+
+    const parentColName = getEditParentColumnName(key, categoryId);
+
+    // Dependent column logic
+    if (parentColName && depOptions) {
+      // Case-insensitive lookup for child deps
+      const keyLower = key.toLowerCase();
+      let childDeps = depOptions[key];
+      if (!childDeps) {
+        for (const [k, v] of Object.entries(depOptions)) {
+          if (k.toLowerCase() === keyLower) { childDeps = v; break; }
+        }
+      }
+      if (!childDeps) return null;
+
+      const parentValue = editForm.activity_data[parentColName];
+      if (!parentValue) return null; // Parent not selected yet
+
+      // Convert parent stored value to label
+      let parentLabel = String(parentValue);
+
+      // Check if parent is also dependent (3-level chain)
+      const grandparentColName = getEditParentColumnName(parentColName, categoryId);
+      if (grandparentColName && isEditDependentColumn(parentColName, categoryId)) {
+        const parentDepOptions = depOptions[parentColName];
+        if (parentDepOptions) {
+          for (const [, options] of Object.entries(parentDepOptions)) {
+            const match = options.find((opt) => String(opt.id) === String(parentValue));
+            if (match) { parentLabel = match.label; break; }
+          }
+        }
+      }
+
+      // Fallback: try column options for parent label
+      if (parentLabel === String(parentValue)) {
+        const parentCol = columns.find(
+          (c) => c.column_name.toLowerCase() === parentColName.toLowerCase()
+        );
+        if (parentCol) {
+          const parentOpts = columnOptions[parentCol.pk_id.toString()];
+          const parentOpt = parentOpts?.find(
+            (o) => String(o.id) === String(parentValue) ||
+                   o.label.toLowerCase() === String(parentValue).toLowerCase()
+          );
+          if (parentOpt) parentLabel = parentOpt.label;
+        }
+      }
+
+      // Try composite key (grandparent|parent) for 3-level deps
+      if (grandparentColName && isEditDependentColumn(parentColName, categoryId)) {
+        const gpCol = columns.find(
+          (c) => c.column_name.toLowerCase() === grandparentColName.toLowerCase()
+        );
+        if (gpCol) {
+          const gpOptions = columnOptions[gpCol.pk_id.toString()];
+          if (gpOptions) {
+            for (const gpOpt of gpOptions) {
+              const compositeKey = `${gpOpt.label}|${parentLabel}`;
+              const matched = childDeps[compositeKey];
+              if (matched && matched.length > 0) return matched;
+            }
+          }
+        }
+      }
+
+      // Try exact match, case-insensitive, and raw value
+      let result = childDeps[parentLabel];
+      if (!result) {
+        const lower = parentLabel.toLowerCase();
+        for (const [k, v] of Object.entries(childDeps)) {
+          if (k.toLowerCase() === lower) { result = v; break; }
+        }
+      }
+      if (!result) result = childDeps[String(parentValue)];
+      if (result && result.length > 0) return result;
+
+      return null;
+    }
+
+    // Non-dependent: use column options by pk_id
+    const col = columns.find(
+      (c) => c.column_name.toLowerCase() === key.toLowerCase(),
+    );
+    if (col) {
+      const opts = columnOptions[col.pk_id.toString()];
+      if (opts && opts.length > 0) return opts;
+    }
+
+    return null;
+  };
+
+  // Edit handlers
+  const handleEditClick = async (emission: EmissionData) => {
+    setEditingEmission(emission);
+    setEditForm({
+      activity_data: { ...emission.activity_data },
+      date_of_reporting: emission.date_of_reporting.split("T")[0],
+      reason: "",
+    });
+    setEditUnit(emission.activity_data_unit || "");
+    setEditModalOpen(true);
+
+    // Fetch emission category options and units for the dropdowns
+    if (siteId && emission.category?.category_id) {
+      try {
+        const reportDate = new Date(emission.date_of_reporting);
+        const targetYear = reportDate.getFullYear() - 1;
+        const [factors, units] = await Promise.all([
+          getUserEmissionFactorsBySiteAndCategory(
+            siteId, emission.category.category_id, targetYear
+          ),
+          getUserUnitsBySiteAndCategory(siteId, emission.category.category_id),
+        ]);
+        const categoryNames = [...new Set(
+          factors.map((f: any) => f.emission_category_name).filter(Boolean)
+        )] as string[];
+        setEmissionCategoryOptions(categoryNames);
+        setEditUnits(units);
+      } catch (error) {
+        console.error("Error fetching edit options:", error);
+        setEmissionCategoryOptions([]);
+        setEditUnits([]);
+      }
+    }
+  };
+
+  const handleEditSave = async () => {
+    if (!editingEmission) return;
+    setEditLoading(true);
+    try {
+      await updateEmission(editingEmission.pk_id, {
+        activity_data: editForm.activity_data,
+        date_of_reporting: editForm.date_of_reporting,
+        activity_data_unit: editUnit || undefined,
+        reason: editForm.reason || undefined,
+      });
+      setEditModalOpen(false);
+      setEditingEmission(null);
+      fetchPage(currentPage);
+    } catch (error) {
+      console.error("Error updating emission:", error);
+      alert("Failed to update emission. Please try again.");
+    } finally {
+      setEditLoading(false);
+    }
+  };
 
   // Fetch emissions with server-side filtering and pagination
   const fetchPage = useCallback(async (page: number) => {
@@ -543,12 +738,25 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                 <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
                   History
                 </th>
+                <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {(() => {
                 // Build parent→FERA map, skip standalone FERA rows
                 const isFera = (e: EmissionData) => e.category?.category_name?.toLowerCase() === "fera";
+
+                // If user explicitly filtered by FERA category, show FERA rows directly
+                const selectedCatIsFera = categories.find(
+                  (c) => c.category_id === selectedCategory
+                )?.category_name?.toLowerCase() === "fera";
+
+                if (selectedCatIsFera) {
+                  return emissions.map((emission) => ({ emission, feraEntry: undefined }));
+                }
+
                 const regular = emissions.filter((e) => !isFera(e));
                 const fera = emissions.filter((e) => isFera(e));
                 const feraMap = new Map<number, EmissionData>();
@@ -566,6 +774,11 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                 <tr key={emission.pk_id} className="hover:bg-gray-50">
                   <td className="border border-gray-300 px-4 py-3">
                     {emission.category?.category_name || "-"}
+                    {emission.parent_category_name && (
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        ({emission.parent_category_name})
+                      </div>
+                    )}
                   </td>
                   <td className="border border-gray-300 px-4 py-3">
                     <div className="max-w-xs">
@@ -625,6 +838,17 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                     >
                       History
                     </button>
+                  </td>
+                  <td className="border border-gray-300 px-4 py-3">
+                    {(emission.status === "pending" || emission.status === "rejected") && (
+                      <button
+                        onClick={() => handleEditClick(emission)}
+                        className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                        title="Edit emission"
+                      >
+                        Edit
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -716,6 +940,245 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
           entityId={auditEntityId}
         />
       )}
+
+      {/* Edit Emission Modal */}
+      <Modal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingEmission(null);
+        }}
+        title="Edit Emission Data"
+      >
+        {editingEmission?.status === "rejected" && editingEmission?.review_comment && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+            <span className="font-medium">Rejection Reason:</span> {editingEmission.review_comment}
+          </div>
+        )}
+
+        {/* Category Info (read-only context) */}
+        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <div className="text-sm">
+            <span className="text-gray-500">Category:</span>{" "}
+            <span className="font-medium">{editingEmission?.category?.category_name || "-"}</span>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Emission Category - always a dropdown */}
+          {editForm.activity_data.emission_category !== undefined && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Emission Category
+              </label>
+              {emissionCategoryOptions.length > 0 ? (
+                <select
+                  value={String(editForm.activity_data.emission_category)}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      activity_data: {
+                        ...editForm.activity_data,
+                        emission_category: e.target.value,
+                      },
+                    })
+                  }
+                  className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                >
+                  <option value="">-- Select Emission Category --</option>
+                  {emissionCategoryOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={String(editForm.activity_data.emission_category)}
+                  readOnly
+                  className="w-full border border-gray-200 bg-gray-50 px-3 py-2 rounded text-gray-600"
+                />
+              )}
+            </div>
+          )}
+
+          {/* Activity Data Fields - rendered from column config with proper dropdowns */}
+          {(() => {
+            const categoryId = editingEmission?.category?.category_id || 0;
+            const configColumns = columnsMap[categoryId] || [];
+            // Build ordered list: config columns first, then any extra keys from activity_data
+            const configKeys = configColumns.map((c) => c.column_name);
+            const activityKeys = Object.keys(editForm.activity_data).filter(
+              (k) => k !== "emission_category"
+            );
+            const orderedKeys = [
+              ...configKeys.filter((k) => k !== "emission_category"),
+              ...activityKeys.filter(
+                (k) => !configKeys.some((ck) => ck.toLowerCase() === k.toLowerCase())
+              ),
+            ];
+
+            return orderedKeys.map((key) => {
+              const value = editForm.activity_data[key] ?? "";
+              const options = getEditFieldOptions(key, categoryId);
+              const isDependent = isEditDependentColumn(key, categoryId);
+              const parentColName = getEditParentColumnName(key, categoryId);
+              const parentValue = parentColName ? editForm.activity_data[parentColName] : undefined;
+              const isDisabledDependent = isDependent && !parentValue;
+              const col = configColumns.find(
+                (c) => c.column_name.toLowerCase() === key.toLowerCase()
+              );
+              const isNumeric = col?.column_type === "number" ||
+                (!isNaN(Number(value)) && value !== "" && value !== null && !options);
+              const formattedLabel = key
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, (c) => c.toUpperCase());
+
+              const handleFieldChange = (newValue: string) => {
+                const updated = { ...editForm.activity_data, [key]: newValue };
+                // Clear dependent children when parent value changes
+                const depChain = columnDependenciesMap?.[categoryId];
+                if (depChain) {
+                  for (const [child, parent] of Object.entries(depChain)) {
+                    if (parent.toLowerCase() === key.toLowerCase()) {
+                      updated[child] = "";
+                      // Also clear grandchildren
+                      for (const [gc, gp] of Object.entries(depChain)) {
+                        if (gp.toLowerCase() === child.toLowerCase()) {
+                          updated[gc] = "";
+                        }
+                      }
+                    }
+                  }
+                }
+                setEditForm({ ...editForm, activity_data: updated });
+              };
+
+              return (
+                <div key={key}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {formattedLabel}
+                  </label>
+                  {options && options.length > 0 ? (
+                    <select
+                      value={String(value)}
+                      onChange={(e) => handleFieldChange(e.target.value)}
+                      disabled={isDisabledDependent}
+                      className={`w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300 ${
+                        isDisabledDependent ? "bg-gray-100 cursor-not-allowed" : ""
+                      }`}
+                    >
+                      <option value="">
+                        {isDisabledDependent
+                          ? `Select ${parentColName?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} first`
+                          : `-- Select ${formattedLabel} --`}
+                      </option>
+                      {options.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : isDisabledDependent ? (
+                    <select disabled className="w-full border border-gray-300 px-3 py-2 rounded bg-gray-100 cursor-not-allowed">
+                      <option>Select {parentColName?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} first</option>
+                    </select>
+                  ) : (
+                    <input
+                      type={isNumeric ? "number" : "text"}
+                      step={isNumeric ? "any" : undefined}
+                      value={String(value)}
+                      onChange={(e) => handleFieldChange(e.target.value)}
+                      className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+                    />
+                  )}
+                </div>
+              );
+            });
+          })()}
+
+          {/* Unit Dropdown */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+            {editUnits.length > 0 ? (
+              <select
+                value={editUnit}
+                onChange={(e) => setEditUnit(e.target.value)}
+                className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+              >
+                <option value="">-- Select Unit --</option>
+                {editUnits.map((unit) => (
+                  <option key={unit.unit_id} value={unit.unit_name}>
+                    {unit.unit_name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={editUnit}
+                readOnly
+                className="w-full border border-gray-200 bg-gray-50 px-3 py-2 rounded text-gray-600"
+              />
+            )}
+          </div>
+
+          {/* Date of Reporting */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date of Reporting</label>
+            <input
+              type="date"
+              value={editForm.date_of_reporting}
+              onChange={(e) =>
+                setEditForm({ ...editForm, date_of_reporting: e.target.value })
+              }
+              className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+            />
+          </div>
+
+          {/* Reason for Edit */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Edit (Optional)</label>
+            <textarea
+              value={editForm.reason}
+              onChange={(e) =>
+                setEditForm({ ...editForm, reason: e.target.value })
+              }
+              placeholder="Why is this data being modified?"
+              rows={2}
+              className="w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-blue-300"
+            />
+          </div>
+        </div>
+
+        {/* Inline Edit History */}
+        {editingEmission && (
+          <AuditTrailTimeline
+            entityType="emission"
+            entityId={editingEmission.pk_id}
+          />
+        )}
+
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            onClick={() => {
+              setEditModalOpen(false);
+              setEditingEmission(null);
+            }}
+            className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleEditSave}
+            disabled={editLoading}
+            className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ${editLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            {editLoading ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </Modal>
 
       {/* Document Viewer Modal */}
       <DocumentViewerModal

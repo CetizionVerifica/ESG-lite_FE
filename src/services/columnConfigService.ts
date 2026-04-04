@@ -107,6 +107,7 @@ export const updateColumnConfig = async (
     dependent_options?: DependentOptionsMap;
     emission_category_mapping?: EmissionCategoryMapping;
     extra_fields?: ExtraFieldDefinition[];
+    rename_map?: Record<string, string>;
   }
 ) => {
   const response = await api.put(`/admin/column-configs/${id}`, data);

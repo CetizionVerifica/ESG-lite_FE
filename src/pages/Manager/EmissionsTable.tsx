@@ -8,7 +8,10 @@ import {
   ColumnOptionsMap,
   DependentOptionsMap,
   ColumnDependencies,
+  EmissionCategoryMapping,
 } from "../../services/columnConfigService";
+import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
+import { getUserUnitsBySiteAndCategory, UnitData } from "../../services/unitService";
 import DocumentViewerModal from "../../components/DocumentViewerModal";
 import Modal from "../../components/Modal";
 import AuditTrailTimeline, {
@@ -25,8 +28,9 @@ interface EmissionsTableProps {
   onBulkDelete?: (ids: number[]) => Promise<void>;
   onManagerEdit?: (
     id: number,
-    data: { activity_data?: Record<string, any>; date_of_reporting?: string; reason?: string },
+    data: { activity_data?: Record<string, any>; date_of_reporting?: string; activity_data_unit?: string; reason?: string },
   ) => Promise<void>;
+  siteId?: number | null;
   isDark?: boolean;
   formatActivityData?: (
     activityData: Record<string, unknown>,
@@ -35,7 +39,9 @@ interface EmissionsTableProps {
   columnOptionsMap?: Record<number, ColumnOptionsMap>;
   dependentOptionsMap?: Record<number, DependentOptionsMap>;
   columnDependenciesMap?: Record<number, ColumnDependencies>;
-  columnsMap?: Record<number, { pk_id: number; column_name: string }[]>;
+  columnsMap?: Record<number, { pk_id: number; column_name: string; column_type?: string }[]>;
+  emissionCategoryMappingMap?: Record<number, EmissionCategoryMapping>;
+  selectedCategoryName?: string;
 }
 
 function formatDate(dateString: string): string {
@@ -93,12 +99,15 @@ const EmissionsTable = ({
   onBulkReject,
   onBulkDelete,
   onManagerEdit,
+  siteId,
   isDark = false,
   formatActivityData,
   columnOptionsMap,
   dependentOptionsMap,
   columnDependenciesMap,
   columnsMap,
+  emissionCategoryMappingMap,
+  selectedCategoryName,
 }: EmissionsTableProps) => {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<number>>(
@@ -134,7 +143,9 @@ const EmissionsTable = ({
     reason: string;
   }>({ activity_data: {}, date_of_reporting: "", reason: "" });
   const [editLoading, setEditLoading] = useState(false);
-
+  const [emissionCategoryOptions, setEmissionCategoryOptions] = useState<string[]>([]);
+  const [editUnits, setEditUnits] = useState<UnitData[]>([]);
+  const [editUnit, setEditUnit] = useState<string>("");
   // Delete confirmation modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -174,8 +185,12 @@ const EmissionsTable = ({
     return map;
   }, [emissions]);
 
-  // Only show regular emissions (FERA is merged inline)
-  const displayEmissions = useMemo(() => emissions.filter((e) => !isFeraRow(e)), [emissions]);
+  // If user filtered by FERA category, show FERA rows directly; otherwise merge inline
+  const filteringByFera = selectedCategoryName?.toLowerCase() === "fera";
+  const displayEmissions = useMemo(
+    () => filteringByFera ? emissions : emissions.filter((e) => !isFeraRow(e)),
+    [emissions, filteringByFera]
+  );
 
   // Get pending and approved emissions (exclude FERA from selectable lists)
   const pendingEmissions = emissions.filter((e) => e.status === "pending" && !isFeraRow(e));
@@ -337,7 +352,26 @@ const EmissionsTable = ({
     setBulkRejectMode(false);
   };
 
-  // Get dropdown options for a field in the edit modal
+  // Check if a column is a dependent column (has a parent)
+  const isEditDependentColumn = (columnName: string, categoryId: number): boolean => {
+    const depChain = columnDependenciesMap?.[categoryId];
+    if (!depChain) return false;
+    return Object.keys(depChain).some(
+      (k) => k.toLowerCase() === columnName.toLowerCase()
+    );
+  };
+
+  // Get parent column name for a dependent column
+  const getEditParentColumnName = (columnName: string, categoryId: number): string | undefined => {
+    const depChain = columnDependenciesMap?.[categoryId];
+    if (!depChain) return undefined;
+    const match = Object.keys(depChain).find(
+      (k) => k.toLowerCase() === columnName.toLowerCase()
+    );
+    return match ? depChain[match] : undefined;
+  };
+
+  // Get dropdown options for a field in the edit modal — full dependency-aware version
   const getEditFieldOptions = (
     key: string,
     categoryId: number,
@@ -347,51 +381,86 @@ const EmissionsTable = ({
     const columns = columnsMap[categoryId];
     const columnOptions = columnOptionsMap[categoryId];
     const depOptions = dependentOptionsMap?.[categoryId];
-    const depChain = columnDependenciesMap?.[categoryId];
 
     if (!columns || !columnOptions) return null;
 
-    // Find parent column name for this key (case-insensitive)
-    const parentColName = depChain
-      ? (() => {
-          const match = Object.keys(depChain).find(
-            (k) => k.toLowerCase() === key.toLowerCase(),
-          );
-          return match ? depChain[match] : undefined;
-        })()
-      : undefined;
+    const parentColName = getEditParentColumnName(key, categoryId);
 
-    // If this field is a dependent column, get filtered options based on parent value
-    if (parentColName && depOptions?.[key]) {
+    // Dependent column logic
+    if (parentColName && depOptions) {
+      const keyLower = key.toLowerCase();
+      let childDeps = depOptions[key];
+      if (!childDeps) {
+        for (const [k, v] of Object.entries(depOptions)) {
+          if (k.toLowerCase() === keyLower) { childDeps = v; break; }
+        }
+      }
+      if (!childDeps) return null;
+
       const parentValue = editForm.activity_data[parentColName];
-      if (parentValue) {
-        // Resolve parent value to label for lookup
+      if (!parentValue) return null;
+
+      let parentLabel = String(parentValue);
+
+      // Check if parent is also dependent (3-level chain)
+      const grandparentColName = getEditParentColumnName(parentColName, categoryId);
+      if (grandparentColName && isEditDependentColumn(parentColName, categoryId)) {
+        const parentDepOptions = depOptions[parentColName];
+        if (parentDepOptions) {
+          for (const [, options] of Object.entries(parentDepOptions)) {
+            const match = options.find((opt) => String(opt.id) === String(parentValue));
+            if (match) { parentLabel = match.label; break; }
+          }
+        }
+      }
+
+      // Fallback: try column options for parent label
+      if (parentLabel === String(parentValue)) {
         const parentCol = columns.find(
-          (c) => c.column_name.toLowerCase() === parentColName.toLowerCase(),
+          (c) => c.column_name.toLowerCase() === parentColName.toLowerCase()
         );
-        let parentLabel = String(parentValue);
         if (parentCol) {
           const parentOpts = columnOptions[parentCol.pk_id.toString()];
           const parentOpt = parentOpts?.find(
-            (o) =>
-              String(o.id) === String(parentValue) ||
-              o.label.toLowerCase() === String(parentValue).toLowerCase(),
+            (o) => String(o.id) === String(parentValue) ||
+                   o.label.toLowerCase() === String(parentValue).toLowerCase()
           );
           if (parentOpt) parentLabel = parentOpt.label;
         }
+      }
 
-        const matchingKey = Object.keys(depOptions[key]).find(
-          (k) => k.toLowerCase() === parentLabel.toLowerCase(),
+      // Try composite key (grandparent|parent) for 3-level deps
+      if (grandparentColName && isEditDependentColumn(parentColName, categoryId)) {
+        const gpCol = columns.find(
+          (c) => c.column_name.toLowerCase() === grandparentColName.toLowerCase()
         );
-        if (matchingKey) {
-          return depOptions[key][matchingKey];
+        if (gpCol) {
+          const gpOptions = columnOptions[gpCol.pk_id.toString()];
+          if (gpOptions) {
+            for (const gpOpt of gpOptions) {
+              const compositeKey = `${gpOpt.label}|${parentLabel}`;
+              const matched = childDeps[compositeKey];
+              if (matched && matched.length > 0) return matched;
+            }
+          }
         }
       }
-      // If no parent value selected yet, show all options flattened
-      return Object.values(depOptions[key]).flat();
+
+      // Try exact match, case-insensitive, and raw value
+      let result = childDeps[parentLabel];
+      if (!result) {
+        const lower = parentLabel.toLowerCase();
+        for (const [k, v] of Object.entries(childDeps)) {
+          if (k.toLowerCase() === lower) { result = v; break; }
+        }
+      }
+      if (!result) result = childDeps[String(parentValue)];
+      if (result && result.length > 0) return result;
+
+      return null;
     }
 
-    // Check if this field has direct column options
+    // Non-dependent: use column options by pk_id
     const col = columns.find(
       (c) => c.column_name.toLowerCase() === key.toLowerCase(),
     );
@@ -404,23 +473,144 @@ const EmissionsTable = ({
   };
 
   // Edit handlers
-  const handleEditClick = (emission: EmissionData) => {
+  const handleEditClick = async (emission: EmissionData) => {
+    const categoryId = emission.category?.category_id || 0;
+    const activityData = { ...emission.activity_data };
+
+    // Reverse-map emission_category to pre-fill select columns
+    const ecm = emissionCategoryMappingMap?.[categoryId] || {};
+    const storedCategory = activityData.emission_category || "";
+    if (storedCategory && Object.keys(ecm).length > 0) {
+      let matchedKey: string | null = null;
+      const storedLower = storedCategory.toLowerCase();
+      for (const [key, value] of Object.entries(ecm)) {
+        if (value === storedCategory || value.toLowerCase() === storedLower) {
+          matchedKey = key;
+          break;
+        }
+      }
+
+      if (matchedKey) {
+        const labels = matchedKey.split("|");
+        const deps = columnDependenciesMap?.[categoryId] || {};
+        const columns = columnsMap?.[categoryId] || [];
+        const columnOptions = columnOptionsMap?.[categoryId] || {};
+        const depOptions = dependentOptionsMap?.[categoryId] || {};
+
+        // Build ordered select column chain: root → ... → leaf
+        const allChildCols = new Set(Object.keys(deps));
+        const allParentCols = new Set(Object.values(deps));
+        const rootCols = [...allParentCols].filter((c) => !allChildCols.has(c));
+
+        const orderedSelectCols: string[] = [];
+        const walkChain = (colName: string) => {
+          orderedSelectCols.push(colName);
+          for (const [child, parent] of Object.entries(deps)) {
+            if (parent === colName) walkChain(child);
+          }
+        };
+        if (rootCols.length > 0) {
+          rootCols.forEach((root) => walkChain(root));
+        } else {
+          columns
+            .filter((c) => c.column_type === "select")
+            .forEach((c) => orderedSelectCols.push(c.column_name));
+        }
+
+        for (let i = 0; i < labels.length && i < orderedSelectCols.length; i++) {
+          const colName = orderedSelectCols[i];
+          const label = labels[i];
+
+          // Only fill if empty
+          if (activityData[colName] && activityData[colName] !== "") continue;
+
+          const col = columns.find((c) => c.column_name.toLowerCase() === colName.toLowerCase());
+          if (!col) continue;
+
+          let matchedId: string | number | null = null;
+
+          // For dependent columns, look up in dependentOptions using parent's label
+          if (allChildCols.has(colName) && i > 0) {
+            const parentColName = deps[colName];
+            const parentVal = activityData[parentColName];
+            if (parentVal && depOptions[colName]) {
+              // Convert parent ID to label
+              const parentCol = columns.find((c) => c.column_name.toLowerCase() === parentColName.toLowerCase());
+              let parentLabel = String(parentVal);
+              if (parentCol) {
+                const pOpts = columnOptions[parentCol.pk_id.toString()] || [];
+                const pMatch = pOpts.find((o) => String(o.id) === String(parentVal));
+                if (pMatch) parentLabel = pMatch.label;
+              }
+              const opts = depOptions[colName][parentLabel] || [];
+              const match = opts.find((o) => o.label.toLowerCase() === label.toLowerCase());
+              if (match) matchedId = match.id;
+            }
+          }
+
+          if (matchedId === null) {
+            const opts = columnOptions[col.pk_id.toString()] || [];
+            const match = opts.find((o) => o.label.toLowerCase() === label.toLowerCase());
+            if (match) matchedId = match.id;
+          }
+
+          if (matchedId !== null) {
+            activityData[colName] = String(matchedId);
+          }
+        }
+      }
+    }
+
     setEditingEmission(emission);
     setEditForm({
-      activity_data: { ...emission.activity_data },
+      activity_data: activityData,
       date_of_reporting: emission.date_of_reporting.split("T")[0],
       reason: "",
     });
+    setEditUnit(emission.activity_data_unit || "");
     setEditModalOpen(true);
+
+    // Fetch emission category options and units for dropdowns
+    if (siteId && categoryId) {
+      try {
+        const reportDate = new Date(emission.date_of_reporting);
+        const targetYear = reportDate.getFullYear() - 1;
+        const [factors, units] = await Promise.all([
+          getUserEmissionFactorsBySiteAndCategory(
+            siteId, categoryId, targetYear
+          ),
+          getUserUnitsBySiteAndCategory(siteId, categoryId),
+        ]);
+        const categoryNames = [...new Set(
+          factors.map((f: any) => f.emission_category_name).filter(Boolean)
+        )] as string[];
+        setEmissionCategoryOptions(categoryNames);
+        setEditUnits(units);
+      } catch (error) {
+        console.error("Error fetching edit options:", error);
+        setEmissionCategoryOptions([]);
+        setEditUnits([]);
+      }
+    }
   };
 
   const handleEditSave = async () => {
     if (!onManagerEdit || !editingEmission) return;
     setEditLoading(true);
     try {
+      // Strip internal/metadata keys before saving
+      const cleanData = { ...editForm.activity_data };
+      const metaKeys = [
+        "category_name", "category_scope", "fera_linked_id",
+        "date_of_reporting", "activity_data_unit", "_extra_data",
+        "_isFeraRow", "_ecmKey", "extra_data",
+      ];
+      for (const k of metaKeys) delete cleanData[k];
+
       await onManagerEdit(editingEmission.pk_id, {
-        activity_data: editForm.activity_data,
+        activity_data: cleanData,
         date_of_reporting: editForm.date_of_reporting,
+        activity_data_unit: editUnit || undefined,
         reason: editForm.reason || undefined,
       });
       setEditModalOpen(false);
@@ -546,10 +736,6 @@ const EmissionsTable = ({
   const cancelBtnClass = isDark
     ? "px-4 py-2 bg-slate-600 text-slate-200 rounded hover:bg-slate-500"
     : "px-4 py-2 bg-gray-300 rounded hover:bg-gray-400";
-
-  const auditWarningClass = isDark
-    ? "mb-4 p-3 rounded text-sm bg-yellow-900/20 border border-yellow-700/30 text-yellow-400"
-    : "mb-4 p-3 rounded text-sm bg-yellow-50 border border-yellow-200 text-yellow-800";
 
   if (loading) {
     return <div className={loadingClass}>Loading emissions...</div>;
@@ -786,6 +972,11 @@ const EmissionsTable = ({
                   )}
                   <td className={tdClass}>
                     {emission.category?.category_name || "-"}
+                    {emission.parent_category_name && (
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        ({emission.parent_category_name})
+                      </div>
+                    )}
                   </td>
                   <td className={tdClass}>
                     <div className="max-w-xs">
@@ -936,93 +1127,219 @@ const EmissionsTable = ({
           setEditModalOpen(false);
           setEditingEmission(null);
         }}
-        title="Edit Emission Data"
+        title="Edit Entry"
         isDark={isDark}
+        className="max-w-4xl! max-h-[85vh]!"
       >
-        {editingEmission?.status === "approved" && (
-          <div className={auditWarningClass}>
-            This entry is approved. Changes will be logged in the audit trail.
-          </div>
-        )}
         <div className="space-y-4">
-          {Object.entries(editForm.activity_data).map(([key, value]) => {
-            const categoryId = editingEmission?.category?.category_id || 0;
-            const options = getEditFieldOptions(key, categoryId);
-
-            return (
-              <div key={key}>
-                <label className={labelClass}>{key}</label>
-                {options && options.length > 0 ? (
-                  <select
-                    value={String(value)}
-                    onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        activity_data: {
-                          ...editForm.activity_data,
-                          [key]: e.target.value,
-                        },
-                      })
-                    }
-                    className={modalInputClass}
-                  >
-                    <option value="">-- Select --</option>
-                    {options.map((opt) => (
-                      <option key={opt.id} value={opt.label}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={String(value)}
-                    onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        activity_data: {
-                          ...editForm.activity_data,
-                          [key]: e.target.value,
-                        },
-                      })
-                    }
-                    className={modalInputClass}
-                  />
+          <div className={`border rounded-lg shadow-sm ${isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-white"}`}>
+            {/* Card Header */}
+            <div className={`flex items-center justify-between px-4 py-2.5 border-b rounded-t-lg ${isDark ? "border-slate-700 bg-slate-700" : "border-gray-100 bg-gray-50"}`}>
+              <div className="flex items-center gap-3">
+                <span className={`text-sm font-semibold ${isDark ? "text-slate-300" : "text-gray-600"}`}>
+                  {editingEmission?.category?.category_name || "Entry"}
+                </span>
+                {editingEmission?.status === "approved" && (
+                  <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">Approved - changes logged</span>
                 )}
               </div>
-            );
-          })}
-          <div>
-            <label className={labelClass}>Date of Reporting</label>
-            <input
-              type="date"
-              value={editForm.date_of_reporting}
-              onChange={(e) =>
-                setEditForm({ ...editForm, date_of_reporting: e.target.value })
-              }
-              className={modalInputClass}
-            />
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Section 1: Emission Category */}
+              <div>
+                <label className={`block text-xs font-semibold uppercase tracking-wide mb-1.5 ${isDark ? "text-slate-400" : "text-gray-600"}`}>Emission Category</label>
+                {editForm.activity_data.emission_category !== undefined ? (
+                  emissionCategoryOptions.length > 0 ? (
+                    <select
+                      value={String(editForm.activity_data.emission_category)}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          activity_data: {
+                            ...editForm.activity_data,
+                            emission_category: e.target.value,
+                          },
+                        })
+                      }
+                      className={modalInputClass}
+                    >
+                      <option value="">-- Select Emission Category --</option>
+                      {emissionCategoryOptions.map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className={`px-3 py-2.5 rounded-md text-sm font-medium ${isDark ? "bg-green-900/30 text-green-400 border border-green-700" : "bg-green-50 text-green-800 border border-green-300"}`}>
+                      {editForm.activity_data.emission_category || "Not set"}
+                    </div>
+                  )
+                ) : (
+                  <div className={`px-3 py-2.5 rounded-md text-sm italic ${isDark ? "bg-slate-700 text-slate-400 border border-slate-600" : "bg-gray-50 text-gray-400 border border-gray-200"}`}>
+                    No emission category
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Activity Data */}
+              <div>
+                <label className={`block text-xs font-semibold uppercase tracking-wide mb-1.5 ${isDark ? "text-slate-400" : "text-gray-600"}`}>Activity Data</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {(() => {
+                    const categoryId = editingEmission?.category?.category_id || 0;
+                    const configColumns = columnsMap?.[categoryId] || [];
+                    const configKeys = configColumns.map((c) => c.column_name);
+                    // Skip internal/metadata keys that shouldn't be editable
+                    const skipKeys = new Set([
+                      "emission_category", "category_name", "category_scope",
+                      "fera_linked_id", "date_of_reporting", "activity_data_unit",
+                      "_extra_data", "_isFeraRow", "_ecmKey", "extra_data",
+                    ]);
+                    const activityKeys = Object.keys(editForm.activity_data).filter(
+                      (k) => !skipKeys.has(k)
+                    );
+                    const orderedKeys = [
+                      ...configKeys.filter((k) => !skipKeys.has(k)),
+                      ...activityKeys.filter(
+                        (k) => !configKeys.some((ck) => ck.toLowerCase() === k.toLowerCase())
+                      ),
+                    ];
+
+                    return orderedKeys.map((key) => {
+                      const value = editForm.activity_data[key] ?? "";
+                      const options = getEditFieldOptions(key, categoryId);
+                      const isDependent = isEditDependentColumn(key, categoryId);
+                      const parentColName = getEditParentColumnName(key, categoryId);
+                      const parentValue = parentColName ? editForm.activity_data[parentColName] : undefined;
+                      const isDisabledDependent = isDependent && !parentValue;
+                      const col = configColumns.find(
+                        (c) => c.column_name.toLowerCase() === key.toLowerCase()
+                      );
+                      const isNumeric = col?.column_type === "number" ||
+                        (!isNaN(Number(value)) && value !== "" && value !== null && !options);
+                      const formattedLabel = key
+                        .replace(/_/g, " ")
+                        .replace(/\b\w/g, (c) => c.toUpperCase());
+
+                      const handleFieldChange = (newValue: string) => {
+                        const updated = { ...editForm.activity_data, [key]: newValue };
+                        const depChain = columnDependenciesMap?.[categoryId];
+                        if (depChain) {
+                          for (const [child, parent] of Object.entries(depChain)) {
+                            if (parent.toLowerCase() === key.toLowerCase()) {
+                              updated[child] = "";
+                              for (const [gc, gp] of Object.entries(depChain)) {
+                                if (gp.toLowerCase() === child.toLowerCase()) {
+                                  updated[gc] = "";
+                                }
+                              }
+                            }
+                          }
+                        }
+                        setEditForm({ ...editForm, activity_data: updated });
+                      };
+
+                      return (
+                        <div key={key}>
+                          <label className={`block text-xs mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>{formattedLabel}</label>
+                          {options && options.length > 0 ? (
+                            <select
+                              value={String(value)}
+                              onChange={(e) => handleFieldChange(e.target.value)}
+                              disabled={isDisabledDependent}
+                              className={`${modalInputClass} ${isDisabledDependent ? "opacity-50 cursor-not-allowed" : ""}`}
+                            >
+                              <option value="">
+                                {isDisabledDependent
+                                  ? `Select ${parentColName?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} first`
+                                  : `Select ${formattedLabel}`}
+                              </option>
+                              {options.map((opt) => (
+                                <option key={opt.id} value={opt.id}>{opt.label}</option>
+                              ))}
+                            </select>
+                          ) : isDisabledDependent ? (
+                            <select disabled className={`${modalInputClass} opacity-50 cursor-not-allowed`}>
+                              <option>Select {parentColName?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} first</option>
+                            </select>
+                          ) : (
+                            <input
+                              type={isNumeric ? "number" : "text"}
+                              step={isNumeric ? "any" : undefined}
+                              value={String(value)}
+                              onChange={(e) => handleFieldChange(e.target.value)}
+                              className={modalInputClass}
+                              placeholder={formattedLabel}
+                            />
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+
+                  {/* Unit */}
+                  <div>
+                    <label className={`block text-xs mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Unit</label>
+                    {editUnits.length > 0 ? (
+                      <select
+                        value={editUnit}
+                        onChange={(e) => setEditUnit(e.target.value)}
+                        className={modalInputClass}
+                      >
+                        <option value="">Select Unit</option>
+                        {editUnits.map((unit) => (
+                          <option key={unit.unit_id} value={unit.unit_name}>{unit.unit_name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input type="text" value={editUnit} readOnly className={modalInputClass} />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Date & Reason */}
+              <div>
+                <label className={`block text-xs font-semibold uppercase tracking-wide mb-1.5 ${isDark ? "text-slate-400" : "text-gray-600"}`}>Details</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={`block text-xs mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Date of Reporting</label>
+                    <input
+                      type="date"
+                      value={editForm.date_of_reporting}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, date_of_reporting: e.target.value })
+                      }
+                      className={modalInputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-xs mb-1 ${isDark ? "text-slate-400" : "text-gray-500"}`}>Reason for Edit</label>
+                    <textarea
+                      value={editForm.reason}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, reason: e.target.value })
+                      }
+                      placeholder="Why is this data being modified?"
+                      rows={2}
+                      className={modalInputClass}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div>
-            <label className={labelClass}>Reason for Edit</label>
-            <textarea
-              value={editForm.reason}
-              onChange={(e) =>
-                setEditForm({ ...editForm, reason: e.target.value })
-              }
-              placeholder="Why is this data being modified?"
-              rows={2}
-              className={modalInputClass}
+
+          {/* Audit Trail */}
+          {editingEmission && (
+            <AuditTrailTimeline
+              entityType="emission"
+              entityId={editingEmission.pk_id}
+              isDark={isDark}
             />
-          </div>
+          )}
         </div>
-        {editingEmission && (
-          <AuditTrailTimeline
-            entityType="emission"
-            entityId={editingEmission.pk_id}
-            isDark={isDark}
-          />
-        )}
+
         <div className="flex justify-end gap-2 mt-4">
           <button
             onClick={() => {

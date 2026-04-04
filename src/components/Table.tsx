@@ -8,6 +8,8 @@ export interface Column<T> {
   render?: (value: any, row: T) => React.ReactNode;
   type?: "text" | "number" | "email" | "date" | "dropdown" | "multiselect";
   options?: DropdownOption[];
+  getOptions?: (row: T, editValues: Partial<T>) => DropdownOption[];
+  onEditChange?: (value: any, editValues: Partial<T>, setEditValues: (updater: (prev: Partial<T>) => Partial<T>) => void) => void;
 }
 
 export interface TableProps<T> {
@@ -32,6 +34,7 @@ export interface TableProps<T> {
   selectedIds?: Set<any>;
   onSelectionChange?: (ids: Set<any>) => void;
   isRowSelectable?: (row: T) => boolean;
+  editMode?: "inline" | "modal";
 }
 
 export function Table<T extends Record<string, any>>({
@@ -49,6 +52,7 @@ export function Table<T extends Record<string, any>>({
   selectedIds,
   onSelectionChange,
   isRowSelectable,
+  editMode = "inline",
 }: TableProps<T>) {
   const [editingId, setEditingId] = useState<any>(null);
   const [editValues, setEditValues] = useState<Partial<T>>({});
@@ -223,22 +227,29 @@ export function Table<T extends Record<string, any>>({
                     </td>
                   );
                 })()}
-                {columns.map((col) => (
+                {columns.map((col) => {
+                  const dynamicOptions = isEditing && col.getOptions ? col.getOptions(row, editValues) : col.options;
+                  return (
                   <td key={String(col.key)} className={cellClass}>
                     {isEditing && col.editable ? (
-                      col.type === "dropdown" && col.options ? (
+                      col.type === "dropdown" && (dynamicOptions || col.getOptions) ? (
                         <Dropdown
-                          options={col.options}
-                          placeholder="Select..."
+                          options={dynamicOptions || []}
+                          placeholder={dynamicOptions && dynamicOptions.length === 0 ? "Select parent first" : "Select..."}
                           value={editValues[col.key] ?? null}
-                          onChange={(option) =>
-                            handleEditChange(col.key, option.id)
-                          }
+                          onChange={(option) => {
+                            if (col.onEditChange) {
+                              col.onEditChange(option.id, editValues, setEditValues);
+                            } else {
+                              handleEditChange(col.key, option.id);
+                            }
+                          }}
                           searchable={true}
+                          disabled={col.getOptions && (!dynamicOptions || dynamicOptions.length === 0)}
                         />
-                      ) : col.type === "multiselect" && col.options ? (
+                      ) : col.type === "multiselect" && dynamicOptions ? (
                         <Dropdown
-                          options={col.options}
+                          options={dynamicOptions}
                           placeholder="Select..."
                           multiple={true}
                           multipleValue={
@@ -270,7 +281,8 @@ export function Table<T extends Record<string, any>>({
                       row[col.key]
                     )}
                   </td>
-                ))}
+                  );
+                })}
                 {showActions && (
                   <td className={cellClass}>
                     {isEditing ? (
@@ -293,7 +305,7 @@ export function Table<T extends Record<string, any>>({
                       renderActions(row, {
                         editButton: onEdit ? (
                           <button
-                            onClick={() => handleEditStart(row)}
+                            onClick={() => editMode === "modal" ? onEdit(row, {}) : handleEditStart(row)}
                             className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
                           >
                             Edit
@@ -315,7 +327,7 @@ export function Table<T extends Record<string, any>>({
                       <div className="flex gap-2">
                         {onEdit && (
                           <button
-                            onClick={() => handleEditStart(row)}
+                            onClick={() => editMode === "modal" ? onEdit(row, {}) : handleEditStart(row)}
                             className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
                           >
                             Edit

@@ -33,6 +33,7 @@ export interface EmissionData {
     name: string;
   };
   fera_linked_id?: number | null;
+  parent_category_name?: string | null;
 }
 
 export type ReportFrequency = "yearly" | "monthly";
@@ -133,6 +134,8 @@ export const updateEmission = async (
     total_emission?: number;
     unit?: string;
     date_of_reporting?: string;
+    activity_data_unit?: string;
+    reason?: string;
   }
 ) => {
   const response = await api.put(`/user/emissions/${id}`, data);
@@ -212,7 +215,7 @@ export const rejectEmissionsByBatch = async (batchId: string, comment?: string) 
 
 export const managerUpdateEmission = async (
   id: string | number,
-  data: { activity_data?: any; date_of_reporting?: string; reason?: string }
+  data: { activity_data?: any; date_of_reporting?: string; activity_data_unit?: string; reason?: string }
 ) => {
   const response = await api.put(`/user/emissions/manager-edit/${id}`, data);
   return response.data;

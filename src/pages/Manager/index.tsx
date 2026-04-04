@@ -23,6 +23,7 @@ import {
   ColumnOptionsMap,
   DependentOptionsMap,
   ColumnDependencies,
+  EmissionCategoryMapping,
 } from "../../services/columnConfigService";
 
 
@@ -111,7 +112,8 @@ const ManagerPage = () => {
   const [columnOptionsMap, setColumnOptionsMap] = useState<Record<number, ColumnOptionsMap>>({});
   const [dependentOptionsMap, setDependentOptionsMap] = useState<Record<number, DependentOptionsMap>>({});
   const [columnDependenciesMap, setColumnDependenciesMap] = useState<Record<number, ColumnDependencies>>({});
-  const [columnsMap, setColumnsMap] = useState<Record<number, { pk_id: number; column_name: string }[]>>({});
+  const [columnsMap, setColumnsMap] = useState<Record<number, { pk_id: number; column_name: string; column_type?: string }[]>>({});
+  const [emissionCategoryMappingMap, setEmissionCategoryMappingMap] = useState<Record<number, EmissionCategoryMapping>>({});
 
   // Get the currently selected site object
   const currentSite = availableSites.find((s) => s.site_id === selectedSite);
@@ -145,6 +147,7 @@ const ManagerPage = () => {
       const newDependentOptions: Record<number, DependentOptionsMap> = {};
       const newColumnDependencies: Record<number, ColumnDependencies> = {};
       const newColumnsMap: Record<number, { pk_id: number; column_name: string }[]> = {};
+      const newEcmMap: Record<number, EmissionCategoryMapping> = {};
 
       for (const category of categories) {
         try {
@@ -162,11 +165,15 @@ const ManagerPage = () => {
             }
             if (config.columns && Array.isArray(config.columns)) {
               newColumnsMap[category.category_id] = config.columns.map(
-                (col: { pk_id: number; column_name: string }) => ({
+                (col: { pk_id: number; column_name: string; column_type?: string }) => ({
                   pk_id: col.pk_id,
                   column_name: col.column_name,
+                  column_type: col.column_type,
                 })
               );
+            }
+            if (config.emission_category_mapping) {
+              newEcmMap[category.category_id] = config.emission_category_mapping;
             }
           }
         } catch (error) {
@@ -178,6 +185,7 @@ const ManagerPage = () => {
       setDependentOptionsMap(newDependentOptions);
       setColumnDependenciesMap(newColumnDependencies);
       setColumnsMap(newColumnsMap);
+      setEmissionCategoryMappingMap(newEcmMap);
     };
 
     fetchColumnConfigs();
@@ -464,7 +472,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
   // Handle manager edit emission
   const handleManagerEdit = useCallback(async (
     id: number,
-    data: { activity_data?: Record<string, any>; date_of_reporting?: string; reason?: string }
+    data: { activity_data?: Record<string, any>; date_of_reporting?: string; activity_data_unit?: string; reason?: string }
   ) => {
     const response = await managerUpdateEmission(id, data);
     setEmissions((prev) =>
@@ -704,12 +712,15 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         onBulkReject={handleBulkReject}
         onBulkDelete={handleBulkDelete}
         onManagerEdit={handleManagerEdit}
+        siteId={selectedSite}
         isDark={isDark}
         formatActivityData={formatActivityData}
         columnOptionsMap={columnOptionsMap}
         dependentOptionsMap={dependentOptionsMap}
         columnDependenciesMap={columnDependenciesMap}
         columnsMap={columnsMap}
+        emissionCategoryMappingMap={emissionCategoryMappingMap}
+        selectedCategoryName={categories.find((c) => c.category_id === selectedCategory)?.category_name}
       />
 
       {/* Batch Approve Confirmation Modal */}

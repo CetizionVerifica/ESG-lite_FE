@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Modal from "./Modal";
 import {
   updateColumnConfig,
@@ -74,6 +74,9 @@ const EditColumnConfigModal = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Track column renames: pk_id → { oldName, newName }
+  const columnRenamesRef = useRef<Map<number, { oldName: string; newName: string }>>(new Map());
+
   // New option inputs for Options tab
   const [newOptCol, setNewOptCol] = useState<string>("");
   const [newOptId, setNewOptId] = useState("");
@@ -98,6 +101,7 @@ const EditColumnConfigModal = ({
   const initFromConfig = useCallback(() => {
     setConfigName(config.config_name);
     setEditColumns(JSON.parse(JSON.stringify(config.columns || [])));
+    columnRenamesRef.current = new Map();
 
     // Convert column_options keys: pk_id string → column_name if needed
     const rawOpts = config.column_options || {};
@@ -126,8 +130,19 @@ const EditColumnConfigModal = ({
   const selectColumns = editColumns.filter((c) => c.column_type === "select");
 
   const handleColumnNameChange = (colIdx: number, newName: string) => {
-    const oldName = editColumns[colIdx].column_name;
+    const col = editColumns[colIdx];
+    const oldName = col.column_name;
     if (oldName === newName) return;
+
+    // Track rename: use original name from config as the old name
+    const existing = columnRenamesRef.current.get(col.pk_id);
+    const originalName = existing ? existing.oldName : oldName;
+    if (originalName === newName) {
+      // Reverted to original name, remove from renames
+      columnRenamesRef.current.delete(col.pk_id);
+    } else {
+      columnRenamesRef.current.set(col.pk_id, { oldName: originalName, newName });
+    }
 
     // Update columns
     setEditColumns((prev) =>
@@ -354,6 +369,13 @@ const EditColumnConfigModal = ({
     setError(null);
 
     try {
+      // Build rename map from tracked renames
+      const renames = columnRenamesRef.current;
+      const renameMap: Record<string, string> = {};
+      for (const [, { oldName, newName }] of renames.entries()) {
+        renameMap[oldName] = newName;
+      }
+
       // Convert column_options keys back to pk_id strings for backend
       const optionsForSave: ColumnOptionsMap = {};
       for (const [colName, opts] of Object.entries(editColumnOptions)) {
@@ -361,7 +383,7 @@ const EditColumnConfigModal = ({
         optionsForSave[col ? col.pk_id.toString() : colName] = opts;
       }
 
-      await updateColumnConfig(config.pk_id, {
+      const response = await updateColumnConfig(config.pk_id, {
         config_name: configName.trim(),
         column_ids: editColumns.map((c) => c.pk_id),
         column_options: optionsForSave,
@@ -369,9 +391,20 @@ const EditColumnConfigModal = ({
         dependent_options: editDependentOptions,
         emission_category_mapping: editMappings,
         extra_fields: editExtraFields,
+        rename_map: Object.keys(renameMap).length > 0 ? renameMap : undefined,
       });
 
-      onSave({
+      // Use backend response if available (has correct pk_ids after shared column renames)
+      const saved = response?.columnConfig;
+      onSave(saved ? {
+        ...saved,
+        // Ensure JSONB fields from response are used (backend is source of truth)
+        column_options: saved.column_options ?? optionsForSave,
+        column_dependencies: saved.column_dependencies ?? editDependencies,
+        dependent_options: saved.dependent_options ?? editDependentOptions,
+        emission_category_mapping: saved.emission_category_mapping ?? editMappings,
+        extra_fields: saved.extra_fields ?? editExtraFields,
+      } : {
         ...config,
         config_name: configName.trim(),
         columns: editColumns,
