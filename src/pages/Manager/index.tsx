@@ -324,11 +324,22 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     ): { key: string; displayValue: string }[] => {
       if (!activityData) return [];
 
-      return Object.entries(activityData).map(([key, value]) => {
-        const stringValue = String(value);
-        const displayValue = getOptionLabel(key, stringValue, categoryId, activityData);
-        return { key, displayValue };
-      });
+      const skipKeys = new Set([
+        "category_name", "category_scope", "fera_linked_id",
+        "date_of_reporting", "activity_data_unit", "_extra_data",
+        "_isFeraRow", "_ecmKey", "extra_data",
+      ]);
+
+      return Object.entries(activityData)
+        .filter(([key]) => !skipKeys.has(key))
+        .map(([key, value]) => {
+          if (value !== null && typeof value === "object") {
+            return { key, displayValue: JSON.stringify(value) };
+          }
+          const stringValue = String(value);
+          const displayValue = getOptionLabel(key, stringValue, categoryId, activityData);
+          return { key, displayValue };
+        });
     },
     [getOptionLabel]
   );
