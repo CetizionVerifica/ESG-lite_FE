@@ -370,6 +370,101 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     [getOptionLabel]
   );
 
+  // Auto-resolve emission_category from select column values (same logic as Data Entry)
+  const autoResolveEmissionCategory = (
+    activityData: Record<string, any>,
+    categoryId: number,
+  ): { key: string; category: string } | null => {
+    const ecm = emissionCategoryMappingMap?.[categoryId] || {};
+    if (Object.keys(ecm).length === 0) return null;
+
+    const deps = columnDependenciesMap?.[categoryId] || {};
+    const columns = columnsMap?.[categoryId] || [];
+    const colOptions = columnOptionsMap?.[categoryId] || {};
+    const depOptions = dependentOptionsMap?.[categoryId] || {};
+
+    // Find root columns
+    const allChildCols = new Set(Object.keys(deps));
+    const allParentCols = new Set(Object.values(deps));
+    const rootCols = [...allParentCols].filter((c) => !allChildCols.has(c));
+
+    const getLabel = (colName: string, value: string, parentLabel?: string): string => {
+      const col = columns.find((c) => c.column_name.toLowerCase() === colName.toLowerCase());
+      if (!col) return value;
+
+      // Try dependent options first
+      if (parentLabel && depOptions[colName]) {
+        const opts = depOptions[colName][parentLabel] || [];
+        const match = opts.find((o) => String(o.id) === String(value));
+        if (match) return match.label;
+      }
+
+      // Try column options
+      const opts = colOptions[col.pk_id.toString()] || [];
+      const match = opts.find((o) => String(o.id) === String(value) || o.label.toLowerCase() === String(value).toLowerCase());
+      if (match) return match.label;
+
+      return value;
+    };
+
+    if (rootCols.length === 0) {
+      // No dependencies — try flat mapping
+      const selectCols = columns.filter((c) => c.column_type === "select");
+      for (const col of selectCols) {
+        const val = activityData[col.column_name];
+        if (!val) continue;
+        const label = getLabel(col.column_name, String(val));
+        if (ecm[label]) return { key: label, category: ecm[label] };
+        const labelLower = label.toLowerCase();
+        for (const [k, v] of Object.entries(ecm)) {
+          if (k.toLowerCase() === labelLower) return { key: k, category: v };
+        }
+      }
+      return null;
+    }
+
+    // Walk dependency chain collecting labels
+    const keyParts: string[] = [];
+    const walkChain = (colName: string): boolean => {
+      const val = activityData[colName];
+      if (!val) return false;
+      const parentLabel = keyParts.length > 0 ? keyParts[keyParts.length - 1] : undefined;
+      const label = getLabel(colName, String(val), parentLabel);
+      keyParts.push(label);
+      for (const [child, parent] of Object.entries(deps)) {
+        if (parent === colName) {
+          if (!walkChain(child)) return false;
+        }
+      }
+      return true;
+    };
+
+    for (const root of rootCols) {
+      if (!walkChain(root)) return null;
+    }
+
+    const mappingKey = keyParts.join("|");
+    if (ecm[mappingKey]) return { key: mappingKey, category: ecm[mappingKey] };
+
+    // Case-insensitive fallback
+    const mappingKeyLower = mappingKey.toLowerCase();
+    for (const [k, v] of Object.entries(ecm)) {
+      if (k.toLowerCase() === mappingKeyLower) return { key: k, category: v };
+    }
+
+    // Progressive sub-key fallback
+    for (let i = keyParts.length - 1; i >= 0; i--) {
+      const subKey = keyParts.slice(0, i + 1).join("|");
+      if (ecm[subKey]) return { key: subKey, category: ecm[subKey] };
+      const subKeyLower = subKey.toLowerCase();
+      for (const [k, v] of Object.entries(ecm)) {
+        if (k.toLowerCase() === subKeyLower) return { key: k, category: v };
+      }
+    }
+
+    return null;
+  };
+
   // Check if a column is a dependent column (has a parent)
   const isEditDependentColumn = (columnName: string, categoryId: number): boolean => {
     const depChain = columnDependenciesMap?.[categoryId];
@@ -1084,36 +1179,54 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
               {/* Section 1: Emission Category */}
               <div>
                 <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Emission Category</label>
-                {editForm.activity_data.emission_category !== undefined ? (
-                  emissionCategoryOptions.length > 0 ? (
-                    <select
-                      value={String(editForm.activity_data.emission_category)}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          activity_data: {
-                            ...editForm.activity_data,
-                            emission_category: e.target.value,
-                          },
-                        })
-                      }
-                      className="w-full border border-gray-300 px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    >
-                      <option value="">-- Select Emission Category --</option>
-                      {emissionCategoryOptions.map((name) => (
-                        <option key={name} value={name}>{name}</option>
-                      ))}
-                    </select>
-                  ) : (
+                {(() => {
+                  const catId = editingEmission?.category?.category_id || 0;
+                  const hasMapping = Object.keys(emissionCategoryMappingMap?.[catId] || {}).length > 0;
+                  if (hasMapping) {
+                    // Auto-resolved from select columns — read-only
+                    return editForm.activity_data.emission_category ? (
+                      <div className="px-3 py-2.5 rounded-md text-sm font-medium bg-green-50 text-green-800 border border-green-300">
+                        {editForm.activity_data.emission_category}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2.5 rounded-md text-sm italic bg-gray-50 text-gray-400 border border-gray-200">
+                        Select dropdown values to auto-determine
+                      </div>
+                    );
+                  }
+                  // No mapping — manual dropdown from emission factors
+                  if (emissionCategoryOptions.length > 0) {
+                    return (
+                      <select
+                        value={String(editForm.activity_data.emission_category || "")}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            activity_data: {
+                              ...editForm.activity_data,
+                              emission_category: e.target.value,
+                            },
+                          })
+                        }
+                        className="w-full border border-gray-300 px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      >
+                        <option value="">-- Select Emission Category --</option>
+                        {emissionCategoryOptions.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    );
+                  }
+                  return editForm.activity_data.emission_category ? (
                     <div className="px-3 py-2.5 rounded-md text-sm font-medium bg-green-50 text-green-800 border border-green-300">
-                      {editForm.activity_data.emission_category || "Not set"}
+                      {editForm.activity_data.emission_category}
                     </div>
-                  )
-                ) : (
-                  <div className="px-3 py-2.5 rounded-md text-sm italic bg-gray-50 text-gray-400 border border-gray-200">
-                    No emission category
-                  </div>
-                )}
+                  ) : (
+                    <div className="px-3 py-2.5 rounded-md text-sm italic bg-gray-50 text-gray-400 border border-gray-200">
+                      No emission category
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Section 2: Activity Data */}
@@ -1122,7 +1235,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {(() => {
                     const categoryId = editingEmission?.category?.category_id || 0;
-                    const configColumns = columnsMap[categoryId] || [];
+                    const configColumns = columnsMap?.[categoryId] || [];
                     const configKeys = configColumns.map((c) => c.column_name);
                     const skipKeys = new Set([
                       "emission_category", "category_name", "category_scope",
@@ -1168,6 +1281,16 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                                 }
                               }
                             }
+                          }
+                        }
+                        // Auto-resolve emission_category from select values (only if mapping exists)
+                        const ecm = emissionCategoryMappingMap?.[categoryId];
+                        if (ecm && Object.keys(ecm).length > 0 && col?.column_type === "select") {
+                          const autoResult = autoResolveEmissionCategory(updated, categoryId);
+                          if (autoResult) {
+                            updated.emission_category = autoResult.category;
+                          } else {
+                            updated.emission_category = "";
                           }
                         }
                         setEditForm({ ...editForm, activity_data: updated });
