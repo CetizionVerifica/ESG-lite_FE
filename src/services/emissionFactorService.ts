@@ -1,7 +1,27 @@
 import api from "../api/axios";
 
-export const getEmissionFactors = async () => {
-  const response = await api.get("/admin/emission-factors");
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export const getEmissionFactors = async (params?: {
+  page?: number;
+  limit?: number;
+  site_id?: number | null;
+  category_id?: number | null;
+  search?: string;
+}): Promise<PaginatedResponse<any>> => {
+  const query: Record<string, string | number> = {};
+  if (params?.page) query.page = params.page;
+  if (params?.limit) query.limit = params.limit;
+  if (params?.site_id) query.site_id = params.site_id;
+  if (params?.category_id) query.category_id = params.category_id;
+  if (params?.search) query.search = params.search;
+  const response = await api.get("/admin/emission-factors", { params: query });
   return response.data;
 };
 
