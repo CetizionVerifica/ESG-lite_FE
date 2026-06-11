@@ -48,6 +48,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setToken(storedToken);
       setRole(storedRole);
       setUser(JSON.parse(storedUser)); // ✅ FIX
+
+      // Refresh the session user from the server so site/category changes
+      // (e.g. a newly assigned category) appear without forcing a re-login.
+      api
+        .get("/auth/me")
+        .then((res) => {
+          const fresh = res.data?.user;
+          if (!fresh) return;
+          localStorage.setItem("user", JSON.stringify(fresh));
+          setUser(fresh);
+          if (res.data?.role) {
+            localStorage.setItem("role", res.data.role);
+            setRole(res.data.role);
+          }
+        })
+        .catch(() => {
+          // Keep the cached user if the refresh fails (offline / token expiry).
+        });
     }
   }, []);
 

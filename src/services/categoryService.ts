@@ -13,6 +13,8 @@ export const getCategoryById = async (id: string | number) => {
 export const createCategory = async (data: {
   category_name: string;
   scope?: string | null;
+  site_ids?: (string | number)[];
+  assign_all_sites?: boolean;
 }) => {
   const response = await api.post("/admin/categories", data);
   return response.data;

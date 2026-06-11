@@ -35,6 +35,17 @@ export const useEmissionCalculation = (
         return emissionFactors.find(
           (f) => f.emission_category_name === companyCatName && yearMatch(f)
         );
+      })()
+      // Step 4: normalized (trim + case-insensitive) match — guards against
+      // whitespace/casing drift between factor names and the submitted value.
+      || (() => {
+        const target = emissionCategory.trim().toLowerCase();
+        const norm = (s?: string) => (s ?? "").trim().toLowerCase();
+        return emissionFactors.find(
+          (f) => norm(f.emission_category_name) === target && yearMatch(f)
+        ) || emissionFactors.find(
+          (f) => norm(f.global_category_name) === target && yearMatch(f)
+        );
       })();
     },
     [emissionFactors, targetYear, emissionCategoryMapping]
