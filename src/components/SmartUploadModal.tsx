@@ -289,19 +289,6 @@ const SmartUploadModal = ({
     setRows((prev) => [...prev, newRow]);
   };
 
-  // Strip parent prefix from emission_category_name for DB storage
-  const stripParentPrefix = (
-    name: string | undefined,
-    parent: string | null
-  ): string | undefined => {
-    if (!name || !parent) return name;
-    const prefix = parent + " - ";
-    if (name.startsWith(prefix)) {
-      return name.slice(prefix.length);
-    }
-    return name;
-  };
-
   // ---- reset ----
   const reset = useCallback(() => {
     setStep("idle");
@@ -581,9 +568,13 @@ const SmartUploadModal = ({
 
         for (const site of groupSites) {
           const factors = group.rows.map((r) => {
-            const ecName =
-              stripParentPrefix(r.emission_category_name, group.parentCat) ||
-              undefined;
+            // Store the FULL composite name (e.g. "Road - Van - CNG [km]").
+            // The column-config generator splits these by " - " to build the
+            // dropdown hierarchy + emission_category_mapping, and emission
+            // calculation looks factors up by this full name. Stripping the
+            // parent prefix here breaks both (and collapses distinct rows that
+            // share a leaf, e.g. the two HGV variants → "All rigids [km]").
+            const ecName = r.emission_category_name || undefined;
             return {
               site_id: site.site_id,
               category_id: group.dbCategoryId,
@@ -1299,12 +1290,8 @@ const SmartUploadModal = ({
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {filteredRows.map((row, idx) => {
-                      const displayName = selectedParent
-                        ? stripParentPrefix(
-                            row.emission_category_name,
-                            selectedParent
-                          ) || ""
-                        : row.emission_category_name || "";
+                      // Show the full composite name — this is exactly what gets stored.
+                      const displayName = row.emission_category_name || "";
 
                       return (
                         <tr
