@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { DropdownOption } from "../components/Dropdown";
 import AuditTrailTimeline, {
   AuditTrailModal,
 } from "../components/AuditTrailTimeline";
@@ -18,6 +18,7 @@ import {
   UnitData,
 } from "../services/unitService";
 import DocumentViewerModal from "../components/DocumentViewerModal";
+import EmissionsFilterSidebar from "../components/EmissionsFilterSidebar";
 import {
   getDocumentsByEmission,
   EmissionDocument,
@@ -972,73 +973,27 @@ const UserEmissionsPage = () => {
         My Emissions - {currentSite?.name || "No Site"}
       </h1>
 
-      {/* Filters */}
-      <div
-        className={`grid grid-cols-1 gap-4 mb-6 ${hasMultipleSites ? "md:grid-cols-5" : "md:grid-cols-4"}`}
-      >
-        {/* Site Selector - only show when user has multiple sites */}
-        {hasMultipleSites && (
-          <div>
-            <label className="block text-sm font-medium mb-1">Site</label>
-            <Dropdown
-              options={siteOptions}
-              placeholder="Select Site"
-              value={selectedSite}
-              onChange={(option) => setSelectedSite(option?.id as number)}
-              searchable={true}
-            />
-          </div>
-        )}
-        <div>
-          <label className="block text-sm font-medium mb-1">Category</label>
-          <Dropdown
-            options={categoryOptions}
-            placeholder="All Categories"
-            value={selectedCategory}
-            onChange={(option) => setSelectedCategory(option?.id as number)}
-            searchable={true}
-            clearable={true}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Year</label>
-          <Dropdown
-            options={yearOptions}
-            placeholder="All Years"
-            value={selectedYear}
-            onChange={(option) => setSelectedYear(option?.id as number)}
-            searchable={true}
-            clearable={true}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Month</label>
-          <Dropdown
-            options={monthOptions}
-            placeholder="All Months"
-            value={selectedMonth}
-            onChange={(option) => setSelectedMonth(option?.id as number)}
-            searchable={true}
-            clearable={true}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Status</label>
-          <Dropdown
-            options={[
-              { id: "pending", label: "Pending" },
-              { id: "approved", label: "Approved" },
-              { id: "rejected", label: "Rejected" },
-            ]}
-            placeholder="All Statuses"
-            value={selectedStatus}
-            onChange={(option) =>
-              setSelectedStatus(option?.id as EmissionStatus)
-            }
-            clearable={true}
-          />
-        </div>
-      </div>
+      {/* Hover-triggered right sidebar with all filters + category breakdown */}
+      <EmissionsFilterSidebar
+        hasMultipleSites={hasMultipleSites}
+        siteOptions={siteOptions}
+        categoryOptions={categoryOptions}
+        yearOptions={yearOptions}
+        monthOptions={monthOptions}
+        selectedSite={selectedSite}
+        selectedCategory={selectedCategory}
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        selectedStatus={selectedStatus}
+        onSiteChange={(value) => setSelectedSite(value)}
+        onCategoryChange={(value) => setSelectedCategory(value)}
+        onYearChange={(value) => setSelectedYear(value)}
+        onMonthChange={(value) => setSelectedMonth(value)}
+        onStatusChange={(value) => setSelectedStatus(value)}
+        columnsForCategory={
+          selectedCategory ? columnsMap[selectedCategory] || [] : []
+        }
+      />
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
