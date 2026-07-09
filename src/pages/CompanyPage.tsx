@@ -2,13 +2,21 @@ import { useActionState, useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Modal from "../components/Modal";
 import { Table, Column } from "../components/Table";
-import { getCompanies, createCompany, updateCompany, deleteCompany } from "../services/companyService";
+import {
+  getCompanies,
+  createCompany,
+  updateCompany,
+  deleteCompany,
+} from "../services/companyService";
 
 interface Company {
   company_id: number;
   name: string;
   address: string;
   contact_person: string;
+  logo_url?: string;
+  color_guideline_url?: string;
+  r2_bucket_name?: string;
 }
 
 const CompanyPage = () => {
@@ -16,6 +24,42 @@ const CompanyPage = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Branding upload modal state
+  const [brandingCompany, setBrandingCompany] = useState<Company | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [guidelineFile, setGuidelineFile] = useState<File | null>(null);
+  const [savingBranding, setSavingBranding] = useState(false);
+
+  const openBranding = (row: Company) => {
+    setBrandingCompany(row);
+    setLogoFile(null);
+    setGuidelineFile(null);
+  };
+
+  const handleBrandingSave = async () => {
+    if (!brandingCompany) return;
+    setSavingBranding(true);
+    try {
+      const payload = new FormData();
+      if (logoFile) payload.append("logo", logoFile);
+      if (guidelineFile) payload.append("colorGuideline", guidelineFile);
+      const res = await updateCompany(brandingCompany.company_id, payload);
+      const updated: Company = res.company || res;
+      setCompanies((prev) =>
+        prev.map((item) =>
+          item.company_id === brandingCompany.company_id
+            ? { ...item, ...updated }
+            : item,
+        ),
+      );
+      setBrandingCompany(null);
+    } catch (error) {
+      console.error("Error saving branding:", error);
+    } finally {
+      setSavingBranding(false);
+    }
+  };
 
   const [_formState, formAction] = useActionState(
     async (_prevData: any, data: any) => {
@@ -36,7 +80,7 @@ const CompanyPage = () => {
         console.log(error);
       }
     },
-    null
+    null,
   );
   const fetchCompanies = useCallback(async () => {
     setLoading(true);
@@ -59,10 +103,8 @@ const CompanyPage = () => {
       await updateCompany(row.company_id, updates);
       setCompanies((prev) =>
         prev.map((item) =>
-          item.company_id === row.company_id
-            ? { ...item, ...updates }
-            : item
-        )
+          item.company_id === row.company_id ? { ...item, ...updates } : item,
+        ),
       );
     } catch (error) {
       console.error("Error updating company:", error);
@@ -74,7 +116,7 @@ const CompanyPage = () => {
     try {
       await deleteCompany(row.company_id);
       setCompanies((prev) =>
-        prev.filter((item) => item.company_id !== row.company_id)
+        prev.filter((item) => item.company_id !== row.company_id),
       );
     } catch (error) {
       console.error("Error deleting company:", error);
@@ -105,6 +147,30 @@ const CompanyPage = () => {
       label: "Contact Person",
       editable: true,
       type: "text",
+    },
+    {
+      key: "logo_url",
+      label: "Branding",
+      editable: false,
+      render: (_value: any, row: Company) => (
+        <div className="flex items-center gap-2">
+          {row.logo_url ? (
+            <img
+              src={row.logo_url}
+              alt="logo"
+              className="h-8 w-8 object-contain rounded border border-gray-200"
+            />
+          ) : (
+            <span className="text-xs text-gray-400">No logo</span>
+          )}
+          <button
+            onClick={() => openBranding(row)}
+            className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+          >
+            Upload
+          </button>
+        </div>
+      ),
     },
   ];
 
@@ -175,6 +241,75 @@ const CompanyPage = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        title={`Branding${brandingCompany ? ` — ${brandingCompany.name}` : ""}`}
+        isOpen={!!brandingCompany}
+        onClose={() => setBrandingCompany(null)}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Company Logo
+            </label>
+            {brandingCompany?.logo_url && (
+              <img
+                src={brandingCompany.logo_url}
+                alt="current logo"
+                className="h-12 mb-2 object-contain border rounded"
+              />
+            )}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+              className="block w-full text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Color Guideline
+            </label>
+            {brandingCompany?.color_guideline_url && (
+              <a
+                href={brandingCompany.color_guideline_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-blue-600 underline block mb-2"
+              >
+                View current file
+              </a>
+            )}
+            <input
+              type="file"
+              accept="application/pdf,image/png,image/jpeg,image/webp,.doc,.docx,.xls,.xlsx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={(e) => setGuidelineFile(e.target.files?.[0] || null)}
+              className="block w-full text-sm"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setBrandingCompany(null)}
+              className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleBrandingSave}
+              disabled={savingBranding || (!logoFile && !guidelineFile)}
+              className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ${
+                savingBranding || (!logoFile && !guidelineFile)
+                  ? "opacity-50 cursor-not-allowed"
+                  : ""
+              }`}
+            >
+              {savingBranding ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       <Table<Company>
