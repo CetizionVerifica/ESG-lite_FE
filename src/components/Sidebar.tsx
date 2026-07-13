@@ -23,6 +23,7 @@ import {
   Moon,
   ArrowLeftRight,
   Bell,
+  Palette,
 } from "lucide-react";
 
 interface NavItem {
@@ -76,7 +77,8 @@ const Sidebar = () => {
     { to: "products", label: "Products", icon: <Package size={20} /> },
     { to: "upload-data", label: "Upload Data", icon: <Upload size={20} /> },
     { to : "ede-reports", label: "EDE Reports", icon: <FolderTree size={20} /> },
-        { to : "ghg-reports", label : "GHG Report", icon : <FolderTree size={20} />}
+        { to : "ghg-reports", label : "GHG Report", icon : <FolderTree size={20} />},
+    { to: "brand-settings", label: "Brand Settings", icon: <Palette size={20} /> }
 
   ];
 
