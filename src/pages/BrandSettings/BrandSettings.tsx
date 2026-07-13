@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTheme } from "../../context/ThemeContext";
 import { getCompanies } from "../../services/companyService";
 import { getBrand, saveBrand, uploadBrandLogo, Brand } from "../../services/brandService";
 
@@ -25,10 +26,12 @@ function ColorField({
   label,
   value,
   onChange,
+  inputClass,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
+  inputClass: string;
 }) {
   const valid = HEX.test(value);
   return (
@@ -45,9 +48,7 @@ function ColorField({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`w-32 border px-3 py-2 rounded font-mono text-sm focus:outline-none focus:ring ${
-            valid ? "" : "border-red-500"
-          }`}
+          className={`w-32 font-mono text-sm ${inputClass} ${valid ? "" : "!border-red-500"}`}
           placeholder="#1f2a44"
         />
       </div>
@@ -56,6 +57,7 @@ function ColorField({
 }
 
 const BrandSettings = () => {
+  const { isDark } = useTheme();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState<number>(0);
   const [brand, setBrand] = useState<Brand>(EMPTY);
@@ -67,6 +69,20 @@ const BrandSettings = () => {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const year = new Date().getFullYear();
+
+  // Theme classes (match GhgReport / other pages)
+  const pageClass = isDark
+    ? "p-6 min-h-screen bg-slate-900 text-slate-100"
+    : "p-6 min-h-screen bg-gray-50 text-gray-900";
+  const subText = isDark ? "text-slate-400" : "text-gray-600";
+  const cardBase = isDark
+    ? "bg-slate-800/60 border border-slate-700"
+    : "bg-white border border-gray-200";
+  const inputClass = `w-full border px-3 py-2 rounded focus:outline-none focus:ring ${
+    isDark
+      ? "bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500"
+      : "bg-white border-gray-300 text-gray-900"
+  }`;
 
   useEffect(() => {
     (async () => {
@@ -158,19 +174,19 @@ const BrandSettings = () => {
   const logoSrc = brand.logoUrl ? `${brand.logoUrl}?v=${logoBust}` : null;
 
   return (
-    <div className="p-6 max-w-5xl">
+    <div className={pageClass}>
       <h1 className="text-2xl font-bold mb-1">Brand Settings</h1>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className={`text-sm ${subText} mb-6`}>
         Set the theme colors and logo used in each client's branded reports.
       </p>
 
       {/* Company selector */}
-      <div className="mb-6 max-w-md">
+      <div className={`rounded-2xl p-5 shadow-sm mb-6 max-w-md ${cardBase}`}>
         <label className="block text-sm font-medium mb-1">Company</label>
         <select
           value={companyId}
           onChange={(e) => onSelectCompany(Number(e.target.value))}
-          className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+          className={inputClass}
         >
           <option value={0}>— Select a company —</option>
           {companies.map((c) => (
@@ -184,7 +200,13 @@ const BrandSettings = () => {
       {msg && (
         <div
           className={`mb-4 px-4 py-2 rounded text-sm ${
-            msg.type === "ok" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+            msg.type === "ok"
+              ? isDark
+                ? "bg-green-900/40 text-green-300 border border-green-800"
+                : "bg-green-100 text-green-800"
+              : isDark
+              ? "bg-red-900/40 text-red-300 border border-red-800"
+              : "bg-red-100 text-red-800"
           }`}
         >
           {msg.text}
@@ -194,34 +216,38 @@ const BrandSettings = () => {
       {companyId > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Editor */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className={`lg:col-span-2 rounded-2xl p-5 shadow-sm space-y-6 ${cardBase}`}>
             <div>
               <label className="block text-sm font-medium mb-1">Display Name</label>
               <input
                 type="text"
                 value={brand.name}
                 onChange={(e) => set("name", e.target.value)}
-                className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
+                className={inputClass}
                 placeholder="Company name shown on the report"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <ColorField label="Primary" value={brand.primary} onChange={(v) => set("primary", v)} />
-              <ColorField label="Accent" value={brand.accent} onChange={(v) => set("accent", v)} />
-              <ColorField label="Cover gradient — from" value={brand.coverFrom} onChange={(v) => set("coverFrom", v)} />
-              <ColorField label="Cover gradient — to" value={brand.coverTo} onChange={(v) => set("coverTo", v)} />
+              <ColorField label="Primary" value={brand.primary} onChange={(v) => set("primary", v)} inputClass={inputClass} />
+              <ColorField label="Accent" value={brand.accent} onChange={(v) => set("accent", v)} inputClass={inputClass} />
+              <ColorField label="Cover gradient — from" value={brand.coverFrom} onChange={(v) => set("coverFrom", v)} inputClass={inputClass} />
+              <ColorField label="Cover gradient — to" value={brand.coverTo} onChange={(v) => set("coverTo", v)} inputClass={inputClass} />
             </div>
 
             {/* Logo */}
             <div>
               <label className="block text-sm font-medium mb-2">Logo</label>
               <div className="flex items-center gap-4">
-                <div className="h-16 w-40 border rounded flex items-center justify-center bg-gray-50 overflow-hidden">
+                <div
+                  className={`h-16 w-40 border rounded flex items-center justify-center overflow-hidden ${
+                    isDark ? "bg-slate-900 border-slate-700" : "bg-gray-50 border-gray-200"
+                  }`}
+                >
                   {logoSrc ? (
                     <img src={logoSrc} alt="logo" className="max-h-14 max-w-[9rem] object-contain" />
                   ) : (
-                    <span className="text-xs text-gray-400">No logo</span>
+                    <span className={`text-xs ${subText}`}>No logo</span>
                   )}
                 </div>
                 <div>
@@ -232,8 +258,8 @@ const BrandSettings = () => {
                     onChange={(e) => e.target.files?.[0] && handleLogo(e.target.files[0])}
                     className="text-sm"
                   />
-                  {uploading && <p className="text-xs text-gray-500 mt-1">Uploading…</p>}
-                  <p className="text-xs text-gray-400 mt-1">PNG, JPG, SVG or WebP · stored on R2</p>
+                  {uploading && <p className={`text-xs mt-1 ${subText}`}>Uploading…</p>}
+                  <p className={`text-xs mt-1 ${subText}`}>PNG, JPG, SVG or WebP · stored on R2</p>
                 </div>
               </div>
             </div>
@@ -242,13 +268,13 @@ const BrandSettings = () => {
               <button
                 onClick={handleSave}
                 disabled={saving || loading}
-                className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                className="h-10 px-5 rounded-lg bg-blue-600 text-white font-semibold shadow-sm hover:bg-blue-700 disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save Theme"}
               </button>
               <button
                 onClick={previewReport}
-                className="px-5 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                className="h-10 px-5 rounded-lg bg-emerald-600 text-white font-semibold shadow-sm hover:bg-emerald-700"
               >
                 Preview Report
               </button>
@@ -258,7 +284,7 @@ const BrandSettings = () => {
           {/* Live preview */}
           <div>
             <p className="text-sm font-medium mb-2">Live preview</p>
-            <div className="rounded-lg border overflow-hidden">
+            <div className={`rounded-2xl overflow-hidden shadow-sm ${cardBase}`}>
               <div
                 className="h-40 p-4 flex flex-col justify-between"
                 style={{
@@ -266,16 +292,21 @@ const BrandSettings = () => {
                 }}
               >
                 {logoSrc ? (
-                  <img src={logoSrc} alt="logo" className="max-h-8 max-w-[8rem] object-contain self-start bg-white/90 rounded px-1" />
+                  <img
+                    src={logoSrc}
+                    alt="logo"
+                    className="max-h-8 max-w-[8rem] object-contain self-start bg-white/90 rounded px-1"
+                  />
                 ) : (
                   <div className="text-white/70 text-xs">logo</div>
                 )}
                 <div className="text-white font-semibold leading-tight">
-                  {brand.name || "Company"}<br />
+                  {brand.name || "Company"}
+                  <br />
                   <span className="text-sm font-normal opacity-90">GHG Report CY{year}</span>
                 </div>
               </div>
-              <div className="p-4 space-y-2 bg-white">
+              <div className={`p-4 space-y-2 ${isDark ? "bg-slate-800" : "bg-white"}`}>
                 <div className="h-3 rounded" style={{ background: brand.primary, width: "70%" }} />
                 <div className="h-3 rounded" style={{ background: brand.accent, width: "50%" }} />
                 <div className="flex gap-2 pt-1">
