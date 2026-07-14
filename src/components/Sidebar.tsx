@@ -102,10 +102,18 @@ const Sidebar = () => {
     { to: "settings", label: "Settings", icon: <Settings size={20} /> },
   ];
 
+  const adminLinks: NavItem[] = [
+    { to: "admin-company/users", label: "Users", icon: <Users size={20} /> },
+    { to: "notifications", label: "Notifications", icon: <Bell size={20} /> },
+    { to: "settings", label: "Settings", icon: <Settings size={20} /> },
+  ];
+
   const getNavLinks = (): NavItem[] => {
     switch (role) {
       case "Superadmin":
         return superadminLinks;
+      case "Admin":
+        return adminLinks;
       case "User":
         return userLinks;
       case "Manager":

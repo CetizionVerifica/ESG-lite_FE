@@ -29,6 +29,7 @@ import GhgReport from "../pages/GhgReport/GhgReport";
 import BrandSettings from "../pages/BrandSettings/BrandSettings";
 import CategoryMappingPage from "../pages/CategoryMappingPage";
 import ManagerUsersPage from "../pages/ManagerUsers";
+import CompanyAdminUsersPage from "../pages/CompanyAdmin/CompanyAdminUsersPage";
 import NotificationsPage from "../pages/NotificationsPage";
 import SettingsPage from "../pages/SettingsPage";
 
@@ -164,6 +165,10 @@ const routes = [
           {
             path: "manage-users",
             element: <ManagerUsersPage />
+          },
+          {
+            path: "admin-company/users",
+            element: <CompanyAdminUsersPage />
           },
           {
             path: "notifications",

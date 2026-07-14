@@ -16,7 +16,11 @@ const RootRedirect = () => {
         return <Navigate to="/admin/dashboard" replace />;
     }
 
-    if (role === "Admin" || role === "Manager") {
+    if (role === "Admin") {
+        return <Navigate to="/admin-company/users" replace />;
+    }
+
+    if (role === "Manager") {
         return <Navigate to="/company/dashboard" replace />;
     }
 
