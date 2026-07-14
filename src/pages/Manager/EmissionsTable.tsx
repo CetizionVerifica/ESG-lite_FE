@@ -652,16 +652,19 @@ const EmissionsTable = ({
     setEditUnit(emission.activity_data_unit || "");
     setEditModalOpen(true);
 
-    // Fetch emission category options and units for dropdowns
-    if (siteId && categoryId) {
+    // Fetch emission category options and units for dropdowns.
+    // Use the row's own site (falling back to the page prop) so options stay
+    // correct when multiple sites are selected on the page.
+    const rowSiteId = emission.site?.site_id ?? siteId;
+    if (rowSiteId && categoryId) {
       try {
         const reportDate = new Date(emission.date_of_reporting);
         const targetYear = reportDate.getFullYear() - 1;
         const [factors, units] = await Promise.all([
           getUserEmissionFactorsBySiteAndCategory(
-            siteId, categoryId, targetYear
+            rowSiteId, categoryId, targetYear
           ),
-          getUserUnitsBySiteAndCategory(siteId, categoryId),
+          getUserUnitsBySiteAndCategory(rowSiteId, categoryId),
         ]);
         const categoryNames = [...new Set(
           factors.map((f: any) => f.emission_category_name).filter(Boolean)
@@ -988,6 +991,7 @@ const EmissionsTable = ({
                   </span>
                 </th>
               )}
+              <th className={thClass}>Site</th>
               <th className={thClass}>Category</th>
               <th className={thClass}>Activity Data</th>
               <th className={thClass}>Activity Unit</th>
@@ -1052,6 +1056,7 @@ const EmissionsTable = ({
                       )}
                     </td>
                   )}
+                  <td className={tdClass}>{emission.site?.name || "-"}</td>
                   <td className={tdClass}>
                     {emission.category?.category_name || "-"}
                     {emission.parent_category_name && (

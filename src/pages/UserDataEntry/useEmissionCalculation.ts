@@ -105,6 +105,16 @@ export const useEmissionCalculation = (
 
       const factor = getEmissionFactor(row.emission_category);
       if (!factor) {
+        console.log("[useEmissionCalculation] no factor matched", {
+          searchedCategory: row.emission_category,
+          targetYear,
+          totalFactorsLoaded: emissionFactors.length,
+          available: emissionFactors.map((f) => ({
+            name: f.emission_category_name,
+            global: f.global_category_name,
+            year: f.year,
+          })),
+        });
         const yearMsg = targetYear !== undefined ? ` for year ${targetYear}` : "";
         return { value: null, status: `No emission factor found${yearMsg}` };
       }

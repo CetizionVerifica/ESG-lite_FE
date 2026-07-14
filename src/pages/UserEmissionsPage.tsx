@@ -1,13 +1,28 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import Dropdown, { DropdownOption } from "../components/Dropdown";
-import AuditTrailTimeline, { AuditTrailModal } from "../components/AuditTrailTimeline";
+import { DropdownOption } from "../components/Dropdown";
+import AuditTrailTimeline, {
+  AuditTrailModal,
+} from "../components/AuditTrailTimeline";
 import Modal from "../components/Modal";
 import { useAuth } from "../context/AuthContext";
-import { getEmissionsPaginated, updateEmission, EmissionData, EmissionStatus, EmissionsSummary } from "../services/emissionService";
+import {
+  getEmissionsPaginated,
+  updateEmission,
+  EmissionData,
+  EmissionStatus,
+  EmissionsSummary,
+} from "../services/emissionService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../services/emissionFactorService";
-import { getUserUnitsBySiteAndCategory, UnitData } from "../services/unitService";
+import {
+  getUserUnitsBySiteAndCategory,
+  UnitData,
+} from "../services/unitService";
 import DocumentViewerModal from "../components/DocumentViewerModal";
-import { getDocumentsByEmission, EmissionDocument } from "../services/documentService";
+import EmissionsFilterSidebar from "../components/EmissionsFilterSidebar";
+import {
+  getDocumentsByEmission,
+  EmissionDocument,
+} from "../services/documentService";
 import {
   getUserColumnConfigsBySiteAndCategory,
   ColumnOptionsMap,
@@ -67,8 +82,18 @@ function generateYearOptions(): DropdownOption[] {
 
 function generateMonthOptions(): DropdownOption[] {
   const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
 
   return months.map((month, index) => ({
@@ -90,16 +115,21 @@ const UserEmissionsPage = () => {
   const hasMultipleSites = availableSites.length > 1;
 
   const [selectedSite, setSelectedSite] = useState<number | null>(
-    availableSites.length > 0 ? availableSites[0].site_id : null
+    availableSites.length > 0 ? availableSites[0].site_id : null,
   );
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<EmissionStatus | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<EmissionStatus | null>(
+    null,
+  );
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [totalEmissions, setTotalEmissions] = useState(0);
   const [summary, setSummary] = useState<EmissionsSummary>({
-    total_emission: 0, pending_count: 0, approved_count: 0, rejected_count: 0,
+    total_emission: 0,
+    pending_count: 0,
+    approved_count: 0,
+    rejected_count: 0,
   });
   const [loading, setLoading] = useState(false);
 
@@ -112,30 +142,50 @@ const UserEmissionsPage = () => {
 
   // Document viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerDocuments, setViewerDocuments] = useState<EmissionDocument[]>([]);
-  const [selectedDocument, setSelectedDocument] = useState<EmissionDocument | null>(null);
+  const [viewerDocuments, setViewerDocuments] = useState<EmissionDocument[]>(
+    [],
+  );
+  const [selectedDocument, setSelectedDocument] =
+    useState<EmissionDocument | null>(null);
   const [loadingDocs, setLoadingDocs] = useState(false);
 
   // Edit modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingEmission, setEditingEmission] = useState<EmissionData | null>(null);
+  const [editingEmission, setEditingEmission] = useState<EmissionData | null>(
+    null,
+  );
   const [editForm, setEditForm] = useState<{
     activity_data: Record<string, any>;
     date_of_reporting: string;
     reason: string;
   }>({ activity_data: {}, date_of_reporting: "", reason: "" });
   const [editLoading, setEditLoading] = useState(false);
-  const [emissionCategoryOptions, setEmissionCategoryOptions] = useState<string[]>([]);
+  const [emissionCategoryOptions, setEmissionCategoryOptions] = useState<
+    string[]
+  >([]);
   const [editUnits, setEditUnits] = useState<UnitData[]>([]);
   const [editUnit, setEditUnit] = useState<string>("");
 
   // Column config state for ID-to-label conversion
-  const [columnOptionsMap, setColumnOptionsMap] = useState<Record<number, ColumnOptionsMap>>({});
-  const [dependentOptionsMap, setDependentOptionsMap] = useState<Record<number, DependentOptionsMap>>({});
-  const [columnDependenciesMap, setColumnDependenciesMap] = useState<Record<number, ColumnDependencies>>({});
+  const [columnOptionsMap, setColumnOptionsMap] = useState<
+    Record<number, ColumnOptionsMap>
+  >({});
+  const [dependentOptionsMap, setDependentOptionsMap] = useState<
+    Record<number, DependentOptionsMap>
+  >({});
+  const [columnDependenciesMap, setColumnDependenciesMap] = useState<
+    Record<number, ColumnDependencies>
+  >({});
   // Store columns per category to map column names to IDs
-  const [columnsMap, setColumnsMap] = useState<Record<number, { pk_id: number; column_name: string; column_type?: string }[]>>({});
-  const [emissionCategoryMappingMap, setEmissionCategoryMappingMap] = useState<Record<number, EmissionCategoryMapping>>({});
+  const [columnsMap, setColumnsMap] = useState<
+    Record<
+      number,
+      { pk_id: number; column_name: string; column_type?: string }[]
+    >
+  >({});
+  const [emissionCategoryMappingMap, setEmissionCategoryMappingMap] = useState<
+    Record<number, EmissionCategoryMapping>
+  >({});
 
   // Get current site and its categories
   const currentSite = availableSites.find((s) => s.site_id === selectedSite);
@@ -154,8 +204,6 @@ const UserEmissionsPage = () => {
 
   const yearOptions = generateYearOptions();
   const monthOptions = generateMonthOptions();
-
-  
 
   // Set initial site when availableSites becomes available
   useEffect(() => {
@@ -177,37 +225,55 @@ const UserEmissionsPage = () => {
       const newColumnOptions: Record<number, ColumnOptionsMap> = {};
       const newDependentOptions: Record<number, DependentOptionsMap> = {};
       const newColumnDependencies: Record<number, ColumnDependencies> = {};
-      const newColumnsMap: Record<number, { pk_id: number; column_name: string }[]> = {};
+      const newColumnsMap: Record<
+        number,
+        { pk_id: number; column_name: string }[]
+      > = {};
       const newEcmMap: Record<number, EmissionCategoryMapping> = {};
 
       for (const category of categories) {
         try {
-          const configs = await getUserColumnConfigsBySiteAndCategory(siteId, category.category_id);
+          const configs = await getUserColumnConfigsBySiteAndCategory(
+            siteId,
+            category.category_id,
+          );
           if (configs && configs.length > 0) {
             const config = configs[0];
             if (config.column_options) {
               newColumnOptions[category.category_id] = config.column_options;
             }
             if (config.dependent_options) {
-              newDependentOptions[category.category_id] = config.dependent_options;
+              newDependentOptions[category.category_id] =
+                config.dependent_options;
             }
             if (config.column_dependencies) {
-              newColumnDependencies[category.category_id] = config.column_dependencies;
+              newColumnDependencies[category.category_id] =
+                config.column_dependencies;
             }
             // Store columns for name-to-ID mapping
             if (config.columns && Array.isArray(config.columns)) {
-              newColumnsMap[category.category_id] = config.columns.map((col: { pk_id: number; column_name: string; column_type?: string }) => ({
-                pk_id: col.pk_id,
-                column_name: col.column_name,
-                column_type: col.column_type,
-              }));
+              newColumnsMap[category.category_id] = config.columns.map(
+                (col: {
+                  pk_id: number;
+                  column_name: string;
+                  column_type?: string;
+                }) => ({
+                  pk_id: col.pk_id,
+                  column_name: col.column_name,
+                  column_type: col.column_type,
+                }),
+              );
             }
             if (config.emission_category_mapping) {
-              newEcmMap[category.category_id] = config.emission_category_mapping;
+              newEcmMap[category.category_id] =
+                config.emission_category_mapping;
             }
           }
         } catch (error) {
-          console.error(`Error fetching column config for category ${category.category_id}:`, error);
+          console.error(
+            `Error fetching column config for category ${category.category_id}:`,
+            error,
+          );
         }
       }
 
@@ -228,16 +294,21 @@ const UserEmissionsPage = () => {
       if (!columns) return null;
       // Case-insensitive column name lookup
       const col = columns.find(
-        (c) => c.column_name.toLowerCase() === columnName.toLowerCase()
+        (c) => c.column_name.toLowerCase() === columnName.toLowerCase(),
       );
       return col ? col.pk_id.toString() : null;
     },
-    [columnsMap]
+    [columnsMap],
   );
 
   // Helper function to get label for a dropdown value
   const getOptionLabel = useCallback(
-    (columnName: string, value: string, categoryId: number, activityData: Record<string, unknown>): string => {
+    (
+      columnName: string,
+      value: string,
+      categoryId: number,
+      activityData: Record<string, unknown>,
+    ): string => {
       if (!value) return "";
 
       const columnOptions = columnOptionsMap[categoryId];
@@ -245,20 +316,20 @@ const UserEmissionsPage = () => {
       const columnDependencies = columnDependenciesMap[categoryId];
 
       // Check if this is a dependent column
-    //  const parentColumnName = columnDependencies?.[columnName];
+      //  const parentColumnName = columnDependencies?.[columnName];
 
-    const findDepKey = (obj: ColumnDependencies, key: string) => {
-  if (!obj) return undefined;
-  if (obj[key] !== undefined) return key;
-  const lower = key.toLowerCase();
-  const toSnake = key.replace(/([A-Z])/g, '_$1').toLowerCase();
-  const toCamel = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-  return Object.keys(obj).find(k =>
-    k.toLowerCase() === lower || k === toSnake || k === toCamel
-  );
-};
-const depKey = findDepKey(columnDependencies, columnName);
-const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
+      const findDepKey = (obj: ColumnDependencies, key: string) => {
+        if (!obj) return undefined;
+        if (obj[key] !== undefined) return key;
+        const lower = key.toLowerCase();
+        const toSnake = key.replace(/([A-Z])/g, "_$1").toLowerCase();
+        const toCamel = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+        return Object.keys(obj).find(
+          (k) => k.toLowerCase() === lower || k === toSnake || k === toCamel,
+        );
+      };
+      const depKey = findDepKey(columnDependencies, columnName);
+      const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
       if (parentColumnName && dependentOptions?.[columnName]) {
         // Get parent value and find its label first
@@ -272,8 +343,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             const parentOptions = columnOptions?.[parentColumnId];
             if (parentOptions) {
               const parentOption = parentOptions.find(
-                (opt) => String(opt.id) === String(parentValue) ||
-                         opt.label.toLowerCase() === String(parentValue).toLowerCase()
+                (opt) =>
+                  String(opt.id) === String(parentValue) ||
+                  opt.label.toLowerCase() === String(parentValue).toLowerCase(),
               );
               if (parentOption) {
                 parentLabel = parentOption.label;
@@ -284,14 +356,15 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
           // Look up dependent options using parent label (case-insensitive)
           const depOptionsForParent = dependentOptions[columnName];
           const matchingKey = Object.keys(depOptionsForParent || {}).find(
-            (key) => key.toLowerCase() === parentLabel.toLowerCase()
+            (key) => key.toLowerCase() === parentLabel.toLowerCase(),
           );
 
           if (matchingKey) {
             const options = depOptionsForParent[matchingKey];
             const option = options?.find(
-              (opt) => String(opt.id) === String(value) ||
-                       opt.label.toLowerCase() === String(value).toLowerCase()
+              (opt) =>
+                String(opt.id) === String(value) ||
+                opt.label.toLowerCase() === String(value).toLowerCase(),
             );
             if (option) {
               return option.label;
@@ -306,8 +379,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         const options = columnOptions?.[columnId];
         if (options) {
           const option = options.find(
-            (opt) => String(opt.id) === String(value) ||
-                     opt.label.toLowerCase() === String(value).toLowerCase()
+            (opt) =>
+              String(opt.id) === String(value) ||
+              opt.label.toLowerCase() === String(value).toLowerCase(),
           );
           if (option) {
             return option.label;
@@ -315,11 +389,13 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         }
       }
 
-     // Fallback: search through ALL parent values in dependentOptions for this category
+      // Fallback: search through ALL parent values in dependentOptions for this category
       const depOptionsForCategory = dependentOptionsMap[categoryId];
       if (depOptionsForCategory) {
         const columnNameLower = columnName.toLowerCase();
-        let depOptionsForColumn: { id: string | number; label: string }[] | undefined;
+        let depOptionsForColumn:
+          | { id: string | number; label: string }[]
+          | undefined;
 
         // Find the dependent options for this column (case-insensitive)
         for (const [key, val] of Object.entries(depOptionsForCategory)) {
@@ -333,7 +409,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
           const option = depOptionsForColumn.find(
             (opt) =>
               String(opt.id) === value ||
-              opt.label.toLowerCase() === value.toLowerCase()
+              opt.label.toLowerCase() === value.toLowerCase(),
           );
           if (option) return option.label;
         }
@@ -342,18 +418,27 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       // Return original value if no label found
       return value;
     },
-    [columnOptionsMap, dependentOptionsMap, columnDependenciesMap, getColumnId]
+    [columnOptionsMap, dependentOptionsMap, columnDependenciesMap, getColumnId],
   );
 
   // Format activity data with labels instead of IDs
   const formatActivityData = useCallback(
-    (activityData: Record<string, unknown>, categoryId: number): { key: string; displayValue: string }[] => {
+    (
+      activityData: Record<string, unknown>,
+      categoryId: number,
+    ): { key: string; displayValue: string }[] => {
       if (!activityData) return [];
 
       const skipKeys = new Set([
-        "category_name", "category_scope", "fera_linked_id",
-        "date_of_reporting", "activity_data_unit", "_extra_data",
-        "_isFeraRow", "_ecmKey", "extra_data",
+        "category_name",
+        "category_scope",
+        "fera_linked_id",
+        "date_of_reporting",
+        "activity_data_unit",
+        "_extra_data",
+        "_isFeraRow",
+        "_ecmKey",
+        "extra_data",
       ]);
 
       return Object.entries(activityData)
@@ -363,11 +448,16 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             return { key, displayValue: JSON.stringify(value) };
           }
           const stringValue = String(value);
-          const displayValue = getOptionLabel(key, stringValue, categoryId, activityData);
+          const displayValue = getOptionLabel(
+            key,
+            stringValue,
+            categoryId,
+            activityData,
+          );
           return { key, displayValue };
         });
     },
-    [getOptionLabel]
+    [getOptionLabel],
   );
 
   // Auto-resolve emission_category from select column values (same logic as Data Entry)
@@ -388,8 +478,14 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     const allParentCols = new Set(Object.values(deps));
     const rootCols = [...allParentCols].filter((c) => !allChildCols.has(c));
 
-    const getLabel = (colName: string, value: string, parentLabel?: string): string => {
-      const col = columns.find((c) => c.column_name.toLowerCase() === colName.toLowerCase());
+    const getLabel = (
+      colName: string,
+      value: string,
+      parentLabel?: string,
+    ): string => {
+      const col = columns.find(
+        (c) => c.column_name.toLowerCase() === colName.toLowerCase(),
+      );
       if (!col) return value;
 
       // Try dependent options first
@@ -401,7 +497,11 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
       // Try column options
       const opts = colOptions[col.pk_id.toString()] || [];
-      const match = opts.find((o) => String(o.id) === String(value) || o.label.toLowerCase() === String(value).toLowerCase());
+      const match = opts.find(
+        (o) =>
+          String(o.id) === String(value) ||
+          o.label.toLowerCase() === String(value).toLowerCase(),
+      );
       if (match) return match.label;
 
       return value;
@@ -428,7 +528,8 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     const walkChain = (colName: string): boolean => {
       const val = activityData[colName];
       if (!val) return false;
-      const parentLabel = keyParts.length > 0 ? keyParts[keyParts.length - 1] : undefined;
+      const parentLabel =
+        keyParts.length > 0 ? keyParts[keyParts.length - 1] : undefined;
       const label = getLabel(colName, String(val), parentLabel);
       keyParts.push(label);
       for (const [child, parent] of Object.entries(deps)) {
@@ -466,20 +567,26 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
   };
 
   // Check if a column is a dependent column (has a parent)
-  const isEditDependentColumn = (columnName: string, categoryId: number): boolean => {
+  const isEditDependentColumn = (
+    columnName: string,
+    categoryId: number,
+  ): boolean => {
     const depChain = columnDependenciesMap?.[categoryId];
     if (!depChain) return false;
     return Object.keys(depChain).some(
-      (k) => k.toLowerCase() === columnName.toLowerCase()
+      (k) => k.toLowerCase() === columnName.toLowerCase(),
     );
   };
 
   // Get parent column name for a dependent column
-  const getEditParentColumnName = (columnName: string, categoryId: number): string | undefined => {
+  const getEditParentColumnName = (
+    columnName: string,
+    categoryId: number,
+  ): string | undefined => {
     const depChain = columnDependenciesMap?.[categoryId];
     if (!depChain) return undefined;
     const match = Object.keys(depChain).find(
-      (k) => k.toLowerCase() === columnName.toLowerCase()
+      (k) => k.toLowerCase() === columnName.toLowerCase(),
     );
     return match ? depChain[match] : undefined;
   };
@@ -506,7 +613,10 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       let childDeps = depOptions[key];
       if (!childDeps) {
         for (const [k, v] of Object.entries(depOptions)) {
-          if (k.toLowerCase() === keyLower) { childDeps = v; break; }
+          if (k.toLowerCase() === keyLower) {
+            childDeps = v;
+            break;
+          }
         }
       }
       if (!childDeps) return null;
@@ -518,13 +628,24 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       let parentLabel = String(parentValue);
 
       // Check if parent is also dependent (3-level chain)
-      const grandparentColName = getEditParentColumnName(parentColName, categoryId);
-      if (grandparentColName && isEditDependentColumn(parentColName, categoryId)) {
+      const grandparentColName = getEditParentColumnName(
+        parentColName,
+        categoryId,
+      );
+      if (
+        grandparentColName &&
+        isEditDependentColumn(parentColName, categoryId)
+      ) {
         const parentDepOptions = depOptions[parentColName];
         if (parentDepOptions) {
           for (const [, options] of Object.entries(parentDepOptions)) {
-            const match = options.find((opt) => String(opt.id) === String(parentValue));
-            if (match) { parentLabel = match.label; break; }
+            const match = options.find(
+              (opt) => String(opt.id) === String(parentValue),
+            );
+            if (match) {
+              parentLabel = match.label;
+              break;
+            }
           }
         }
       }
@@ -532,22 +653,27 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       // Fallback: try column options for parent label
       if (parentLabel === String(parentValue)) {
         const parentCol = columns.find(
-          (c) => c.column_name.toLowerCase() === parentColName.toLowerCase()
+          (c) => c.column_name.toLowerCase() === parentColName.toLowerCase(),
         );
         if (parentCol) {
           const parentOpts = columnOptions[parentCol.pk_id.toString()];
           const parentOpt = parentOpts?.find(
-            (o) => String(o.id) === String(parentValue) ||
-                   o.label.toLowerCase() === String(parentValue).toLowerCase()
+            (o) =>
+              String(o.id) === String(parentValue) ||
+              o.label.toLowerCase() === String(parentValue).toLowerCase(),
           );
           if (parentOpt) parentLabel = parentOpt.label;
         }
       }
 
       // Try composite key (grandparent|parent) for 3-level deps
-      if (grandparentColName && isEditDependentColumn(parentColName, categoryId)) {
+      if (
+        grandparentColName &&
+        isEditDependentColumn(parentColName, categoryId)
+      ) {
         const gpCol = columns.find(
-          (c) => c.column_name.toLowerCase() === grandparentColName.toLowerCase()
+          (c) =>
+            c.column_name.toLowerCase() === grandparentColName.toLowerCase(),
         );
         if (gpCol) {
           const gpOptions = columnOptions[gpCol.pk_id.toString()];
@@ -566,7 +692,10 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       if (!result) {
         const lower = parentLabel.toLowerCase();
         for (const [k, v] of Object.entries(childDeps)) {
-          if (k.toLowerCase() === lower) { result = v; break; }
+          if (k.toLowerCase() === lower) {
+            result = v;
+            break;
+          }
         }
       }
       if (!result) result = childDeps[String(parentValue)];
@@ -631,12 +760,18 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             .forEach((c) => orderedSelectCols.push(c.column_name));
         }
 
-        for (let i = 0; i < labels.length && i < orderedSelectCols.length; i++) {
+        for (
+          let i = 0;
+          i < labels.length && i < orderedSelectCols.length;
+          i++
+        ) {
           const colName = orderedSelectCols[i];
           const label = labels[i];
           if (activityData[colName] && activityData[colName] !== "") continue;
 
-          const col = columns.find((c) => c.column_name.toLowerCase() === colName.toLowerCase());
+          const col = columns.find(
+            (c) => c.column_name.toLowerCase() === colName.toLowerCase(),
+          );
           if (!col) continue;
 
           let matchedId: string | number | null = null;
@@ -645,22 +780,31 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             const parentColName = deps[colName];
             const parentVal = activityData[parentColName];
             if (parentVal && depOptions[colName]) {
-              const parentCol = columns.find((c) => c.column_name.toLowerCase() === parentColName.toLowerCase());
+              const parentCol = columns.find(
+                (c) =>
+                  c.column_name.toLowerCase() === parentColName.toLowerCase(),
+              );
               let parentLabel = String(parentVal);
               if (parentCol) {
                 const pOpts = colOptions[parentCol.pk_id.toString()] || [];
-                const pMatch = pOpts.find((o) => String(o.id) === String(parentVal));
+                const pMatch = pOpts.find(
+                  (o) => String(o.id) === String(parentVal),
+                );
                 if (pMatch) parentLabel = pMatch.label;
               }
               const opts = depOptions[colName][parentLabel] || [];
-              const match = opts.find((o) => o.label.toLowerCase() === label.toLowerCase());
+              const match = opts.find(
+                (o) => o.label.toLowerCase() === label.toLowerCase(),
+              );
               if (match) matchedId = match.id;
             }
           }
 
           if (matchedId === null) {
             const opts = colOptions[col.pk_id.toString()] || [];
-            const match = opts.find((o) => o.label.toLowerCase() === label.toLowerCase());
+            const match = opts.find(
+              (o) => o.label.toLowerCase() === label.toLowerCase(),
+            );
             if (match) matchedId = match.id;
           }
 
@@ -687,13 +831,17 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         const targetYear = reportDate.getFullYear() - 1;
         const [factors, units] = await Promise.all([
           getUserEmissionFactorsBySiteAndCategory(
-            siteId, categoryId, targetYear
+            siteId,
+            categoryId,
+            targetYear,
           ),
           getUserUnitsBySiteAndCategory(siteId, categoryId),
         ]);
-        const categoryNames = [...new Set(
-          factors.map((f: any) => f.emission_category_name).filter(Boolean)
-        )] as string[];
+        const categoryNames = [
+          ...new Set(
+            factors.map((f: any) => f.emission_category_name).filter(Boolean),
+          ),
+        ] as string[];
         setEmissionCategoryOptions(categoryNames);
         setEditUnits(units);
       } catch (error) {
@@ -710,9 +858,15 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     try {
       const cleanData = { ...editForm.activity_data };
       const metaKeys = [
-        "category_name", "category_scope", "fera_linked_id",
-        "date_of_reporting", "activity_data_unit", "_extra_data",
-        "_isFeraRow", "_ecmKey", "extra_data",
+        "category_name",
+        "category_scope",
+        "fera_linked_id",
+        "date_of_reporting",
+        "activity_data_unit",
+        "_extra_data",
+        "_isFeraRow",
+        "_ecmKey",
+        "extra_data",
       ];
       for (const k of metaKeys) delete cleanData[k];
 
@@ -734,32 +888,40 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
   };
 
   // Fetch emissions with server-side filtering and pagination
-  const fetchPage = useCallback(async (page: number) => {
-    if (!siteId) return;
+  const fetchPage = useCallback(
+    async (page: number) => {
+      if (!siteId) return;
 
-    try {
-      setLoading(true);
-      const result = await getEmissionsPaginated({
-        siteId,
-        categoryId: selectedCategory,
-        year: selectedYear,
-        month: selectedMonth,
-        status: selectedStatus,
-        page,
-        limit: rowsPerPage,
-      });
-      setEmissions(result.data);
-      setTotalEmissions(result.total);
-      setSummary(result.summary);
-    } catch (error) {
-      console.error("Error fetching emissions:", error);
-      setEmissions([]);
-      setTotalEmissions(0);
-      setSummary({ total_emission: 0, pending_count: 0, approved_count: 0, rejected_count: 0 });
-    } finally {
-      setLoading(false);
-    }
-  }, [siteId, selectedCategory, selectedYear, selectedMonth, selectedStatus]);
+      try {
+        setLoading(true);
+        const result = await getEmissionsPaginated({
+          siteId,
+          categoryId: selectedCategory,
+          year: selectedYear,
+          month: selectedMonth,
+          status: selectedStatus,
+          page,
+          limit: rowsPerPage,
+        });
+        setEmissions(result.data);
+        setTotalEmissions(result.total);
+        setSummary(result.summary);
+      } catch (error) {
+        console.error("Error fetching emissions:", error);
+        setEmissions([]);
+        setTotalEmissions(0);
+        setSummary({
+          total_emission: 0,
+          pending_count: 0,
+          approved_count: 0,
+          rejected_count: 0,
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [siteId, selectedCategory, selectedYear, selectedMonth, selectedStatus],
+  );
 
   // When filters change, reset to page 1 and fetch
   useEffect(() => {
@@ -772,8 +934,6 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     setCurrentPage(page);
     fetchPage(page);
   };
-
-  
 
   // Document viewer handlers
   const handleViewDocuments = async (emissionId: number) => {
@@ -805,7 +965,6 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     setSelectedDocument(doc);
   };
 
-
   const totalPages = Math.ceil(totalEmissions / rowsPerPage);
 
   return (
@@ -814,69 +973,27 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         My Emissions - {currentSite?.name || "No Site"}
       </h1>
 
-      {/* Filters */}
-      <div className={`grid grid-cols-1 gap-4 mb-6 ${hasMultipleSites ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
-        {/* Site Selector - only show when user has multiple sites */}
-        {hasMultipleSites && (
-          <div>
-            <label className="block text-sm font-medium mb-1">Site</label>
-            <Dropdown
-              options={siteOptions}
-              placeholder="Select Site"
-              value={selectedSite}
-              onChange={(option) => setSelectedSite(option?.id as number)}
-              searchable={true}
-            />
-          </div>
-        )}
-        <div>
-          <label className="block text-sm font-medium mb-1">Category</label>
-          <Dropdown
-            options={categoryOptions}
-            placeholder="All Categories"
-            value={selectedCategory}
-            onChange={(option) => setSelectedCategory(option?.id as number)}
-            searchable={true}
-            clearable={true}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Year</label>
-          <Dropdown
-            options={yearOptions}
-            placeholder="All Years"
-            value={selectedYear}
-            onChange={(option) => setSelectedYear(option?.id as number)}
-            searchable={true}
-            clearable={true}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Month</label>
-          <Dropdown
-            options={monthOptions}
-            placeholder="All Months"
-            value={selectedMonth}
-            onChange={(option) => setSelectedMonth(option?.id as number)}
-            searchable={true}
-            clearable={true}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Status</label>
-          <Dropdown
-            options={[
-              { id: "pending", label: "Pending" },
-              { id: "approved", label: "Approved" },
-              { id: "rejected", label: "Rejected" },
-            ]}
-            placeholder="All Statuses"
-            value={selectedStatus}
-            onChange={(option) => setSelectedStatus(option?.id as EmissionStatus)}
-            clearable={true}
-          />
-        </div>
-      </div>
+      {/* Hover-triggered right sidebar with all filters + category breakdown */}
+      <EmissionsFilterSidebar
+        hasMultipleSites={hasMultipleSites}
+        siteOptions={siteOptions}
+        categoryOptions={categoryOptions}
+        yearOptions={yearOptions}
+        monthOptions={monthOptions}
+        selectedSite={selectedSite}
+        selectedCategory={selectedCategory}
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        selectedStatus={selectedStatus}
+        onSiteChange={(value) => setSelectedSite(value)}
+        onCategoryChange={(value) => setSelectedCategory(value)}
+        onYearChange={(value) => setSelectedYear(value)}
+        onMonthChange={(value) => setSelectedMonth(value)}
+        onStatusChange={(value) => setSelectedStatus(value)}
+        columnsForCategory={
+          selectedCategory ? columnsMap[selectedCategory] || [] : []
+        }
+      />
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
@@ -886,19 +1003,27 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         </div>
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-sm text-gray-500">Total Emission</div>
-          <div className="text-2xl font-bold">{summary.total_emission.toFixed(2)} tCO2e</div>
+          <div className="text-2xl font-bold">
+            {summary.total_emission.toFixed(2)} tCO2e
+          </div>
         </div>
         <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
           <div className="text-sm text-yellow-700">Pending</div>
-          <div className="text-2xl font-bold text-yellow-800">{summary.pending_count}</div>
+          <div className="text-2xl font-bold text-yellow-800">
+            {summary.pending_count}
+          </div>
         </div>
         <div className="bg-green-50 p-4 rounded-lg border border-green-200">
           <div className="text-sm text-green-700">Approved</div>
-          <div className="text-2xl font-bold text-green-800">{summary.approved_count}</div>
+          <div className="text-2xl font-bold text-green-800">
+            {summary.approved_count}
+          </div>
         </div>
         <div className="bg-red-50 p-4 rounded-lg border border-red-200">
           <div className="text-sm text-red-700">Rejected</div>
-          <div className="text-2xl font-bold text-red-800">{summary.rejected_count}</div>
+          <div className="text-2xl font-bold text-red-800">
+            {summary.rejected_count}
+          </div>
         </div>
       </div>
 
@@ -949,15 +1074,20 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             <tbody>
               {(() => {
                 // Build parent→FERA map, skip standalone FERA rows
-                const isFera = (e: EmissionData) => e.category?.category_name?.toLowerCase() === "fera";
+                const isFera = (e: EmissionData) =>
+                  e.category?.category_name?.toLowerCase() === "fera";
 
                 // If user explicitly filtered by FERA category, show FERA rows directly
-                const selectedCatIsFera = categories.find(
-                  (c) => c.category_id === selectedCategory
-                )?.category_name?.toLowerCase() === "fera";
+                const selectedCatIsFera =
+                  categories
+                    .find((c) => c.category_id === selectedCategory)
+                    ?.category_name?.toLowerCase() === "fera";
 
                 if (selectedCatIsFera) {
-                  return emissions.map((emission) => ({ emission, feraEntry: undefined }));
+                  return emissions.map((emission) => ({
+                    emission,
+                    feraEntry: undefined,
+                  }));
                 }
 
                 const regular = emissions.filter((e) => !isFera(e));
@@ -965,7 +1095,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                 const feraMap = new Map<number, EmissionData>();
                 for (const em of regular) {
                   const linked = fera.find(
-                    (f) => f.pk_id === em.fera_linked_id || f.fera_linked_id === em.pk_id
+                    (f) =>
+                      f.pk_id === em.fera_linked_id ||
+                      f.fera_linked_id === em.pk_id,
                   );
                   if (linked) feraMap.set(em.pk_id, linked);
                 }
@@ -987,10 +1119,11 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                     <div className="max-w-xs">
                       {formatActivityData(
                         emission.activity_data || {},
-                        emission.category?.category_id || 0
+                        emission.category?.category_id || 0,
                       ).map(({ key, displayValue }) => (
                         <div key={key} className="text-sm">
-                          <span className="font-medium">{key}:</span> {displayValue}
+                          <span className="font-medium">{key}:</span>{" "}
+                          {displayValue}
                         </div>
                       ))}
                     </div>
@@ -1002,8 +1135,12 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                     <div>{Number(emission.total_emission).toFixed(2)}</div>
                     {feraEntry && (
                       <div className="mt-1.5 flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold px-1 py-0.5 rounded bg-purple-100 text-purple-700">FERA</span>
-                        <span className="text-sm text-purple-600 font-medium">{Number(feraEntry.total_emission).toFixed(2)}</span>
+                        <span className="text-[10px] font-bold px-1 py-0.5 rounded bg-purple-100 text-purple-700">
+                          FERA
+                        </span>
+                        <span className="text-sm text-purple-600 font-medium">
+                          {Number(feraEntry.total_emission).toFixed(2)}
+                        </span>
                       </div>
                     )}
                   </td>
@@ -1012,11 +1149,12 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                   </td>
                   <td className="border border-gray-300 px-4 py-3">
                     <StatusBadge status={emission.status} />
-                    {emission.status === "rejected" && emission.review_comment && (
-                      <div className="text-xs text-red-600 mt-1">
-                        Reason: {emission.review_comment}
-                      </div>
-                    )}
+                    {emission.status === "rejected" &&
+                      emission.review_comment && (
+                        <div className="text-xs text-red-600 mt-1">
+                          Reason: {emission.review_comment}
+                        </div>
+                      )}
                   </td>
                   <td className="border border-gray-300 px-4 py-3">
                     {formatDate(emission.created_at)}
@@ -1043,7 +1181,8 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                     </button>
                   </td>
                   <td className="border border-gray-300 px-4 py-3">
-                    {(emission.status === "pending" || emission.status === "rejected") && (
+                    {(emission.status === "pending" ||
+                      emission.status === "rejected") && (
                       <button
                         onClick={() => handleEditClick(emission)}
                         className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
@@ -1057,77 +1196,91 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
               ))}
             </tbody>
           </table>
-           {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white mt-2">
-            <p className="text-sm text-gray-600">
-              Showing{" "}
-              <span className="font-medium">
-                {(currentPage - 1) * rowsPerPage + 1}
-              </span>{" "}
-              to{" "}
-              <span className="font-medium">
-                {Math.min(currentPage * rowsPerPage, totalEmissions)}
-              </span>{" "}
-              of{" "}
-              <span className="font-medium">{totalEmissions}</span> entries
-            </p>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white mt-2">
+              <p className="text-sm text-gray-600">
+                Showing{" "}
+                <span className="font-medium">
+                  {(currentPage - 1) * rowsPerPage + 1}
+                </span>{" "}
+                to{" "}
+                <span className="font-medium">
+                  {Math.min(currentPage * rowsPerPage, totalEmissions)}
+                </span>{" "}
+                of <span className="font-medium">{totalEmissions}</span> entries
+              </p>
 
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => handlePageChange(1)}
-                disabled={currentPage === 1}
-                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >«</button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                  className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  «
+                </button>
 
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >‹</button>
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ‹
+                </button>
 
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter(
-                  (page) =>
-                    page === 1 ||
-                    page === totalPages ||
-                    Math.abs(page - currentPage) <= 2
-                )
-                .reduce<(number | "...")[]>((acc, page, idx, arr) => {
-                  if (idx > 0 && page - (arr[idx - 1] as number) > 1)
-                    acc.push("...");
-                  acc.push(page);
-                  return acc;
-                }, [])
-                .map((item, idx) =>
-                  item === "..." ? (
-                    <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">…</span>
-                  ) : (
-                    <button
-                      key={item}
-                      onClick={() => handlePageChange(item as number)}
-                      className={`px-3 py-1 text-sm rounded border transition-colors ${
-                        currentPage === item
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "border-gray-300 hover:bg-gray-50 text-gray-700"
-                      }`}
-                    >{item}</button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(
+                    (page) =>
+                      page === 1 ||
+                      page === totalPages ||
+                      Math.abs(page - currentPage) <= 2,
                   )
-                )}
+                  .reduce<(number | "...")[]>((acc, page, idx, arr) => {
+                    if (idx > 0 && page - (arr[idx - 1] as number) > 1)
+                      acc.push("...");
+                    acc.push(page);
+                    return acc;
+                  }, [])
+                  .map((item, idx) =>
+                    item === "..." ? (
+                      <span
+                        key={`ellipsis-${idx}`}
+                        className="px-2 text-gray-400"
+                      >
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={item}
+                        onClick={() => handlePageChange(item as number)}
+                        className={`px-3 py-1 text-sm rounded border transition-colors ${
+                          currentPage === item
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "border-gray-300 hover:bg-gray-50 text-gray-700"
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    ),
+                  )}
 
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >›</button>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ›
+                </button>
 
-              <button
-                onClick={() => handlePageChange(totalPages)}
-                disabled={currentPage === totalPages}
-                className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >»</button>
+                <button
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-2 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  »
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
         </div>
       )}
 
@@ -1163,25 +1316,33 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                   {editingEmission?.category?.category_name || "Entry"}
                 </span>
                 {editingEmission?.status === "rejected" && (
-                  <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">Rejected</span>
+                  <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                    Rejected
+                  </span>
                 )}
               </div>
             </div>
 
             <div className="p-4 space-y-4">
               {/* Rejection reason */}
-              {editingEmission?.status === "rejected" && editingEmission?.review_comment && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
-                  <span className="font-medium">Rejection Reason:</span> {editingEmission.review_comment}
-                </div>
-              )}
+              {editingEmission?.status === "rejected" &&
+                editingEmission?.review_comment && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                    <span className="font-medium">Rejection Reason:</span>{" "}
+                    {editingEmission.review_comment}
+                  </div>
+                )}
 
               {/* Section 1: Emission Category */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Emission Category</label>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+                  Emission Category
+                </label>
                 {(() => {
                   const catId = editingEmission?.category?.category_id || 0;
-                  const hasMapping = Object.keys(emissionCategoryMappingMap?.[catId] || {}).length > 0;
+                  const hasMapping =
+                    Object.keys(emissionCategoryMappingMap?.[catId] || {})
+                      .length > 0;
                   if (hasMapping) {
                     // Auto-resolved from select columns — read-only
                     return editForm.activity_data.emission_category ? (
@@ -1198,7 +1359,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                   if (emissionCategoryOptions.length > 0) {
                     return (
                       <select
-                        value={String(editForm.activity_data.emission_category || "")}
+                        value={String(
+                          editForm.activity_data.emission_category || "",
+                        )}
                         onChange={(e) =>
                           setEditForm({
                             ...editForm,
@@ -1212,7 +1375,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                       >
                         <option value="">-- Select Emission Category --</option>
                         {emissionCategoryOptions.map((name) => (
-                          <option key={name} value={name}>{name}</option>
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
                         ))}
                       </select>
                     );
@@ -1231,48 +1396,79 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
               {/* Section 2: Activity Data */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Activity Data</label>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+                  Activity Data
+                </label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {(() => {
-                    const categoryId = editingEmission?.category?.category_id || 0;
+                    const categoryId =
+                      editingEmission?.category?.category_id || 0;
                     const configColumns = columnsMap?.[categoryId] || [];
                     const configKeys = configColumns.map((c) => c.column_name);
                     const skipKeys = new Set([
-                      "emission_category", "category_name", "category_scope",
-                      "fera_linked_id", "date_of_reporting", "activity_data_unit",
-                      "_extra_data", "_isFeraRow", "_ecmKey", "extra_data",
+                      "emission_category",
+                      "category_name",
+                      "category_scope",
+                      "fera_linked_id",
+                      "date_of_reporting",
+                      "activity_data_unit",
+                      "_extra_data",
+                      "_isFeraRow",
+                      "_ecmKey",
+                      "extra_data",
                     ]);
-                    const activityKeys = Object.keys(editForm.activity_data).filter(
-                      (k) => !skipKeys.has(k)
-                    );
+                    const activityKeys = Object.keys(
+                      editForm.activity_data,
+                    ).filter((k) => !skipKeys.has(k));
                     const orderedKeys = [
                       ...configKeys.filter((k) => !skipKeys.has(k)),
                       ...activityKeys.filter(
-                        (k) => !configKeys.some((ck) => ck.toLowerCase() === k.toLowerCase())
+                        (k) =>
+                          !configKeys.some(
+                            (ck) => ck.toLowerCase() === k.toLowerCase(),
+                          ),
                       ),
                     ];
 
                     return orderedKeys.map((key) => {
                       const value = editForm.activity_data[key] ?? "";
                       const options = getEditFieldOptions(key, categoryId);
-                      const isDependent = isEditDependentColumn(key, categoryId);
-                      const parentColName = getEditParentColumnName(key, categoryId);
-                      const parentValue = parentColName ? editForm.activity_data[parentColName] : undefined;
+                      const isDependent = isEditDependentColumn(
+                        key,
+                        categoryId,
+                      );
+                      const parentColName = getEditParentColumnName(
+                        key,
+                        categoryId,
+                      );
+                      const parentValue = parentColName
+                        ? editForm.activity_data[parentColName]
+                        : undefined;
                       const isDisabledDependent = isDependent && !parentValue;
                       const col = configColumns.find(
-                        (c) => c.column_name.toLowerCase() === key.toLowerCase()
+                        (c) =>
+                          c.column_name.toLowerCase() === key.toLowerCase(),
                       );
-                      const isNumeric = col?.column_type === "number" ||
-                        (!isNaN(Number(value)) && value !== "" && value !== null && !options);
+                      const isNumeric =
+                        col?.column_type === "number" ||
+                        (!isNaN(Number(value)) &&
+                          value !== "" &&
+                          value !== null &&
+                          !options);
                       const formattedLabel = key
                         .replace(/_/g, " ")
                         .replace(/\b\w/g, (c) => c.toUpperCase());
 
                       const handleFieldChange = (newValue: string) => {
-                        const updated = { ...editForm.activity_data, [key]: newValue };
+                        const updated = {
+                          ...editForm.activity_data,
+                          [key]: newValue,
+                        };
                         const depChain = columnDependenciesMap?.[categoryId];
                         if (depChain) {
-                          for (const [child, parent] of Object.entries(depChain)) {
+                          for (const [child, parent] of Object.entries(
+                            depChain,
+                          )) {
                             if (parent.toLowerCase() === key.toLowerCase()) {
                               updated[child] = "";
                               for (const [gc, gp] of Object.entries(depChain)) {
@@ -1285,8 +1481,15 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                         }
                         // Auto-resolve emission_category from select values (only if mapping exists)
                         const ecm = emissionCategoryMappingMap?.[categoryId];
-                        if (ecm && Object.keys(ecm).length > 0 && col?.column_type === "select") {
-                          const autoResult = autoResolveEmissionCategory(updated, categoryId);
+                        if (
+                          ecm &&
+                          Object.keys(ecm).length > 0 &&
+                          col?.column_type === "select"
+                        ) {
+                          const autoResult = autoResolveEmissionCategory(
+                            updated,
+                            categoryId,
+                          );
                           if (autoResult) {
                             updated.emission_category = autoResult.category;
                           } else {
@@ -1298,14 +1501,20 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
                       return (
                         <div key={key}>
-                          <label className="block text-xs text-gray-500 mb-1">{formattedLabel}</label>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            {formattedLabel}
+                          </label>
                           {options && options.length > 0 ? (
                             <select
                               value={String(value)}
-                              onChange={(e) => handleFieldChange(e.target.value)}
+                              onChange={(e) =>
+                                handleFieldChange(e.target.value)
+                              }
                               disabled={isDisabledDependent}
                               className={`w-full border border-gray-300 px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${
-                                isDisabledDependent ? "bg-gray-100 cursor-not-allowed" : ""
+                                isDisabledDependent
+                                  ? "bg-gray-100 cursor-not-allowed"
+                                  : ""
                               }`}
                             >
                               <option value="">
@@ -1314,19 +1523,34 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                                   : `Select ${formattedLabel}`}
                               </option>
                               {options.map((opt) => (
-                                <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                <option key={opt.id} value={opt.id}>
+                                  {opt.label}
+                                </option>
                               ))}
                             </select>
                           ) : isDisabledDependent ? (
-                            <select disabled className="w-full border border-gray-300 px-3 py-2 rounded-md text-sm bg-gray-100 cursor-not-allowed">
-                              <option>Select {parentColName?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} first</option>
+                            <select
+                              disabled
+                              className="w-full border border-gray-300 px-3 py-2 rounded-md text-sm bg-gray-100 cursor-not-allowed"
+                            >
+                              <option>
+                                Select{" "}
+                                {parentColName
+                                  ?.replace(/_/g, " ")
+                                  .replace(/\b\w/g, (c) =>
+                                    c.toUpperCase(),
+                                  )}{" "}
+                                first
+                              </option>
                             </select>
                           ) : (
                             <input
                               type={isNumeric ? "number" : "text"}
                               step={isNumeric ? "any" : undefined}
                               value={String(value)}
-                              onChange={(e) => handleFieldChange(e.target.value)}
+                              onChange={(e) =>
+                                handleFieldChange(e.target.value)
+                              }
                               className="w-full border border-gray-300 px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                               placeholder={formattedLabel}
                             />
@@ -1338,7 +1562,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
                   {/* Unit */}
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Unit</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Unit
+                    </label>
                     {editUnits.length > 0 ? (
                       <select
                         value={editUnit}
@@ -1347,11 +1573,18 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                       >
                         <option value="">Select Unit</option>
                         {editUnits.map((unit) => (
-                          <option key={unit.unit_id} value={unit.unit_name}>{unit.unit_name}</option>
+                          <option key={unit.unit_id} value={unit.unit_name}>
+                            {unit.unit_name}
+                          </option>
                         ))}
                       </select>
                     ) : (
-                      <input type="text" value={editUnit} readOnly className="w-full border border-gray-200 bg-gray-50 px-3 py-2 rounded-md text-sm text-gray-600" />
+                      <input
+                        type="text"
+                        value={editUnit}
+                        readOnly
+                        className="w-full border border-gray-200 bg-gray-50 px-3 py-2 rounded-md text-sm text-gray-600"
+                      />
                     )}
                   </div>
                 </div>
@@ -1359,21 +1592,30 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
               {/* Section 3: Date & Reason */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Details</label>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+                  Details
+                </label>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Date of Reporting</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Date of Reporting
+                    </label>
                     <input
                       type="date"
                       value={editForm.date_of_reporting}
                       onChange={(e) =>
-                        setEditForm({ ...editForm, date_of_reporting: e.target.value })
+                        setEditForm({
+                          ...editForm,
+                          date_of_reporting: e.target.value,
+                        })
                       }
                       className="w-full border border-gray-300 px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Reason for Edit (Optional)</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Reason for Edit (Optional)
+                    </label>
                     <textarea
                       value={editForm.reason}
                       onChange={(e) =>
