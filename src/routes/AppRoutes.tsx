@@ -26,6 +26,7 @@ import UserEmissionsPage from "../pages/UserEmissionsPage";
 import EdeReports from "../pages/Reports/EdePreports";
 import SbtiMain from "../pages/sbti/SbtiMain";
 import GhgReport from "../pages/GhgReport/GhgReport";
+import BrandSettings from "../pages/BrandSettings/BrandSettings";
 import CategoryMappingPage from "../pages/CategoryMappingPage";
 import ManagerUsersPage from "../pages/ManagerUsers";
 import NotificationsPage from "../pages/NotificationsPage";
@@ -135,6 +136,10 @@ const routes = [
           {
             path: "ghg-reports",
             element: <GhgReport />
+          },
+          {
+            path: "brand-settings",
+            element: <BrandSettings />
           },
           {
             path: "products",

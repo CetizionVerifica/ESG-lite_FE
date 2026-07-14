@@ -653,6 +653,26 @@ const FiltersStep = () => (
 
             {/* Download PDF ONLY on step 3 */}
             <GhgReportPdfExport siteIds={selectedSites} tablesData={tablesData} detailsData={detailsData} />
+
+            {/* Branded, client-themed PDF from the backend (auto theme per company) */}
+            <button
+              className="h-10 px-4 rounded-lg font-semibold text-white shadow-sm bg-emerald-600 hover:bg-emerald-700"
+              onClick={() => {
+                const siteId = selectedSites[0] ?? availableSites[0]?.site_id;
+                if (!siteId) {
+                  alert("Select a site first to download the branded report.");
+                  return;
+                }
+                const base = import.meta.env.VITE_API_URL;
+                // /reports is JWT-protected; a new browser tab can't send the
+                // Authorization header, so pass the token as a query param.
+                const token = localStorage.getItem("token") ?? "";
+                const url = `${base}/reports/ghg?siteId=${siteId}&year=${year}&frequency=yearly&download=1&token=${encodeURIComponent(token)}`;
+                window.open(url, "_blank");
+              }}
+            >
+              Download Branded PDF
+            </button>
           </div>
         </div>
       </div>
