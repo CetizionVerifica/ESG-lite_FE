@@ -71,7 +71,8 @@ export const getEmissionsBySite = async (siteId: string | number) => {
 };
 
 export const getEmissionsPaginated = async (params: {
-  siteId: number;
+  siteId?: number;
+  siteIds?: number[];
   categoryId?: number | null;
   scope?: string | null;
   year?: number | null;
@@ -81,10 +82,15 @@ export const getEmissionsPaginated = async (params: {
   limit: number;
 }): Promise<PaginatedEmissions> => {
   const query: Record<string, string | number> = {
-    siteId: params.siteId,
     page: params.page,
     limit: params.limit,
   };
+  // Prefer multi-site (siteIds); fall back to legacy single siteId.
+  if (params.siteIds && params.siteIds.length > 0) {
+    query.siteIds = params.siteIds.join(",");
+  } else if (params.siteId != null) {
+    query.siteId = params.siteId;
+  }
   if (params.categoryId != null) query.categoryId = params.categoryId;
   if (params.scope) query.scope = params.scope;
   if (params.year != null) query.year = params.year;
@@ -243,11 +249,15 @@ export interface EmissionUploadBatch {
 
 // Get all upload batches for emissions
 export const getEmissionBatches = async (
-  siteId?: number | null,
+  site?: number | number[] | null,
   categoryId?: number | null,
 ): Promise<EmissionUploadBatch[]> => {
-  const params: Record<string, number> = {};
-  if (siteId != null) params.siteId = siteId;
+  const params: Record<string, number | string> = {};
+  if (Array.isArray(site)) {
+    if (site.length > 0) params.siteIds = site.join(",");
+  } else if (site != null) {
+    params.siteId = site;
+  }
   if (categoryId != null) params.categoryId = categoryId;
   const response = await api.get("/user/emissions/batches", { params });
   return response.data;
@@ -284,14 +294,22 @@ export const downloadEmissions = async (params: {
 
 // Export monthly emissions as Excel with status filter
 export const exportMonthlyEmissions = async (params: {
-  siteId: number;
+  siteIds: number[];
   year: number;
   month: number;
   categoryId?: number;
   status?: string;
 }) => {
+  const query: Record<string, string | number> = {
+    siteIds: params.siteIds.join(","),
+    year: params.year,
+    month: params.month,
+  };
+  if (params.categoryId != null) query.categoryId = params.categoryId;
+  if (params.status) query.status = params.status;
+
   const response = await api.get("/user/emissions/export", {
-    params,
+    params: query,
     responseType: "blob",
   });
 

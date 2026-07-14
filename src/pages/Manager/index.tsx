@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Dropdown, { DropdownOption } from "../../components/Dropdown";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -25,7 +25,6 @@ import {
   ColumnDependencies,
   EmissionCategoryMapping,
 } from "../../services/columnConfigService";
-
 
 import EmissionsTable from "./EmissionsTable";
 import Modal from "../../components/Modal";
@@ -80,14 +79,19 @@ const ManagerPage = () => {
   const singleSite: Site | null = user?.site || null;
 
   // Use sites array if available, otherwise use single site
-  const availableSites = sites.length > 0 ? sites : singleSite ? [singleSite] : [];
+  const availableSites = useMemo(
+    () => (sites.length > 0 ? sites : singleSite ? [singleSite] : []),
+    [sites, singleSite],
+  );
 
-  const [selectedSite, setSelectedSite] = useState<number | null>(
-    availableSites.length > 0 ? availableSites[0].site_id : null
+  const [selectedSites, setSelectedSites] = useState<number[]>(
+    availableSites.length > 0 ? [availableSites[0].site_id] : [],
   );
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<EmissionStatus | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<EmissionStatus | null>(
+    null,
+  );
   const [exporting, setExporting] = useState(false);
   const [emissions, setEmissions] = useState<EmissionData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -95,7 +99,9 @@ const ManagerPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const PAGE_LIMIT = 50;
-  const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>([]);
+  const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>(
+    [],
+  );
   const [showBatches, setShowBatches] = useState(true);
   const [approvingBatchId, setApprovingBatchId] = useState<string | null>(null);
   const [rejectingBatchId, setRejectingBatchId] = useState<string | null>(null);
@@ -109,18 +115,42 @@ const ManagerPage = () => {
   const [batchRejectId, setBatchRejectId] = useState<string | null>(null);
   const [batchRejectComment, setBatchRejectComment] = useState("");
 
-  const [columnOptionsMap, setColumnOptionsMap] = useState<Record<number, ColumnOptionsMap>>({});
-  const [dependentOptionsMap, setDependentOptionsMap] = useState<Record<number, DependentOptionsMap>>({});
-  const [columnDependenciesMap, setColumnDependenciesMap] = useState<Record<number, ColumnDependencies>>({});
-  const [columnsMap, setColumnsMap] = useState<Record<number, { pk_id: number; column_name: string; column_type?: string }[]>>({});
-  const [emissionCategoryMappingMap, setEmissionCategoryMappingMap] = useState<Record<number, EmissionCategoryMapping>>({});
+  const [columnOptionsMap, setColumnOptionsMap] = useState<
+    Record<number, ColumnOptionsMap>
+  >({});
+  const [dependentOptionsMap, setDependentOptionsMap] = useState<
+    Record<number, DependentOptionsMap>
+  >({});
+  const [columnDependenciesMap, setColumnDependenciesMap] = useState<
+    Record<number, ColumnDependencies>
+  >({});
+  const [columnsMap, setColumnsMap] = useState<
+    Record<
+      number,
+      { pk_id: number; column_name: string; column_type?: string }[]
+    >
+  >({});
+  const [emissionCategoryMappingMap, setEmissionCategoryMappingMap] = useState<
+    Record<number, EmissionCategoryMapping>
+  >({});
 
-  // Get the currently selected site object
-  const currentSite = availableSites.find((s) => s.site_id === selectedSite);
+  // Categories from all selected sites (union, deduplicated)
+  const categories: Category[] = useMemo(() => {
+    const map = new Map<number, Category>();
+    selectedSites.forEach((sid) => {
+      availableSites
+        .find((s) => s.site_id === sid)
+        ?.categories?.forEach((cat) => {
+          if (!map.has(cat.category_id)) map.set(cat.category_id, cat);
+        });
+    });
+    return Array.from(map.values());
+  }, [selectedSites, availableSites]);
 
-  // Categories from the selected site
-  const categories: Category[] = currentSite?.categories || [];
-    const siteId = selectedSite;
+  // Names of the selected sites (for the info banner)
+  const selectedSiteNames = availableSites
+    .filter((s) => selectedSites.includes(s.site_id))
+    .map((s) => s.name);
 
   const siteOptions: DropdownOption[] = availableSites.map((site) => ({
     id: site.site_id,
@@ -134,50 +164,92 @@ const ManagerPage = () => {
 
   const dateOptions = generateDateOptions();
 
-  // Reset category when site changes
+  // Reset category if it is no longer available for the selected sites
   useEffect(() => {
-    setSelectedCategory(null);
-  }, [selectedSite]);
+    if (
+      selectedCategory &&
+      !categories.some((c) => c.category_id === selectedCategory)
+    ) {
+      setSelectedCategory(null);
+    }
+  }, [selectedSites, categories, selectedCategory]);
 
+  // Load column configs for every selected site and union them per category,
+  // so a category configured differently across sites shows all its columns.
   useEffect(() => {
     const fetchColumnConfigs = async () => {
-      if (!siteId || categories.length === 0) return;
+      if (selectedSites.length === 0 || categories.length === 0) return;
 
       const newColumnOptions: Record<number, ColumnOptionsMap> = {};
       const newDependentOptions: Record<number, DependentOptionsMap> = {};
       const newColumnDependencies: Record<number, ColumnDependencies> = {};
-      const newColumnsMap: Record<number, { pk_id: number; column_name: string }[]> = {};
+      const newColumnsMap: Record<
+        number,
+        { pk_id: number; column_name: string; column_type?: string }[]
+      > = {};
       const newEcmMap: Record<number, EmissionCategoryMapping> = {};
 
       for (const category of categories) {
-        try {
-          const configs = await getUserColumnConfigsBySiteAndCategory(siteId, category.category_id);
-          if (configs && configs.length > 0) {
+        const catId = category.category_id;
+        for (const sid of selectedSites) {
+          try {
+            const configs = await getUserColumnConfigsBySiteAndCategory(
+              sid,
+              catId,
+            );
+            if (!configs || configs.length === 0) continue;
             const config = configs[0];
+
+            // Union columns across sites, deduped by column name
+            if (config.columns && Array.isArray(config.columns)) {
+              const existing = newColumnsMap[catId] || [];
+              const seen = new Set(
+                existing.map((c) => c.column_name.toLowerCase()),
+              );
+              const merged = [...existing];
+              for (const col of config.columns as {
+                pk_id: number;
+                column_name: string;
+                column_type?: string;
+              }[]) {
+                if (!seen.has(col.column_name.toLowerCase())) {
+                  seen.add(col.column_name.toLowerCase());
+                  merged.push({
+                    pk_id: col.pk_id,
+                    column_name: col.column_name,
+                    column_type: col.column_type,
+                  });
+                }
+              }
+              newColumnsMap[catId] = merged;
+            }
             if (config.column_options) {
-              newColumnOptions[category.category_id] = config.column_options;
+              newColumnOptions[catId] = {
+                ...(newColumnOptions[catId] || {}),
+                ...config.column_options,
+              };
             }
             if (config.dependent_options) {
-              newDependentOptions[category.category_id] = config.dependent_options;
+              newDependentOptions[catId] = {
+                ...(newDependentOptions[catId] || {}),
+                ...config.dependent_options,
+              };
             }
             if (config.column_dependencies) {
-              newColumnDependencies[category.category_id] = config.column_dependencies;
+              newColumnDependencies[catId] = {
+                ...(newColumnDependencies[catId] || {}),
+                ...config.column_dependencies,
+              };
             }
-            if (config.columns && Array.isArray(config.columns)) {
-              newColumnsMap[category.category_id] = config.columns.map(
-                (col: { pk_id: number; column_name: string; column_type?: string }) => ({
-                  pk_id: col.pk_id,
-                  column_name: col.column_name,
-                  column_type: col.column_type,
-                })
-              );
+            if (config.emission_category_mapping && !newEcmMap[catId]) {
+              newEcmMap[catId] = config.emission_category_mapping;
             }
-            if (config.emission_category_mapping) {
-              newEcmMap[category.category_id] = config.emission_category_mapping;
-            }
+          } catch (error) {
+            console.error(
+              `Error fetching column config for site ${sid}, category ${catId}:`,
+              error,
+            );
           }
-        } catch (error) {
-          console.error(`Error fetching column config for category ${category.category_id}:`, error);
         }
       }
 
@@ -190,20 +262,18 @@ const ManagerPage = () => {
 
     fetchColumnConfigs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteId, selectedSite]);
+  }, [selectedSites, categories]);
 
-  
-  
-const getColumnId = useCallback(
+  const getColumnId = useCallback(
     (columnName: string, categoryId: number): string | null => {
       const columns = columnsMap[categoryId];
       if (!columns) return null;
       const col = columns.find(
-        (c) => c.column_name.toLowerCase() === columnName.toLowerCase()
+        (c) => c.column_name.toLowerCase() === columnName.toLowerCase(),
       );
       return col ? col.pk_id.toString() : null;
     },
-    [columnsMap]
+    [columnsMap],
   );
 
   const getOptionLabel = useCallback(
@@ -211,7 +281,7 @@ const getColumnId = useCallback(
       columnName: string,
       value: string,
       categoryId: number,
-      activityData: Record<string, unknown>
+      activityData: Record<string, unknown>,
     ): string => {
       if (!value) return "";
 
@@ -219,20 +289,20 @@ const getColumnId = useCallback(
       const dependentOptions = dependentOptionsMap[categoryId];
       const columnDependencies = columnDependenciesMap[categoryId];
 
-    //  const parentColumnName = columnDependencies?.[columnName];
+      //  const parentColumnName = columnDependencies?.[columnName];
 
-    const findDepKey = (obj: ColumnDependencies, key: string) => {
-  if (!obj) return undefined;
-  if (obj[key] !== undefined) return key;
-  const lower = key.toLowerCase();
-  const toSnake = key.replace(/([A-Z])/g, '_$1').toLowerCase();
-  const toCamel = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-  return Object.keys(obj).find(k =>
-    k.toLowerCase() === lower || k === toSnake || k === toCamel
-  );
-};
-const depKey = findDepKey(columnDependencies, columnName);
-const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
+      const findDepKey = (obj: ColumnDependencies, key: string) => {
+        if (!obj) return undefined;
+        if (obj[key] !== undefined) return key;
+        const lower = key.toLowerCase();
+        const toSnake = key.replace(/([A-Z])/g, "_$1").toLowerCase();
+        const toCamel = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+        return Object.keys(obj).find(
+          (k) => k.toLowerCase() === lower || k === toSnake || k === toCamel,
+        );
+      };
+      const depKey = findDepKey(columnDependencies, columnName);
+      const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
       if (parentColumnName && dependentOptions?.[columnName]) {
         const parentValue = activityData[parentColumnName] as string;
@@ -245,7 +315,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
               const parentOption = parentOptions.find(
                 (opt) =>
                   String(opt.id) === String(parentValue) ||
-                  opt.label.toLowerCase() === String(parentValue).toLowerCase()
+                  opt.label.toLowerCase() === String(parentValue).toLowerCase(),
               );
               if (parentOption) {
                 parentLabel = parentOption.label;
@@ -255,7 +325,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
           const depOptionsForParent = dependentOptions[columnName];
           const matchingKey = Object.keys(depOptionsForParent || {}).find(
-            (key) => key.toLowerCase() === parentLabel.toLowerCase()
+            (key) => key.toLowerCase() === parentLabel.toLowerCase(),
           );
 
           if (matchingKey) {
@@ -263,7 +333,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             const option = options?.find(
               (opt) =>
                 String(opt.id) === String(value) ||
-                opt.label.toLowerCase() === String(value).toLowerCase()
+                opt.label.toLowerCase() === String(value).toLowerCase(),
             );
             if (option) {
               return option.label;
@@ -279,7 +349,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
           const option = options.find(
             (opt) =>
               String(opt.id) === String(value) ||
-              opt.label.toLowerCase() === String(value).toLowerCase()
+              opt.label.toLowerCase() === String(value).toLowerCase(),
           );
           if (option) {
             return option.label;
@@ -291,7 +361,9 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       const depOptionsForCategory = dependentOptionsMap[categoryId];
       if (depOptionsForCategory) {
         const columnNameLower = columnName.toLowerCase();
-        let depOptionsForColumn: { id: string | number; label: string }[] | undefined;
+        let depOptionsForColumn:
+          | { id: string | number; label: string }[]
+          | undefined;
 
         // Find the dependent options for this column (case-insensitive)
         for (const [key, val] of Object.entries(depOptionsForCategory)) {
@@ -305,7 +377,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
           const option = depOptionsForColumn.find(
             (opt) =>
               String(opt.id) === value ||
-              opt.label.toLowerCase() === value.toLowerCase()
+              opt.label.toLowerCase() === value.toLowerCase(),
           );
           if (option) return option.label;
         }
@@ -314,20 +386,26 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       // Return original value if no label found
       return value;
     },
-    [columnOptionsMap, dependentOptionsMap, columnDependenciesMap, getColumnId]
+    [columnOptionsMap, dependentOptionsMap, columnDependenciesMap, getColumnId],
   );
 
   const formatActivityData = useCallback(
     (
       activityData: Record<string, unknown>,
-      categoryId: number
+      categoryId: number,
     ): { key: string; displayValue: string }[] => {
       if (!activityData) return [];
 
       const skipKeys = new Set([
-        "category_name", "category_scope", "fera_linked_id",
-        "date_of_reporting", "activity_data_unit", "_extra_data",
-        "_isFeraRow", "_ecmKey", "extra_data",
+        "category_name",
+        "category_scope",
+        "fera_linked_id",
+        "date_of_reporting",
+        "activity_data_unit",
+        "_extra_data",
+        "_isFeraRow",
+        "_ecmKey",
+        "extra_data",
       ]);
 
       return Object.entries(activityData)
@@ -337,59 +415,68 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             return { key, displayValue: JSON.stringify(value) };
           }
           const stringValue = String(value);
-          const displayValue = getOptionLabel(key, stringValue, categoryId, activityData);
+          const displayValue = getOptionLabel(
+            key,
+            stringValue,
+            categoryId,
+            activityData,
+          );
           return { key, displayValue };
         });
     },
-    [getOptionLabel]
+    [getOptionLabel],
   );
 
+  // Fetch paginated emissions for the selected sites with filters
+  const fetchEmissions = useCallback(
+    async (page?: number) => {
+      if (selectedSites.length === 0) return;
 
-  // Fetch paginated emissions for the selected site with filters
-  const fetchEmissions = useCallback(async (page?: number) => {
-    if (!selectedSite) return;
+      const pageToFetch = page ?? currentPage;
 
-    const pageToFetch = page ?? currentPage;
+      // Parse year and month from selectedDate (format: "YYYY-MM-DD")
+      let year: number | null = null;
+      let month: number | null = null;
+      if (selectedDate) {
+        const parts = selectedDate.split("-");
+        year = parseInt(parts[0]);
+        month = parseInt(parts[1]);
+      }
 
-    // Parse year and month from selectedDate (format: "YYYY-MM-DD")
-    let year: number | null = null;
-    let month: number | null = null;
-    if (selectedDate) {
-      const parts = selectedDate.split("-");
-      year = parseInt(parts[0]);
-      month = parseInt(parts[1]);
-    }
-
-    try {
-      setLoading(true);
-      const result = await getEmissionsPaginated({
-        siteId: selectedSite,
-        categoryId: selectedCategory,
-        year,
-        month,
-        status: selectedStatus,
-        page: pageToFetch,
-        limit: PAGE_LIMIT,
-      });
-      setEmissions(result.data);
-      setTotalCount(result.total);
-      setTotalPages(Math.max(1, Math.ceil(result.total / PAGE_LIMIT)));
-      // Fetch upload batches for this site
-      getEmissionBatches(selectedSite, selectedCategory).then(setEmissionBatches).catch(() => setEmissionBatches([]));
-    } catch (error) {
-      console.error("Error fetching emissions:", error);
-      setEmissions([]);
-      setTotalCount(0);
-      setTotalPages(1);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedSite, selectedCategory, selectedDate, selectedStatus, currentPage]);
+      try {
+        setLoading(true);
+        const result = await getEmissionsPaginated({
+          siteIds: selectedSites,
+          categoryId: selectedCategory,
+          year,
+          month,
+          status: selectedStatus,
+          page: pageToFetch,
+          limit: PAGE_LIMIT,
+        });
+        setEmissions(result.data);
+        setTotalCount(result.total);
+        setTotalPages(Math.max(1, Math.ceil(result.total / PAGE_LIMIT)));
+        // Fetch upload batches for the selected sites
+        getEmissionBatches(selectedSites, selectedCategory)
+          .then(setEmissionBatches)
+          .catch(() => setEmissionBatches([]));
+      } catch (error) {
+        console.error("Error fetching emissions:", error);
+        setEmissions([]);
+        setTotalCount(0);
+        setTotalPages(1);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [selectedSites, selectedCategory, selectedDate, selectedStatus, currentPage],
+  );
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedSite, selectedCategory, selectedDate, selectedStatus]);
+  }, [selectedSites, selectedCategory, selectedDate, selectedStatus]);
 
   useEffect(() => {
     fetchEmissions();
@@ -400,9 +487,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     const response = await approveEmission(id, comment);
     // Update the emission with the full response data including reviewed_by
     setEmissions((prev) =>
-      prev.map((e) =>
-        e.pk_id === id ? response.emission : e
-      )
+      prev.map((e) => (e.pk_id === id ? response.emission : e)),
     );
   }, []);
 
@@ -411,30 +496,37 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
     const response = await rejectEmission(id, comment);
     // Update the emission with the full response data including reviewed_by
     setEmissions((prev) =>
-      prev.map((e) =>
-        e.pk_id === id ? response.emission : e
-      )
+      prev.map((e) => (e.pk_id === id ? response.emission : e)),
     );
   }, []);
 
   // Handle bulk approve emissions
-  const handleBulkApprove = useCallback(async (ids: number[]) => {
-    await bulkApproveEmissions(ids);
-    // Refresh emissions after bulk approval
-    await fetchEmissions();
-  }, [fetchEmissions]);
+  const handleBulkApprove = useCallback(
+    async (ids: number[]) => {
+      await bulkApproveEmissions(ids);
+      // Refresh emissions after bulk approval
+      await fetchEmissions();
+    },
+    [fetchEmissions],
+  );
 
   // Handle bulk reject emissions
-  const handleBulkReject = useCallback(async (ids: number[], comment: string) => {
-    await bulkRejectEmissions(ids, comment);
-    await fetchEmissions();
-  }, [fetchEmissions]);
+  const handleBulkReject = useCallback(
+    async (ids: number[], comment: string) => {
+      await bulkRejectEmissions(ids, comment);
+      await fetchEmissions();
+    },
+    [fetchEmissions],
+  );
 
   // Handle bulk delete emissions
-  const handleBulkDelete = useCallback(async (ids: number[]) => {
-    await bulkDeleteEmissions(ids);
-    await fetchEmissions();
-  }, [fetchEmissions]);
+  const handleBulkDelete = useCallback(
+    async (ids: number[]) => {
+      await bulkDeleteEmissions(ids);
+      await fetchEmissions();
+    },
+    [fetchEmissions],
+  );
 
   // Handle batch approve - open confirmation modal
   const handleBatchApprove = useCallback((batchId: string) => {
@@ -481,16 +573,23 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
   }, [batchRejectId, batchRejectComment, fetchEmissions]);
 
   // Handle manager edit emission
-  const handleManagerEdit = useCallback(async (
-    id: number,
-    data: { activity_data?: Record<string, any>; date_of_reporting?: string; activity_data_unit?: string; reason?: string }
-  ) => {
-    const response = await managerUpdateEmission(id, data);
-    setEmissions((prev) =>
-      prev.map((e) => e.pk_id === id ? response.emission : e)
-    );
-  }, []);
-
+  const handleManagerEdit = useCallback(
+    async (
+      id: number,
+      data: {
+        activity_data?: Record<string, any>;
+        date_of_reporting?: string;
+        activity_data_unit?: string;
+        reason?: string;
+      },
+    ) => {
+      const response = await managerUpdateEmission(id, data);
+      setEmissions((prev) =>
+        prev.map((e) => (e.pk_id === id ? response.emission : e)),
+      );
+    },
+    [],
+  );
 
   // Theme classes
   const containerClass = isDark
@@ -520,10 +619,14 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
           <label className={labelClass}>Site</label>
           <Dropdown
             options={siteOptions}
-            placeholder="Select Site"
-            value={selectedSite}
-            onChange={(option) => setSelectedSite(option?.id as number)}
+            placeholder="Select Sites"
+            multiple={true}
+            multipleValue={selectedSites}
+            onMultipleChange={(options) =>
+              setSelectedSites(options.map((o) => o.id as number))
+            }
             searchable={true}
+            clearable={true}
           />
         </div>
         <div>
@@ -554,40 +657,52 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
             options={STATUS_OPTIONS}
             placeholder="All Statuses"
             value={selectedStatus}
-            onChange={(option) => setSelectedStatus(option?.id as EmissionStatus)}
+            onChange={(option) =>
+              setSelectedStatus(option?.id as EmissionStatus)
+            }
             clearable={true}
           />
         </div>
         <div className="flex items-end gap-2">
           <button
             onClick={() => fetchEmissions()}
-            className={isDark ? "px-4 py-2 bg-slate-700 text-slate-200 rounded hover:bg-slate-600" : "px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"}
+            className={
+              isDark
+                ? "px-4 py-2 bg-slate-700 text-slate-200 rounded hover:bg-slate-600"
+                : "px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+            }
           >
             Refresh
           </button>
           <button
             onClick={async () => {
-              if (!selectedSite || !selectedDate) return;
+              if (selectedSites.length === 0 || !selectedDate) return;
               const [y, m] = selectedDate.split("-");
               setExporting(true);
               try {
                 await exportMonthlyEmissions({
-                  siteId: selectedSite,
+                  siteIds: selectedSites,
                   year: parseInt(y),
                   month: parseInt(m),
                   categoryId: selectedCategory || undefined,
                   status: selectedStatus || undefined,
                 });
               } catch (err: any) {
-                const msg = err?.response?.status === 404
-                  ? "No emissions found for the selected filters"
-                  : "Failed to export data. Please try again.";
+                const msg =
+                  err?.response?.status === 404
+                    ? "No emissions found for the selected filters"
+                    : "Failed to export data. Please try again.";
                 alert(msg);
+              } finally {
+                setExporting(false);
               }
-              finally { setExporting(false); }
             }}
-            disabled={!selectedSite || !selectedDate || exporting}
-            title={!selectedDate ? "Select a date first" : "Download filtered emissions as Excel"}
+            disabled={selectedSites.length === 0 || !selectedDate || exporting}
+            title={
+              !selectedDate
+                ? "Select a date first"
+                : "Download filtered emissions as Excel"
+            }
             className={`px-4 py-2 rounded disabled:opacity-40 ${isDark ? "bg-emerald-700 text-white hover:bg-emerald-600" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}
           >
             {exporting ? "Exporting..." : "Download Excel"}
@@ -596,16 +711,21 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       </div>
 
       {/* Current Site Info */}
-      {currentSite && (
+      {selectedSiteNames.length > 0 && (
         <div className="mb-4">
           <span className={infoTextClass}>
-            Viewing: {currentSite.name}
+            Viewing: {selectedSiteNames.join(", ")}
           </span>
           <span className={countTextClass}>
             {totalCount} emission{totalCount !== 1 ? "s" : ""} found
             {emissions.filter((e) => e.status === "pending").length > 0 && (
-              <span className={isDark ? "ml-2 text-yellow-400" : "ml-2 text-yellow-600"}>
-                ({emissions.filter((e) => e.status === "pending").length} pending on this page)
+              <span
+                className={
+                  isDark ? "ml-2 text-yellow-400" : "ml-2 text-yellow-600"
+                }
+              >
+                ({emissions.filter((e) => e.status === "pending").length}{" "}
+                pending on this page)
               </span>
             )}
           </span>
@@ -623,31 +743,64 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                 : "text-orange-700 bg-orange-50 border border-orange-200 hover:bg-orange-100"
             }`}
           >
-            <svg className={`w-4 h-4 transition-transform ${showBatches ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            <svg
+              className={`w-4 h-4 transition-transform ${showBatches ? "rotate-90" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5l7 7-7 7"
+              />
             </svg>
             Upload Batches ({emissionBatches.length})
           </button>
 
           {showBatches && (
-            <div className={`mt-2 border rounded-lg overflow-hidden ${isDark ? "border-slate-600" : "border-orange-200"}`}>
+            <div
+              className={`mt-2 border rounded-lg overflow-hidden ${isDark ? "border-slate-600" : "border-orange-200"}`}
+            >
               <table className="w-full text-sm">
                 <thead>
-                  <tr className={isDark ? "bg-slate-800 text-slate-300" : "bg-orange-50 text-orange-800"}>
-                    <th className="px-4 py-2 text-left font-medium">Category</th>
+                  <tr
+                    className={
+                      isDark
+                        ? "bg-slate-800 text-slate-300"
+                        : "bg-orange-50 text-orange-800"
+                    }
+                  >
+                    <th className="px-4 py-2 text-left font-medium">
+                      Category
+                    </th>
                     <th className="px-4 py-2 text-left font-medium">Rows</th>
                     <th className="px-4 py-2 text-left font-medium">Status</th>
-                    <th className="px-4 py-2 text-left font-medium">Uploaded By</th>
-                    <th className="px-4 py-2 text-left font-medium">Uploaded</th>
+                    <th className="px-4 py-2 text-left font-medium">
+                      Uploaded By
+                    </th>
+                    <th className="px-4 py-2 text-left font-medium">
+                      Uploaded
+                    </th>
                     <th className="px-4 py-2 text-right font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {emissionBatches.map((batch) => (
-                    <tr key={batch.upload_batch_id} className={`border-t ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-orange-100 hover:bg-orange-50/50"}`}>
-                      <td className={`px-4 py-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>{batch.category_name}</td>
+                    <tr
+                      key={batch.upload_batch_id}
+                      className={`border-t ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-orange-100 hover:bg-orange-50/50"}`}
+                    >
+                      <td
+                        className={`px-4 py-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}
+                      >
+                        {batch.category_name}
+                      </td>
                       <td className="px-4 py-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isDark ? "bg-orange-900/30 text-orange-400" : "bg-orange-100 text-orange-800"}`}>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isDark ? "bg-orange-900/30 text-orange-400" : "bg-orange-100 text-orange-800"}`}
+                        >
                           {batch.count}
                         </span>
                       </td>
@@ -670,37 +823,64 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
                           )}
                         </div>
                       </td>
-                      <td className={`px-4 py-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+                      <td
+                        className={`px-4 py-2 ${isDark ? "text-slate-300" : "text-gray-700"}`}
+                      >
                         {batch.uploaded_by || "-"}
                       </td>
-                      <td className={`px-4 py-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-                        {new Date(batch.uploaded_at).toLocaleDateString(undefined, {
-                          year: "numeric", month: "short", day: "numeric",
-                          hour: "2-digit", minute: "2-digit",
-                        })}
+                      <td
+                        className={`px-4 py-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}
+                      >
+                        {new Date(batch.uploaded_at).toLocaleDateString(
+                          undefined,
+                          {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          },
+                        )}
                       </td>
                       <td className="px-4 py-2 text-right">
                         <div className="flex gap-2 justify-end">
                           {batch.pending_count > 0 && (
                             <button
-                              onClick={() => handleBatchApprove(batch.upload_batch_id)}
-                              disabled={approvingBatchId === batch.upload_batch_id}
+                              onClick={() =>
+                                handleBatchApprove(batch.upload_batch_id)
+                              }
+                              disabled={
+                                approvingBatchId === batch.upload_batch_id
+                              }
                               className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:bg-gray-400 transition-colors"
                             >
-                              {approvingBatchId === batch.upload_batch_id ? "Approving..." : "Approve"}
+                              {approvingBatchId === batch.upload_batch_id
+                                ? "Approving..."
+                                : "Approve"}
                             </button>
                           )}
-                          {(batch.pending_count > 0 || batch.approved_count > 0) && (
+                          {(batch.pending_count > 0 ||
+                            batch.approved_count > 0) && (
                             <button
-                              onClick={() => handleBatchReject(batch.upload_batch_id)}
-                              disabled={rejectingBatchId === batch.upload_batch_id}
+                              onClick={() =>
+                                handleBatchReject(batch.upload_batch_id)
+                              }
+                              disabled={
+                                rejectingBatchId === batch.upload_batch_id
+                              }
                               className="px-3 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 disabled:bg-gray-400 transition-colors"
                             >
-                              {rejectingBatchId === batch.upload_batch_id ? "Rejecting..." : "Reject"}
+                              {rejectingBatchId === batch.upload_batch_id
+                                ? "Rejecting..."
+                                : "Reject"}
                             </button>
                           )}
                           {batch.rejected_count === batch.count && (
-                            <span className={`text-xs italic ${isDark ? "text-slate-500" : "text-gray-400"}`}>All rejected</span>
+                            <span
+                              className={`text-xs italic ${isDark ? "text-slate-500" : "text-gray-400"}`}
+                            >
+                              All rejected
+                            </span>
                           )}
                         </div>
                       </td>
@@ -723,7 +903,7 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         onBulkReject={handleBulkReject}
         onBulkDelete={handleBulkDelete}
         onManagerEdit={handleManagerEdit}
-        siteId={selectedSite}
+        siteId={selectedSites.length === 1 ? selectedSites[0] : null}
         isDark={isDark}
         formatActivityData={formatActivityData}
         columnOptionsMap={columnOptionsMap}
@@ -731,28 +911,49 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
         columnDependenciesMap={columnDependenciesMap}
         columnsMap={columnsMap}
         emissionCategoryMappingMap={emissionCategoryMappingMap}
-        selectedCategoryName={categories.find((c) => c.category_id === selectedCategory)?.category_name}
+        selectedCategoryName={
+          categories.find((c) => c.category_id === selectedCategory)
+            ?.category_name
+        }
       />
 
       {/* Batch Approve Confirmation Modal */}
       <Modal
         isOpen={batchApproveModalOpen}
-        onClose={() => { setBatchApproveModalOpen(false); setBatchApproveId(null); }}
+        onClose={() => {
+          setBatchApproveModalOpen(false);
+          setBatchApproveId(null);
+        }}
         title="Approve Batch"
         isDark={isDark}
         className="max-w-md!"
       >
         {(() => {
-          const batch = emissionBatches.find((b) => b.upload_batch_id === batchApproveId);
+          const batch = emissionBatches.find(
+            (b) => b.upload_batch_id === batchApproveId,
+          );
           return (
             <div>
-              <p className={isDark ? "text-slate-300 mb-4" : "text-gray-700 mb-4"}>
-                Are you sure you want to approve all <strong>{batch?.pending_count ?? "?"}</strong> pending emission(s) from this batch?
+              <p
+                className={
+                  isDark ? "text-slate-300 mb-4" : "text-gray-700 mb-4"
+                }
+              >
+                Are you sure you want to approve all{" "}
+                <strong>{batch?.pending_count ?? "?"}</strong> pending
+                emission(s) from this batch?
               </p>
               <div className="flex justify-end gap-2">
                 <button
-                  onClick={() => { setBatchApproveModalOpen(false); setBatchApproveId(null); }}
-                  className={isDark ? "px-4 py-2 bg-slate-600 text-slate-200 rounded hover:bg-slate-500" : "px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"}
+                  onClick={() => {
+                    setBatchApproveModalOpen(false);
+                    setBatchApproveId(null);
+                  }}
+                  className={
+                    isDark
+                      ? "px-4 py-2 bg-slate-600 text-slate-200 rounded hover:bg-slate-500"
+                      : "px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+                  }
                 >
                   Cancel
                 </button>
@@ -771,29 +972,48 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
       {/* Batch Reject Modal with Reason Input */}
       <Modal
         isOpen={batchRejectModalOpen}
-        onClose={() => { setBatchRejectModalOpen(false); setBatchRejectId(null); setBatchRejectComment(""); }}
+        onClose={() => {
+          setBatchRejectModalOpen(false);
+          setBatchRejectId(null);
+          setBatchRejectComment("");
+        }}
         title="Reject Batch"
         isDark={isDark}
         className="max-w-md!"
       >
         {(() => {
-          const batch = emissionBatches.find((b) => b.upload_batch_id === batchRejectId);
-          const rejectableCount = (batch?.pending_count ?? 0) + (batch?.approved_count ?? 0);
+          const batch = emissionBatches.find(
+            (b) => b.upload_batch_id === batchRejectId,
+          );
+          const rejectableCount =
+            (batch?.pending_count ?? 0) + (batch?.approved_count ?? 0);
           return (
             <div>
-              <p className={isDark ? "text-slate-300 mb-3" : "text-gray-700 mb-3"}>
-                Reject all <strong>{rejectableCount}</strong> pending/approved emission(s) from this batch?
+              <p
+                className={
+                  isDark ? "text-slate-300 mb-3" : "text-gray-700 mb-3"
+                }
+              >
+                Reject all <strong>{rejectableCount}</strong> pending/approved
+                emission(s) from this batch?
               </p>
               <div className="mb-4">
-                <label className={isDark ? "block text-sm font-medium mb-1 text-slate-300" : "block text-sm font-medium mb-1 text-gray-700"}>
+                <label
+                  className={
+                    isDark
+                      ? "block text-sm font-medium mb-1 text-slate-300"
+                      : "block text-sm font-medium mb-1 text-gray-700"
+                  }
+                >
                   Rejection Reason (Required)
                 </label>
                 <textarea
                   value={batchRejectComment}
                   onChange={(e) => setBatchRejectComment(e.target.value)}
-                  className={isDark
-                    ? "w-full border border-slate-600 bg-slate-700 text-slate-200 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-red-500/30"
-                    : "w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-red-300"
+                  className={
+                    isDark
+                      ? "w-full border border-slate-600 bg-slate-700 text-slate-200 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-red-500/30"
+                      : "w-full border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring focus:ring-red-300"
                   }
                   rows={3}
                   placeholder="Enter reason for rejection..."
@@ -801,8 +1021,16 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
               </div>
               <div className="flex justify-end gap-2">
                 <button
-                  onClick={() => { setBatchRejectModalOpen(false); setBatchRejectId(null); setBatchRejectComment(""); }}
-                  className={isDark ? "px-4 py-2 bg-slate-600 text-slate-200 rounded hover:bg-slate-500" : "px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"}
+                  onClick={() => {
+                    setBatchRejectModalOpen(false);
+                    setBatchRejectId(null);
+                    setBatchRejectComment("");
+                  }}
+                  className={
+                    isDark
+                      ? "px-4 py-2 bg-slate-600 text-slate-200 rounded hover:bg-slate-500"
+                      : "px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+                  }
                 >
                   Cancel
                 </button>
@@ -821,42 +1049,59 @@ const parentColumnName = depKey ? columnDependencies[depKey] : undefined;
 
       {/* Pagination Controls */}
       {totalPages > 1 && (
-        <div className={`flex items-center justify-between px-4 py-3 border-t mt-2 rounded-b-lg ${isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-white"}`}>
-          <p className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}>
+        <div
+          className={`flex items-center justify-between px-4 py-3 border-t mt-2 rounded-b-lg ${isDark ? "border-slate-600 bg-slate-800" : "border-gray-200 bg-white"}`}
+        >
+          <p
+            className={`text-sm ${isDark ? "text-slate-400" : "text-gray-600"}`}
+          >
             Showing{" "}
-            <span className="font-medium">{(currentPage - 1) * PAGE_LIMIT + 1}</span>{" "}
+            <span className="font-medium">
+              {(currentPage - 1) * PAGE_LIMIT + 1}
+            </span>{" "}
             to{" "}
-            <span className="font-medium">{Math.min(currentPage * PAGE_LIMIT, totalCount)}</span>{" "}
-            of{" "}
-            <span className="font-medium">{totalCount}</span> entries
+            <span className="font-medium">
+              {Math.min(currentPage * PAGE_LIMIT, totalCount)}
+            </span>{" "}
+            of <span className="font-medium">{totalCount}</span> entries
           </p>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => { setCurrentPage(1); }}
+              onClick={() => {
+                setCurrentPage(1);
+              }}
               disabled={currentPage === 1}
               className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}
             >
               &laquo;
             </button>
             <button
-              onClick={() => { setCurrentPage((p) => p - 1); }}
+              onClick={() => {
+                setCurrentPage((p) => p - 1);
+              }}
               disabled={currentPage === 1}
               className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}
             >
               &lsaquo;
             </button>
-            <span className={`px-3 py-1 text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}>
+            <span
+              className={`px-3 py-1 text-sm ${isDark ? "text-slate-300" : "text-gray-700"}`}
+            >
               Page {currentPage} of {totalPages}
             </span>
             <button
-              onClick={() => { setCurrentPage((p) => p + 1); }}
+              onClick={() => {
+                setCurrentPage((p) => p + 1);
+              }}
               disabled={currentPage === totalPages}
               className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}
             >
               &rsaquo;
             </button>
             <button
-              onClick={() => { setCurrentPage(totalPages); }}
+              onClick={() => {
+                setCurrentPage(totalPages);
+              }}
               disabled={currentPage === totalPages}
               className={`px-2 py-1 text-sm rounded border disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "border-slate-600 hover:bg-slate-700 text-slate-300" : "border-gray-300 hover:bg-gray-50 text-gray-700"}`}
             >
