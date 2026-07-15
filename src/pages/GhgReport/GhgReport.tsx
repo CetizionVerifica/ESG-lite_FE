@@ -658,8 +658,8 @@ const FiltersStep = () => (
             <button
               className="h-10 px-4 rounded-lg font-semibold text-white shadow-sm bg-emerald-600 hover:bg-emerald-700"
               onClick={() => {
-                const siteId = selectedSites[0] ?? availableSites[0]?.site_id;
-                if (!siteId) {
+                const siteIds = selectedSites.length > 0 ? selectedSites : (availableSites[0]?.site_id ? [availableSites[0].site_id] : []);
+                if (siteIds.length === 0) {
                   alert("Select a site first to download the branded report.");
                   return;
                 }
@@ -667,7 +667,16 @@ const FiltersStep = () => (
                 // /reports is JWT-protected; a new browser tab can't send the
                 // Authorization header, so pass the token as a query param.
                 const token = localStorage.getItem("token") ?? "";
-                const url = `${base}/reports/ghg?siteId=${siteId}&year=${year}&frequency=yearly&download=1&token=${encodeURIComponent(token)}`;
+                // Pass the SAME filters as the on-screen tables so the branded
+                // PDF numbers match exactly.
+                const params = new URLSearchParams();
+                params.set("siteIds", siteIds.join(","));
+                if (selectedCategoryIds.length > 0) params.set("categoryIds", selectedCategoryIds.join(","));
+                params.set("yearType", yearType);
+                params.set("year", String(year));
+                params.set("download", "1");
+                params.set("token", token);
+                const url = `${base}/reports/ghg?${params.toString()}`;
                 window.open(url, "_blank");
               }}
             >
