@@ -39,7 +39,7 @@ const Login = () => {
             navigate("/data-entry");
             break;
           case "Admin":
-            navigate("/company/dashboard"); // Changed from /home/admin
+            navigate("/admin-company/users"); // Company admin lands directly on the users page
             break;
           case "Employee":
             navigate("/expenses");
