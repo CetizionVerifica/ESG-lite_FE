@@ -21,6 +21,9 @@ const CompanyOnboardingPage = () => {
         esgMitraAccess: false,
     });
 
+    const [logoFile, setLogoFile] = useState<File | null>(null);
+    const [guidelineFile, setGuidelineFile] = useState<File | null>(null);
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
         const checked = (e.target as HTMLInputElement).checked;
@@ -37,7 +40,19 @@ const CompanyOnboardingPage = () => {
         setError(null);
 
         try {
-            await onboardCompany(formData);
+            const payload = new FormData();
+            Object.entries(formData).forEach(([key, value]) => {
+                // Only send the access flag when enabled (backend treats presence as true).
+                if (key === "esgMitraAccess") {
+                    if (value) payload.append(key, "true");
+                    return;
+                }
+                payload.append(key, value as string);
+            });
+            if (logoFile) payload.append("logo", logoFile);
+            if (guidelineFile) payload.append("colorGuideline", guidelineFile);
+
+            await onboardCompany(payload);
             navigate("/companies"); // Navigate back to company list
         } catch (err: any) {
             console.error("Onboarding error:", err);
@@ -234,6 +249,37 @@ const CompanyOnboardingPage = () => {
                             />
                             <span className="text-gray-700 font-medium">Grant ESG-Mitra Access</span>
                         </label>
+                    </div>
+
+                    {/* Branding */}
+                    <div className="md:col-span-2 mt-4">
+                        <h2 className="text-xl font-semibold mb-4 border-b pb-2">Branding</h2>
+                    </div>
+
+                    <div className="mb-4">
+                        <label className="block text-gray-700 text-sm font-bold mb-2">
+                            Company Logo
+                        </label>
+                        <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                            onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                            className="block w-full text-sm text-gray-700"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP or SVG. Max 10MB.</p>
+                    </div>
+
+                    <div className="mb-4">
+                        <label className="block text-gray-700 text-sm font-bold mb-2">
+                            Color Guideline
+                        </label>
+                        <input
+                            type="file"
+                            accept="application/pdf,image/png,image/jpeg,image/webp,.doc,.docx,.xls,.xlsx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            onChange={(e) => setGuidelineFile(e.target.files?.[0] || null)}
+                            className="block w-full text-sm text-gray-700"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">PDF, image, Word, or Excel with the brand color guideline. Max 10MB.</p>
                     </div>
                 </div>
 
