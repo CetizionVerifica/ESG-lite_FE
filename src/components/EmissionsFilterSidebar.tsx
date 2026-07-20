@@ -66,6 +66,37 @@ function findValueCaseInsensitive(
   return match ? data[match] : undefined;
 }
 
+// The single "activity value" the rest of the app treats as consumption. Mirrors
+// the reporting layer's COALESCE priority (ghg-data.ts) and the create/update
+// controllers — a single field, NOT the sum of every numeric column. Falls back to
+// the category's configured numeric columns when none of the canonical keys exist.
+const CONSUMPTION_KEYS = [
+  "activity data",
+  "activity_value",
+  "value",
+  "quantity",
+  "amount",
+  "consumption",
+];
+
+function resolveConsumption(
+  activityData: Record<string, unknown>,
+  activityColumns: string[],
+): number {
+  for (const key of CONSUMPTION_KEYS) {
+    const raw = findValueCaseInsensitive(activityData, key);
+    const num = Number(raw);
+    if (raw !== undefined && raw !== "" && !isNaN(num)) return num;
+  }
+  // Fallback: first configured numeric column that holds a usable value.
+  for (const columnName of activityColumns) {
+    const raw = findValueCaseInsensitive(activityData, columnName);
+    const num = Number(raw);
+    if (raw !== undefined && raw !== "" && !isNaN(num)) return num;
+  }
+  return 0;
+}
+
 // Aggregates the chosen metric across emissions, grouped by emission_category
 // (the fuel type / dimension that selects the emission factor).
 function computeBreakdown(
@@ -85,9 +116,7 @@ function computeBreakdown(
     if (metric === "emission") {
       value = Number(emission.total_emission) || 0;
     } else {
-      for (const columnName of activityColumns) {
-        value += Number(findValueCaseInsensitive(activityData, columnName)) || 0;
-      }
+      value = resolveConsumption(activityData, activityColumns);
     }
 
     const entry = groups.get(label) || { total: 0, units: new Set<string>() };
@@ -162,6 +191,7 @@ const EmissionsFilterSidebar = ({
           categoryId: selectedCategory,
           year: selectedYear,
           month: selectedMonth,
+          status: selectedStatus,
           page: 1,
           limit: pageSize,
         });
@@ -174,6 +204,7 @@ const EmissionsFilterSidebar = ({
             categoryId: selectedCategory,
             year: selectedYear,
             month: selectedMonth,
+            status: selectedStatus,
             page,
             limit: pageSize,
           });
@@ -193,7 +224,13 @@ const EmissionsFilterSidebar = ({
     return () => {
       cancelled = true;
     };
-  }, [selectedSite, selectedCategory, selectedYear, selectedMonth]);
+  }, [
+    selectedSite,
+    selectedCategory,
+    selectedYear,
+    selectedMonth,
+    selectedStatus,
+  ]);
 
   const breakdown = useMemo(() => {
     if (!selectedCategory) return [];
