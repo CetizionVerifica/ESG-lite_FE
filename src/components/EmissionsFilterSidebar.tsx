@@ -104,13 +104,20 @@ function computeBreakdown(
   metric: BreakdownMetric,
   activityColumns: string[],
 ): BreakdownRow[] {
-  const groups = new Map<string, { total: number; units: Set<string> }>();
+  // Group case-insensitively so "Natural Gas" and "Natural gas" collapse into a
+  // single row. The map is keyed by a normalized (trimmed, lowercased) value,
+  // while the first-seen original text is kept as the display label.
+  const groups = new Map<
+    string,
+    { label: string; total: number; units: Set<string> }
+  >();
 
   for (const emission of emissions) {
     const activityData = emission.activity_data || {};
 
     const rawGroup = findValueCaseInsensitive(activityData, GROUP_KEY);
-    const label = rawGroup ? String(rawGroup) : BLANK_LABEL;
+    const label = rawGroup ? String(rawGroup).trim() : BLANK_LABEL;
+    const groupKey = label.toLowerCase();
 
     let value = 0;
     if (metric === "emission") {
@@ -119,16 +126,20 @@ function computeBreakdown(
       value = resolveConsumption(activityData, activityColumns);
     }
 
-    const entry = groups.get(label) || { total: 0, units: new Set<string>() };
+    const entry = groups.get(groupKey) || {
+      label,
+      total: 0,
+      units: new Set<string>(),
+    };
     entry.total += value;
     if (metric === "consumption" && emission.activity_data_unit) {
       entry.units.add(emission.activity_data_unit);
     }
-    groups.set(label, entry);
+    groups.set(groupKey, entry);
   }
 
-  return [...groups.entries()]
-    .map(([label, { total, units }]) => {
+  return [...groups.values()]
+    .map(({ label, total, units }) => {
       let unit = EMISSION_UNIT;
       if (metric === "consumption") {
         unit =
