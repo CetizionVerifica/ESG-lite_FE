@@ -1,6 +1,21 @@
 import api from "../api/axios";
 
 export type YearType = "CY" | "FY";
+export type Frequency = "monthly" | "quarterly" | "yearly";
+
+export type PeriodBucket = {
+  label: string;
+  total: number;
+  scope1: number;
+  scope2: number;
+  scope3: number;
+};
+
+export type PeriodBreakdown = {
+  frequency: Frequency;
+  periods: PeriodBucket[];
+  total: number;
+};
 
 export type GhgReportTablesRequest = {
   siteIds: number[];
@@ -8,6 +23,7 @@ export type GhgReportTablesRequest = {
   yearType: YearType;
   year: number;
   compareYear?: number;
+  frequency?: Frequency;
 }
 
 export type ScopeTotals = {
@@ -50,6 +66,7 @@ export type GhgReportTablesResponse = {
     table_overviewByLocations_compareYear: { year: number; rows: OverviewRow[] };
     table_overviewByLocations_selectedYear: { year: number; rows: OverviewRow[] };
   };
+  periodBreakdown?: PeriodBreakdown;
 };
 
 export const getGhgReportTables = async (payload: GhgReportTablesRequest) => {
@@ -64,6 +81,7 @@ export type GhgReportDetailsRequest = {
   yearType: YearType;
   year: number;
   compareYear?: number;
+  frequency?: Frequency;
 };
 
 export type GhgDetailsRow = {

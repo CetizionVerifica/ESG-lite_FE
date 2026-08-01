@@ -16,11 +16,13 @@ import {
   type GhgReportTablesResponse,
   type GhgReportDetailsResponse,
   type YearType,
+  type Frequency,
 } from "../../services/ghgreportService";
 
 import GhgReportSummaryCharts from "./GhgReportSummaryCharts";
 import GhgReportDetailedCharts from "./GhgReportDetailedCharts";
 import GhgReportResultsChart from "./GhgReportResultsCharts";
+import GhgReportPeriodChart from "./GhgReportPeriodChart";
 import GhgReportPdfExport from "./pdf/GhgPdf";
 
 type Step = 1 | 2 | 3;
@@ -61,6 +63,7 @@ const GhgReport = () => {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [yearType, setYearType] = useState<YearType>("CY");
   const [year, setYear] = useState<number>(now.getFullYear());
+  const [frequency, setFrequency] = useState<Frequency>("yearly");
 
   const [tablesData, setTablesData] = useState<GhgReportTablesResponse | null>(null);
   const [detailsData, setDetailsData] = useState<GhgReportDetailsResponse | null>(null);
@@ -103,9 +106,12 @@ const GhgReport = () => {
 
     const yearTypeText = yearType === "CY" ? "Calendar Year (CY)" : "Financial Year (FY)";
     const yearText = `Year: ${year}`;
+    const freqText = `Frequency: ${
+      frequency === "monthly" ? "Monthly" : frequency === "quarterly" ? "Quarterly" : "Yearly"
+    }`;
 
-    return `${sitesText} • ${catsText} • ${yearTypeText} • ${yearText}`;
-  }, [selectedSites, availableSites, selectedCategoryIds.length, yearType, year]);
+    return `${sitesText} • ${catsText} • ${yearTypeText} • ${yearText} • ${freqText}`;
+  }, [selectedSites, availableSites, selectedCategoryIds.length, yearType, year, frequency]);
 
   // Theme classes
   const pageClass = isDark
@@ -142,6 +148,7 @@ const GhgReport = () => {
         siteIds,
         yearType,
         year: yr,
+        frequency,
         ...(categoryIds.length > 0 ? { categoryIds } : {}),
       };
 
@@ -627,6 +634,8 @@ const FiltersStep = () => (
     setYearType={setYearType}
     year={year}
     setYear={setYear}
+    frequency={frequency}
+    setFrequency={setFrequency}
     onProceed={runReport}
     onBack={() => setStep(1)}
     loading={loading}
@@ -674,6 +683,7 @@ const FiltersStep = () => (
                 if (selectedCategoryIds.length > 0) params.set("categoryIds", selectedCategoryIds.join(","));
                 params.set("yearType", yearType);
                 params.set("year", String(year));
+                params.set("frequency", frequency);
                 params.set("download", "1");
                 params.set("token", token);
                 const url = `${base}/reports/ghg?${params.toString()}`;
@@ -694,6 +704,10 @@ const FiltersStep = () => (
         <div className="space-y-8">
           <GhgSiteCategoriesTable data={tablesData} isDark={isDark} />
           <GhgReportTables data={tablesData} isDark={isDark} />
+
+          {tablesData?.periodBreakdown ? (
+            <GhgReportPeriodChart periodBreakdown={tablesData.periodBreakdown} isDark={isDark} />
+          ) : null}
 
           {tablesData && detailsData ? (
             <GhgReportSummaryCharts tablesData={tablesData} detailsData={detailsData} isDark={isDark} />

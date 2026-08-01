@@ -7,6 +7,7 @@ import { Site, Category } from "../ManagerDashboard/types";
 import { useTheme } from "../../context/ThemeContext";
 
 export type YearType = "CY" | "FY";
+export type Frequency = "monthly" | "quarterly" | "yearly";
 
 interface Props {
   availableSites: Site[];
@@ -18,6 +19,8 @@ interface Props {
   setYearType: React.Dispatch<React.SetStateAction<YearType>>;
   year: number;
   setYear: React.Dispatch<React.SetStateAction<number>>;
+  frequency: Frequency;
+  setFrequency: React.Dispatch<React.SetStateAction<Frequency>>;
   onProceed: () => void;
   onBack: () => void;
   loading?: boolean;
@@ -34,6 +37,8 @@ const GhgReportFilters = ({
   setYearType,
   year,
   setYear,
+  frequency,
+  setFrequency,
   onProceed,
   onBack,
   loading = false,
@@ -122,6 +127,11 @@ const GhgReportFilters = ({
           : `${selectedSites.length} sites`,
     },
     { label: "Calendar", value: yearType === "CY" ? "CY" : "FY" },
+    {
+      label: "Frequency",
+      value:
+        frequency === "monthly" ? "Monthly" : frequency === "quarterly" ? "Quarterly" : "Yearly",
+    },
     { label: "Year", value: year ? String(year) : "—" },
     {
       label: "Categories",
@@ -204,6 +214,46 @@ const GhgReportFilters = ({
                   <button
                     key={opt.id}
                     onClick={() => setYearType(opt.id)}
+                    style={{
+                      flex: 1,
+                      padding: "14px 20px",
+                      borderRadius: 12,
+                      border: `2px solid ${selected ? accent : border}`,
+                      background: selected ? accent : "transparent",
+                      color: selected ? "#fff" : textSub,
+                      cursor: "pointer",
+                      textAlign: "left" as const,
+                      transition: "all 0.18s",
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>
+                      {opt.label}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>{opt.sub}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {divider}
+
+          {/* FREQUENCY */}
+          <div>
+            <Label text="Frequency" />
+            <Hint text="Break the emissions down Monthly, Quarterly, or as a single Yearly total." />
+            <div style={{ display: "flex", gap: 10 }}>
+              {[
+                { id: "monthly" as Frequency, label: "Monthly", sub: "12 periods" },
+                { id: "quarterly" as Frequency, label: "Quarterly", sub: "4 periods" },
+                { id: "yearly" as Frequency, label: "Yearly", sub: "1 total" },
+              ].map((opt) => {
+                const selected = frequency === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => setFrequency(opt.id)}
                     style={{
                       flex: 1,
                       padding: "14px 20px",
