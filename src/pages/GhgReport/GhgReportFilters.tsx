@@ -6,8 +6,11 @@ import { generateYearOptions } from "../ManagerDashboard/utils/dateUtils";
 import { Site, Category } from "../ManagerDashboard/types";
 import { useTheme } from "../../context/ThemeContext";
 
+// Single source of truth is the service layer, so the UI and the API contract
+// can't drift apart; re-exported here for existing importers of this module.
+import type { Frequency } from "../../services/ghgreportService";
+export type { Frequency };
 export type YearType = "CY" | "FY";
-export type Frequency = "monthly" | "quarterly" | "yearly";
 
 interface Props {
   availableSites: Site[];

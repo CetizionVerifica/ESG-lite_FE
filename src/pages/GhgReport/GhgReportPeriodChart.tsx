@@ -11,6 +11,14 @@ function r2(n: number) {
   return Number((n || 0).toFixed(2));
 }
 
+// The ECharts tooltip is built as an HTML string, which bypasses React's own
+// escaping — so any server-provided text interpolated into it must be escaped.
+function esc(s: string) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)
+  );
+}
+
 const Card = ({
   title,
   subtitle,
@@ -95,7 +103,7 @@ const GhgReportPeriodChart = ({ periodBreakdown, isDark }: Props) => {
             <div style="min-width:200px">
               <div style="font-size:13px;font-weight:700;color:${labelCol};margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid ${
             isDark ? "#1e293b" : "#f4f4f5"
-          }">${p.label}</div>
+          }">${esc(p.label)}</div>
               <div style="display:flex;flex-direction:column;gap:6px">
                 ${line("Scope 1", p.scope1)}
                 ${line("Scope 2", p.scope2)}
