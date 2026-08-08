@@ -348,7 +348,9 @@ const GhgReportFilters = ({
             <div style={{ display: "flex", gap: 10 }}>
               {[
                 { id: "CY" as YearType, label: "Calendar Year", sub: "Jan – Dec" },
-                { id: "FY" as YearType, label: "Fiscal Year", sub: fySpan ?? "Loading…" },
+                // No "Loading…" here: the toggle is usable before the span is
+                // known, so a slow/failed lookup must not make it look broken.
+                { id: "FY" as YearType, label: "Fiscal Year", sub: fySpan ?? "Your reporting year" },
               ].map((opt) => {
                 const selected = yearType === opt.id;
                 return (
