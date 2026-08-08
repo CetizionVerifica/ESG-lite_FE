@@ -82,8 +82,12 @@ interface Props {
   setMonth: React.Dispatch<React.SetStateAction<number>>;
   quarter: number;
   setQuarter: React.Dispatch<React.SetStateAction<number>>;
-  /** Backend-published fiscal-year start month (1-12); null until it loads. */
-  fyStartMonth: number | null;
+  /**
+   * Backend-published fiscal-year start month (1-12). Always a usable number:
+   * the parent seeds it with a bootstrap default and swaps in the server value
+   * as soon as the reporting calendar loads.
+   */
+  fyStartMonth: number;
   onProceed: () => void;
   onBack: () => void;
   loading?: boolean;
@@ -150,33 +154,22 @@ const GhgReportFilters = ({
 
   const yearOptions = useMemo(() => generateYearOptions(), []);
 
-  // The reporting calendar is only known once the backend has published the
-  // fiscal-year start month; until then the period pickers stay empty rather
-  // than listing months derived from a guessed start.
-  const periodReady = fyStartMonth !== null;
-
   // "Apr – Mar" for a company whose fiscal year starts in April; derived from
   // the published start month rather than written into the UI.
-  const fySpan =
-    fyStartMonth === null
-      ? null
-      : `${MONTH_SHORT[fyStartMonth - 1]} – ${MONTH_SHORT[(fyStartMonth + 10) % 12]}`;
+  const fySpan = `${MONTH_SHORT[fyStartMonth - 1]} – ${MONTH_SHORT[(fyStartMonth + 10) % 12]}`;
 
   // Month / quarter pickers list the periods of the SELECTED reporting year, in
   // reporting-calendar order with their real calendar year (FY straddles two).
   const monthOptions: DropdownOption[] = useMemo(
     () =>
-      fyStartMonth === null
-        ? []
-        : reportingMonths(yearType, year, fyStartMonth).map(({ calYear, monthNum }) => ({
-            id: monthNum,
-            label: `${MONTH_SHORT[monthNum - 1]} ${calYear}`,
-          })),
+      reportingMonths(yearType, year, fyStartMonth).map(({ calYear, monthNum }) => ({
+        id: monthNum,
+        label: `${MONTH_SHORT[monthNum - 1]} ${calYear}`,
+      })),
     [yearType, year, fyStartMonth]
   );
 
   const quarterOptions: DropdownOption[] = useMemo(() => {
-    if (fyStartMonth === null) return [];
     const months = reportingMonths(yearType, year, fyStartMonth);
     return [1, 2, 3, 4].map((q) => {
       const slice = months.slice((q - 1) * 3, (q - 1) * 3 + 3);
@@ -192,10 +185,9 @@ const GhgReportFilters = ({
 
   // Changing the reporting calendar/year re-anchors the period to the start of
   // that year, so the selection is always a real period of the chosen year.
-  // Also runs once the fiscal-year start month arrives, so FY gets the right
-  // default month instead of whatever was selected before it was known.
+  // Also runs when the server's fiscal-year start month replaces the bootstrap
+  // default, so FY re-anchors to the company's actual first month.
   useEffect(() => {
-    if (fyStartMonth === null) return;
     setMonth(firstReportingMonth(yearType, fyStartMonth));
     setQuarter(1);
   }, [yearType, year, fyStartMonth, setMonth, setQuarter]);
@@ -203,8 +195,6 @@ const GhgReportFilters = ({
   const periodValid =
     frequency === "yearly"
       ? true
-      : !periodReady
-      ? false
       : frequency === "monthly"
       ? month >= 1 && month <= 12
       : quarter >= 1 && quarter <= 4;
@@ -263,10 +253,9 @@ const GhgReportFilters = ({
     { label: "Year", value: year ? String(year) : "—" },
     {
       label: "Period",
-      value:
-        year && fyStartMonth !== null
-          ? formatPeriodLabel(yearType, year, frequency, fyStartMonth, month, quarter)
-          : "—",
+      value: year
+        ? formatPeriodLabel(yearType, year, frequency, fyStartMonth, month, quarter)
+        : "—",
     },
     {
       label: "Categories",
@@ -338,19 +327,11 @@ const GhgReportFilters = ({
           {/* REPORTING CALENDAR */}
           <div>
             <Label text="Reporting Calendar" />
-            <Hint
-              text={
-                fySpan
-                  ? `Calendar Year runs Jan–Dec. Fiscal Year runs ${fySpan}.`
-                  : "Calendar Year runs Jan–Dec. Fiscal Year follows your company's reporting calendar."
-              }
-            />
+            <Hint text={`Calendar Year runs Jan–Dec. Fiscal Year runs ${fySpan}.`} />
             <div style={{ display: "flex", gap: 10 }}>
               {[
                 { id: "CY" as YearType, label: "Calendar Year", sub: "Jan – Dec" },
-                // No "Loading…" here: the toggle is usable before the span is
-                // known, so a slow/failed lookup must not make it look broken.
-                { id: "FY" as YearType, label: "Fiscal Year", sub: fySpan ?? "Your reporting year" },
+                { id: "FY" as YearType, label: "Fiscal Year", sub: fySpan },
               ].map((opt) => {
                 const selected = yearType === opt.id;
                 return (
@@ -399,11 +380,7 @@ const GhgReportFilters = ({
                     onClick={() => {
                       setFrequency(opt.id);
                       // Guarantee a valid period so the request is never rejected.
-                      if (
-                        opt.id === "monthly" &&
-                        fyStartMonth !== null &&
-                        !(month >= 1 && month <= 12)
-                      ) {
+                      if (opt.id === "monthly" && !(month >= 1 && month <= 12)) {
                         setMonth(firstReportingMonth(yearType, fyStartMonth));
                       }
                       if (opt.id === "quarterly" && !(quarter >= 1 && quarter <= 4)) {
@@ -459,9 +436,7 @@ const GhgReportFilters = ({
                 <Label text={frequency === "monthly" ? "Month" : "Quarter"} />
                 <Hint
                   text={
-                    !periodReady
-                      ? "Loading the company's reporting calendar…"
-                      : frequency === "monthly"
+                    frequency === "monthly"
                       ? "The entire report — totals, scopes, sites and charts — will cover only this month."
                       : "The entire report — totals, scopes, sites and charts — will cover only this quarter."
                   }
@@ -469,24 +444,22 @@ const GhgReportFilters = ({
                 <div style={{ maxWidth: 260 }}>
                   {frequency === "monthly" ? (
                     <Dropdown
-                      key={`month-${yearType}-${year}-${fyStartMonth ?? "loading"}`}
+                      key={`month-${yearType}-${year}-${fyStartMonth}`}
                       options={monthOptions}
-                      placeholder={periodReady ? "Select month" : "Loading…"}
-                      value={periodReady ? month : null}
+                      placeholder="Select month"
+                      value={month}
                       onChange={(opt) => setMonth(opt?.id as number)}
                       clearable={false}
                       searchable
-                      disabled={!periodReady}
                     />
                   ) : (
                     <Dropdown
-                      key={`quarter-${yearType}-${year}-${fyStartMonth ?? "loading"}`}
+                      key={`quarter-${yearType}-${year}-${fyStartMonth}`}
                       options={quarterOptions}
-                      placeholder={periodReady ? "Select quarter" : "Loading…"}
-                      value={periodReady ? quarter : null}
+                      placeholder="Select quarter"
+                      value={quarter}
                       onChange={(opt) => setQuarter(opt?.id as number)}
                       clearable={false}
-                      disabled={!periodReady}
                     />
                   )}
                 </div>

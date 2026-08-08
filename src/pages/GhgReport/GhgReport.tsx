@@ -27,6 +27,16 @@ import GhgReportPdfExport from "./pdf/GhgPdf";
 
 type Step = 1 | 2 | 3;
 
+/**
+ * Bootstrap only — overwritten by GET /user/reporting-calendar, which is the
+ * source of truth. It exists purely so the period pickers are usable on the
+ * very first render and stay usable if that lookup is slow or fails; it is NOT
+ * a second definition of the fiscal-year rule. Safe because the frontend's
+ * start month only drives display labels and the default month selection — the
+ * emissions themselves are computed server-side from the backend's own value.
+ */
+const DEFAULT_FY_START_MONTH = 4;
+
 function extractErrorMessage(err: any) {
   // Axios-style
   const apiMsg =
@@ -71,8 +81,10 @@ const GhgReport = () => {
   const [quarter, setQuarter] = useState<number>(1);
 
   // The fiscal-year start month is owned by the backend and published per
-  // company — the frontend only ever consumes it, never defines it.
-  const [fyStartMonth, setFyStartMonth] = useState<number | null>(null);
+  // company — the frontend only ever consumes it, never defines it. It is
+  // seeded with the bootstrap default so the UI is never blocked on the
+  // lookup, and replaced the moment the real value arrives.
+  const [fyStartMonth, setFyStartMonth] = useState<number>(DEFAULT_FY_START_MONTH);
 
   const [tablesData, setTablesData] = useState<GhgReportTablesResponse | null>(null);
   const [detailsData, setDetailsData] = useState<GhgReportDetailsResponse | null>(null);
@@ -135,16 +147,12 @@ const GhgReport = () => {
     const yearText = `Year: ${year}`;
     // The period the whole report covers — "Full year" for yearly, otherwise the
     // exact month/quarter the data is narrowed to.
+    // A calendar year always runs Jan–Dec, so formatPeriodLabel ignores the
+    // fiscal start for CY; FY labels it against the reporting calendar.
     const periodText =
       frequency === "yearly"
         ? "Full year"
-        : // A calendar year always runs Jan–Dec, so its labels never consult the
-          // fiscal start; a fiscal year can only be labelled once it has loaded.
-        yearType === "CY"
-        ? formatPeriodLabel(yearType, year, frequency, 1, month, quarter)
-        : fyStartMonth !== null
-        ? formatPeriodLabel(yearType, year, frequency, fyStartMonth, month, quarter)
-        : `${yearType}${year}`;
+        : formatPeriodLabel(yearType, year, frequency, fyStartMonth, month, quarter);
 
     return `${sitesText} • ${catsText} • ${yearTypeText} • ${yearText} • ${periodText}`;
   }, [selectedSites, availableSites, selectedCategoryIds.length, yearType, year, frequency, month, quarter, fyStartMonth]);
