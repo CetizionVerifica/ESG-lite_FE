@@ -3,27 +3,18 @@ import api from "../api/axios";
 export type YearType = "CY" | "FY";
 export type Frequency = "monthly" | "quarterly" | "yearly";
 
-export type PeriodBucket = {
-  label: string;
-  total: number;
-  scope1: number;
-  scope2: number;
-  scope3: number;
-};
-
-export type PeriodBreakdown = {
-  frequency: Frequency;
-  periods: PeriodBucket[];
-  total: number;
-};
-
 export type GhgReportTablesRequest = {
   siteIds: number[];
   categoryIds?: number[];
   yearType: YearType;
   year: number;
   compareYear?: number;
+  /** Narrows the WHOLE report to one period of the reporting year. */
   frequency?: Frequency;
+  /** Calendar month 1-12, required when frequency === "monthly". */
+  month?: number;
+  /** Quarter 1-4 of the reporting year, required when frequency === "quarterly". */
+  quarter?: number;
 }
 
 export type ScopeTotals = {
@@ -66,7 +57,6 @@ export type GhgReportTablesResponse = {
     table_overviewByLocations_compareYear: { year: number; rows: OverviewRow[] };
     table_overviewByLocations_selectedYear: { year: number; rows: OverviewRow[] };
   };
-  periodBreakdown?: PeriodBreakdown;
 };
 
 export const getGhgReportTables = async (payload: GhgReportTablesRequest) => {
@@ -81,7 +71,12 @@ export type GhgReportDetailsRequest = {
   yearType: YearType;
   year: number;
   compareYear?: number;
+  /** Narrows the WHOLE report to one period of the reporting year. */
   frequency?: Frequency;
+  /** Calendar month 1-12, required when frequency === "monthly". */
+  month?: number;
+  /** Quarter 1-4 of the reporting year, required when frequency === "quarterly". */
+  quarter?: number;
 };
 
 export type GhgDetailsRow = {

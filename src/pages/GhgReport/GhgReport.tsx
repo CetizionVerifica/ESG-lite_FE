@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { getSites } from "../../services/siteService";
 import { Site } from "../ManagerDashboard/types";
-import GhgReportFilters from "./GhgReportFilters";
+import GhgReportFilters, { firstReportingMonth, formatPeriodLabel } from "./GhgReportFilters";
 import GhgReportTables from "./GhgReportTables";
 import GhgReportDetailsTables from "./GhgReportDetailsTables";
 import GhgSiteCategoriesTable from "./GhgSiteCategoriesTable";
@@ -22,7 +22,6 @@ import {
 import GhgReportSummaryCharts from "./GhgReportSummaryCharts";
 import GhgReportDetailedCharts from "./GhgReportDetailedCharts";
 import GhgReportResultsChart from "./GhgReportResultsCharts";
-import GhgReportPeriodChart from "./GhgReportPeriodChart";
 import GhgReportPdfExport from "./pdf/GhgPdf";
 
 type Step = 1 | 2 | 3;
@@ -64,6 +63,10 @@ const GhgReport = () => {
   const [yearType, setYearType] = useState<YearType>("CY");
   const [year, setYear] = useState<number>(now.getFullYear());
   const [frequency, setFrequency] = useState<Frequency>("yearly");
+  // The single period the report is narrowed to (used only by the matching
+  // frequency; "yearly" ignores both).
+  const [month, setMonth] = useState<number>(firstReportingMonth("CY"));
+  const [quarter, setQuarter] = useState<number>(1);
 
   const [tablesData, setTablesData] = useState<GhgReportTablesResponse | null>(null);
   const [detailsData, setDetailsData] = useState<GhgReportDetailsResponse | null>(null);
@@ -106,12 +109,15 @@ const GhgReport = () => {
 
     const yearTypeText = yearType === "CY" ? "Calendar Year (CY)" : "Financial Year (FY)";
     const yearText = `Year: ${year}`;
-    const freqText = `Frequency: ${
-      frequency === "monthly" ? "Monthly" : frequency === "quarterly" ? "Quarterly" : "Yearly"
-    }`;
+    // The period the whole report covers — "Full year" for yearly, otherwise the
+    // exact month/quarter the data is narrowed to.
+    const periodText =
+      frequency === "yearly"
+        ? "Full year"
+        : formatPeriodLabel(yearType, year, frequency, month, quarter);
 
-    return `${sitesText} • ${catsText} • ${yearTypeText} • ${yearText} • ${freqText}`;
-  }, [selectedSites, availableSites, selectedCategoryIds.length, yearType, year, frequency]);
+    return `${sitesText} • ${catsText} • ${yearTypeText} • ${yearText} • ${periodText}`;
+  }, [selectedSites, availableSites, selectedCategoryIds.length, yearType, year, frequency, month, quarter]);
 
   // Theme classes
   const pageClass = isDark
@@ -149,6 +155,9 @@ const GhgReport = () => {
         yearType,
         year: yr,
         frequency,
+        // Only the period that belongs to the chosen frequency is sent.
+        ...(frequency === "monthly" ? { month: Number(month) } : {}),
+        ...(frequency === "quarterly" ? { quarter: Number(quarter) } : {}),
         ...(categoryIds.length > 0 ? { categoryIds } : {}),
       };
 
@@ -636,6 +645,10 @@ const FiltersStep = () => (
     setYear={setYear}
     frequency={frequency}
     setFrequency={setFrequency}
+    month={month}
+    setMonth={setMonth}
+    quarter={quarter}
+    setQuarter={setQuarter}
     onProceed={runReport}
     onBack={() => setStep(1)}
     loading={loading}
@@ -684,6 +697,8 @@ const FiltersStep = () => (
                 params.set("yearType", yearType);
                 params.set("year", String(year));
                 params.set("frequency", frequency);
+                if (frequency === "monthly") params.set("month", String(month));
+                if (frequency === "quarterly") params.set("quarter", String(quarter));
                 params.set("download", "1");
                 params.set("token", token);
                 const url = `${base}/reports/ghg?${params.toString()}`;
@@ -704,10 +719,6 @@ const FiltersStep = () => (
         <div className="space-y-8">
           <GhgSiteCategoriesTable data={tablesData} isDark={isDark} />
           <GhgReportTables data={tablesData} isDark={isDark} />
-
-          {tablesData?.periodBreakdown ? (
-            <GhgReportPeriodChart periodBreakdown={tablesData.periodBreakdown} isDark={isDark} />
-          ) : null}
 
           {tablesData && detailsData ? (
             <GhgReportSummaryCharts tablesData={tablesData} detailsData={detailsData} isDark={isDark} />
