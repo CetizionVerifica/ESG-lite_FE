@@ -58,6 +58,21 @@ export type CompanyBySitesResponse = {
   fiscalYearRule: string;
 };
 
+export interface ReportingCalendar {
+  fiscalYearStartMonth: number;
+  fiscalYearRule: string;
+}
+
+/**
+ * Where the financial year starts, per the backend (the single source of truth).
+ * Independent of any company lookup, so it also resolves for sites that have no
+ * company linked.
+ */
+export const getReportingCalendar = async (): Promise<ReportingCalendar> => {
+  const response = await api.get(`/user/reporting-calendar`);
+  return response.data;
+};
+
 export const getCompanyNameBySites = async (siteIds: number[]) => {
   const response = await api.post<CompanyBySitesResponse>(`/user/companies/by-sites`, { siteIds });
   return response.data;

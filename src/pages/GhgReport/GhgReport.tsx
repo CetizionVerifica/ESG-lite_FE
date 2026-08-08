@@ -6,7 +6,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { getSites } from "../../services/siteService";
 import { Site } from "../ManagerDashboard/types";
 import GhgReportFilters, { formatPeriodLabel } from "./GhgReportFilters";
-import { getCompanyNameBySites } from "../../services/companyService";
+import { getReportingCalendar } from "../../services/companyService";
 import GhgReportTables from "./GhgReportTables";
 import GhgReportDetailsTables from "./GhgReportDetailsTables";
 import GhgSiteCategoriesTable from "./GhgSiteCategoriesTable";
@@ -105,21 +105,20 @@ const GhgReport = () => {
   // Pull the company's reporting calendar from the backend, which is the single
   // source of truth for where the fiscal year starts.
   useEffect(() => {
-    if (selectedSites.length === 0) return;
     let alive = true;
-    getCompanyNameBySites(selectedSites)
+    getReportingCalendar()
       .then((res) => {
         if (!alive) return;
         const m = Number(res?.fiscalYearStartMonth);
         if (Number.isInteger(m) && m >= 1 && m <= 12) setFyStartMonth(m);
       })
       .catch((e) => {
-        console.error("Failed to load the company's fiscal year start month:", e);
+        console.error("Failed to load the reporting calendar:", e);
       });
     return () => {
       alive = false;
     };
-  }, [selectedSites]);
+  }, []);
 
   const titleLine = useMemo(() => {
   const sitesText =
