@@ -5,7 +5,8 @@ import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { getSites } from "../../services/siteService";
 import { Site } from "../ManagerDashboard/types";
-import GhgReportFilters from "./GhgReportFilters";
+import GhgReportFilters, { formatPeriodLabel } from "./GhgReportFilters";
+import { getReportingCalendar } from "../../services/companyService";
 import GhgReportTables from "./GhgReportTables";
 import GhgReportDetailsTables from "./GhgReportDetailsTables";
 import GhgSiteCategoriesTable from "./GhgSiteCategoriesTable";
@@ -22,10 +23,19 @@ import {
 import GhgReportSummaryCharts from "./GhgReportSummaryCharts";
 import GhgReportDetailedCharts from "./GhgReportDetailedCharts";
 import GhgReportResultsChart from "./GhgReportResultsCharts";
-import GhgReportPeriodChart from "./GhgReportPeriodChart";
 import GhgReportPdfExport from "./pdf/GhgPdf";
 
 type Step = 1 | 2 | 3;
+
+/**
+ * Bootstrap only — overwritten by GET /user/reporting-calendar, which is the
+ * source of truth. It exists purely so the period pickers are usable on the
+ * very first render and stay usable if that lookup is slow or fails; it is NOT
+ * a second definition of the fiscal-year rule. Safe because the frontend's
+ * start month only drives display labels and the default month selection — the
+ * emissions themselves are computed server-side from the backend's own value.
+ */
+const DEFAULT_FY_START_MONTH = 4;
 
 function extractErrorMessage(err: any) {
   // Axios-style
@@ -64,6 +74,17 @@ const GhgReport = () => {
   const [yearType, setYearType] = useState<YearType>("CY");
   const [year, setYear] = useState<number>(now.getFullYear());
   const [frequency, setFrequency] = useState<Frequency>("yearly");
+  // The single period the report is narrowed to (used only by the matching
+  // frequency; "yearly" ignores both). Starts on the first month of the default
+  // CY calendar; the filters re-anchor it once the reporting calendar is known.
+  const [month, setMonth] = useState<number>(1);
+  const [quarter, setQuarter] = useState<number>(1);
+
+  // The fiscal-year start month is owned by the backend and published per
+  // company — the frontend only ever consumes it, never defines it. It is
+  // seeded with the bootstrap default so the UI is never blocked on the
+  // lookup, and replaced the moment the real value arrives.
+  const [fyStartMonth, setFyStartMonth] = useState<number>(DEFAULT_FY_START_MONTH);
 
   const [tablesData, setTablesData] = useState<GhgReportTablesResponse | null>(null);
   const [detailsData, setDetailsData] = useState<GhgReportDetailsResponse | null>(null);
@@ -93,6 +114,24 @@ const GhgReport = () => {
     }
   }, [availableSites, selectedSites.length]);
 
+  // Pull the company's reporting calendar from the backend, which is the single
+  // source of truth for where the fiscal year starts.
+  useEffect(() => {
+    let alive = true;
+    getReportingCalendar()
+      .then((res) => {
+        if (!alive) return;
+        const m = Number(res?.fiscalYearStartMonth);
+        if (Number.isInteger(m) && m >= 1 && m <= 12) setFyStartMonth(m);
+      })
+      .catch((e) => {
+        console.error("Failed to load the reporting calendar:", e);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const titleLine = useMemo(() => {
   const sitesText =
   selectedSites.length === 0
@@ -106,12 +145,17 @@ const GhgReport = () => {
 
     const yearTypeText = yearType === "CY" ? "Calendar Year (CY)" : "Financial Year (FY)";
     const yearText = `Year: ${year}`;
-    const freqText = `Frequency: ${
-      frequency === "monthly" ? "Monthly" : frequency === "quarterly" ? "Quarterly" : "Yearly"
-    }`;
+    // The period the whole report covers — "Full year" for yearly, otherwise the
+    // exact month/quarter the data is narrowed to.
+    // A calendar year always runs Jan–Dec, so formatPeriodLabel ignores the
+    // fiscal start for CY; FY labels it against the reporting calendar.
+    const periodText =
+      frequency === "yearly"
+        ? "Full year"
+        : formatPeriodLabel(yearType, year, frequency, fyStartMonth, month, quarter);
 
-    return `${sitesText} • ${catsText} • ${yearTypeText} • ${yearText} • ${freqText}`;
-  }, [selectedSites, availableSites, selectedCategoryIds.length, yearType, year, frequency]);
+    return `${sitesText} • ${catsText} • ${yearTypeText} • ${yearText} • ${periodText}`;
+  }, [selectedSites, availableSites, selectedCategoryIds.length, yearType, year, frequency, month, quarter, fyStartMonth]);
 
   // Theme classes
   const pageClass = isDark
@@ -149,6 +193,9 @@ const GhgReport = () => {
         yearType,
         year: yr,
         frequency,
+        // Only the period that belongs to the chosen frequency is sent.
+        ...(frequency === "monthly" ? { month: Number(month) } : {}),
+        ...(frequency === "quarterly" ? { quarter: Number(quarter) } : {}),
         ...(categoryIds.length > 0 ? { categoryIds } : {}),
       };
 
@@ -636,6 +683,11 @@ const FiltersStep = () => (
     setYear={setYear}
     frequency={frequency}
     setFrequency={setFrequency}
+    month={month}
+    setMonth={setMonth}
+    quarter={quarter}
+    setQuarter={setQuarter}
+    fyStartMonth={fyStartMonth}
     onProceed={runReport}
     onBack={() => setStep(1)}
     loading={loading}
@@ -684,6 +736,8 @@ const FiltersStep = () => (
                 params.set("yearType", yearType);
                 params.set("year", String(year));
                 params.set("frequency", frequency);
+                if (frequency === "monthly") params.set("month", String(month));
+                if (frequency === "quarterly") params.set("quarter", String(quarter));
                 params.set("download", "1");
                 params.set("token", token);
                 const url = `${base}/reports/ghg?${params.toString()}`;
@@ -704,10 +758,6 @@ const FiltersStep = () => (
         <div className="space-y-8">
           <GhgSiteCategoriesTable data={tablesData} isDark={isDark} />
           <GhgReportTables data={tablesData} isDark={isDark} />
-
-          {tablesData?.periodBreakdown ? (
-            <GhgReportPeriodChart periodBreakdown={tablesData.periodBreakdown} isDark={isDark} />
-          ) : null}
 
           {tablesData && detailsData ? (
             <GhgReportSummaryCharts tablesData={tablesData} detailsData={detailsData} isDark={isDark} />
