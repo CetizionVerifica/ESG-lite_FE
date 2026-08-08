@@ -5,7 +5,8 @@ import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { getSites } from "../../services/siteService";
 import { Site } from "../ManagerDashboard/types";
-import GhgReportFilters, { firstReportingMonth, formatPeriodLabel } from "./GhgReportFilters";
+import GhgReportFilters, { formatPeriodLabel } from "./GhgReportFilters";
+import { getCompanyNameBySites } from "../../services/companyService";
 import GhgReportTables from "./GhgReportTables";
 import GhgReportDetailsTables from "./GhgReportDetailsTables";
 import GhgSiteCategoriesTable from "./GhgSiteCategoriesTable";
@@ -64,9 +65,14 @@ const GhgReport = () => {
   const [year, setYear] = useState<number>(now.getFullYear());
   const [frequency, setFrequency] = useState<Frequency>("yearly");
   // The single period the report is narrowed to (used only by the matching
-  // frequency; "yearly" ignores both).
-  const [month, setMonth] = useState<number>(firstReportingMonth("CY"));
+  // frequency; "yearly" ignores both). Starts on the first month of the default
+  // CY calendar; the filters re-anchor it once the reporting calendar is known.
+  const [month, setMonth] = useState<number>(1);
   const [quarter, setQuarter] = useState<number>(1);
+
+  // The fiscal-year start month is owned by the backend and published per
+  // company — the frontend only ever consumes it, never defines it.
+  const [fyStartMonth, setFyStartMonth] = useState<number | null>(null);
 
   const [tablesData, setTablesData] = useState<GhgReportTablesResponse | null>(null);
   const [detailsData, setDetailsData] = useState<GhgReportDetailsResponse | null>(null);
@@ -96,6 +102,25 @@ const GhgReport = () => {
     }
   }, [availableSites, selectedSites.length]);
 
+  // Pull the company's reporting calendar from the backend, which is the single
+  // source of truth for where the fiscal year starts.
+  useEffect(() => {
+    if (selectedSites.length === 0) return;
+    let alive = true;
+    getCompanyNameBySites(selectedSites)
+      .then((res) => {
+        if (!alive) return;
+        const m = Number(res?.fiscalYearStartMonth);
+        if (Number.isInteger(m) && m >= 1 && m <= 12) setFyStartMonth(m);
+      })
+      .catch((e) => {
+        console.error("Failed to load the company's fiscal year start month:", e);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedSites]);
+
   const titleLine = useMemo(() => {
   const sitesText =
   selectedSites.length === 0
@@ -114,10 +139,16 @@ const GhgReport = () => {
     const periodText =
       frequency === "yearly"
         ? "Full year"
-        : formatPeriodLabel(yearType, year, frequency, month, quarter);
+        : // A calendar year always runs Jan–Dec, so its labels never consult the
+          // fiscal start; a fiscal year can only be labelled once it has loaded.
+        yearType === "CY"
+        ? formatPeriodLabel(yearType, year, frequency, 1, month, quarter)
+        : fyStartMonth !== null
+        ? formatPeriodLabel(yearType, year, frequency, fyStartMonth, month, quarter)
+        : `${yearType}${year}`;
 
     return `${sitesText} • ${catsText} • ${yearTypeText} • ${yearText} • ${periodText}`;
-  }, [selectedSites, availableSites, selectedCategoryIds.length, yearType, year, frequency, month, quarter]);
+  }, [selectedSites, availableSites, selectedCategoryIds.length, yearType, year, frequency, month, quarter, fyStartMonth]);
 
   // Theme classes
   const pageClass = isDark
@@ -649,6 +680,7 @@ const FiltersStep = () => (
     setMonth={setMonth}
     quarter={quarter}
     setQuarter={setQuarter}
+    fyStartMonth={fyStartMonth}
     onProceed={runReport}
     onBack={() => setStep(1)}
     loading={loading}

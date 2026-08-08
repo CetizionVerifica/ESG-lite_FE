@@ -50,9 +50,16 @@ export const onboardCompany = async (data: any) => {
   return response.data;
 };
 
+export type CompanyBySitesResponse = {
+  companyName: string;
+  /** Backend-owned fiscal-year start month, 1-12. */
+  fiscalYearStartMonth: number;
+  /** Human-readable form of the same rule, e.g. "Apr 1 → Mar 31". */
+  fiscalYearRule: string;
+};
+
 export const getCompanyNameBySites = async (siteIds: number[]) => {
-  const response = await api.post(`/user/companies/by-sites`, { siteIds });
-  console.log("response", response)
+  const response = await api.post<CompanyBySitesResponse>(`/user/companies/by-sites`, { siteIds });
   return response.data;
 };
 

@@ -48,7 +48,9 @@ export type GhgReportTablesResponse = {
     yearType: YearType;
     year: number;
     compareYear: number;
-    fiscalYearRule?: string; 
+    fiscalYearRule?: string;
+    /** Backend-owned fiscal-year start month, 1-12. */
+    fiscalYearStartMonth?: number;
   };
   ranges: Record<string, { startDate: string; endDate: string }>;
   totals: Record<string, ScopeTotals>;
@@ -98,6 +100,8 @@ export type GhgReportDetailsResponse = {
     year: number;
     compareYear: number;
     fiscalYearRule?: string;
+    /** Backend-owned fiscal-year start month, 1-12. */
+    fiscalYearStartMonth?: number;
   };
   ranges: Record<string, { startDate: string; endDate: string }>;
   rows: GhgDetailsRow[];
