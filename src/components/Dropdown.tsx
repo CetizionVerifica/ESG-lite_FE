@@ -243,11 +243,14 @@ const Dropdown = ({
             <span className={placeholderClass}>{placeholder}</span>
           )}
         </div>
+        {/* pointer-events-none keeps the chevron from stealing clicks from the
+            trigger, but the ✕ needs to receive its own click — so it re-enables
+            pointer events on itself via pointer-events-auto. */}
         <div className="flex items-center gap-2 pointer-events-none ml-2">
           {clearable && (selectedOption || selectedOptions.length > 0) && (
             <div
               onClick={handleClear}
-              className={clearClass}
+              className={`${clearClass} pointer-events-auto`}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
