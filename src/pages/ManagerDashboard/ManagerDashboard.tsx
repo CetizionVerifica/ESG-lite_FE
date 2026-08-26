@@ -86,6 +86,7 @@ const ManagerDashboard = () => {
     hasSavedEmissionsData,
     hasScope2Data,
     hasIntensityData,
+    yearlyEmissionsTotal,
   } = useChartOptions({
     filteredEmissions,
     approvedEmissions,
@@ -281,6 +282,12 @@ const ManagerDashboard = () => {
               <p className={`text-xs mb-2 ${isDark ? "text-slate-400" : "text-gray-500"}`}>
                 Net = Gross - Saved (Renewable Electricity discounted)
               </p>
+              {yearlyEmissionsTotal > 0 && (
+                <p className={`text-xs mb-2 ${isDark ? "text-amber-400" : "text-amber-700"}`}>
+                  + {yearlyEmissionsTotal.toLocaleString()} tCO2e filed as yearly
+                  batches — counted in totals, not shown as monthly bars
+                </p>
+              )}
               {hasMonthlyTrendData ? (
                 <ReactECharts option={monthlyTrendOptions} style={{ height: "300px" }} />
               ) : (

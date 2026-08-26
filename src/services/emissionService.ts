@@ -9,6 +9,10 @@ export interface EmissionData {
   total_emission: number;
   unit: string;
   date_of_reporting: string;
+  // 'monthly' (default) or 'yearly'. Yearly rows are dated at their period
+  // end and cover the whole year — monthly charts must not bucket them.
+  reporting_period?: "monthly" | "yearly";
+  year_type?: "CY" | "FY" | null;
   activity_data_unit?: string;
   status: EmissionStatus;
   review_comment?: string;
@@ -124,6 +128,10 @@ export const createEmission = async (
     unit?: string;
     date_of_reporting: string;
     activity_data_unit?: string;
+    // Yearly data entry: 'monthly' (default) or 'yearly'; yearly rows carry
+    // year_type 'CY' or 'FY' and are dated at the period end.
+    reporting_period?: "monthly" | "yearly";
+    year_type?: "CY" | "FY";
   },
   replace?: boolean
 ) => {

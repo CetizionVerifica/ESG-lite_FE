@@ -116,6 +116,12 @@ const UserDataEntryPage = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedScope, setSelectedScope] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  // Yearly data entry (spend-based categories only). In yearly mode the Date
+  // control becomes a CY/FY + year picker, and selectedDate holds the
+  // period-end date the backend expects (Dec 31 for CY, Mar 31 for FY).
+  const [periodMode, setPeriodMode] = useState<"monthly" | "yearly">("monthly");
+  const [yearType, setYearType] = useState<"CY" | "FY">("FY");
+  const [yearlyYear, setYearlyYear] = useState<number | null>(null);
   const [dynamicColumns, setDynamicColumns] = useState<ColumnEntity[]>([]);
   const [emissions, setEmissions] = useState<EmissionRow[]>([]);
   const [emissionBatches, setEmissionBatches] = useState<EmissionUploadBatch[]>(
@@ -337,6 +343,63 @@ const UserDataEntryPage = () => {
       label: category.category_name,
     }));
 
+  // Yearly entry is only offered for spend-based categories (the ones whose
+  // forms carry a Spent Value column). Mirrors the backend allow-list in
+  // services/reportingPeriod.ts — the backend rejects anything else anyway.
+  const SPEND_BASED_CATEGORY_NAMES = ["purchased goods and services", "capital goods"];
+  const yearlyAllowed = useMemo(() => {
+    const cat = categories.find((c) => c.category_id === selectedCategory);
+    return (
+      !!cat && SPEND_BASED_CATEGORY_NAMES.includes(cat.category_name.trim().toLowerCase())
+    );
+  }, [categories, selectedCategory]);
+
+  // Leaving a spend-based category exits yearly mode.
+  useEffect(() => {
+    if (!yearlyAllowed && periodMode === "yearly") {
+      setPeriodMode("monthly");
+      setYearlyYear(null);
+      setSelectedDate(null);
+    }
+  }, [yearlyAllowed, periodMode]);
+
+  // In yearly mode the CY/FY + year selection drives selectedDate to the
+  // period-end date (Dec 31 for CY; Mar 31 of the following year for FY,
+  // where yearlyYear is the FY start year, e.g. FY 2025-26 -> 2026-03-31).
+  useEffect(() => {
+    if (periodMode !== "yearly") return;
+    if (!yearlyYear) {
+      setSelectedDate(null);
+      return;
+    }
+    setSelectedDate(
+      yearType === "CY" ? `${yearlyYear}-12-31` : `${yearlyYear + 1}-03-31`,
+    );
+  }, [periodMode, yearType, yearlyYear]);
+
+  const fyLabel = (startYear: number) =>
+    `FY ${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
+
+  const yearlyYearOptions: DropdownOption[] = useMemo(() => {
+    const now = new Date().getFullYear();
+    const opts: DropdownOption[] = [];
+    for (let y = now; y >= now - 6; y--) {
+      opts.push(
+        yearType === "CY"
+          ? { id: y, label: `CY ${y}` }
+          : { id: y, label: fyLabel(y) },
+      );
+    }
+    return opts;
+  }, [yearType]);
+
+  const periodLabel =
+    periodMode === "yearly" && yearlyYear
+      ? yearType === "CY"
+        ? `CY ${yearlyYear}`
+        : fyLabel(yearlyYear)
+      : null;
+
   // Scope filter options — derived from unique scopes of non-FERA categories
   const scopeOptions: DropdownOption[] = useMemo(() => {
     const scopes = new Set(
@@ -412,15 +475,18 @@ const UserDataEntryPage = () => {
     }
   }, [selectedCategory, categories]);
 
-  // When year changes, clear date if it doesn't match
+  // When year changes, clear date if it doesn't match. Monthly mode only —
+  // in yearly mode selectedDate is the period end (an FY ending Mar 2026
+  // legitimately differs from a start-year filter of 2025).
   useEffect(() => {
+    if (periodMode !== "monthly") return;
     if (selectedYear && selectedDate) {
       const dateYear = parseInt(selectedDate.substring(0, 4));
       if (dateYear !== selectedYear) {
         setSelectedDate(null);
       }
     }
-  }, [selectedYear]);
+  }, [selectedYear, periodMode]);
 
   const filteredColumns = dynamicColumns.filter(
     (col) => col.column_name.toLowerCase() !== "emission_category",
@@ -1443,8 +1509,14 @@ const UserDataEntryPage = () => {
           extra_data: extraData,
           total_emission: 0,
           unit: "kg CO2e",
-          date_of_reporting: rowDate || dateOfReporting,
+          // Yearly batches are always filed on the period-end date; a per-row
+          // Received Date stays in activity_data but must not move the row
+          // out of its reporting year.
+          date_of_reporting:
+            periodMode === "yearly" ? dateOfReporting : rowDate || dateOfReporting,
           activity_data_unit: activity_data_unit || undefined,
+          reporting_period: periodMode,
+          year_type: periodMode === "yearly" ? yearType : undefined,
         };
 
         try {
@@ -2596,14 +2668,87 @@ const UserDataEntryPage = () => {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Date</label>
-          <Dropdown
-            options={filteredDateOptions}
-            placeholder="Select Date"
-            value={selectedDate}
-            onChange={(option) => setSelectedDate(option?.id as string)}
-            searchable={true}
-          />
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium">
+              {periodMode === "yearly" ? "Reporting year" : "Date"}
+            </label>
+            {yearlyAllowed && (
+              <div
+                className="flex rounded border border-gray-300 dark:border-gray-600 overflow-hidden text-xs"
+                role="group"
+                aria-label="Reporting period"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPeriodMode("monthly");
+                    setYearlyYear(null);
+                    setSelectedDate(null);
+                  }}
+                  className={`px-2 py-0.5 ${
+                    periodMode === "monthly"
+                      ? "bg-blue-600 text-white"
+                      : "bg-transparent"
+                  }`}
+                >
+                  Monthly
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPeriodMode("yearly");
+                    setSelectedYear(null);
+                    setSelectedDate(null);
+                  }}
+                  className={`px-2 py-0.5 ${
+                    periodMode === "yearly"
+                      ? "bg-blue-600 text-white"
+                      : "bg-transparent"
+                  }`}
+                >
+                  Yearly
+                </button>
+              </div>
+            )}
+          </div>
+          {periodMode === "yearly" && yearlyAllowed ? (
+            <div className="flex gap-2">
+              <div className="w-20 shrink-0">
+                <Dropdown
+                  options={[
+                    { id: "CY", label: "CY" },
+                    { id: "FY", label: "FY" },
+                  ]}
+                  value={yearType}
+                  onChange={(option) => {
+                    if (!option) return;
+                    setYearType(option.id as "CY" | "FY");
+                    setYearlyYear(null);
+                    setSelectedDate(null);
+                  }}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <Dropdown
+                  options={yearlyYearOptions}
+                  placeholder="Select Year"
+                  value={yearlyYear}
+                  onChange={(option) =>
+                    setYearlyYear(option ? (option.id as number) : null)
+                  }
+                  searchable={true}
+                />
+              </div>
+            </div>
+          ) : (
+            <Dropdown
+              options={filteredDateOptions}
+              placeholder="Select Date"
+              value={selectedDate}
+              onChange={(option) => setSelectedDate(option?.id as string)}
+              searchable={true}
+            />
+          )}
         </div>
       </div>
 
@@ -2851,7 +2996,13 @@ const UserDataEntryPage = () => {
       <Modal
         isOpen={modalOpen}
         onClose={closeModal}
-        title={editingEmissionId ? "Edit Entry" : "Add New Entries"}
+        title={
+          editingEmissionId
+            ? "Edit Entry"
+            : periodLabel
+              ? `Add New Entries · ${periodLabel} (yearly)`
+              : "Add New Entries"
+        }
         className="max-w-4xl! max-h-[85vh]!"
       >
         <div className="space-y-4">
