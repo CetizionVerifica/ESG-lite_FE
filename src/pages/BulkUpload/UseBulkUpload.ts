@@ -15,6 +15,35 @@ import {
   importAllRows,
 } from "../../services/excelService";
 
+/** Strip case, spaces and punctuation so "UOM INR/USD" and "uom_inr_usd" compare equal. */
+const normaliseKey = (s: string) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Header wordings we have actually seen in client workbooks, per mapping slot.
+ * Every company names its columns differently, so auto-mapping falls back to
+ * these before asking the user to pick by hand.
+ */
+const FIELD_ALIASES: Record<string, string[]> = {
+  emissioncategory: ["category", "categoryname", "emissioncat", "type"],
+  // Order matters — most specific first. Spend-based factors are quoted per USD,
+  // so a currency column must outrank a physical "UOM (MT/Kg/KL/No)" when a sheet
+  // carries both; the generic entries are the fallback for quantity-based sheets.
+  activitydataunit: [
+    "uominrusd",
+    "currencyinrusd",
+    "currencyinr usd",
+    "currency",
+    "uommtkgklno",
+    "uomkgklno",
+    "uom",
+    "unit",
+  ],
+  dateofreporting: ["receiveddate", "date", "invoicedate", "transactiondate", "postingdate"],
+  description: ["descriptionofthematerialservicegood", "materialdescription", "particulars"],
+  suppliername: ["nameofthesupplier", "supplier", "vendor", "vendorname"],
+  ponumber: ["po", "purchaseorder", "ponumber"],
+};
+
 export function useBulkUpload({
   dynamicColumns,
   extraFields,
@@ -68,7 +97,9 @@ export function useBulkUpload({
     ];
 
     dynamicColumns
-      .filter((col: any) => col.column_name.toLowerCase() !== "emission_category")
+      // The configured column is often spelled "Emission category" — compare on
+      // an alphanumeric key so it isn't offered twice alongside the slot above.
+      .filter((col: any) => normaliseKey(col.column_name) !== "emissioncategory")
       .forEach((col: any) => {
         fields.push({
           requiredField: col.column_name,
@@ -87,6 +118,17 @@ export function useBulkUpload({
       isRequired: true,
     });
 
+    // Optional per-row date. Client exports usually hold a whole year of
+    // transactions with a real date on every line; mapping that column lands
+    // each row in its own month instead of stamping the file with one date.
+    fields.push({
+      requiredField: "date_of_reporting",
+      label: "Row Date (optional — otherwise the selected date applies to all rows)",
+      mappedTo: "",
+      skipped: false,
+      isRequired: false,
+    });
+
     // Extra supplementary fields (optional, skipped by default)
     extraFields.forEach((ef) => {
       fields.push({
@@ -102,15 +144,34 @@ export function useBulkUpload({
   }, [dynamicColumns, extraFields]);
 
   const autoMap = useCallback((fields: ColumnMappingEntry[], headers: string[]) => {
+    const taken = new Set<string>();
+
     return fields.map((field) => {
-      const fieldName = field.requiredField.toLowerCase().trim();
-      const fieldNameNoPrefix = fieldName.replace(/^extra_/, "");
-      const match = headers.find(
-        (h) => {
-          const header = h.toLowerCase().trim();
-          return header === fieldName || header === fieldNameNoPrefix;
+      const key = normaliseKey(field.requiredField.replace(/^extra_/, ""));
+      const aliases = [key, ...(FIELD_ALIASES[key] ?? [])];
+
+      // Walk aliases in priority order rather than walking headers: a sheet can
+      // hold two plausible columns for one slot (a physical "UOM (MT/Kg/KL/No)"
+      // and a currency "UOM INR/USD"), and picking by column order silently grabs
+      // whichever comes first. Alias order decides instead, most specific first.
+      let match: string | undefined;
+      for (const alias of aliases) {
+        match = headers.find((h) => !taken.has(h) && normaliseKey(h) === alias);
+        if (match) break;
+        if (alias.length >= 4) {
+          match = headers.find((h) => {
+            if (taken.has(h)) return false;
+            const header = normaliseKey(h);
+            // Both sides must be substantial: a two-letter header like "PO"
+            // otherwise matches inside an alias such as "dateofrep(o)rting".
+            if (header.length < 4) return false;
+            return header.includes(alias) || alias.includes(header);
+          });
+          if (match) break;
         }
-      );
+      }
+
+      if (match) taken.add(match);
       return match ? { ...field, mappedTo: match } : field;
     });
   }, []);

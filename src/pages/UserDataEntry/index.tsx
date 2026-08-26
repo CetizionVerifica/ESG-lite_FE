@@ -245,6 +245,14 @@ const UserDataEntryPage = () => {
     ? parseInt(selectedDate.substring(0, 4)) - 1
     : undefined;
 
+  // Fallback reporting date for bulk upload when no month is selected. Rows that
+  // carry their own date ignore it; it only covers rows with a blank date cell.
+  // Mid-year keeps such a row inside the chosen year rather than on a boundary.
+  const bulkFallbackDate = useMemo(() => {
+    const year = selectedYear ?? new Date().getFullYear();
+    return `${year}-06-30`;
+  }, [selectedYear]);
+
   // Compute select column names (columns that are dropdowns, not numeric activity data)
   const selectColumnNames = useMemo(() => {
     const names = new Set<string>();
@@ -553,19 +561,34 @@ const UserDataEntryPage = () => {
             setCompanyMappings([]);
           }
         } else {
-          // Partial filters: fetch only the emissions list (no column config/factors/units needed)
-          const paginatedResult = await getEmissionsPaginated({
-            siteId,
-            categoryId: selectedCategory,
-            scope: selectedScope,
-            year: dateYear,
-            month: dateMonth,
-            page: pageToFetch,
-            limit: PAGE_LIMIT,
-          });
+          // Partial filters: fetch the emissions list, plus the column config when
+          // a category is known. The config is keyed by site + category only, so it
+          // does not need a date — and bulk upload needs it to build its mapping
+          // screen for a sheet that spans a whole year.
+          const [paginatedResult, configs] = await Promise.all([
+            getEmissionsPaginated({
+              siteId,
+              categoryId: selectedCategory,
+              scope: selectedScope,
+              year: dateYear,
+              month: dateMonth,
+              page: pageToFetch,
+              limit: PAGE_LIMIT,
+            }),
+            selectedCategory
+              ? getUserColumnConfigsBySiteAndCategory(siteId, selectedCategory).catch(
+                  () => [],
+                )
+              : Promise.resolve([]),
+          ]);
 
-          setDynamicColumns([]);
-          setExtraFields([]);
+          const partialConfig = configs[0] as ColumnConfig | undefined;
+          setDynamicColumns(partialConfig?.columns || []);
+          setColumnOptions(partialConfig?.column_options || {});
+          setColumnDependencies(partialConfig?.column_dependencies || {});
+          setDependentOptions(partialConfig?.dependent_options || {});
+          setEmissionCategoryMapping(partialConfig?.emission_category_mapping || {});
+          setExtraFields(partialConfig?.extra_fields || []);
           setEmissionFactors([]);
           setFeraEmissionFactors([]);
           setUnits([]);
@@ -2618,35 +2641,39 @@ const UserDataEntryPage = () => {
       {/* Action Buttons */}
       {selectedCategory && siteId && (
         <div className="mb-6 flex gap-3">
-          {/* Add New Entries & Bulk Upload require columns configured */}
+          {/* Manual entry needs a month — the row being typed has no date of its own. */}
           {selectedDate && dynamicColumns.length > 0 && (
-            <>
-              <button
-                onClick={openModal}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            <button
+              onClick={openModal}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Add New Entries
+            </button>
+          )}
+
+          {/* Bulk upload does not: an uploaded sheet usually spans a whole year and
+              carries its own date per row, so requiring a month first would force a
+              year's data to be split up by hand. */}
+          {dynamicColumns.length > 0 && (
+            <button
+              onClick={() => setBulkUploadOpen(true)}
+              className="px-4 py-2 bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 flex items-center gap-2"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                Add New Entries
-              </button>
-              <button
-                onClick={() => setBulkUploadOpen(true)}
-                className="px-4 py-2 bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 flex items-center gap-2"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                  />
-                </svg>
-                Bulk Upload
-              </button>
-            </>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                />
+              </svg>
+              Bulk Upload
+            </button>
           )}
 
           {/* Bulk Delete Selected */}
@@ -3480,7 +3507,7 @@ const UserDataEntryPage = () => {
         />
       )}
 
-      {selectedCategory && selectedDate && siteId && (
+      {selectedCategory && siteId && (
         <BulkUploadModal
           isOpen={bulkUploadOpen}
           onClose={() => setBulkUploadOpen(false)}
@@ -3491,7 +3518,7 @@ const UserDataEntryPage = () => {
           siteId={siteId}
           categoryId={selectedCategory}
           companyId={companyId ?? undefined}
-          selectedDate={selectedDate}
+          selectedDate={selectedDate ?? bulkFallbackDate}
           getExpectedUnit={getExpectedUnit}
           calculateEmission={calculateEmission}
           getAutoEmissionCategory={getAutoEmissionCategory}
