@@ -321,7 +321,7 @@ const MappingUploadModal = ({
                 options={siteOptions}
                 value={selectedSite?.id ?? null}
                 onChange={(opt) =>
-                  setSelectedSite(opt.id === "all" ? null : opt)
+                  setSelectedSite(!opt || opt.id === "all" ? null : opt)
                 }
                 placeholder="All Sites (Company-wide)"
                 searchable
