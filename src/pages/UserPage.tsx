@@ -301,7 +301,7 @@ const UserPage = () => {
               options={roleOptions}
               placeholder="Select Role"
               value={selectedRole}
-              onChange={(option) => setSelectedRole(option.id as string)}
+              onChange={(option) => setSelectedRole(option ? (option.id as string) : null)}
               searchable={true}
             />
           </div>
@@ -325,7 +325,7 @@ const UserPage = () => {
                 options={siteOptions}
                 placeholder="Select Site"
                 value={selectedSite}
-                onChange={(option) => setSelectedSite(option.id as number)}
+                onChange={(option) => setSelectedSite(option ? (option.id as number) : null)}
                 searchable={true}
               />
             )}

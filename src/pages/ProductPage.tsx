@@ -165,7 +165,7 @@ const ProductPage = () => {
               options={siteOptions}
               placeholder="Select Site"
               value={selectedSite}
-              onChange={(option) => setSelectedSite(option.id as number)}
+              onChange={(option) => setSelectedSite(option ? (option.id as number) : null)}
               searchable={true}
             />
           </div>

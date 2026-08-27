@@ -384,7 +384,7 @@ const ProductionDataPage = () => {
               options={productOptions}
               placeholder="Select Product"
               value={selectedProduct}
-              onChange={(option) => setSelectedProduct(option.id as number)}
+              onChange={(option) => setSelectedProduct(option ? (option.id as number) : null)}
               searchable={true}
             />
           </div>

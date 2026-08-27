@@ -281,7 +281,7 @@ const SitePage = () => {
               placeholder="Select Company"
               value={selectedCompany}
               onChange={(option) => {
-                setSelectedCompany(option.id);
+                setSelectedCompany(option ? option.id : null);
               }}
               searchable={true}
             />
@@ -292,7 +292,7 @@ const SitePage = () => {
               options={countryOptions}
               placeholder="Select Country"
               value={selectedCountry}
-              onChange={(option) => setSelectedCountry(option.id)}
+              onChange={(option) => setSelectedCountry(option ? option.id : null)}
               searchable={true}
             />
           </div>

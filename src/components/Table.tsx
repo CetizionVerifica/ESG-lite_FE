@@ -238,10 +238,12 @@ export function Table<T extends Record<string, any>>({
                           placeholder={dynamicOptions && dynamicOptions.length === 0 ? "Select parent first" : "Select..."}
                           value={editValues[col.key] ?? null}
                           onChange={(option) => {
+                            // The clear button passes null; never dereference it.
+                            const nextValue = option ? option.id : null;
                             if (col.onEditChange) {
-                              col.onEditChange(option.id, editValues, setEditValues);
+                              col.onEditChange(nextValue, editValues, setEditValues);
                             } else {
-                              handleEditChange(col.key, option.id);
+                              handleEditChange(col.key, nextValue);
                             }
                           }}
                           searchable={true}
