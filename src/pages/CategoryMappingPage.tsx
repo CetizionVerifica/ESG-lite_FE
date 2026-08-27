@@ -46,28 +46,56 @@ const CategoryMappingPage = () => {
   }>({ company_category_name: "", global_category_name: "" });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Fetch data
+  // Reference data for the dropdowns. Doesn't depend on the filters, so it is
+  // fetched separately instead of being re-requested on every filter change.
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    let cancelled = false;
+    const fetchReferenceData = async () => {
       try {
-        const [mappingsData, companiesData, sitesData, categoriesData] = await Promise.all([
-          getMappings(filterCompanyId ?? undefined, filterCategoryId ?? undefined),
+        const [companiesData, sitesData, categoriesData] = await Promise.all([
           getCompanies(),
           getSites(),
           getCategories(),
         ]);
-        setMappings(mappingsData);
+        if (cancelled) return;
         setCompanies(companiesData);
         setSites(sitesData);
         setCategories(categoriesData);
       } catch (error) {
-        console.error("Failed to fetch data:", error);
-      } finally {
-        setLoading(false);
+        if (!cancelled) console.error("Failed to fetch reference data:", error);
       }
     };
-    fetchData();
+    fetchReferenceData();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshTrigger]);
+
+  // Mappings for the current filters. The `cancelled` flag makes a superseded
+  // request discard its result: without it, changing filters quickly lets a
+  // slower earlier response land last and overwrite the newer, correct rows —
+  // the table would then disagree with the filter chips.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchMappings = async () => {
+      setLoading(true);
+      try {
+        const mappingsData = await getMappings(
+          filterCompanyId ?? undefined,
+          filterCategoryId ?? undefined,
+        );
+        if (cancelled) return;
+        setMappings(mappingsData);
+      } catch (error) {
+        if (!cancelled) console.error("Failed to fetch mappings:", error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchMappings();
+    return () => {
+      cancelled = true;
+    };
   }, [filterCompanyId, filterCategoryId, refreshTrigger]);
 
   // Filter by search
@@ -189,7 +217,7 @@ const CategoryMappingPage = () => {
             options={companyOptions}
             value={filterCompanyId ?? "all"}
             onChange={(opt) =>
-              setFilterCompanyId(opt.id === "all" ? null : Number(opt.id))
+              setFilterCompanyId(!opt || opt.id === "all" ? null : Number(opt.id))
             }
             placeholder="Filter by company"
             searchable
@@ -200,7 +228,7 @@ const CategoryMappingPage = () => {
             options={categoryOptions}
             value={filterCategoryId ?? "all"}
             onChange={(opt) =>
-              setFilterCategoryId(opt.id === "all" ? null : Number(opt.id))
+              setFilterCategoryId(!opt || opt.id === "all" ? null : Number(opt.id))
             }
             placeholder="Filter by category"
             searchable

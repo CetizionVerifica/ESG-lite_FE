@@ -34,6 +34,9 @@ interface ChartOptions {
   intensityTrendChartOptions: EChartsOption;
   hasCategoryData: boolean;
   hasMonthlyTrendData: boolean;
+  // Approved emissions filed as yearly batches — real emissions for the year
+  // that are deliberately excluded from the monthly bars above.
+  yearlyEmissionsTotal: number;
   hasSavedEmissionsData: boolean;
   hasScope2Data: boolean;
   hasIntensityData: boolean;
@@ -292,6 +295,9 @@ export function useChartOptions({
       const monthlyData = new Array(12).fill(0);
 
       siteEmissions.forEach((e) => {
+        // Yearly rows cover a whole year — plotting them on their period-end
+        // month would fake a spike in that month's line.
+        if (e.reporting_period === "yearly") return;
         const emissionDate = new Date(e.date_of_reporting);
         if (emissionDate.getFullYear() === year) {
           const monthIndex = emissionDate.getMonth();
@@ -389,8 +395,12 @@ export function useChartOptions({
       }
     }
 
-    // Calculate gross (scoped) and saved (null scope) emissions per month
+    // Calculate gross (scoped) and saved (null scope) emissions per month.
+    // Yearly rows cover a whole reporting year, not the month they're dated
+    // in — bucketing them here would draw a false spike on their period-end
+    // month, so they're kept out of the monthly series entirely.
     approvedEmissions.forEach((e) => {
+      if (e.reporting_period === "yearly") return;
       const month = e.date_of_reporting.substring(0, 7);
       if (monthlyGross[month] !== undefined) {
         const emissionValue = Number(e.total_emission) || 0;
@@ -926,6 +936,17 @@ export function useChartOptions({
     return (intensityData?.monthlyData?.length || 0) > 0;
   }, [intensityData]);
 
+  // Total of approved yearly-batch emissions. Shown as a note beside the
+  // monthly trend so annual data stays visible without faking a monthly spike.
+  const yearlyEmissionsTotal = useMemo(() => {
+    return parseFloat(
+      approvedEmissions
+        .filter((e) => e.reporting_period === "yearly")
+        .reduce((sum, e) => sum + (Number(e.total_emission) || 0), 0)
+        .toFixed(2),
+    );
+  }, [approvedEmissions]);
+
   return {
     categoryChartOptions,
     statusChartOptions,
@@ -940,5 +961,6 @@ export function useChartOptions({
     hasSavedEmissionsData,
     hasScope2Data,
     hasIntensityData,
+    yearlyEmissionsTotal,
   };
 }
