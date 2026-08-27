@@ -377,6 +377,12 @@ const UserDataEntryPage = () => {
     );
   }, [periodMode, yearType, yearlyYear]);
 
+  // Bulk upload is monthly-only (see the button below), so a modal left open
+  // must not reappear when the user switches back to monthly.
+  useEffect(() => {
+    if (periodMode === "yearly") setBulkUploadOpen(false);
+  }, [periodMode]);
+
   const fyLabel = (startYear: number) =>
     `FY ${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
 
@@ -2772,6 +2778,13 @@ const UserDataEntryPage = () => {
               >
                 Add New Entries
               </button>
+              {/* Bulk upload imports through the AI service, which inserts rows
+                  directly as monthly and never passes the backend's mode lock.
+                  In yearly mode selectedDate is the period-end date, so every
+                  imported row would land on Dec 31 / Mar 31 inside the window
+                  the lock protects, and double count against the yearly batch.
+                  Monthly-only until the import path is guarded. */}
+              {periodMode === "monthly" && (
               <button
                 onClick={() => setBulkUploadOpen(true)}
                 className="px-4 py-2 bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 flex items-center gap-2"
@@ -2791,6 +2804,7 @@ const UserDataEntryPage = () => {
                 </svg>
                 Bulk Upload
               </button>
+              )}
             </>
           )}
 
@@ -3631,7 +3645,7 @@ const UserDataEntryPage = () => {
         />
       )}
 
-      {selectedCategory && selectedDate && siteId && (
+      {selectedCategory && selectedDate && siteId && periodMode === "monthly" && (
         <BulkUploadModal
           isOpen={bulkUploadOpen}
           onClose={() => setBulkUploadOpen(false)}
