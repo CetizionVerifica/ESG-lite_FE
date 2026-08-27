@@ -351,18 +351,16 @@ const UserDataEntryPage = () => {
       label: category.category_name,
     }));
 
-  // Yearly entry is only offered for spend-based categories (the ones whose
-  // forms carry a Spent Value column). Mirrors the backend allow-list in
-  // services/reportingPeriod.ts — the backend rejects anything else anyway.
-  const SPEND_BASED_CATEGORY_NAMES = ["purchased goods and services", "capital goods"];
-  const yearlyAllowed = useMemo(() => {
-    const cat = categories.find((c) => c.category_id === selectedCategory);
-    return (
-      !!cat && SPEND_BASED_CATEGORY_NAMES.includes(cat.category_name.trim().toLowerCase())
-    );
-  }, [categories, selectedCategory]);
+  // Yearly entry is available for every category and scope (widened Aug 2026
+  // from the original spend-based-only rollout, by product decision). The
+  // toggle just needs a category selected so the period has something to
+  // attach to.
+  const yearlyAllowed = useMemo(
+    () => selectedCategory !== null && selectedCategory !== undefined,
+    [selectedCategory],
+  );
 
-  // Leaving a spend-based category exits yearly mode.
+  // Deselecting the category exits yearly mode.
   useEffect(() => {
     if (!yearlyAllowed && periodMode === "yearly") {
       setPeriodMode("monthly");

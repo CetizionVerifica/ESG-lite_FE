@@ -7,10 +7,10 @@ name (new `emission.reporting_period` / `year_type` columns and validation).
 
 ### Data Entry page (`src/pages/UserDataEntry/index.tsx`)
 
-- A **Monthly | Yearly** toggle beside the Date label. It appears **only** when
-  the selected category is spend-based (Purchased Goods and Services, Capital
-  Goods) — mirroring the backend allow-list. Leaving a spend-based category
-  snaps the mode back to Monthly.
+- A **Monthly | Yearly** toggle beside the Date label, available for **every
+  category and scope** (widened Aug 2026 from the original spend-based-only
+  rollout, by product decision). It appears once a category is selected;
+  deselecting the category snaps the mode back to Monthly.
 - In Yearly mode the month picker becomes a **CY/FY + year picker**
   ("CY 2025", "FY 2025-26"). The selection drives `selectedDate` to the
   period-end date the backend expects (CY → Dec 31, FY → Mar 31 of the
