@@ -20,6 +20,9 @@ name (new `emission.reporting_period` / `year_type` columns and validation).
   **"Add New Entries · FY 2025-26 (yearly)"** — so nobody files a year into the
   wrong slot. A per-row Received Date stays informational and no longer moves a
   yearly row out of its reporting year.
+- The Monthly/Yearly toggle is styled to match the app's Dropdown pills and
+  is theme-aware via `useTheme` (slate in dark mode, white/gray in light,
+  blue-600 active segment).
 - Save payload carries `reporting_period` and `year_type`
   (`src/services/emissionService.ts`). Backend 409 mode-lock messages surface
   in the modal's existing error box.

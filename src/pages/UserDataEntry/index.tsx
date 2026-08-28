@@ -10,6 +10,7 @@ import Dropdown, { DropdownOption } from "../../components/Dropdown";
 import { Table, Column } from "../../components/Table";
 import Modal from "../../components/Modal";
 import { useAuth } from "../../context/AuthContext";
+import { useTheme } from "../../context/ThemeContext";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import {
   getEmissionsBySiteAndCategory,
@@ -91,6 +92,7 @@ const EXTRACTION_STAGES = [
 
 const UserDataEntryPage = () => {
   const { user } = useAuth();
+  const { isDark } = useTheme();
 
   // ---------------------------------------------------------------------------
   // Derived Data - Available Sites
@@ -2678,7 +2680,9 @@ const UserDataEntryPage = () => {
             </label>
             {yearlyAllowed && (
               <div
-                className="flex rounded border border-gray-300 dark:border-gray-600 overflow-hidden text-xs"
+                className={`inline-flex rounded overflow-hidden border text-xs font-medium ${
+                  isDark ? "border-slate-600 bg-slate-800" : "border-gray-300 bg-white"
+                }`}
                 role="group"
                 aria-label="Reporting period"
               >
@@ -2689,10 +2693,12 @@ const UserDataEntryPage = () => {
                     setYearlyYear(null);
                     setSelectedDate(null);
                   }}
-                  className={`px-2 py-0.5 ${
+                  className={`px-3 py-1 transition ${
                     periodMode === "monthly"
                       ? "bg-blue-600 text-white"
-                      : "bg-transparent"
+                      : isDark
+                        ? "text-slate-300 hover:bg-slate-700"
+                        : "text-gray-600 hover:bg-gray-100"
                   }`}
                 >
                   Monthly
@@ -2704,10 +2710,12 @@ const UserDataEntryPage = () => {
                     setSelectedYear(null);
                     setSelectedDate(null);
                   }}
-                  className={`px-2 py-0.5 ${
+                  className={`px-3 py-1 transition ${
                     periodMode === "yearly"
                       ? "bg-blue-600 text-white"
-                      : "bg-transparent"
+                      : isDark
+                        ? "text-slate-300 hover:bg-slate-700"
+                        : "text-gray-600 hover:bg-gray-100"
                   }`}
                 >
                   Yearly
