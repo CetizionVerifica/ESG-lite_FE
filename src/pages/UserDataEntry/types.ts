@@ -43,6 +43,23 @@ export interface ColumnEntity {
     dropdown_options?: DropdownOptionValue[] | null;
 }
 
+// Per-method multi-field calculation (mirrors backend services/calculationSpec.ts).
+// When a config carries this, the activity value is the PRODUCT of the listed
+// columns for the chosen method — not a single sniffed field. First user:
+// Use of Sold Products (Scope 3 Category 11).
+export interface MethodCalculation {
+    multiply: string[];      // column names whose values multiply together
+    percent?: string[];      // subset of multiply entered as percentages (divided by 100)
+    activity_unit?: string;  // unit the product is in (preselects activity_data_unit)
+}
+
+export interface CalculationSpec {
+    mode: "per_method";
+    method_column: string;               // select column that picks the method
+    identity_columns?: string[];         // columns added to the duplicate identity (backend)
+    methods: { [methodOptionId: string]: MethodCalculation };
+}
+
 // Definition for supplementary (extra) fields per category
 // These fields don't affect emission calculation — stored separately in emission.extra_data
 export interface ExtraFieldDefinition {
@@ -63,6 +80,7 @@ export interface ColumnConfig {
     dependent_options?: DependentOptionsMap;
     emission_category_mapping?: EmissionCategoryMapping;
     extra_fields?: ExtraFieldDefinition[];
+    calculation?: CalculationSpec | null;
 }
 
 export interface EmissionFactor {
