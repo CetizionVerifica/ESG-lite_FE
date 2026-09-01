@@ -50,34 +50,56 @@ const Dropdown = ({
   useEffect(() => {
     if (!isOpen) return;
     const updatePos = () => {
-      if (dropdownRef.current) {
-        const rect = dropdownRef.current.getBoundingClientRect();
-        const menuHeight = 260; // approximate max menu height
-        const spaceBelow = window.innerHeight - rect.bottom;
-        const openUpward = spaceBelow < menuHeight && rect.top > menuHeight;
-
-        setMenuPos({
-          top: openUpward ? rect.top - menuHeight - 4 : rect.bottom + 4,
-          left: rect.left,
-          width: rect.width,
-        });
-      }
+      if (!dropdownRef.current) return;
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const menuHeight = 260; // approximate max menu height
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < menuHeight && rect.top > menuHeight;
+      const next = {
+        top: openUpward ? rect.top - menuHeight - 4 : rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      };
+      // Skip the state update (and re-render of the whole option list) when the
+      // position is unchanged — avoids scroll jank in multi-select mode.
+      setMenuPos((prev) =>
+        prev.top === next.top && prev.left === next.left && prev.width === next.width
+          ? prev
+          : next,
+      );
     };
     updatePos();
+
+    // Coalesce scroll repositions to one per animation frame.
+    let rafId = 0;
+    const scheduleUpdatePos = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        updatePos();
+      });
+    };
 
     const handleScroll = (e: Event) => {
       // Don't close if the scroll is inside the dropdown menu itself (options list)
       if (menuRef.current?.contains(e.target as Node)) return;
+      // Multi-select: keep open (just reposition) so ticking an option — which
+      // reflows the page — doesn't close it. User closes via outside-click/toggle.
+      if (multiple) {
+        scheduleUpdatePos();
+        return;
+      }
       setIsOpen(false);
     };
     // Capture phase so we catch scrolls on any ancestor (e.g. modal overflow container)
     window.addEventListener("scroll", handleScroll, true);
     window.addEventListener("resize", updatePos);
     return () => {
+      if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener("scroll", handleScroll, true);
       window.removeEventListener("resize", updatePos);
     };
-  }, [isOpen]);
+  }, [isOpen, multiple]);
 
   // Single select logic
   const selectedOption = !multiple

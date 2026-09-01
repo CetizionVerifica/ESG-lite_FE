@@ -807,7 +807,12 @@ const FiltersStep = () => (
       ) : null}
 
       {step === 1 ? <IntroHero /> : null}
-      {step === 2 ? <FiltersStep /> : null}
+      {/* Call FiltersStep() rather than <FiltersStep/> — it's defined inside
+          this component, so rendering it as an element remounts the whole
+          subtree on every parent re-render, which reset the Sites dropdown's
+          open state on each tick. Calling inlines the JSX and preserves child
+          state. (FiltersStep uses no hooks, so a conditional call is safe.) */}
+      {step === 2 ? FiltersStep() : null}
       {step === 3 ? <ResultsStep /> : null}
     </div>
   );
