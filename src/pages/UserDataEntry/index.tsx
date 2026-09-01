@@ -2839,10 +2839,10 @@ const UserDataEntryPage = () => {
                   imported row would land on Dec 31 / Mar 31 inside the window
                   the lock protects, and double count against the yearly batch.
                   Monthly-only until the import path is guarded.
-                  Also hidden for multi-field calculation categories (e.g. Use
-                  of Sold Products): the AI-service import computes one value ×
-                  factor and would silently store wrong totals. */}
-              {periodMode === "monthly" && !calculationSpec && (
+                  (Multi-field calculation categories like Use of Sold Products
+                  are supported: the AI service reads the same calculation spec
+                  and multiplies the method's fields, skipping bad rows.) */}
+              {periodMode === "monthly" && (
               <button
                 onClick={() => setBulkUploadOpen(true)}
                 className="px-4 py-2 bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 flex items-center gap-2"

@@ -20,8 +20,9 @@ The data-entry page (`src/pages/UserDataEntry/`) understands an optional
     method-specific numbers are hidden until a Method is picked;
   - switching Method clears numbers the new method doesn't use, prefills
     percentage fields to 100, and preselects the method's `activity_unit`;
-  - Bulk Upload is hidden for spec categories (the AI-service import only knows
-    one-value × factor math; its API also refuses with a 400 as defence in depth);
+  - Bulk Upload works for spec categories too (the AI service reads the same
+    calculation spec, multiplies the method's fields, and skips uncomputable
+    rows instead of saving zeros — see the backend doc);
   - the spec state resets wherever the rest of the config state resets.
 
 The Method and Country / Fuel / Gas dropdowns, the factor auto-selection, and the
