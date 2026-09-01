@@ -65,6 +65,15 @@ export function useBulkUpload({
         skipped: false,
         isRequired: true,
       },
+      {
+        // Explicit value column → emission is always calculated on THIS number
+        // (spend or quantity), never guessed. Prevents picking the wrong column.
+        requiredField: "activity_value",
+        label: "Value (Spend / Quantity)",
+        mappedTo: "",
+        skipped: false,
+        isRequired: true,
+      },
     ];
 
     dynamicColumns
@@ -96,6 +105,17 @@ export function useBulkUpload({
         skipped: false,
         isRequired: false,
       });
+    });
+
+    // Optional per-row reporting date. If mapped, each row is stamped with its
+    // own month/year (month-wise import). If left unmapped, all rows use the
+    // single reporting date chosen above (year-wise import).
+    fields.push({
+      requiredField: "reporting_date",
+      label: "Reporting Date — map to import month-wise (optional)",
+      mappedTo: "",
+      skipped: false,
+      isRequired: false,
     });
 
     return fields;

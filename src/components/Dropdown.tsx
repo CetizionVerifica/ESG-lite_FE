@@ -68,6 +68,12 @@ const Dropdown = ({
     const handleScroll = (e: Event) => {
       // Don't close if the scroll is inside the dropdown menu itself (options list)
       if (menuRef.current?.contains(e.target as Node)) return;
+      // Multi-select: keep open (just reposition) so ticking an option — which
+      // reflows the page — doesn't close it. User closes via outside-click/toggle.
+      if (multiple) {
+        updatePos();
+        return;
+      }
       setIsOpen(false);
     };
     // Capture phase so we catch scrolls on any ancestor (e.g. modal overflow container)
@@ -77,7 +83,7 @@ const Dropdown = ({
       window.removeEventListener("scroll", handleScroll, true);
       window.removeEventListener("resize", updatePos);
     };
-  }, [isOpen]);
+  }, [isOpen, multiple]);
 
   // Single select logic
   const selectedOption = !multiple
