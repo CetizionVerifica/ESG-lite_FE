@@ -3721,6 +3721,7 @@ const UserDataEntryPage = () => {
           calculateEmission={calculateEmission}
           getAutoEmissionCategory={getAutoEmissionCategory}
           userId={user?.user_id}
+          calculationSpec={calculationSpec}
           // onImportComplete={(newEmissions) => {
           //     setEmissions((prev) => [...newEmissions, ...prev]);
           // }}

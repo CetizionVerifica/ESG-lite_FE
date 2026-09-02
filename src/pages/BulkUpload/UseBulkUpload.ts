@@ -24,6 +24,7 @@ export function useBulkUpload({
   selectedDate,
   getAutoEmissionCategory,
   userId,
+  calculationSpec,
   // onImportComplete, // kept but not used inside handleImport anymore (BulkUploadModal will call it)
   // onClose,          // kept but not used inside handleImport anymore (BulkUploadModal will close)
 }: Omit<
@@ -65,16 +66,22 @@ export function useBulkUpload({
         skipped: false,
         isRequired: true,
       },
-      {
-        // Explicit value column → emission is always calculated on THIS number
-        // (spend or quantity), never guessed. Prevents picking the wrong column.
+    ];
+
+    // Explicit value column → emission is always calculated on THIS number
+    // (spend or quantity), never guessed. Prevents picking the wrong column.
+    // Not offered for multi-field calculation categories (e.g. Use of Sold
+    // Products): their value is the PRODUCT of the method's fields, so a
+    // single "value" column doesn't exist and mapping one would mislead.
+    if (!calculationSpec) {
+      fields.push({
         requiredField: "activity_value",
         label: "Value (Spend / Quantity)",
         mappedTo: "",
         skipped: false,
         isRequired: true,
-      },
-    ];
+      });
+    }
 
     dynamicColumns
       .filter((col: any) => col.column_name.toLowerCase() !== "emission_category")
@@ -119,7 +126,7 @@ export function useBulkUpload({
     });
 
     return fields;
-  }, [dynamicColumns, extraFields]);
+  }, [dynamicColumns, extraFields, calculationSpec]);
 
   const autoMap = useCallback((fields: ColumnMappingEntry[], headers: string[]) => {
     return fields.map((field) => {

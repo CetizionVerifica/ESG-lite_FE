@@ -168,4 +168,7 @@ export interface BulkUploadModalProps {
     getAutoEmissionCategory: (row: ModalRow) => { key: string; category: string } | null;
     onImportComplete: (newEmissions: EmissionRow[]) => void;
     userId?: number;
+    // Multi-field categories compute the value from the method's fields, so the
+    // explicit "Value (Spend / Quantity)" mapping field is hidden for them.
+    calculationSpec?: CalculationSpec | null;
 }
