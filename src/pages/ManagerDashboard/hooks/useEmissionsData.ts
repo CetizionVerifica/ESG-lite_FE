@@ -135,7 +135,13 @@ export function useEmissionsData({
 
     approvedEmissions.forEach((e) => {
       const categoryId = e.category?.category_id;
-      const scope = categoryId ? categoryToScope[categoryId] : null;
+      // Prefer the scope carried on the emission's own joined category; fall back
+      // to the availableSites-derived map. Relying on the map alone silently
+      // dropped emissions whose category wasn't in it — undercounting the total
+      // once multiple sites (with categories not all present in the map) were selected.
+      const scope =
+        (e.category as any)?.scope ??
+        (categoryId ? categoryToScope[categoryId] : null);
       const emissionValue = Number(e.total_emission) || 0;
 
       if (scope === "Scope 1") {
