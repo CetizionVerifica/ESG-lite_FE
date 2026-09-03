@@ -125,11 +125,14 @@ export const useEmissionCalculation = (
       // (services/calculationSpec.ts), so the preview matches the saved total.
       let activityValue: number | null;
       if (calculationSpec) {
-        const methodValue = row[calculationSpec.method_column];
-        if (!methodValue) {
+        // Trimmed to match services/calculationSpec.ts and the Python engine —
+        // all three must agree on the key or the preview and the saved total
+        // disagree for a value that arrived with surrounding whitespace.
+        const methodKey = String(row[calculationSpec.method_column] ?? "").trim();
+        if (!methodKey) {
           return { value: null, status: `Select ${calculationSpec.method_column}` };
         }
-        const method = calculationSpec.methods[String(methodValue)];
+        const method = calculationSpec.methods[methodKey];
         if (!method || !method.multiply?.length) {
           return { value: null, status: "This option is not configured for calculation" };
         }

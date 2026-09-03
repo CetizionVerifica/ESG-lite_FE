@@ -86,10 +86,16 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
       const res: any = await handleImport();
 
       const inserted = res?.inserted ?? res?.data?.inserted ?? null;
+      // Rows the engine could not calculate are dropped rather than saved with a
+      // wrong total, so the count has to be reported — a bare "imported N rows"
+      // reads as success even when a third of the sheet never made it in.
+      const skipped = res?.skipped ?? res?.data?.skipped ?? 0;
 
       setSuccessMsg(
         inserted !== null
-          ? `Saved successfully. Imported ${inserted} rows.`
+          ? skipped > 0
+            ? `Imported ${inserted} rows. ${skipped} row${skipped === 1 ? "" : "s"} skipped — they could not be calculated (check the Issue column in the preview).`
+            : `Saved successfully. Imported ${inserted} rows.`
           : "Saved successfully."
       );
 
@@ -98,12 +104,13 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
       // If your parent simply refetches from DB, just call it without args.
       await props.onImportComplete?.(res);
 
-      // ✅ close after short pause (so user sees message)
+      // ✅ close after short pause (so user sees message); a skipped-row notice
+      // needs longer than the plain success case to actually be read
       setTimeout(() => {
         handleReset();
         setSuccessMsg(null);
         onClose();
-      }, 900);
+      }, skipped > 0 ? 4000 : 900);
     } catch {
       // importError is already handled inside hook; keep modal open
     }
