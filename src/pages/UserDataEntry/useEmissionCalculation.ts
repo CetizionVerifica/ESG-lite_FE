@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { getConversionFactor, unitsMatchExact } from "../../utils/unitConversions";
-import { EmissionFactor, ModalRow, EmissionCalculationResult, ColumnEntity, EmissionCategoryMapping } from "./types";
+import { EmissionFactor, ModalRow, EmissionCalculationResult, ColumnEntity, EmissionCategoryMapping, CalculationSpec } from "./types";
 
 export const useEmissionCalculation = (
   emissionFactors: EmissionFactor[],
@@ -8,7 +8,8 @@ export const useEmissionCalculation = (
   columns?: ColumnEntity[],
   selectColumnNames?: string[],
   emissionCategoryMapping?: EmissionCategoryMapping,
-  fallbackToRaw?: boolean
+  fallbackToRaw?: boolean,
+  calculationSpec?: CalculationSpec | null
 ) => {
   // Helper: find EF with year filter, trying emission_category_name then global_category_name,
   // then falling back to company_category_name (JSONB key) if ECM mapping exists.
@@ -119,7 +120,41 @@ export const useEmissionCalculation = (
         return { value: null, status: `No emission factor found${yearMsg}` };
       }
 
-      const activityValue = findActivityValue(row);
+      // Spec category (e.g. Use of Sold Products): the activity value is the
+      // PRODUCT of the chosen method's fields — mirrors the backend exactly
+      // (services/calculationSpec.ts), so the preview matches the saved total.
+      let activityValue: number | null;
+      if (calculationSpec) {
+        // Trimmed to match services/calculationSpec.ts and the Python engine —
+        // all three must agree on the key or the preview and the saved total
+        // disagree for a value that arrived with surrounding whitespace.
+        const methodKey = String(row[calculationSpec.method_column] ?? "").trim();
+        if (!methodKey) {
+          return { value: null, status: `Select ${calculationSpec.method_column}` };
+        }
+        const method = calculationSpec.methods[methodKey];
+        if (!method || !method.multiply?.length) {
+          return { value: null, status: "This option is not configured for calculation" };
+        }
+        let product = 1;
+        for (const fieldName of method.multiply) {
+          const value = parseFloat(String(row[fieldName] ?? ""));
+          if (isNaN(value) || value <= 0) {
+            return { value: null, status: `Enter ${fieldName}` };
+          }
+          if (method.percent?.includes(fieldName)) {
+            if (value > 100) {
+              return { value: null, status: `${fieldName} cannot be more than 100` };
+            }
+            product *= value / 100;
+          } else {
+            product *= value;
+          }
+        }
+        activityValue = product;
+      } else {
+        activityValue = findActivityValue(row);
+      }
       if (activityValue === null) {
         return { value: null, status: "Enter activity data" };
       }
@@ -154,7 +189,7 @@ export const useEmissionCalculation = (
 
       return { value: null, status: "Unit mismatch - no conversion available" };
     },
-    [getEmissionFactor, findActivityValue, targetYear]
+    [getEmissionFactor, findActivityValue, targetYear, calculationSpec]
   );
 
   return {

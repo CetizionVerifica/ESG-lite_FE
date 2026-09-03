@@ -159,6 +159,15 @@ const UserDataEntryPage = () => {
     import("./types").ExtraFieldDefinition[]
   >([]);
 
+  // Multi-field calculation spec from column config (null = normal category).
+  // When set (e.g. Use of Sold Products), the emission is the product of the
+  // chosen method's fields × factor, numeric fields show/hide per method, and
+  // bulk upload reads the same spec in the AI service (rows it cannot compute
+  // are surfaced in the preview's Issue column and skipped on import).
+  const [calculationSpec, setCalculationSpec] = useState<
+    import("./types").CalculationSpec | null
+  >(null);
+
   // Company category mapping: company_category_name → global_category_name (= emission_category_name)
   const [companyMappings, setCompanyMappings] = useState<CategoryMapping[]>([]);
 
@@ -283,6 +292,8 @@ const UserDataEntryPage = () => {
       dynamicColumns,
       selectColumnNames,
       emissionCategoryMapping,
+      undefined,
+      calculationSpec,
     );
 
   // FERA emission calculation (uses FERA factors for the same fuel type)
@@ -561,6 +572,7 @@ const UserDataEntryPage = () => {
           setDependentOptions(config?.dependent_options || {});
           setEmissionCategoryMapping(config?.emission_category_mapping || {});
           setExtraFields(config?.extra_fields || []);
+          setCalculationSpec(config?.calculation || null);
 
           setEmissionFactors(factors);
           setUnits(unitsData);
@@ -638,6 +650,7 @@ const UserDataEntryPage = () => {
 
           setDynamicColumns([]);
           setExtraFields([]);
+          setCalculationSpec(null);
           setEmissionFactors([]);
           setFeraEmissionFactors([]);
           setUnits([]);
@@ -745,6 +758,7 @@ const UserDataEntryPage = () => {
           setDependentOptions(config.dependent_options || {});
           setEmissionCategoryMapping(config.emission_category_mapping || {});
           setExtraFields(config.extra_fields || []);
+          setCalculationSpec(config.calculation || null);
         }
         setEmissionFactors(factors);
         setUnits(unitsData);
@@ -1254,6 +1268,19 @@ const UserDataEntryPage = () => {
       (c) => c.column_type === "number" && !isSelectColumn(c),
     )?.pk_id ?? null;
 
+  // Spec categories: numeric fields belong to a method (e.g. "Lifetime Uses"
+  // only applies to energy-consuming products), so hide the ones the chosen
+  // method doesn't multiply — and all of them until a method is chosen.
+  // Selects and text columns always show.
+  const isColumnVisibleForRow = (col: ColumnEntity, row: ModalRow): boolean => {
+    if (!calculationSpec) return true;
+    if (col.column_type !== "number" || isSelectColumn(col)) return true;
+    const methodKey = String(row[calculationSpec.method_column] ?? "").trim();
+    if (!methodKey) return false;
+    const method = calculationSpec.methods[methodKey];
+    return !!method?.multiply?.includes(col.column_name);
+  };
+
   // ---------------------------------------------------------------------------
   // Modal Handlers
   // ---------------------------------------------------------------------------
@@ -1308,6 +1335,28 @@ const UserDataEntryPage = () => {
               }
             }
           });
+        }
+
+        // Spec categories: switching Method changes which numeric fields apply.
+        // Clear the ones the new method doesn't use (stale values would be
+        // multiplied in), prefill percentage fields to 100 (the guidance says
+        // assume 100% released when unknown), and preselect the method's unit.
+        if (calculationSpec && columnName === calculationSpec.method_column) {
+          const method = calculationSpec.methods[String(value ?? "").trim()];
+          const applicable = new Set(method?.multiply ?? []);
+          dynamicColumns.forEach((col) => {
+            if (col.column_type === "number" && !applicable.has(col.column_name)) {
+              if (updatedRow[col.column_name] !== undefined) {
+                updatedRow[col.column_name] = "";
+              }
+            }
+          });
+          method?.percent?.forEach((fieldName) => {
+            if (!updatedRow[fieldName]) updatedRow[fieldName] = "100";
+          });
+          if (method?.activity_unit) {
+            updatedRow.activity_data_unit = method.activity_unit;
+          }
         }
 
         // Auto-compute product for composite distance units (e.g. passenger.km)
@@ -2571,6 +2620,7 @@ const UserDataEntryPage = () => {
     setDependentOptions({});
     setEmissionCategoryMapping({});
     setExtraFields([]);
+    setCalculationSpec(null);
     setEmissions([]);
     setEmissionFactors([]);
     setFeraEmissionFactors([]);
@@ -2789,7 +2839,10 @@ const UserDataEntryPage = () => {
                   In yearly mode selectedDate is the period-end date, so every
                   imported row would land on Dec 31 / Mar 31 inside the window
                   the lock protects, and double count against the yearly batch.
-                  Monthly-only until the import path is guarded. */}
+                  Monthly-only until the import path is guarded.
+                  (Multi-field calculation categories like Use of Sold Products
+                  are supported: the AI service reads the same calculation spec
+                  and multiplies the method's fields, skipping bad rows.) */}
               {periodMode === "monthly" && (
               <button
                 onClick={() => setBulkUploadOpen(true)}
@@ -3224,8 +3277,10 @@ const UserDataEntryPage = () => {
                       Activity Data
                     </label>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {/* Dynamic Columns */}
-                      {filteredColumns.map((col) => {
+                      {/* Dynamic Columns (spec categories hide numeric fields the chosen method doesn't use) */}
+                      {filteredColumns
+                        .filter((col) => isColumnVisibleForRow(col, row))
+                        .map((col) => {
                         const parentColName = getParentColumnName(
                           col.column_name,
                         );
@@ -3667,6 +3722,7 @@ const UserDataEntryPage = () => {
           calculateEmission={calculateEmission}
           getAutoEmissionCategory={getAutoEmissionCategory}
           userId={user?.user_id}
+          calculationSpec={calculationSpec}
           // onImportComplete={(newEmissions) => {
           //     setEmissions((prev) => [...newEmissions, ...prev]);
           // }}
