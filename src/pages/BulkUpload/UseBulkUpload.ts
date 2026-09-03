@@ -28,11 +28,14 @@ const normaliseName = (name: string) =>
 // a site with several "*category" columns always resolves the same way.
 const findCategoryColumn = (columns: any[]) => {
   const normalised = (columns || []).map((col) => ({ col, name: normaliseName(col?.column_name) }));
+  // The loose tier only fires when it is unambiguous. With several "*category"
+  // columns (e.g. "Waste Category" alongside "Product Category") a first-match
+  // would silently promote the wrong one and send it as the emission category.
+  const loose = normalised.filter((c) => c.name.includes("category"));
   return (
     normalised.find((c) => c.name === "emission category")?.col ??
     normalised.find((c) => c.name === "category")?.col ??
-    normalised.find((c) => c.name.includes("category"))?.col ??
-    null
+    (loose.length === 1 ? loose[0].col : null)
   );
 };
 
@@ -95,7 +98,6 @@ export function useBulkUpload({
 
     const fields: ColumnMappingEntry[] = [
       {
-       
         requiredField: "emission_category",
         label: categoryColumn?.column_name || "Emission Category",
         sourceColumn: categoryColumn?.column_name,
@@ -105,11 +107,15 @@ export function useBulkUpload({
       },
     ];
 
+    // Explicit value column → emission is always calculated on THIS number
+    // (spend or quantity), never guessed. Prevents picking the wrong column.
+    // Not offered for multi-field calculation categories (e.g. Use of Sold
+    // Products): their value is the PRODUCT of the method's fields, so a
+    // single "value" column doesn't exist and mapping one would mislead.
     const valueColumn = calculationSpec ? null : findValueColumn(dynamicColumns as any[]);
 
     if (!calculationSpec) {
       fields.push({
-       
         requiredField: "activity_value",
         label: valueColumn?.column_name || "Value (Spend / Quantity)",
         sourceColumn: valueColumn?.column_name,
@@ -154,6 +160,9 @@ export function useBulkUpload({
       });
     });
 
+    // Optional per-row reporting date. If mapped, each row is stamped with its
+    // own month/year (month-wise import). If left unmapped, all rows use the
+    // single reporting date chosen above (year-wise import).
     fields.push({
       requiredField: "reporting_date",
       label: "Reporting Date — map to import month-wise (optional)",
@@ -276,7 +285,17 @@ export function useBulkUpload({
   const mappingsObj = useMemo(() => {
     const obj: Record<string, string> = {};
     columnMappings.forEach((m) => {
-      if (!m.skipped && m.mappedTo) obj[m.requiredField] = m.mappedTo;
+      if (m.skipped || !m.mappedTo) return;
+      obj[m.requiredField] = m.mappedTo;
+      // A promoted column is sent under BOTH the fixed key the backend expects
+      // (emission_category / activity_value) and its configured name. Manual
+      // entry stores every column under its own name, so without this a
+      // bulk-imported row's activity_data would be missing the field that
+      // reports, exports and the edit form look it up by. The AI service maps
+      // each target independently, so one header can feed two keys.
+      if (m.sourceColumn && m.sourceColumn !== m.requiredField) {
+        obj[m.sourceColumn] = m.mappedTo;
+      }
     });
     return obj;
   }, [columnMappings]);
