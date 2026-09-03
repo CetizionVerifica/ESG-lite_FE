@@ -97,6 +97,7 @@ const ManagerDashboard = () => {
     approvedSitesEmissions,
     comparisonYear,
     selectedComparisonYears,
+    selectedSites,
     yoySelectedSite,
     selectedYear,
     isDark,
@@ -358,9 +359,10 @@ const ManagerDashboard = () => {
             )}
           </div>
 
-          {/* Site Comparison Chart - show whenever at least one site is selected
-              (including multiple); it compares emissions across sites. */}
-          {availableSites.length > 1 && selectedSites.length >= 1 && (
+          {/* Site Comparison Chart - compares the selected sites against each
+              other, so it needs at least one selected AND more than one site to
+              compare (a lone site charts a single bar against nothing). */}
+          {availableSites.length > 1 && selectedSites.length > 0 && (
             <div className={`${cardClass} mb-6`}>
               <div className="flex justify-between items-center mb-4">
                 <h3 className={chartTitleClass.replace(" mb-4", "")}>Site Comparison</h3>
