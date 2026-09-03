@@ -158,7 +158,11 @@ const DistanceCalculatorModal = ({
     }
 
     return () => {
+      // A mode switch mid-request must not leave the spinner (and the
+      // "Use Distance" button) stuck: the in-flight .finally is skipped
+      // when cancelled, so reset here.
       cancelled = true;
+      setIsCalculating(false);
     };
   }, [startLocation, endLocation, travelMode]);
 
@@ -181,6 +185,7 @@ const DistanceCalculatorModal = ({
     setRoadResult(null);
     setSeaResult(null);
     setError(null);
+    setIsCalculating(false);
   };
 
   const currentDistance =
@@ -417,6 +422,20 @@ const DistanceCalculatorModal = ({
                 {error}
               </div>
             )}
+
+            {/* The sea-route service failed but a straight-line estimate exists:
+                offer it clearly labelled instead of leaving the user with nothing. */}
+            {error && !isCalculating && fallbackSeaDistance !== null && (
+              <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                <Anchor size={18} className="text-amber-500 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-xs text-amber-700">Straight-line estimate (sea route unavailable)</div>
+                  <div className="text-xl font-semibold text-amber-800">
+                    {fallbackSeaDistance.toLocaleString()} {displayUnit}
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -430,7 +449,13 @@ const DistanceCalculatorModal = ({
 
           <button
             onClick={handleUseDistance}
-            disabled={currentDistance === null || isCalculating || !!error}
+            disabled={
+              currentDistance === null ||
+              currentDistance <= 0 ||
+              isCalculating ||
+              (!!error && !(travelMode === "sea" && fallbackSeaDistance !== null))
+            }
+            title={currentDistance !== null && currentDistance <= 0 ? "Start and end are the same place" : undefined}
             className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium transition-colors"
           >
             Use Distance

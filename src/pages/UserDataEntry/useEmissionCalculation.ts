@@ -1,6 +1,40 @@
 import { useCallback } from "react";
 import { getConversionFactor, unitsMatchExact } from "../../utils/unitConversions";
-import { EmissionFactor, ModalRow, EmissionCalculationResult, ColumnEntity, EmissionCategoryMapping, CalculationSpec } from "./types";
+import { EmissionFactor, ModalRow, EmissionCalculationResult, ColumnEntity, EmissionCategoryMapping, CalculationSpec, MethodCalculation } from "./types";
+
+// "tonne.km", "Tonne KM", "tonne-km", "tonne_km", "tkm" → "tonne.km"
+// (mirrors backend services/calculationSpec.ts normalizeUnitKey)
+export const normalizeUnitKey = (unit: unknown): string => {
+  let u = String(unit ?? "").trim().toLowerCase().replace(/[\s_\-]+/g, ".");
+  if (u === "tkm" || u === "t.km" || u === "tonnes.km" || u === "tonne.kms") u = "tonne.km";
+  if (u === "kms") u = "km";
+  return u;
+};
+
+// Which of the spec's methods applies to this row — by dropdown value
+// (per_method) or by the row's unit (per_unit). null = not decidable yet.
+export const resolveSpecMethod = (
+  spec: CalculationSpec,
+  row: ModalRow,
+): { method: MethodCalculation; key: string } | null => {
+  if (spec.mode === "per_unit") {
+    const key = normalizeUnitKey(row.activity_data_unit);
+    const method = key ? spec.methods[key] : undefined;
+    return method?.multiply?.length ? { method, key } : null;
+  }
+  const value = spec.method_column ? row[spec.method_column] : undefined;
+  if (!value) return null;
+  const method = spec.methods[String(value)];
+  return method?.multiply?.length ? { method, key: String(value) } : null;
+};
+
+// Every numeric column any method of the spec can use (to show them before a
+// method/unit is chosen).
+export const specNumericColumns = (spec: CalculationSpec): Set<string> => {
+  const all = new Set<string>();
+  Object.values(spec.methods).forEach((m) => m.multiply?.forEach((f) => all.add(f)));
+  return all;
+};
 
 export const useEmissionCalculation = (
   emissionFactors: EmissionFactor[],
@@ -67,8 +101,16 @@ export const useEmissionCalculation = (
   );
 
   const findActivityValue = useCallback((row: ModalRow): number | null => {
-    // Build a set of column names to skip (select/dropdown columns)
-    const skipColumns = new Set<string>(["id", "emission_category", "activity_data_unit"]);
+    // Build a set of column names to skip (select/dropdown columns and the
+    // row's bookkeeping fields — a saved row carries its date, ids and totals,
+    // which must never be mistaken for the activity value: "2026-03-31"
+    // parses as 2026).
+    const skipColumns = new Set<string>([
+      "id", "emission_category", "activity_data_unit", "date_of_reporting",
+      "pk_id", "total_emission", "site_id", "category_id", "created_by",
+      "reviewed_by", "fera_linked_id", "reporting_period", "year_type",
+      "activity_value",
+    ]);
 
     // Add select-type columns to skip list (they contain dropdown IDs, not activity data)
     if (selectColumnNames) {
@@ -88,6 +130,7 @@ export const useEmissionCalculation = (
     for (const [key, value] of Object.entries(row)) {
       // Skip composite-unit helper fields (e.g. quantity__multiplier, quantity__distance)
       if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
+      if (key.startsWith("_")) continue;
       if (!skipColumns.has(key)) {
         const numVal = parseFloat(value as string);
         if (!isNaN(numVal) && numVal > 0) {
@@ -120,35 +163,49 @@ export const useEmissionCalculation = (
         return { value: null, status: `No emission factor found${yearMsg}` };
       }
 
-      // Spec category (e.g. Use of Sold Products): the activity value is the
-      // PRODUCT of the chosen method's fields — mirrors the backend exactly
+      // Spec category (Use of Sold Products, Transport): the activity value is
+      // the PRODUCT of the chosen method's fields — mirrors the backend exactly
       // (services/calculationSpec.ts), so the preview matches the saved total.
       let activityValue: number | null;
       if (calculationSpec) {
-        const methodValue = row[calculationSpec.method_column];
-        if (!methodValue) {
-          return { value: null, status: `Select ${calculationSpec.method_column}` };
+        const resolved = resolveSpecMethod(calculationSpec, row);
+        if (!resolved) {
+          return {
+            value: null,
+            status: calculationSpec.mode === "per_unit"
+              ? (row.activity_data_unit ? "This unit is not configured for this category" : "Select unit")
+              : `Select ${calculationSpec.method_column ?? "method"}`,
+          };
         }
-        const method = calculationSpec.methods[String(methodValue)];
-        if (!method || !method.multiply?.length) {
-          return { value: null, status: "This option is not configured for calculation" };
-        }
-        let product = 1;
-        for (const fieldName of method.multiply) {
-          const value = parseFloat(String(row[fieldName] ?? ""));
-          if (isNaN(value) || value <= 0) {
-            return { value: null, status: `Enter ${fieldName}` };
+        const { method } = resolved;
+        // Legacy rows (saved before the spec) hold the product in legacy_field
+        // and don't carry the other fields at all.
+        const legacy = calculationSpec.legacy_field;
+        const others = legacy ? method.multiply.filter((f) => f !== legacy) : [];
+        if (legacy && method.multiply.includes(legacy) && others.length > 0 && others.every((f) => !(f in row))) {
+          const legacyValue = parseFloat(String(row[legacy] ?? ""));
+          if (isNaN(legacyValue) || legacyValue <= 0) {
+            return { value: null, status: `Enter ${legacy}` };
           }
-          if (method.percent?.includes(fieldName)) {
-            if (value > 100) {
-              return { value: null, status: `${fieldName} cannot be more than 100` };
+          activityValue = legacyValue;
+        } else {
+          let product = 1;
+          for (const fieldName of method.multiply) {
+            const value = parseFloat(String(row[fieldName] ?? "").replace(/,/g, ""));
+            if (isNaN(value) || value <= 0) {
+              return { value: null, status: `Enter ${fieldName} (a number greater than 0)` };
             }
-            product *= value / 100;
-          } else {
-            product *= value;
+            if (method.percent?.includes(fieldName)) {
+              if (value > 100) {
+                return { value: null, status: `${fieldName} cannot be more than 100` };
+              }
+              product *= value / 100;
+            } else {
+              product *= value;
+            }
           }
+          activityValue = product;
         }
-        activityValue = product;
       } else {
         activityValue = findActivityValue(row);
       }
@@ -184,6 +241,15 @@ export const useEmissionCalculation = (
         return { value: emission, status: "ok" };
       }
 
+      // Say WHY when the factor itself names its unit in brackets (transport's
+      // "[km]" / "[tonne.km]" twins) — the fix is a different option or unit.
+      const bracket = row.emission_category.match(/\[([^\]]+)\]/)?.[1];
+      if (bracket) {
+        return {
+          value: null,
+          status: `Unit mismatch - this option is per ${bracket}; choose the [${currentUnit}] option or switch the unit to ${bracket}`,
+        };
+      }
       return { value: null, status: "Unit mismatch - no conversion available" };
     },
     [getEmissionFactor, findActivityValue, targetYear, calculationSpec]
