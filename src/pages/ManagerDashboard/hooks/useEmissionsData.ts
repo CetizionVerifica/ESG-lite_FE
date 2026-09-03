@@ -136,7 +136,21 @@ export function useEmissionsData({
     console.log("Calculating KPIs from approved emissions:", approvedEmissions);
     approvedEmissions.forEach((e) => {
       const categoryId = e.category?.category_id;
-      const scope = categoryId ? categoryToScope[categoryId] : null;
+      // Prefer the scope carried on the emission's own joined category; fall back
+      // to the availableSites-derived map. Relying on the map alone silently
+      // dropped emissions whose category wasn't in it — undercounting the total
+      // once multiple sites (with categories not all present in the map) were selected.
+      // Use the emission's own joined category scope when present. A category
+      // scope of `null` is meaningful (saved emissions, e.g. Renewable
+      // Electricity), so only fall back to the map when scope is truly ABSENT
+      // (undefined) — never when it's an explicit null.
+      const catScope = (e.category as any)?.scope;
+      const scope =
+        catScope !== undefined
+          ? catScope
+          : categoryId
+          ? categoryToScope[categoryId]
+          : null;
       const emissionValue = Number(e.total_emission) || 0;
 
       if (scope === "Scope 1") {

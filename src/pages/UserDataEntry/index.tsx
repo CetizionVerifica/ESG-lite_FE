@@ -162,7 +162,8 @@ const UserDataEntryPage = () => {
   // Multi-field calculation spec from column config (null = normal category).
   // When set (e.g. Use of Sold Products), the emission is the product of the
   // chosen method's fields × factor, numeric fields show/hide per method, and
-  // bulk upload is disabled (the AI-service import only knows one-value math).
+  // bulk upload reads the same spec in the AI service (rows it cannot compute
+  // are surfaced in the preview's Issue column and skipped on import).
   const [calculationSpec, setCalculationSpec] = useState<
     import("./types").CalculationSpec | null
   >(null);
@@ -1274,9 +1275,9 @@ const UserDataEntryPage = () => {
   const isColumnVisibleForRow = (col: ColumnEntity, row: ModalRow): boolean => {
     if (!calculationSpec) return true;
     if (col.column_type !== "number" || isSelectColumn(col)) return true;
-    const methodValue = row[calculationSpec.method_column];
-    if (!methodValue) return false;
-    const method = calculationSpec.methods[String(methodValue)];
+    const methodKey = String(row[calculationSpec.method_column] ?? "").trim();
+    if (!methodKey) return false;
+    const method = calculationSpec.methods[methodKey];
     return !!method?.multiply?.includes(col.column_name);
   };
 
@@ -1341,7 +1342,7 @@ const UserDataEntryPage = () => {
         // multiplied in), prefill percentage fields to 100 (the guidance says
         // assume 100% released when unknown), and preselect the method's unit.
         if (calculationSpec && columnName === calculationSpec.method_column) {
-          const method = calculationSpec.methods[String(value)];
+          const method = calculationSpec.methods[String(value ?? "").trim()];
           const applicable = new Set(method?.multiply ?? []);
           dynamicColumns.forEach((col) => {
             if (col.column_type === "number" && !applicable.has(col.column_name)) {
