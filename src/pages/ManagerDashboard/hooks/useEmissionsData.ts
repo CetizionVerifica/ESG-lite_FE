@@ -133,7 +133,6 @@ export function useEmissionsData({
     let scope3Emissions = 0;
     let savedEmissions = 0;
 
-    console.log("Calculating KPIs from approved emissions:", approvedEmissions);
     approvedEmissions.forEach((e) => {
       const categoryId = e.category?.category_id;
       // Prefer the scope carried on the emission's own joined category; fall back
@@ -170,6 +169,7 @@ export function useEmissionsData({
 
     // Net emissions = Gross - Saved (discounted by renewable electricity)
     const netEmissions = grossEmissions - savedEmissions;
+
     return {
       grossEmissions,
       netEmissions,

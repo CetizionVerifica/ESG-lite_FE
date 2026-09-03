@@ -15,16 +15,23 @@ export interface ColumnOptionsMap {
     [columnId: string]: DropdownOptionValue[];
 }
 
+// Maps child column name to parent column name
+// Example: { "disposal_method": "material" } - disposal_method depends on material
 export interface ColumnDependencies {
     [childColumnName: string]: string;
 }
 
+// Options for dependent columns based on parent value
+// Example: { "disposal_method": { "paper": [{id: "recycled", label: "Recycled"}] } }
 export interface DependentOptionsMap {
     [childColumnName: string]: {
         [parentValue: string]: DropdownOptionValue[];
     };
 }
 
+// Maps column value combinations to emission_category_name
+// Key format: "parentValue|childValue"
+// Example: { "paper|recycled": "Paper - Recycled" }
 export interface EmissionCategoryMapping {
     [key: string]: string;
 }

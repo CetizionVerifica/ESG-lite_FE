@@ -204,9 +204,9 @@ export function useChartOptions({
   const siteComparisonOptions = useMemo(() => {
     const siteData: { name: string; value: number }[] = [];
 
-    const sitesToShow = availableSites.filter((site) =>   
-      selectedSites.includes(site.site_id)                 
-    );  
+    const sitesToShow = availableSites.filter((site) =>
+      selectedSites.includes(site.site_id)
+    );
 
     sitesToShow.forEach((site) => {
       const siteEmissions = approvedSitesEmissions[site.site_id] || [];
@@ -288,7 +288,7 @@ export function useChartOptions({
         },
       ],
     };
-  }, [availableSites, approvedSitesEmissions, comparisonYear,selectedSites, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
+  }, [availableSites, approvedSitesEmissions, comparisonYear, selectedSites, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
 
   // Chart: Year-over-Year Monthly Comparison (Line Chart) - Only approved emissions
   const yearOverYearOptions = useMemo(() => {
