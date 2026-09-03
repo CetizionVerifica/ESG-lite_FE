@@ -15,23 +15,16 @@ export interface ColumnOptionsMap {
     [columnId: string]: DropdownOptionValue[];
 }
 
-// Maps child column name to parent column name
-// Example: { "disposal_method": "material" } - disposal_method depends on material
 export interface ColumnDependencies {
     [childColumnName: string]: string;
 }
 
-// Options for dependent columns based on parent value
-// Example: { "disposal_method": { "paper": [{id: "recycled", label: "Recycled"}] } }
 export interface DependentOptionsMap {
     [childColumnName: string]: {
         [parentValue: string]: DropdownOptionValue[];
     };
 }
 
-// Maps column value combinations to emission_category_name
-// Key format: "parentValue|childValue"
-// Example: { "paper|recycled": "Paper - Recycled" }
 export interface EmissionCategoryMapping {
     [key: string]: string;
 }
@@ -150,6 +143,10 @@ export interface ColumnMappingEntry {
     mappedTo: string;
     skipped: boolean;
     isRequired: boolean;
+    // The site's own column this entry stands for, when it differs from
+    // requiredField. emission_category is always sent to the backend under that
+    // fixed key, so this preserves the configured name for display and automap.
+    sourceColumn?: string;
 }
 
 export interface BulkUploadModalProps {

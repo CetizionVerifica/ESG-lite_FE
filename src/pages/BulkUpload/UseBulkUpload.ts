@@ -15,6 +15,38 @@ import {
   importAllRows,
 } from "../../services/excelService";
 
+// A site's category column is configured with a free-form name — "Emission
+// Category", "emission_category", "Category", "Fuel Category". Normalising
+// away case and _/-/space lets one comparison recognise all of them.
+const normaliseName = (name: string) =>
+  String(name ?? "")
+    .toLowerCase()
+    .replace(/[_\-\s]+/g, " ")
+    .trim();
+
+// Pick the column that represents the emission category, most specific first so
+// a site with several "*category" columns always resolves the same way.
+const findCategoryColumn = (columns: any[]) => {
+  const normalised = (columns || []).map((col) => ({ col, name: normaliseName(col?.column_name) }));
+  return (
+    normalised.find((c) => c.name === "emission category")?.col ??
+    normalised.find((c) => c.name === "category")?.col ??
+    normalised.find((c) => c.name.includes("category"))?.col ??
+    null
+  );
+};
+
+// The value column is identified by type rather than name: "Activity Data",
+// "Spent Value", "Consumption" and "Distance" all play the same role and share
+// column_type "number". Exactly one is unambiguous; zero or several are not, and
+// then the explicit static field is kept so the user chooses.
+const findValueColumn = (columns: any[]) => {
+  const numeric = (columns || []).filter(
+    (col) => String(col?.column_type ?? "").toLowerCase() === "number"
+  );
+  return numeric.length === 1 ? numeric[0] : null;
+};
+
 export function useBulkUpload({
   dynamicColumns,
   extraFields,
@@ -58,33 +90,41 @@ export function useBulkUpload({
     selectedCategories.size > 0 ? selectedCategories.size : uniqueCategories.length;
 
   const buildRequiredFields = useCallback((): ColumnMappingEntry[] => {
+    // The site's own category column, when it has one.
+    const categoryColumn = findCategoryColumn(dynamicColumns as any[]);
+
     const fields: ColumnMappingEntry[] = [
       {
+       
         requiredField: "emission_category",
-        label: "Emission Category",
+        label: categoryColumn?.column_name || "Emission Category",
+        sourceColumn: categoryColumn?.column_name,
         mappedTo: "",
         skipped: false,
         isRequired: true,
       },
     ];
 
-    // Explicit value column → emission is always calculated on THIS number
-    // (spend or quantity), never guessed. Prevents picking the wrong column.
-    // Not offered for multi-field calculation categories (e.g. Use of Sold
-    // Products): their value is the PRODUCT of the method's fields, so a
-    // single "value" column doesn't exist and mapping one would mislead.
+    const valueColumn = calculationSpec ? null : findValueColumn(dynamicColumns as any[]);
+
     if (!calculationSpec) {
       fields.push({
+       
         requiredField: "activity_value",
-        label: "Value (Spend / Quantity)",
+        label: valueColumn?.column_name || "Value (Spend / Quantity)",
+        sourceColumn: valueColumn?.column_name,
         mappedTo: "",
         skipped: false,
         isRequired: true,
       });
     }
 
+    const promotedColumns = [categoryColumn, valueColumn]
+      .filter(Boolean)
+      .map((col: any) => normaliseName(col.column_name));
+
     dynamicColumns
-      .filter((col: any) => col.column_name.toLowerCase() !== "emission_category")
+      .filter((col: any) => !promotedColumns.includes(normaliseName(col.column_name)))
       .forEach((col: any) => {
         fields.push({
           requiredField: col.column_name,
@@ -114,9 +154,6 @@ export function useBulkUpload({
       });
     });
 
-    // Optional per-row reporting date. If mapped, each row is stamped with its
-    // own month/year (month-wise import). If left unmapped, all rows use the
-    // single reporting date chosen above (year-wise import).
     fields.push({
       requiredField: "reporting_date",
       label: "Reporting Date — map to import month-wise (optional)",
@@ -130,14 +167,15 @@ export function useBulkUpload({
 
   const autoMap = useCallback((fields: ColumnMappingEntry[], headers: string[]) => {
     return fields.map((field) => {
-      const fieldName = field.requiredField.toLowerCase().trim();
-      const fieldNameNoPrefix = fieldName.replace(/^extra_/, "");
-      const match = headers.find(
-        (h) => {
-          const header = h.toLowerCase().trim();
-          return header === fieldName || header === fieldNameNoPrefix;
-        }
-      );
+      const candidates = [
+        field.requiredField,
+        field.requiredField.replace(/^extra_/, ""),
+        field.sourceColumn,
+      ]
+        .filter(Boolean)
+        .map((c) => normaliseName(c as string));
+
+      const match = headers.find((h) => candidates.includes(normaliseName(h)));
       return match ? { ...field, mappedTo: match } : field;
     });
   }, []);
