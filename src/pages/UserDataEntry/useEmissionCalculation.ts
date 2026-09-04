@@ -22,10 +22,13 @@ export const resolveSpecMethod = (
     const method = key ? spec.methods[key] : undefined;
     return method?.multiply?.length ? { method, key } : null;
   }
-  const value = spec.method_column ? row[spec.method_column] : undefined;
+  // Trimmed to match services/calculationSpec.ts and the Python engine — all
+  // three must agree on the key or the preview and the saved total disagree
+  // for a value that arrived with surrounding whitespace.
+  const value = spec.method_column ? String(row[spec.method_column] ?? "").trim() : "";
   if (!value) return null;
-  const method = spec.methods[String(value)];
-  return method?.multiply?.length ? { method, key: String(value) } : null;
+  const method = spec.methods[value];
+  return method?.multiply?.length ? { method, key: value } : null;
 };
 
 // Every numeric column any method of the spec can use (to show them before a

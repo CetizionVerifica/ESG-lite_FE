@@ -50,12 +50,19 @@ export function ReviewStage({
   const hasDenom = reviewRows.some((r) => r?.denominator_unit !== undefined && r?.denominator_unit !== null);
   const hasEmission = reviewRows.some((r) => r?.total_emission !== undefined && r?.total_emission !== null);
 
+  // Multi-field calculation categories return a per-row reason when the row
+  // can't be computed. The import SKIPS those rows, so they have to be visible
+  // here — otherwise the only signal is a lower "imported N rows" at the end.
+  const errorRowCount = reviewRows.filter((r) => r?.row_error).length;
+  const hasRowErrors = errorRowCount > 0;
+
   // build final columns: mapped fields + computed fields
   const computedCols = [
     hasGlobalCat ? { key: "global_category_name", label: "Global Category" } : null,
     hasFactor ? { key: "factor_value", label: "Emission Factor" } : null,
     hasDenom ? { key: "denominator_unit", label: "Denominator Unit" } : null,
     hasEmission ? { key: "total_emission", label: "Total Emission (tCO2e)" } : null,
+    hasRowErrors ? { key: "row_error", label: "Issue" } : null,
   ].filter(Boolean) as Array<{ key: string; label: string }>;
 
   const colSpan = mappedFields.length + computedCols.length;
@@ -73,6 +80,17 @@ export function ReviewStage({
             Total rows in file: <span className="font-semibold">{totalRows}</span>
           </div>
         </div>
+
+        {hasRowErrors && (
+          <div className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-2">
+            <span className="font-semibold">
+              {errorRowCount} of the {reviewRows.length} previewed row
+              {errorRowCount === 1 ? "" : "s"} cannot be calculated
+            </span>{" "}
+            and will be skipped on import — see the Issue column. Fix them in the
+            spreadsheet and re-upload if they should be included.
+          </div>
+        )}
 
         {/* Small hint if computed values are missing */}
         {!hasEmission && (
@@ -161,7 +179,10 @@ export function ReviewStage({
 
             <tbody className="divide-y divide-gray-100">
               {reviewRows.map((row, idx) => (
-                <tr key={idx} className="hover:bg-gray-50">
+                <tr
+                  key={idx}
+                  className={row?.row_error ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-gray-50"}
+                >
                   {mappedFields.map((m) => (
                     <td key={m.requiredField} className="px-3 py-2 text-gray-700 max-w-40 truncate">
                       {row?.[m.requiredField] ? String(row[m.requiredField]) : <span className="text-gray-300">—</span>}
@@ -176,6 +197,13 @@ export function ReviewStage({
                       return (
                         <td key={c.key} className="px-3 py-2 text-gray-700 whitespace-nowrap">
                           {v === null || v === undefined ? <span className="text-gray-300">—</span> : fmtNumber(v, 6)}
+                        </td>
+                      );
+                    }
+                    if (c.key === "row_error") {
+                      return (
+                        <td key={c.key} className="px-3 py-2 text-amber-800 max-w-64">
+                          {v ? String(v) : <span className="text-gray-300">—</span>}
                         </td>
                       );
                     }

@@ -14,6 +14,7 @@ interface UseChartOptionsProps {
   approvedSitesEmissions: SiteEmissionsMap;
   comparisonYear: number;
   selectedComparisonYears: number[];
+  selectedSites: number[];
   yoySelectedSite: number | null;
   selectedYear: number | null;
   isDark?: boolean;
@@ -49,6 +50,7 @@ export function useChartOptions({
   approvedSitesEmissions,
   comparisonYear,
   selectedComparisonYears,
+  selectedSites,
   yoySelectedSite,
   selectedYear,
   isDark = false,
@@ -202,7 +204,11 @@ export function useChartOptions({
   const siteComparisonOptions = useMemo(() => {
     const siteData: { name: string; value: number }[] = [];
 
-    availableSites.forEach((site) => {
+    const sitesToShow = availableSites.filter((site) =>
+      selectedSites.includes(site.site_id)
+    );
+
+    sitesToShow.forEach((site) => {
       const siteEmissions = approvedSitesEmissions[site.site_id] || [];
       const yearEmissions = siteEmissions.filter((e) => {
         const emissionYear = new Date(e.date_of_reporting).getFullYear();
@@ -282,7 +288,7 @@ export function useChartOptions({
         },
       ],
     };
-  }, [availableSites, approvedSitesEmissions, comparisonYear, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
+  }, [availableSites, approvedSitesEmissions, comparisonYear, selectedSites, isDark, textColor, subTextColor, axisLineColor, splitLineColor]);
 
   // Chart: Year-over-Year Monthly Comparison (Line Chart) - Only approved emissions
   const yearOverYearOptions = useMemo(() => {

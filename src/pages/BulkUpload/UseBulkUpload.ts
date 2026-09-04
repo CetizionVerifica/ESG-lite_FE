@@ -15,6 +15,41 @@ import {
   importAllRows,
 } from "../../services/excelService";
 
+// A site's category column is configured with a free-form name — "Emission
+// Category", "emission_category", "Category", "Fuel Category". Normalising
+// away case and _/-/space lets one comparison recognise all of them.
+const normaliseName = (name: string) =>
+  String(name ?? "")
+    .toLowerCase()
+    .replace(/[_\-\s]+/g, " ")
+    .trim();
+
+// Pick the column that represents the emission category, most specific first so
+// a site with several "*category" columns always resolves the same way.
+const findCategoryColumn = (columns: any[]) => {
+  const normalised = (columns || []).map((col) => ({ col, name: normaliseName(col?.column_name) }));
+  // The loose tier only fires when it is unambiguous. With several "*category"
+  // columns (e.g. "Waste Category" alongside "Product Category") a first-match
+  // would silently promote the wrong one and send it as the emission category.
+  const loose = normalised.filter((c) => c.name.includes("category"));
+  return (
+    normalised.find((c) => c.name === "emission category")?.col ??
+    normalised.find((c) => c.name === "category")?.col ??
+    (loose.length === 1 ? loose[0].col : null)
+  );
+};
+
+// The value column is identified by type rather than name: "Activity Data",
+// "Spent Value", "Consumption" and "Distance" all play the same role and share
+// column_type "number". Exactly one is unambiguous; zero or several are not, and
+// then the explicit static field is kept so the user chooses.
+const findValueColumn = (columns: any[]) => {
+  const numeric = (columns || []).filter(
+    (col) => String(col?.column_type ?? "").toLowerCase() === "number"
+  );
+  return numeric.length === 1 ? numeric[0] : null;
+};
+
 export function useBulkUpload({
   dynamicColumns,
   extraFields,
@@ -58,10 +93,14 @@ export function useBulkUpload({
     selectedCategories.size > 0 ? selectedCategories.size : uniqueCategories.length;
 
   const buildRequiredFields = useCallback((): ColumnMappingEntry[] => {
+    // The site's own category column, when it has one.
+    const categoryColumn = findCategoryColumn(dynamicColumns as any[]);
+
     const fields: ColumnMappingEntry[] = [
       {
         requiredField: "emission_category",
-        label: "Emission Category",
+        label: categoryColumn?.column_name || "Emission Category",
+        sourceColumn: categoryColumn?.column_name,
         mappedTo: "",
         skipped: false,
         isRequired: true,
@@ -73,18 +112,25 @@ export function useBulkUpload({
     // Not offered for multi-field calculation categories (e.g. Use of Sold
     // Products): their value is the PRODUCT of the method's fields, so a
     // single "value" column doesn't exist and mapping one would mislead.
+    const valueColumn = calculationSpec ? null : findValueColumn(dynamicColumns as any[]);
+
     if (!calculationSpec) {
       fields.push({
         requiredField: "activity_value",
-        label: "Value (Spend / Quantity)",
+        label: valueColumn?.column_name || "Value (Spend / Quantity)",
+        sourceColumn: valueColumn?.column_name,
         mappedTo: "",
         skipped: false,
         isRequired: true,
       });
     }
 
+    const promotedColumns = [categoryColumn, valueColumn]
+      .filter(Boolean)
+      .map((col: any) => normaliseName(col.column_name));
+
     dynamicColumns
-      .filter((col: any) => col.column_name.toLowerCase() !== "emission_category")
+      .filter((col: any) => !promotedColumns.includes(normaliseName(col.column_name)))
       .forEach((col: any) => {
         fields.push({
           requiredField: col.column_name,
@@ -130,14 +176,15 @@ export function useBulkUpload({
 
   const autoMap = useCallback((fields: ColumnMappingEntry[], headers: string[]) => {
     return fields.map((field) => {
-      const fieldName = field.requiredField.toLowerCase().trim();
-      const fieldNameNoPrefix = fieldName.replace(/^extra_/, "");
-      const match = headers.find(
-        (h) => {
-          const header = h.toLowerCase().trim();
-          return header === fieldName || header === fieldNameNoPrefix;
-        }
-      );
+      const candidates = [
+        field.requiredField,
+        field.requiredField.replace(/^extra_/, ""),
+        field.sourceColumn,
+      ]
+        .filter(Boolean)
+        .map((c) => normaliseName(c as string));
+
+      const match = headers.find((h) => candidates.includes(normaliseName(h)));
       return match ? { ...field, mappedTo: match } : field;
     });
   }, []);
@@ -238,7 +285,17 @@ export function useBulkUpload({
   const mappingsObj = useMemo(() => {
     const obj: Record<string, string> = {};
     columnMappings.forEach((m) => {
-      if (!m.skipped && m.mappedTo) obj[m.requiredField] = m.mappedTo;
+      if (m.skipped || !m.mappedTo) return;
+      obj[m.requiredField] = m.mappedTo;
+      // A promoted column is sent under BOTH the fixed key the backend expects
+      // (emission_category / activity_value) and its configured name. Manual
+      // entry stores every column under its own name, so without this a
+      // bulk-imported row's activity_data would be missing the field that
+      // reports, exports and the edit form look it up by. The AI service maps
+      // each target independently, so one header can feed two keys.
+      if (m.sourceColumn && m.sourceColumn !== m.requiredField) {
+        obj[m.sourceColumn] = m.mappedTo;
+      }
     });
     return obj;
   }, [columnMappings]);

@@ -154,6 +154,10 @@ export interface ColumnMappingEntry {
     mappedTo: string;
     skipped: boolean;
     isRequired: boolean;
+    // The site's own column this entry stands for, when it differs from
+    // requiredField. emission_category is always sent to the backend under that
+    // fixed key, so this preserves the configured name for display and automap.
+    sourceColumn?: string;
 }
 
 export interface BulkUploadModalProps {
