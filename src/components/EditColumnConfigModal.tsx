@@ -7,6 +7,8 @@ import {
   DependentOptionsMap,
   EmissionCategoryMapping,
   ExtraFieldDefinition,
+  CalculationSpec,
+  MethodCalculation,
 } from "../services/columnConfigService";
 import { DropdownOptionValue } from "../services/columnService";
 
@@ -40,9 +42,10 @@ interface ColumnConfigEntity {
   dependent_options?: DependentOptionsMap;
   emission_category_mapping?: EmissionCategoryMapping;
   extra_fields?: ExtraFieldDefinition[];
+  calculation?: CalculationSpec | null;
 }
 
-type EditTab = "columns" | "options" | "dependencies" | "mappings" | "extra_fields";
+type EditTab = "columns" | "options" | "dependencies" | "mappings" | "extra_fields" | "calculation";
 
 interface EditColumnConfigModalProps {
   isOpen: boolean;
@@ -70,6 +73,9 @@ const EditColumnConfigModal = ({
   const [editDependentOptions, setEditDependentOptions] = useState<DependentOptionsMap>({});
   const [editMappings, setEditMappings] = useState<EmissionCategoryMapping>({});
   const [editExtraFields, setEditExtraFields] = useState<ExtraFieldDefinition[]>([]);
+  // Calculation rule (null = the normal "one value × factor" behaviour)
+  const [editCalc, setEditCalc] = useState<CalculationSpec | null>(null);
+  const [newUnitKey, setNewUnitKey] = useState("");
   const [activeTab, setActiveTab] = useState<EditTab>("columns");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +123,8 @@ const EditColumnConfigModal = ({
     setEditDependentOptions(JSON.parse(JSON.stringify(config.dependent_options || {})));
     setEditMappings(JSON.parse(JSON.stringify(config.emission_category_mapping || {})));
     setEditExtraFields(JSON.parse(JSON.stringify(config.extra_fields || [])));
+    setEditCalc(config.calculation ? JSON.parse(JSON.stringify(config.calculation)) : null);
+    setNewUnitKey("");
     setActiveTab("columns");
     setError(null);
   }, [config]);
@@ -358,11 +366,118 @@ const EditColumnConfigModal = ({
     setEditExtraFields((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // ─── Calculation rule handlers ────────────────────────────────────────────
+
+  const numberColumns = editColumns.filter((c) => c.column_type === "number");
+  const nonNumberColumns = editColumns.filter((c) => c.column_type !== "number");
+
+  const setCalcMode = (mode: "" | "per_method" | "per_unit") => {
+    if (mode === "") {
+      setEditCalc(null);
+      return;
+    }
+    setEditCalc((prev) => {
+      if (prev && prev.mode === mode) return prev;
+      const base: CalculationSpec = { mode, methods: {}, identity_columns: prev?.identity_columns ?? [] };
+      if (mode === "per_method") {
+        const firstSelect = selectColumns[0]?.column_name;
+        if (firstSelect) {
+          base.method_column = firstSelect;
+          for (const opt of editColumnOptions[firstSelect] ?? []) base.methods[opt.id] = { multiply: [] };
+        }
+      }
+      return base;
+    });
+  };
+
+  const setCalcMethodColumn = (colName: string) => {
+    setEditCalc((prev) => {
+      if (!prev) return prev;
+      const methods: Record<string, MethodCalculation> = {};
+      for (const opt of editColumnOptions[colName] ?? []) methods[opt.id] = prev.methods[opt.id] ?? { multiply: [] };
+      return { ...prev, method_column: colName, methods };
+    });
+  };
+
+  const updateCalcMethod = (key: string, updates: Partial<MethodCalculation>) => {
+    setEditCalc((prev) => {
+      if (!prev) return prev;
+      const current = prev.methods[key] ?? { multiply: [] };
+      return { ...prev, methods: { ...prev.methods, [key]: { ...current, ...updates } } };
+    });
+  };
+
+  const toggleCalcMultiply = (key: string, colName: string) => {
+    setEditCalc((prev) => {
+      if (!prev) return prev;
+      const current = prev.methods[key] ?? { multiply: [] };
+      const on = current.multiply.includes(colName);
+      const multiply = on ? current.multiply.filter((c) => c !== colName) : [...current.multiply, colName];
+      const percent = (current.percent ?? []).filter((c) => multiply.includes(c));
+      return { ...prev, methods: { ...prev.methods, [key]: { ...current, multiply, percent: percent.length ? percent : undefined } } };
+    });
+  };
+
+  const toggleCalcPercent = (key: string, colName: string) => {
+    setEditCalc((prev) => {
+      if (!prev) return prev;
+      const current = prev.methods[key] ?? { multiply: [] };
+      const list = current.percent ?? [];
+      const percent = list.includes(colName) ? list.filter((c) => c !== colName) : [...list, colName];
+      return { ...prev, methods: { ...prev.methods, [key]: { ...current, percent: percent.length ? percent : undefined } } };
+    });
+  };
+
+  const toggleIdentityColumn = (colName: string) => {
+    setEditCalc((prev) => {
+      if (!prev) return prev;
+      const list = prev.identity_columns ?? [];
+      const next = list.includes(colName) ? list.filter((c) => c !== colName) : [...list, colName];
+      return { ...prev, identity_columns: next };
+    });
+  };
+
+  const addUnitKey = () => {
+    const key = newUnitKey.trim();
+    if (!key) return;
+    setEditCalc((prev) => {
+      if (!prev || prev.methods[key]) return prev;
+      return { ...prev, methods: { ...prev.methods, [key]: { multiply: [], activity_unit: key } } };
+    });
+    setNewUnitKey("");
+  };
+
+  const removeUnitKey = (key: string) => {
+    setEditCalc((prev) => {
+      if (!prev) return prev;
+      const methods = { ...prev.methods };
+      delete methods[key];
+      return { ...prev, methods };
+    });
+  };
+
+  const calcValidationError = (): string | null => {
+    if (!editCalc) return null;
+    if (editCalc.mode === "per_method" && !editCalc.method_column) return "Calculation: choose the dropdown that decides the formula.";
+    const keys = Object.keys(editCalc.methods);
+    if (keys.length === 0) return "Calculation: add at least one method / unit.";
+    for (const k of keys) {
+      if ((editCalc.methods[k]?.multiply ?? []).length === 0) return `Calculation: "${k}" has no fields ticked to multiply.`;
+    }
+    return null;
+  };
+
   // ─── Save ─────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
     if (!configName.trim()) {
       setError("Config name is required.");
+      return;
+    }
+    const calcError = calcValidationError();
+    if (calcError) {
+      setError(calcError);
+      setActiveTab("calculation");
       return;
     }
     setSaving(true);
@@ -391,6 +506,7 @@ const EditColumnConfigModal = ({
         dependent_options: editDependentOptions,
         emission_category_mapping: editMappings,
         extra_fields: editExtraFields,
+        calculation: editCalc,
         rename_map: Object.keys(renameMap).length > 0 ? renameMap : undefined,
       });
 
@@ -404,6 +520,7 @@ const EditColumnConfigModal = ({
         dependent_options: saved.dependent_options ?? editDependentOptions,
         emission_category_mapping: saved.emission_category_mapping ?? editMappings,
         extra_fields: saved.extra_fields ?? editExtraFields,
+        calculation: saved.calculation !== undefined ? saved.calculation : editCalc,
       } : {
         ...config,
         config_name: configName.trim(),
@@ -413,6 +530,7 @@ const EditColumnConfigModal = ({
         dependent_options: editDependentOptions,
         emission_category_mapping: editMappings,
         extra_fields: editExtraFields,
+        calculation: editCalc,
       });
     } catch (err: any) {
       setError(err?.response?.data?.message || err?.message || "Failed to save.");
@@ -433,6 +551,7 @@ const EditColumnConfigModal = ({
     { key: "dependencies", label: "Dependencies", count: depCount },
     { key: "mappings", label: "Mappings", count: mappingCount },
     { key: "extra_fields", label: "Extra Fields", count: editExtraFields.length },
+    { key: "calculation", label: "Calculation", count: editCalc ? Object.keys(editCalc.methods).length : 0 },
   ];
 
   // ─── Theme classes ────────────────────────────────────────────────────────
@@ -1061,6 +1180,163 @@ const EditColumnConfigModal = ({
               >
                 + Add Field
               </button>
+            </div>
+          )}
+
+          {/* ── Calculation Tab ────────────────────────────────────────── */}
+          {activeTab === "calculation" && (
+            <div className="space-y-4 py-1">
+              <p className={`text-xs ${mutedClass}`}>
+                Normally an entry has one number that is multiplied by the emission factor. Use this tab when the
+                activity is a <strong>product of several number fields</strong> (e.g. Units Sold × Energy per Use × Lifetime Uses,
+                or Weight × Distance). Leave it on &quot;None&quot; for ordinary categories.
+              </p>
+
+              <div>
+                <label className={`block text-xs font-medium mb-1 ${labelClass}`}>Mode</label>
+                <select
+                  value={editCalc?.mode ?? ""}
+                  onChange={(e) => setCalcMode(e.target.value as "" | "per_method" | "per_unit")}
+                  className={inputClass}
+                >
+                  <option value="">None — one value × factor (default)</option>
+                  <option value="per_method">Per method — a dropdown decides which fields multiply</option>
+                  <option value="per_unit">Per unit — the unit chosen on the row decides which fields multiply</option>
+                </select>
+              </div>
+
+              {editCalc && numberColumns.length === 0 && (
+                <p className={`text-xs ${isDark ? "text-amber-400" : "text-amber-700"}`}>
+                  This config has no number columns yet. Add them on the Columns tab first.
+                </p>
+              )}
+
+              {editCalc?.mode === "per_method" && (
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${labelClass}`}>Dropdown that decides the formula</label>
+                  <select
+                    value={editCalc.method_column ?? ""}
+                    onChange={(e) => setCalcMethodColumn(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">Choose a dropdown column…</option>
+                    {selectColumns.map((c) => (
+                      <option key={c.pk_id} value={c.column_name}>{c.column_name}</option>
+                    ))}
+                  </select>
+                  {editCalc.method_column && (editColumnOptions[editCalc.method_column] ?? []).length === 0 && (
+                    <p className={`text-xs mt-1 ${isDark ? "text-amber-400" : "text-amber-700"}`}>
+                      &quot;{editCalc.method_column}&quot; has no options yet — add them on the Options tab, then come back.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {editCalc?.mode === "per_unit" && (
+                <div className="space-y-2">
+                  <label className={`block text-xs font-medium ${labelClass}`}>Units (one row per unit the user can pick)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newUnitKey}
+                      onChange={(e) => setNewUnitKey(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addUnitKey(); } }}
+                      placeholder="e.g. tonne.km"
+                      className={`flex-1 ${smallInputClass}`}
+                    />
+                    <button onClick={addUnitKey} disabled={!newUnitKey.trim()} className={`px-3 py-1 text-sm rounded cursor-pointer disabled:opacity-50 ${isDark ? "bg-slate-600 text-slate-200" : "bg-gray-200 text-gray-800"}`}>Add unit</button>
+                  </div>
+                  <div>
+                    <label className={`block text-xs font-medium mb-1 ${labelClass}`}>Old-entries field (optional)</label>
+                    <select
+                      value={editCalc.legacy_field ?? ""}
+                      onChange={(e) => setEditCalc((prev) => prev ? { ...prev, legacy_field: e.target.value || undefined } : prev)}
+                      className={inputClass}
+                    >
+                      <option value="">None</option>
+                      {numberColumns.map((c) => (
+                        <option key={c.pk_id} value={c.column_name}>{c.column_name}</option>
+                      ))}
+                    </select>
+                    <p className={`text-xs mt-1 ${mutedClass}`}>Entries saved before this rule existed hold only one number under this field; it is used as-is.</p>
+                  </div>
+                </div>
+              )}
+
+              {editCalc && Object.keys(editCalc.methods).length > 0 && (
+                <div className={`border rounded-md overflow-hidden ${isDark ? "border-slate-600" : "border-gray-300"}`}>
+                  <table className="w-full text-sm">
+                    <thead className={isDark ? "bg-slate-700" : "bg-gray-100"}>
+                      <tr>
+                        <th className={`px-3 py-2 text-left font-medium ${labelClass}`}>{editCalc.mode === "per_method" ? "Method (dropdown value)" : "Unit"}</th>
+                        <th className={`px-3 py-2 text-left font-medium ${labelClass}`}>Multiply these fields (tick % if the field is a percentage)</th>
+                        {editCalc.mode === "per_method" && <th className={`px-3 py-2 text-left font-medium ${labelClass}`}>Preselect unit</th>}
+                        {editCalc.mode === "per_unit" && <th className="px-3 py-2 w-8"></th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(editCalc.methods).map(([key, m]) => (
+                        <tr key={key} className={`border-t align-top ${isDark ? "border-slate-700" : "border-gray-200"}`}>
+                          <td className={`px-3 py-2 font-medium ${textClass}`}>{key}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1">
+                              {numberColumns.map((c) => {
+                                const on = m.multiply.includes(c.column_name);
+                                const pct = (m.percent ?? []).includes(c.column_name);
+                                return (
+                                  <label key={c.pk_id} className={`flex items-center gap-1 text-xs ${textClass}`}>
+                                    <input type="checkbox" checked={on} onChange={() => toggleCalcMultiply(key, c.column_name)} className="w-4 h-4" />
+                                    {c.column_name}
+                                    {on && (
+                                      <span className={`ml-1 flex items-center gap-0.5 ${mutedClass}`} title="Value is entered as a percentage (80 = 80%)">
+                                        <input type="checkbox" checked={pct} onChange={() => toggleCalcPercent(key, c.column_name)} className="w-3 h-3" />%
+                                      </span>
+                                    )}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            {m.multiply.length > 0 && (
+                              <p className={`text-xs mt-1 ${mutedClass}`}>= {m.multiply.map((f) => (m.percent ?? []).includes(f) ? `${f} ÷ 100` : f).join(" × ")} × factor</p>
+                            )}
+                          </td>
+                          {editCalc.mode === "per_method" && (
+                            <td className="px-3 py-2">
+                              <input
+                                type="text"
+                                value={m.activity_unit ?? ""}
+                                onChange={(e) => updateCalcMethod(key, { activity_unit: e.target.value || undefined })}
+                                placeholder="e.g. kWh"
+                                className={`w-24 ${smallInputClass}`}
+                              />
+                            </td>
+                          )}
+                          {editCalc.mode === "per_unit" && (
+                            <td className="px-3 py-2">
+                              <button onClick={() => removeUnitKey(key)} className={`cursor-pointer ${isDark ? "text-red-400" : "text-red-500"}`} title="Remove">&times;</button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {editCalc && (
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${labelClass}`}>Fields that make an entry unique (duplicate check)</label>
+                  <p className={`text-xs mb-1 ${mutedClass}`}>Same site + category + date + factor is normally a duplicate. Tick fields that must also match, e.g. Product Name or Shipment Ref.</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {nonNumberColumns.map((c) => (
+                      <label key={c.pk_id} className={`flex items-center gap-1 text-xs ${textClass}`}>
+                        <input type="checkbox" checked={(editCalc.identity_columns ?? []).includes(c.column_name)} onChange={() => toggleIdentityColumn(c.column_name)} className="w-4 h-4" />
+                        {c.column_name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

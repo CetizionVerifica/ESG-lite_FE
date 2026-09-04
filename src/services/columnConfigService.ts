@@ -23,6 +23,22 @@ export interface EmissionCategoryMapping {
   [key: string]: string;
 }
 
+// Calculation rule: which number fields multiply together (see backend
+// services/calculationSpec.ts — this must stay in sync with it).
+export interface MethodCalculation {
+  multiply: string[];
+  percent?: string[];
+  activity_unit?: string;
+}
+
+export interface CalculationSpec {
+  mode: "per_method" | "per_unit";
+  method_column?: string;
+  identity_columns?: string[];
+  legacy_field?: string;
+  methods: Record<string, MethodCalculation>;
+}
+
 export interface ColumnConfigData {
   pk_id?: number;
   config_name: string;
@@ -107,6 +123,7 @@ export const updateColumnConfig = async (
     dependent_options?: DependentOptionsMap;
     emission_category_mapping?: EmissionCategoryMapping;
     extra_fields?: ExtraFieldDefinition[];
+    calculation?: CalculationSpec | null;
     rename_map?: Record<string, string>;
   }
 ) => {
