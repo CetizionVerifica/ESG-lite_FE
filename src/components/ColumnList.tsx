@@ -78,12 +78,25 @@ const ColumnList = ({ refreshTrigger }: ColumnListProps) => {
     }
   };
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const handleDelete = async (row: ColumnEntity) => {
+    setDeleteError(null);
     try {
       await deleteColumn(row.pk_id);
       setColumns((prev) => prev.filter((item) => item.pk_id !== row.pk_id));
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting column:", error);
+      // The backend refuses to delete a column that a column config still
+      // uses. Say so on screen, naming the configs, instead of failing silently.
+      const data = error?.response?.data;
+      const configs: { config_name: string }[] = data?.associatedConfigs ?? [];
+      const names = configs.map((c) => c.config_name).join(", ");
+      setDeleteError(
+        names
+          ? `"${row.column_name}" cannot be deleted: it is used by ${configs.length} column config${configs.length === 1 ? "" : "s"} (${names}). Remove it from those configs first (Column Config → Edit → Columns).`
+          : data?.message || `Could not delete "${row.column_name}".`,
+      );
       throw error;
     }
   };
@@ -202,6 +215,12 @@ const ColumnList = ({ refreshTrigger }: ColumnListProps) => {
 
   return (
     <>
+      {deleteError && (
+        <div className={`mb-3 flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm ${isDark ? "bg-red-900/30 border-red-800/50 text-red-300" : "bg-red-50 border-red-200 text-red-700"}`}>
+          <span>{deleteError}</span>
+          <button onClick={() => setDeleteError(null)} className="shrink-0 font-bold cursor-pointer" title="Dismiss">&times;</button>
+        </div>
+      )}
       <Table<ColumnEntity>
         data={columns}
         columns={tableColumns}
