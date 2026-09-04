@@ -3483,7 +3483,13 @@ const UserDataEntryPage = () => {
                           expectedUnit={
                             row._isFeraRow
                               ? getFeraExpectedUnit(row.emission_category || "")
-                              : getExpectedUnit(row.emission_category || "")
+                              : getExpectedUnit(row.emission_category || "") ||
+                                // Before the factor is known, the calculation
+                                // rule's preselected unit for the chosen
+                                // method is the expected one.
+                                (calculationSpec?.mode === "per_method"
+                                  ? resolveSpecMethod(calculationSpec, row)?.method.activity_unit || null
+                                  : null)
                           }
                           units={units}
                           onChange={(value) =>
