@@ -49,6 +49,12 @@ export const useEmissionCalculation = (
   // then falling back to company_category_name (JSONB key) if ECM mapping exists.
   const findFactor = useCallback(
     (emissionCategory: string): EmissionFactor | undefined => {
+      // No category yet (dropdowns not all chosen): there is nothing to
+      // match. Without this guard the normalized fallback below matched ""
+      // against factors whose global_category_name is empty and reported a
+      // random factor's unit as "expected" before the user had finished.
+      if (!emissionCategory || !emissionCategory.trim()) return undefined;
+
       const yearMatch = (f: EmissionFactor) =>
         targetYear === undefined || f.year === targetYear;
 
