@@ -5144,8 +5144,23 @@ const UserDataEntryPage = () => {
                 {duplicateConfirm.existingEmission?.activity_data
                   ?.emission_category
                   ? ` (${duplicateConfirm.existingEmission.activity_data.emission_category})`
-                  : ""}{" "}
+                  : ""}
+                {/* Spec categories add identity columns (Shipment Ref, Product
+                    Name…) to what counts as "the same entry" — say so, so users
+                    understand why two same-route rows were allowed but this one
+                    wasn't. */}
+                {(calculationSpec?.identity_columns ?? []).map((col) => {
+                  const v = duplicateConfirm.existingEmission?.activity_data?.[col];
+                  return v ? `, ${col} "${v}"` : `, empty ${col}`;
+                }).join("")}{" "}
                 and date.
+                {(calculationSpec?.identity_columns ?? []).length > 0 && (
+                  <>
+                    {" "}
+                    A different {calculationSpec!.identity_columns!.join(" / ")} would
+                    make it a separate entry.
+                  </>
+                )}
               </p>
               <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1">
                 <div>
