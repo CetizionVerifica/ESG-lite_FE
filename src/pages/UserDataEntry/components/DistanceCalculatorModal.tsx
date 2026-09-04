@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { ArrowDownUp, Car, Navigation, Anchor, Route } from "lucide-react";
+import { ArrowDownUp, Car, Navigation, Anchor, Route, TrainFront } from "lucide-react";
 import Modal from "../../../components/Modal";
 import LocationSearchInput from "./LocationSearchInput";
 import type { ResolvedLocation as GeocodingResult } from "../../../services/locationService";
@@ -16,7 +16,14 @@ import {
 } from "../../../services/distanceService";
 import { getCanonicalDistanceUnit } from "../../../utils/distanceUnits";
 
-type TravelMode = "road" | "air" | "sea";
+type TravelMode = "road" | "air" | "sea" | "rail";
+
+// Rail has no public routing service (Google routes roads, not railways). The
+// Rail mode ESTIMATES: it uses the road route between the two points — freight
+// rail follows the same corridors, typically within 10-15% — and falls back to
+// straight-line × a standard rail circuity factor when no road route exists.
+// The result is labelled as an estimate wherever it is shown.
+const RAIL_STRAIGHT_LINE_FACTOR = 1.2;
 
 const METERS_PER_NAUTICAL_MILE = 1852;
 
@@ -80,6 +87,13 @@ const DistanceCalculatorModal = ({
     ? convertDistanceFromMeters(roadResult.distanceMeters, targetUnit)
     : null;
 
+  // Rail estimate: road corridor first, straight-line × factor as fallback.
+  const railFallbackDistance =
+    airDistance !== null
+      ? Math.round(airDistance * RAIL_STRAIGHT_LINE_FACTOR * 100) / 100
+      : null;
+  const railDistance = roadDistance ?? (error ? railFallbackDistance : null);
+
   const apiSeaDistance = seaResult
     ? convertDistanceFromMeters(seaResult.distanceMeters, targetUnit)
     : null;
@@ -95,7 +109,7 @@ const DistanceCalculatorModal = ({
 
   useEffect(() => {
     if (!startLocation || !endLocation) return;
-    if (travelMode !== "road" && travelMode !== "sea") return;
+    if (travelMode !== "road" && travelMode !== "sea" && travelMode !== "rail") return;
 
     let cancelled = false;
 
@@ -129,7 +143,8 @@ const DistanceCalculatorModal = ({
       );
     };
 
-    if (travelMode === "road") {
+    if (travelMode === "road" || travelMode === "rail") {
+      // rail = road corridor estimate (see RAIL_STRAIGHT_LINE_FACTOR note)
       calculateRoadDistance({
         ...commonPayload,
         mode: "road",
@@ -191,9 +206,11 @@ const DistanceCalculatorModal = ({
   const currentDistance =
     travelMode === "road"
       ? roadDistance
-      : travelMode === "air"
-        ? airDistance
-        : finalSeaDistance;
+      : travelMode === "rail"
+        ? railDistance
+        : travelMode === "air"
+          ? airDistance
+          : finalSeaDistance;
 
   const handleUseDistance = () => {
     if (currentDistance !== null) {
@@ -270,6 +287,20 @@ const DistanceCalculatorModal = ({
 
           <button
             type="button"
+            onClick={() => handleModeChange("rail")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              travelMode === "rail"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+            title="Estimated from the road corridor"
+          >
+            <TrainFront size={16} />
+            Rail
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleModeChange("air")}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               travelMode === "air"
@@ -333,9 +364,9 @@ const DistanceCalculatorModal = ({
             startLocation ? [startLocation.lat, startLocation.lon] : null
           }
           endPoint={endLocation ? [endLocation.lat, endLocation.lon] : null}
-          encodedPolyline={travelMode === "road" ? roadResult?.encodedPolyline : null}
+          encodedPolyline={travelMode === "road" || travelMode === "rail" ? roadResult?.encodedPolyline : null}
           seaGeometry={travelMode === "sea" ? seaResult?.seaGeometry ?? null : null}
-          travelMode={travelMode}
+          travelMode={travelMode === "rail" ? "road" : travelMode}
         />
 
         {travelMode === "road" && bothLocationsSet && (
@@ -370,6 +401,48 @@ const DistanceCalculatorModal = ({
               <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                 {error}
               </div>
+            )}
+          </>
+        )}
+
+        {travelMode === "rail" && bothLocationsSet && (
+          <>
+            {isCalculating && (
+              <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 animate-pulse">
+                <Route size={18} className="text-blue-400 shrink-0" />
+                <div className="text-sm text-blue-600">Estimating rail distance from the road corridor...</div>
+              </div>
+            )}
+
+            {roadDistance !== null && !isCalculating && (
+              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                <TrainFront size={18} className="text-green-500 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-xs text-green-600">Rail Distance — estimated from the road corridor</div>
+                  <div className="text-xl font-semibold text-green-800">
+                    {roadDistance.toLocaleString()} {displayUnit}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Freight rail follows the same corridors as the road network; actual track distance is typically within 10–15%. Recorded as an estimate.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {error && !isCalculating && railFallbackDistance !== null && (
+              <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                <TrainFront size={18} className="text-amber-500 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-xs text-amber-700">Rail Distance — straight line × {RAIL_STRAIGHT_LINE_FACTOR} (no road route available)</div>
+                  <div className="text-xl font-semibold text-amber-800">
+                    {railFallbackDistance.toLocaleString()} {displayUnit}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {error && !isCalculating && railFallbackDistance === null && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">{error}</div>
             )}
           </>
         )}
@@ -453,7 +526,9 @@ const DistanceCalculatorModal = ({
               currentDistance === null ||
               currentDistance <= 0 ||
               isCalculating ||
-              (!!error && !(travelMode === "sea" && fallbackSeaDistance !== null))
+              (!!error &&
+                !(travelMode === "sea" && fallbackSeaDistance !== null) &&
+                !(travelMode === "rail" && railFallbackDistance !== null))
             }
             title={currentDistance !== null && currentDistance <= 0 ? "Start and end are the same place" : undefined}
             className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium transition-colors"
