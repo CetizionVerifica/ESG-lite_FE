@@ -1135,6 +1135,12 @@ export default function AutoGenerateColumnConfigModal({
                 )}
 
                 {/* Actions */}
+                {Object.keys(editMappings).length === 0 && editColumns.some((c) => c.column_type === "select") && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    No mappings: the form would never find an emission factor. Adding or removing a dimension clears
+                    them. Click Cancel and open Auto-Generate again to rebuild, then only rename columns.
+                  </div>
+                )}
                 <div className="flex justify-end gap-3 pt-2 border-t border-gray-200">
                   <button
                     onClick={handleClose}
@@ -1144,7 +1150,7 @@ export default function AutoGenerateColumnConfigModal({
                   </button>
                   <button
                     onClick={handleConfirm}
-                    disabled={!configName.trim()}
+                    disabled={!configName.trim() || (Object.keys(editMappings).length === 0 && editColumns.some((c) => c.column_type === "select"))}
                     className="px-5 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                   >
                     Create Config

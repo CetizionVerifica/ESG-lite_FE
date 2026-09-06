@@ -36,7 +36,7 @@ import {
   getMappingsByCompany,
   type CategoryMapping,
 } from "../../services/categoryMappingService";
-import { useEmissionCalculation } from "./useEmissionCalculation";
+import { useEmissionCalculation, resolveSpecMethod, specNumericColumns } from "./useEmissionCalculation";
 import {
   UnitSelector,
   ValidationError,
@@ -162,8 +162,7 @@ const UserDataEntryPage = () => {
   // Multi-field calculation spec from column config (null = normal category).
   // When set (e.g. Use of Sold Products), the emission is the product of the
   // chosen method's fields × factor, numeric fields show/hide per method, and
-  // bulk upload reads the same spec in the AI service (rows it cannot compute
-  // are surfaced in the preview's Issue column and skipped on import).
+  // bulk upload is disabled (the AI-service import only knows one-value math).
   const [calculationSpec, setCalculationSpec] = useState<
     import("./types").CalculationSpec | null
   >(null);
@@ -1275,10 +1274,15 @@ const UserDataEntryPage = () => {
   const isColumnVisibleForRow = (col: ColumnEntity, row: ModalRow): boolean => {
     if (!calculationSpec) return true;
     if (col.column_type !== "number" || isSelectColumn(col)) return true;
-    const methodKey = String(row[calculationSpec.method_column] ?? "").trim();
-    if (!methodKey) return false;
-    const method = calculationSpec.methods[methodKey];
-    return !!method?.multiply?.includes(col.column_name);
+    const resolved = resolveSpecMethod(calculationSpec, row);
+    if (!resolved) {
+      // per_method: numbers wait for the method choice. per_unit: show every
+      // number any unit could use until the unit is chosen (Weight + Distance).
+      return calculationSpec.mode === "per_unit"
+        ? specNumericColumns(calculationSpec).has(col.column_name)
+        : false;
+    }
+    return resolved.method.multiply.includes(col.column_name);
   };
 
   // ---------------------------------------------------------------------------
@@ -1342,7 +1346,7 @@ const UserDataEntryPage = () => {
         // multiplied in), prefill percentage fields to 100 (the guidance says
         // assume 100% released when unknown), and preselect the method's unit.
         if (calculationSpec && columnName === calculationSpec.method_column) {
-          const method = calculationSpec.methods[String(value ?? "").trim()];
+          const method = calculationSpec.methods[String(value)];
           const applicable = new Set(method?.multiply ?? []);
           dynamicColumns.forEach((col) => {
             if (col.column_type === "number" && !applicable.has(col.column_name)) {
@@ -1420,8 +1424,13 @@ const UserDataEntryPage = () => {
         !unitsMatchExact(expectedUnit, row.activity_data_unit)
       ) {
         if (!canConvert(row.activity_data_unit, expectedUnit)) {
+          // Transport's "[km]" / "[tonne.km]" twins: say what to do, not just what's wrong.
+          const bracket = row.emission_category.match(/\[([^\]]+)\]/)?.[1];
+          const hint = bracket
+            ? ` This option is per ${bracket} — choose the "[${row.activity_data_unit}]" version of it, or switch the unit to ${bracket}.`
+            : "";
           errors.push(
-            `Row ${index + 1}: Unit mismatch - Expected "${expectedUnit}" but got "${row.activity_data_unit}". No conversion available.`,
+            `Row ${index + 1}: Unit mismatch - Expected "${expectedUnit}" but got "${row.activity_data_unit}". No conversion available.${hint}`,
           );
           return;
         }
@@ -3332,13 +3341,19 @@ const UserDataEntryPage = () => {
                               </select>
                             ) : (
                               (() => {
+                                // Spec configs (transport): weight and distance are
+                                // real stored columns multiplied by the engine, so the
+                                // synthetic "tonne × km" helper widget is not used; the
+                                // Map button attaches to the distance column itself.
                                 const composite =
-                                  col.pk_id === firstNumericColId
+                                  col.pk_id === firstNumericColId && !calculationSpec
                                     ? parseCompositeUnit(row.activity_data_unit)
                                     : null;
-                                const isDistCol =
-                                  col.pk_id === firstNumericColId &&
-                                  isDistanceUnit(row.activity_data_unit);
+                                const isDistCol = calculationSpec
+                                  ? /distance/i.test(col.column_name) &&
+                                    isDistanceUnit(row.activity_data_unit)
+                                  : col.pk_id === firstNumericColId &&
+                                    isDistanceUnit(row.activity_data_unit);
 
                                 if (composite && isDistCol) {
                                   const mulKey = `${col.column_name}__multiplier`;
@@ -3422,6 +3437,7 @@ const UserDataEntryPage = () => {
                                           ? "number"
                                           : "text"
                                       }
+                                      min={col.column_type === "number" ? 0 : undefined}
                                       value={row[col.column_name] || ""}
                                       onChange={(e) =>
                                         handleModalRowChange(
@@ -3467,7 +3483,13 @@ const UserDataEntryPage = () => {
                           expectedUnit={
                             row._isFeraRow
                               ? getFeraExpectedUnit(row.emission_category || "")
-                              : getExpectedUnit(row.emission_category || "")
+                              : getExpectedUnit(row.emission_category || "") ||
+                                // Before the factor is known, the calculation
+                                // rule's preselected unit for the chosen
+                                // method is the expected one.
+                                (calculationSpec?.mode === "per_method"
+                                  ? resolveSpecMethod(calculationSpec, row)?.method.activity_unit || null
+                                  : null)
                           }
                           units={units}
                           onChange={(value) =>
@@ -3692,7 +3714,9 @@ const UserDataEntryPage = () => {
             const unit = modalRows.find(
               (r) => r.id === distanceModalState.rowId,
             )?.activity_data_unit;
-            const composite = parseCompositeUnit(unit);
+            // Spec configs store the distance in its own real column — write
+            // straight into it (no synthetic helper key).
+            const composite = calculationSpec ? null : parseCompositeUnit(unit);
             const targetCol = composite
               ? `${distanceModalState.colName}__distance`
               : distanceModalState.colName;
@@ -5126,8 +5150,23 @@ const UserDataEntryPage = () => {
                 {duplicateConfirm.existingEmission?.activity_data
                   ?.emission_category
                   ? ` (${duplicateConfirm.existingEmission.activity_data.emission_category})`
-                  : ""}{" "}
+                  : ""}
+                {/* Spec categories add identity columns (Shipment Ref, Product
+                    Name…) to what counts as "the same entry" — say so, so users
+                    understand why two same-route rows were allowed but this one
+                    wasn't. */}
+                {(calculationSpec?.identity_columns ?? []).map((col) => {
+                  const v = duplicateConfirm.existingEmission?.activity_data?.[col];
+                  return v ? `, ${col} "${v}"` : `, empty ${col}`;
+                }).join("")}{" "}
                 and date.
+                {(calculationSpec?.identity_columns ?? []).length > 0 && (
+                  <>
+                    {" "}
+                    A different {calculationSpec!.identity_columns!.join(" / ")} would
+                    make it a separate entry.
+                  </>
+                )}
               </p>
               <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1">
                 <div>

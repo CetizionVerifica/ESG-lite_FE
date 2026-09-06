@@ -67,6 +67,8 @@ const LocationSearchInput = ({
     onSelect(result);
   };
 
+  const [resolveError, setResolveError] = useState<string | null>(null);
+
   const resolveRawQuery = async () => {
     const normalized = normalizeText(query);
 
@@ -78,6 +80,7 @@ const LocationSearchInput = ({
       geocodeInFlightRef.current = true;
       setIsResolving(true);
 
+      setResolveError(null);
       const result = await resolveLocationFromBackend(normalized);
 
       hasSelectedPlaceRef.current = true;
@@ -85,6 +88,8 @@ const LocationSearchInput = ({
       onSelect(result);
     } catch (err) {
       console.error("Failed to geocode pasted location:", err);
+      // Tell the user — a silent failure looked like a frozen form.
+      setResolveError("Could not find that location. Try a fuller address or pick one from the suggestions.");
     } finally {
       geocodeInFlightRef.current = false;
       setIsResolving(false);
@@ -105,6 +110,7 @@ const LocationSearchInput = ({
   const handleInputChange = (text: string) => {
     setQuery(text);
     hasSelectedPlaceRef.current = false;
+    setResolveError(null);
   };
 
   const handleBlur = () => {
@@ -219,6 +225,9 @@ const LocationSearchInput = ({
           )}
         </div>
       </div>
+      {resolveError && (
+        <p className="text-xs text-red-500 mt-1">{resolveError}</p>
+      )}
     </div>
   );
 };

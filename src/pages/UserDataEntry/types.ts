@@ -54,10 +54,14 @@ export interface MethodCalculation {
 }
 
 export interface CalculationSpec {
-    mode: "per_method";
-    method_column: string;               // select column that picks the method
+    // per_method: a select column picks the fields (Use of Sold Products).
+    // per_unit:   the row's unit picks them (transport: tonne.km = Weight × Distance,
+    //             km = Distance alone); keys are normalized unit names.
+    mode: "per_method" | "per_unit";
+    method_column?: string;              // per_method only
     identity_columns?: string[];         // columns added to the duplicate identity (backend)
-    methods: { [methodOptionId: string]: MethodCalculation };
+    methods: { [methodKeyOrUnit: string]: MethodCalculation };
+    legacy_field?: string;               // per_unit: pre-spec rows hold the product here
 }
 
 // Definition for supplementary (extra) fields per category

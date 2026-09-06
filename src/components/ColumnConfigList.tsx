@@ -10,6 +10,7 @@ import {
   DependentOptionsMap,
   EmissionCategoryMapping,
   ExtraFieldDefinition,
+  CalculationSpec,
 } from "../services/columnConfigService";
 import { getColumns, DropdownOptionValue } from "../services/columnService";
 import { Table, Column } from "./Table";
@@ -46,6 +47,7 @@ interface ColumnConfigEntity {
   dependent_options?: DependentOptionsMap;
   emission_category_mapping?: EmissionCategoryMapping;
   extra_fields?: ExtraFieldDefinition[];
+  calculation?: CalculationSpec | null;
 }
 
 interface ColumnConfigListProps {
