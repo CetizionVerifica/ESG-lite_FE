@@ -22,7 +22,7 @@ import {
   deleteEmissionsByBatch,
   getEmissionBatches,
   getEmissionFactorForEmission,
-  getPreviousPeriodTotal,
+  getPeriodTotal,
   type EmissionUploadBatch,
   type EmissionFactorDetails,
   EmissionData,
@@ -138,6 +138,11 @@ const UserDataEntryPage = () => {
     EmissionFactor[]
   >([]);
   const [categoryPreviousTotals, setCategoryPreviousTotals] =
+  useState<Record<string, number>>({});
+  // Already saved for the period being entered, per category. The modal only
+  // holds unsaved rows, so without this an entry added later — or one opened
+  // for edit — would be compared against the previous period on its own.
+  const [categorySavedTotals, setCategorySavedTotals] =
   useState<Record<string, number>>({});
   const [units, setUnits] = useState<UnitData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -333,6 +338,26 @@ const UserDataEntryPage = () => {
       }, {}),
     [modalRows, calculateEmission],
   );
+
+  // A row opened for edit is in the saved total (it is persisted) and in the
+  // modal total (the user is changing it). Drop its stored value so the edit
+  // reads as a replacement rather than a second entry.
+  const effectiveSavedTotals = useMemo(() => {
+    const editing =
+      editingEmissionId === null
+        ? null
+        : emissions.find((e) => e.pk_id === editingEmissionId);
+    const category = editing?.emission_category;
+    if (!editing || !category || editing.status === "rejected") {
+      return categorySavedTotals;
+    }
+    if (!(category in categorySavedTotals)) return categorySavedTotals;
+    return {
+      ...categorySavedTotals,
+      [category]:
+        categorySavedTotals[category] - Number(editing.total_emission ?? 0),
+    };
+  }, [categorySavedTotals, editingEmissionId, emissions]);
 
   // ---------------------------------------------------------------------------
   // Derived Data (continued)
@@ -776,7 +801,7 @@ const UserDataEntryPage = () => {
   if (categoriesToFetch.length === 0) return;
 
   categoriesToFetch.forEach((cat) => {
-    getPreviousPeriodTotal({
+    getPeriodTotal({
       siteId,
       categoryId: selectedCategory,
       emissionCategory: cat,
@@ -784,6 +809,7 @@ const UserDataEntryPage = () => {
       reportingPeriod: periodMode,
       month: lookupMonth,
       yearType: periodMode === "yearly" ? yearType : undefined,
+      basis: "approved",
     })
       .then((total) => {
         setCategoryPreviousTotals((prev) => ({ ...prev, [cat]: total }));
@@ -802,6 +828,52 @@ const UserDataEntryPage = () => {
   categoryPreviousTotals,
 ]);
 
+  // Same lookup for the period being entered. It has to come from the API
+  // rather than the loaded `emissions` rows, which are only the current page
+  // of 50 and would silently undercount a busy period.
+  useEffect(() => {
+    if (!siteId || !selectedCategory || !selectedDate) return;
+
+    const selectedDateYear = parseInt(selectedDate.substring(0, 4), 10);
+    const selectedDateMonth = parseInt(selectedDate.substring(5, 7), 10);
+
+    const categoriesToFetch = Array.from(
+      new Set(
+        modalRows
+          .filter((r) => !r._isFeraRow && r.emission_category)
+          .map((r) => r.emission_category as string),
+      ),
+    ).filter((cat) => !(cat in categorySavedTotals));
+
+    if (categoriesToFetch.length === 0) return;
+
+    categoriesToFetch.forEach((cat) => {
+      getPeriodTotal({
+        siteId,
+        categoryId: selectedCategory,
+        emissionCategory: cat,
+        year: selectedDateYear,
+        reportingPeriod: periodMode,
+        month: periodMode === "monthly" ? selectedDateMonth : undefined,
+        yearType: periodMode === "yearly" ? yearType : undefined,
+        basis: "entered",
+      })
+        .then((total) => {
+          setCategorySavedTotals((prev) => ({ ...prev, [cat]: total }));
+        })
+        .catch(() => {
+          setCategorySavedTotals((prev) => ({ ...prev, [cat]: 0 }));
+        });
+    });
+  }, [
+    modalRows,
+    siteId,
+    selectedCategory,
+    selectedDate,
+    periodMode,
+    yearType,
+    categorySavedTotals,
+  ]);
 
   // Fetch upload batches whenever site changes (independent of category/date)
   const fetchBatches = useCallback(() => {
@@ -1385,6 +1457,7 @@ const UserDataEntryPage = () => {
     setNextRowId(2);
     setSaveError(null);
     setCategoryPreviousTotals({});
+    setCategorySavedTotals({});
     setModalOpen(true);
   };
 
@@ -1896,7 +1969,8 @@ const UserDataEntryPage = () => {
     setModalRows([modalRow]);
     setNextRowId(2);
     setSaveError(null);
-    setCategoryPreviousTotals({}); 
+    setCategoryPreviousTotals({});
+    setCategorySavedTotals({});
     setModalOpen(true);
   };
 
@@ -3205,9 +3279,14 @@ const UserDataEntryPage = () => {
               row.emission_category && row.emission_category in categoryPreviousTotals
                 ? categoryPreviousTotals[row.emission_category]
                 : null;
+            // What this period will hold once the modal is saved: rows already
+            // persisted for it, plus what the modal is adding or replacing.
             const categoryCurrentTotal =
-              row.emission_category && row.emission_category in categoryCurrentTotals
-                ? categoryCurrentTotals[row.emission_category]
+              row.emission_category &&
+              (row.emission_category in categoryCurrentTotals ||
+                row.emission_category in effectiveSavedTotals)
+                ? (categoryCurrentTotals[row.emission_category] ?? 0) +
+                  (effectiveSavedTotals[row.emission_category] ?? 0)
                 : null;
             const categoryEmissionVariation =
               categoryCurrentTotal !== null &&
