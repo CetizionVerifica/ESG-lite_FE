@@ -66,7 +66,19 @@ export interface PaginatedEmissions {
   total: number;
   summary: EmissionsSummary;
 }
-
+export interface PeriodTotalParams {
+  siteId: number;
+  categoryId: number;
+  emissionCategory: string;
+  year: number;
+  reportingPeriod: "monthly" | "yearly";
+  month?: number;
+  yearType?: "CY" | "FY";
+  // "approved" (the default) is the reported basis — right for a period that is
+  // finished. "entered" counts everything not rejected, the only basis with any
+  // meaning for the period currently being entered.
+  basis?: "approved" | "entered";
+}
 export const getEmissionsBySite = async (siteId: string | number) => {
   const response = await api.get("/user/emissions", {
     params: { siteId },
@@ -334,4 +346,24 @@ export const exportMonthlyEmissions = async (params: {
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+};
+
+export const getPeriodTotal = async (
+  params: PeriodTotalParams,
+): Promise<number> => {
+  const query: Record<string, string | number> = {
+    site_id: params.siteId,
+    category_id: params.categoryId,
+    emission_category: params.emissionCategory,
+    year: params.year,
+    reporting_period: params.reportingPeriod,
+  };
+  if (params.month != null) query.month = params.month;
+  if (params.yearType) query.year_type = params.yearType;
+  if (params.basis) query.basis = params.basis;
+
+  const response = await api.get("/user/emissions/period-total", {
+    params: query,
+  });
+  return response.data.total_emission;
 };

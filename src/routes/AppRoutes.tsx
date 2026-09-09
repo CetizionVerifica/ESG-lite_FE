@@ -32,6 +32,7 @@ import ManagerUsersPage from "../pages/ManagerUsers";
 import CompanyAdminUsersPage from "../pages/CompanyAdmin/CompanyAdminUsersPage";
 import NotificationsPage from "../pages/NotificationsPage";
 import SettingsPage from "../pages/SettingsPage";
+import ThresholdValuePage from "../pages/ThresholdValuePage";
 
 const routes = [
   {
@@ -145,6 +146,10 @@ const routes = [
           {
             path: "products",
             element: <ProductPage />
+          },
+          {
+            path: "threshold-values",
+            element: <ThresholdValuePage />
           },
           {
             path: "production-data",

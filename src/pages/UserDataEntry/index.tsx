@@ -22,6 +22,7 @@ import {
   deleteEmissionsByBatch,
   getEmissionBatches,
   getEmissionFactorForEmission,
+  getPeriodTotal,
   type EmissionUploadBatch,
   type EmissionFactorDetails,
   EmissionData,
@@ -68,6 +69,7 @@ import {
   reextractInvoice,
   type Invoice,
 } from "../../services/invoiceService";
+import { getThresholdByCompany } from "../../services/thresholdService";
 
 interface Site {
   site_id: number;
@@ -135,6 +137,13 @@ const UserDataEntryPage = () => {
   const [feraEmissionFactors, setFeraEmissionFactors] = useState<
     EmissionFactor[]
   >([]);
+  const [categoryPreviousTotals, setCategoryPreviousTotals] =
+  useState<Record<string, number>>({});
+  // Already saved for the period being entered, per category. The modal only
+  // holds unsaved rows, so without this an entry added later — or one opened
+  // for edit — would be compared against the previous period on its own.
+  const [categorySavedTotals, setCategorySavedTotals] =
+  useState<Record<string, number>>({});
   const [units, setUnits] = useState<UnitData[]>([]);
   const [loading, setLoading] = useState(false);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
@@ -253,6 +262,8 @@ const UserDataEntryPage = () => {
     useState<EmissionRow | null>(null);
   const [factorLoading, setFactorLoading] = useState(false);
 
+  const [emissionThreshold, setEmissionThreshold] = useState<number>(5);
+
   // ---------------------------------------------------------------------------
   // Derived Data
   // ---------------------------------------------------------------------------
@@ -309,6 +320,45 @@ const UserDataEntryPage = () => {
     true, // fallbackToRaw — FERA factors account for fuel energy content in their factor_value
   );
 
+  // This period's entries summed per emission category. The previous-period
+  // figure is a category total, so the current side has to be one too — a
+  // category split across several entries would otherwise compare each entry
+  // alone against the whole previous total and read as a large false drop.
+  const categoryCurrentTotals = useMemo(
+    () =>
+      modalRows.reduce<Record<string, number>>((totals, row) => {
+        if (row._isFeraRow || !row.emission_category) return totals;
+        const { value } = calculateEmission(row);
+        if (value === null) return totals;
+        return {
+          ...totals,
+          [row.emission_category]:
+            (totals[row.emission_category] ?? 0) + value,
+        };
+      }, {}),
+    [modalRows, calculateEmission],
+  );
+
+  // A row opened for edit is in the saved total (it is persisted) and in the
+  // modal total (the user is changing it). Drop its stored value so the edit
+  // reads as a replacement rather than a second entry.
+  const effectiveSavedTotals = useMemo(() => {
+    const editing =
+      editingEmissionId === null
+        ? null
+        : emissions.find((e) => e.pk_id === editingEmissionId);
+    const category = editing?.emission_category;
+    if (!editing || !category || editing.status === "rejected") {
+      return categorySavedTotals;
+    }
+    if (!(category in categorySavedTotals)) return categorySavedTotals;
+    return {
+      ...categorySavedTotals,
+      [category]:
+        categorySavedTotals[category] - Number(editing.total_emission ?? 0),
+    };
+  }, [categorySavedTotals, editingEmissionId, emissions]);
+
   // ---------------------------------------------------------------------------
   // Derived Data (continued)
   // ---------------------------------------------------------------------------
@@ -363,6 +413,13 @@ const UserDataEntryPage = () => {
     () => selectedCategory !== null && selectedCategory !== undefined,
     [selectedCategory],
   );
+
+  useEffect(() => {
+  if (!companyId) return;
+  getThresholdByCompany(companyId)
+    .then(setEmissionThreshold)
+    .catch(() => setEmissionThreshold(5));
+}, [companyId]);
 
   // Deselecting the category exits yearly mode.
   useEffect(() => {
@@ -711,6 +768,112 @@ const UserDataEntryPage = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+ useEffect(() => {
+  if (!siteId || !selectedCategory || !selectedDate) return;
+
+  const selectedDateYear = parseInt(selectedDate.substring(0, 4), 10);
+  const selectedDateMonth = parseInt(selectedDate.substring(5, 7), 10);
+
+  let lookupYear: number;
+  let lookupMonth: number | undefined;
+  if (periodMode === "monthly") {
+    if (selectedDateMonth === 1) {
+      lookupYear = selectedDateYear - 1;
+      lookupMonth = 12;
+    } else {
+      lookupYear = selectedDateYear;
+      lookupMonth = selectedDateMonth - 1;
+    }
+  } else {
+    lookupYear = selectedDateYear - 1;
+    lookupMonth = undefined;
+  }
+
+  const categoriesToFetch = Array.from(
+    new Set(
+      modalRows
+        .filter((r) => !r._isFeraRow && r.emission_category)
+        .map((r) => r.emission_category as string),
+    ),
+  ).filter((cat) => !(cat in categoryPreviousTotals));
+
+  if (categoriesToFetch.length === 0) return;
+
+  categoriesToFetch.forEach((cat) => {
+    getPeriodTotal({
+      siteId,
+      categoryId: selectedCategory,
+      emissionCategory: cat,
+      year: lookupYear,
+      reportingPeriod: periodMode,
+      month: lookupMonth,
+      yearType: periodMode === "yearly" ? yearType : undefined,
+      basis: "approved",
+    })
+      .then((total) => {
+        setCategoryPreviousTotals((prev) => ({ ...prev, [cat]: total }));
+      })
+      .catch(() => {
+        setCategoryPreviousTotals((prev) => ({ ...prev, [cat]: 0 }));
+      });
+  });
+}, [
+  modalRows,
+  siteId,
+  selectedCategory,
+  selectedDate,
+  periodMode,
+  yearType,
+  categoryPreviousTotals,
+]);
+
+  // Same lookup for the period being entered. It has to come from the API
+  // rather than the loaded `emissions` rows, which are only the current page
+  // of 50 and would silently undercount a busy period.
+  useEffect(() => {
+    if (!siteId || !selectedCategory || !selectedDate) return;
+
+    const selectedDateYear = parseInt(selectedDate.substring(0, 4), 10);
+    const selectedDateMonth = parseInt(selectedDate.substring(5, 7), 10);
+
+    const categoriesToFetch = Array.from(
+      new Set(
+        modalRows
+          .filter((r) => !r._isFeraRow && r.emission_category)
+          .map((r) => r.emission_category as string),
+      ),
+    ).filter((cat) => !(cat in categorySavedTotals));
+
+    if (categoriesToFetch.length === 0) return;
+
+    categoriesToFetch.forEach((cat) => {
+      getPeriodTotal({
+        siteId,
+        categoryId: selectedCategory,
+        emissionCategory: cat,
+        year: selectedDateYear,
+        reportingPeriod: periodMode,
+        month: periodMode === "monthly" ? selectedDateMonth : undefined,
+        yearType: periodMode === "yearly" ? yearType : undefined,
+        basis: "entered",
+      })
+        .then((total) => {
+          setCategorySavedTotals((prev) => ({ ...prev, [cat]: total }));
+        })
+        .catch(() => {
+          setCategorySavedTotals((prev) => ({ ...prev, [cat]: 0 }));
+        });
+    });
+  }, [
+    modalRows,
+    siteId,
+    selectedCategory,
+    selectedDate,
+    periodMode,
+    yearType,
+    categorySavedTotals,
+  ]);
 
   // Fetch upload batches whenever site changes (independent of category/date)
   const fetchBatches = useCallback(() => {
@@ -1293,6 +1456,8 @@ const UserDataEntryPage = () => {
     setModalRows([initialRow]);
     setNextRowId(2);
     setSaveError(null);
+    setCategoryPreviousTotals({});
+    setCategorySavedTotals({});
     setModalOpen(true);
   };
 
@@ -1804,6 +1969,8 @@ const UserDataEntryPage = () => {
     setModalRows([modalRow]);
     setNextRowId(2);
     setSaveError(null);
+    setCategoryPreviousTotals({});
+    setCategorySavedTotals({});
     setModalOpen(true);
   };
 
@@ -2437,6 +2604,8 @@ const UserDataEntryPage = () => {
       /* leave list unchanged on error */
     }
   };
+
+ 
 
   // ---------------------------------------------------------------------------
   // Table Columns
@@ -3106,7 +3275,45 @@ const UserDataEntryPage = () => {
             const emissionResult = row._isFeraRow
               ? calculateFeraEmission(row)
               : calculateEmission(row);
-
+            const rowPreviousTotal =
+              row.emission_category && row.emission_category in categoryPreviousTotals
+                ? categoryPreviousTotals[row.emission_category]
+                : null;
+            // What this period will hold once the modal is saved: rows already
+            // persisted for it, plus what the modal is adding or replacing.
+            const categoryCurrentTotal =
+              row.emission_category &&
+              (row.emission_category in categoryCurrentTotals ||
+                row.emission_category in effectiveSavedTotals)
+                ? (categoryCurrentTotals[row.emission_category] ?? 0) +
+                  (effectiveSavedTotals[row.emission_category] ?? 0)
+                : null;
+            const categoryEmissionVariation =
+              categoryCurrentTotal !== null &&
+              rowPreviousTotal !== null &&
+              rowPreviousTotal !== 0
+                ? ((categoryCurrentTotal - rowPreviousTotal) / Math.abs(rowPreviousTotal)) * 100
+                : null;
+            // Both sides are category totals, so show the comparison once per
+            // category rather than repeating the same line on every entry.
+            const isFirstRowForCategory =
+              !row._isFeraRow &&
+              !!row.emission_category &&
+              modalRows.findIndex(
+                (r) =>
+                  !r._isFeraRow && r.emission_category === row.emission_category,
+              ) === rowIdx;
+            const previousPeriodLabel = (() => {
+              if (!selectedDate) return periodMode === "monthly" ? "month" : "year";
+              const selectedDateYear = parseInt(selectedDate.substring(0, 4), 10);
+              const selectedDateMonth = parseInt(selectedDate.substring(5, 7), 10);
+              if (periodMode === "monthly") {
+                const d = new Date(selectedDateYear, selectedDateMonth - 2, 1);
+                return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+              }
+              const prevYear = selectedDateYear - 1;
+              return yearType === "CY" ? `CY ${prevYear}` : fyLabel(prevYear - 1);
+            })();
             return (
               <div
                 key={row.id}
@@ -3613,6 +3820,50 @@ const UserDataEntryPage = () => {
                       {emissionResult.status === "converted" && (
                         <span className="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded">
                           (unit converted)
+                        </span>
+                      )}
+                      
+                      {/* A zero baseline means nothing approved in the previous
+                          period, or the lookup failed (the catch stores 0) —
+                          either way there is nothing to compare against, so say
+                          nothing rather than show a bare "0.00 tCO2e". */}
+                      {isFirstRowForCategory &&
+                        rowPreviousTotal !== null &&
+                        rowPreviousTotal !== 0 && (
+                        <span className="text-sm text-gray-500 border-l border-gray-200 pl-3">
+                          {previousPeriodLabel} ({row.emission_category}):{" "}
+                          {rowPreviousTotal.toFixed(2)} tCO2e
+                          {categoryEmissionVariation !== null &&
+                            categoryCurrentTotal !== null && (
+                              <span
+                                className={`ml-1 font-semibold ${
+                                  categoryEmissionVariation < 0
+                                    ? "text-green-600"
+                                    : categoryEmissionVariation <= emissionThreshold
+                                    ? "text-black"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {categoryEmissionVariation < 0 ? (
+                                  <>
+                                    (This period's total of {categoryCurrentTotal.toFixed(2)} tCO2e is{" "}
+                                    {Math.abs(categoryEmissionVariation).toFixed(2)}% below{" "}
+                                    {previousPeriodLabel})
+                                  </>
+                                ) : categoryEmissionVariation <= emissionThreshold ? (
+                                  <>
+                                    (This period's total of {categoryCurrentTotal.toFixed(2)} tCO2e is{" "}
+                                    {categoryEmissionVariation.toFixed(2)}% greater than {previousPeriodLabel} - Within the threshold range)
+                                  </>
+                                ) : (
+                                  <>
+                                    (This period's total of {categoryCurrentTotal.toFixed(2)} tCO2e is +
+                                    {categoryEmissionVariation.toFixed(2)}% greater than{" "}
+                                    {previousPeriodLabel})
+                                  </>
+                                )}
+                              </span>
+                            )}
                         </span>
                       )}
                     </div>
