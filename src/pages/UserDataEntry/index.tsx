@@ -3744,7 +3744,13 @@ const UserDataEntryPage = () => {
                         </span>
                       )}
                       
-                      {isFirstRowForCategory && rowPreviousTotal !== null && (
+                      {/* A zero baseline means nothing approved in the previous
+                          period, or the lookup failed (the catch stores 0) —
+                          either way there is nothing to compare against, so say
+                          nothing rather than show a bare "0.00 tCO2e". */}
+                      {isFirstRowForCategory &&
+                        rowPreviousTotal !== null &&
+                        rowPreviousTotal !== 0 && (
                         <span className="text-sm text-gray-500 border-l border-gray-200 pl-3">
                           {previousPeriodLabel} ({row.emission_category}):{" "}
                           {rowPreviousTotal.toFixed(2)} tCO2e
