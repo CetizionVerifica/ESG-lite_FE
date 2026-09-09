@@ -315,6 +315,25 @@ const UserDataEntryPage = () => {
     true, // fallbackToRaw — FERA factors account for fuel energy content in their factor_value
   );
 
+  // This period's entries summed per emission category. The previous-period
+  // figure is a category total, so the current side has to be one too — a
+  // category split across several entries would otherwise compare each entry
+  // alone against the whole previous total and read as a large false drop.
+  const categoryCurrentTotals = useMemo(
+    () =>
+      modalRows.reduce<Record<string, number>>((totals, row) => {
+        if (row._isFeraRow || !row.emission_category) return totals;
+        const { value } = calculateEmission(row);
+        if (value === null) return totals;
+        return {
+          ...totals,
+          [row.emission_category]:
+            (totals[row.emission_category] ?? 0) + value,
+        };
+      }, {}),
+    [modalRows, calculateEmission],
+  );
+
   // ---------------------------------------------------------------------------
   // Derived Data (continued)
   // ---------------------------------------------------------------------------
@@ -3186,12 +3205,25 @@ const UserDataEntryPage = () => {
               row.emission_category && row.emission_category in categoryPreviousTotals
                 ? categoryPreviousTotals[row.emission_category]
                 : null;
-            const rowEmissionVariation =
-              emissionResult.value !== null &&
+            const categoryCurrentTotal =
+              row.emission_category && row.emission_category in categoryCurrentTotals
+                ? categoryCurrentTotals[row.emission_category]
+                : null;
+            const categoryEmissionVariation =
+              categoryCurrentTotal !== null &&
               rowPreviousTotal !== null &&
               rowPreviousTotal !== 0
-                ? ((emissionResult.value - rowPreviousTotal) / Math.abs(rowPreviousTotal)) * 100
+                ? ((categoryCurrentTotal - rowPreviousTotal) / Math.abs(rowPreviousTotal)) * 100
                 : null;
+            // Both sides are category totals, so show the comparison once per
+            // category rather than repeating the same line on every entry.
+            const isFirstRowForCategory =
+              !row._isFeraRow &&
+              !!row.emission_category &&
+              modalRows.findIndex(
+                (r) =>
+                  !r._isFeraRow && r.emission_category === row.emission_category,
+              ) === rowIdx;
             const previousPeriodLabel = (() => {
               if (!selectedDate) return periodMode === "monthly" ? "month" : "year";
               const selectedDateYear = parseInt(selectedDate.substring(0, 4), 10);
@@ -3712,36 +3744,41 @@ const UserDataEntryPage = () => {
                         </span>
                       )}
                       
-                      {!row._isFeraRow && rowPreviousTotal !== null && (
+                      {isFirstRowForCategory && rowPreviousTotal !== null && (
                         <span className="text-sm text-gray-500 border-l border-gray-200 pl-3">
                           {previousPeriodLabel} ({row.emission_category}):{" "}
                           {rowPreviousTotal.toFixed(2)} tCO2e
-
-                          {rowEmissionVariation !== null && (
-                            <span
-                              className={`ml-1 font-semibold ${
-                                rowEmissionVariation < 0
-                                  ? "text-green-600"
-                                  : rowEmissionVariation <= emissionThreshold
-                                  ? "text-black"
-                                  : "text-red-600"
-                              }`}
-                            >
-                              {rowEmissionVariation < 0 ? (
-                                <>
-                                  (The calculated emission is {Math.abs(rowEmissionVariation).toFixed(2)}% below than{" "}
-                                  {previousPeriodLabel})
-                                </>
-                              ) : rowEmissionVariation <= emissionThreshold ? (
-                                <>(The calculated emission is {rowEmissionVariation.toFixed(2)}% greater than {previousPeriodLabel} - Within the threshold range)</>
-                              ) : (
-                                <>
-                                  (The calculated emission is +{rowEmissionVariation.toFixed(2)}% greater than{" "}
-                                  {previousPeriodLabel})
-                                </>
-                              )}
-                            </span>
-                          )}
+                          {categoryEmissionVariation !== null &&
+                            categoryCurrentTotal !== null && (
+                              <span
+                                className={`ml-1 font-semibold ${
+                                  categoryEmissionVariation < 0
+                                    ? "text-green-600"
+                                    : categoryEmissionVariation <= emissionThreshold
+                                    ? "text-black"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {categoryEmissionVariation < 0 ? (
+                                  <>
+                                    (This period's total of {categoryCurrentTotal.toFixed(2)} tCO2e is{" "}
+                                    {Math.abs(categoryEmissionVariation).toFixed(2)}% below{" "}
+                                    {previousPeriodLabel})
+                                  </>
+                                ) : categoryEmissionVariation <= emissionThreshold ? (
+                                  <>
+                                    (This period's total of {categoryCurrentTotal.toFixed(2)} tCO2e is{" "}
+                                    {categoryEmissionVariation.toFixed(2)}% greater than {previousPeriodLabel} - Within the threshold range)
+                                  </>
+                                ) : (
+                                  <>
+                                    (This period's total of {categoryCurrentTotal.toFixed(2)} tCO2e is +
+                                    {categoryEmissionVariation.toFixed(2)}% greater than{" "}
+                                    {previousPeriodLabel})
+                                  </>
+                                )}
+                              </span>
+                            )}
                         </span>
                       )}
                     </div>
