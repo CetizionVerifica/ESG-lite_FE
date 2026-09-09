@@ -8,7 +8,7 @@ import {
   type UploadBatch,
 } from "../services/emissionFactorService";
 
-interface EmissionFactor {
+export interface EmissionFactor {
   emission_factor_id: number;
   year: number;
   factor_value: number;
@@ -31,6 +31,7 @@ interface EmissionFactorListProps {
   categoryId: number | null;
   refreshTrigger?: number;
   onSelectionChange?: (selectedIds: number[]) => void;
+  onEdit?: (row: EmissionFactor) => void;
 }
 
 const PAGE_SIZE = 50;
@@ -40,6 +41,7 @@ const EmissionFactorList = ({
   categoryId,
   refreshTrigger,
   onSelectionChange,
+  onEdit,
 }: EmissionFactorListProps) => {
   const [emissionFactors, setEmissionFactors] = useState<EmissionFactor[]>([]);
   const [loading, setLoading] = useState(false);
@@ -451,12 +453,20 @@ const EmissionFactorList = ({
                       </td>
                     ))}
                     <td className="border border-gray-300 px-4 py-3">
+                     <div className="flex gap-2">
+                      <button
+                        onClick={() => onEdit?.(ef)}
+                        className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                      >
+                        Edit
+                      </button>
                       <button
                         onClick={() => handleDelete(ef)}
                         className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
                       >
                         Delete
                       </button>
+                      </div>
                     </td>
                   </tr>
                 );

@@ -22,6 +22,7 @@ import {
   deleteEmissionsByBatch,
   getEmissionBatches,
   getEmissionFactorForEmission,
+  getPreviousPeriodTotal,
   type EmissionUploadBatch,
   type EmissionFactorDetails,
   EmissionData,
@@ -68,6 +69,7 @@ import {
   reextractInvoice,
   type Invoice,
 } from "../../services/invoiceService";
+import { getThresholdByCompany } from "../../services/thresholdService";
 
 interface Site {
   site_id: number;
@@ -135,6 +137,8 @@ const UserDataEntryPage = () => {
   const [feraEmissionFactors, setFeraEmissionFactors] = useState<
     EmissionFactor[]
   >([]);
+  const [categoryPreviousTotals, setCategoryPreviousTotals] =
+  useState<Record<string, number>>({});
   const [units, setUnits] = useState<UnitData[]>([]);
   const [loading, setLoading] = useState(false);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
@@ -253,6 +257,8 @@ const UserDataEntryPage = () => {
     useState<EmissionRow | null>(null);
   const [factorLoading, setFactorLoading] = useState(false);
 
+  const [emissionThreshold, setEmissionThreshold] = useState<number>(5);
+
   // ---------------------------------------------------------------------------
   // Derived Data
   // ---------------------------------------------------------------------------
@@ -363,6 +369,13 @@ const UserDataEntryPage = () => {
     () => selectedCategory !== null && selectedCategory !== undefined,
     [selectedCategory],
   );
+
+  useEffect(() => {
+  if (!companyId) return;
+  getThresholdByCompany(companyId)
+    .then(setEmissionThreshold)
+    .catch(() => setEmissionThreshold(5));
+}, [companyId]);
 
   // Deselecting the category exits yearly mode.
   useEffect(() => {
@@ -711,6 +724,65 @@ const UserDataEntryPage = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+ useEffect(() => {
+  if (!siteId || !selectedCategory || !selectedDate) return;
+
+  const selectedDateYear = parseInt(selectedDate.substring(0, 4), 10);
+  const selectedDateMonth = parseInt(selectedDate.substring(5, 7), 10);
+
+  let lookupYear: number;
+  let lookupMonth: number | undefined;
+  if (periodMode === "monthly") {
+    if (selectedDateMonth === 1) {
+      lookupYear = selectedDateYear - 1;
+      lookupMonth = 12;
+    } else {
+      lookupYear = selectedDateYear;
+      lookupMonth = selectedDateMonth - 1;
+    }
+  } else {
+    lookupYear = selectedDateYear - 1;
+    lookupMonth = undefined;
+  }
+
+  const categoriesToFetch = Array.from(
+    new Set(
+      modalRows
+        .filter((r) => !r._isFeraRow && r.emission_category)
+        .map((r) => r.emission_category as string),
+    ),
+  ).filter((cat) => !(cat in categoryPreviousTotals));
+
+  if (categoriesToFetch.length === 0) return;
+
+  categoriesToFetch.forEach((cat) => {
+    getPreviousPeriodTotal({
+      siteId,
+      categoryId: selectedCategory,
+      emissionCategory: cat,
+      year: lookupYear,
+      reportingPeriod: periodMode,
+      month: lookupMonth,
+      yearType: periodMode === "yearly" ? yearType : undefined,
+    })
+      .then((total) => {
+        setCategoryPreviousTotals((prev) => ({ ...prev, [cat]: total }));
+      })
+      .catch(() => {
+        setCategoryPreviousTotals((prev) => ({ ...prev, [cat]: 0 }));
+      });
+  });
+}, [
+  modalRows,
+  siteId,
+  selectedCategory,
+  selectedDate,
+  periodMode,
+  yearType,
+  categoryPreviousTotals,
+]);
+
 
   // Fetch upload batches whenever site changes (independent of category/date)
   const fetchBatches = useCallback(() => {
@@ -1293,6 +1365,7 @@ const UserDataEntryPage = () => {
     setModalRows([initialRow]);
     setNextRowId(2);
     setSaveError(null);
+    setCategoryPreviousTotals({});
     setModalOpen(true);
   };
 
@@ -1804,6 +1877,7 @@ const UserDataEntryPage = () => {
     setModalRows([modalRow]);
     setNextRowId(2);
     setSaveError(null);
+    setCategoryPreviousTotals({}); 
     setModalOpen(true);
   };
 
@@ -2437,6 +2511,8 @@ const UserDataEntryPage = () => {
       /* leave list unchanged on error */
     }
   };
+
+ 
 
   // ---------------------------------------------------------------------------
   // Table Columns
@@ -3106,7 +3182,27 @@ const UserDataEntryPage = () => {
             const emissionResult = row._isFeraRow
               ? calculateFeraEmission(row)
               : calculateEmission(row);
-
+            const rowPreviousTotal =
+              row.emission_category && row.emission_category in categoryPreviousTotals
+                ? categoryPreviousTotals[row.emission_category]
+                : null;
+            const rowEmissionVariation =
+              emissionResult.value !== null &&
+              rowPreviousTotal !== null &&
+              rowPreviousTotal !== 0
+                ? ((emissionResult.value - rowPreviousTotal) / Math.abs(rowPreviousTotal)) * 100
+                : null;
+            const previousPeriodLabel = (() => {
+              if (!selectedDate) return periodMode === "monthly" ? "month" : "year";
+              const selectedDateYear = parseInt(selectedDate.substring(0, 4), 10);
+              const selectedDateMonth = parseInt(selectedDate.substring(5, 7), 10);
+              if (periodMode === "monthly") {
+                const d = new Date(selectedDateYear, selectedDateMonth - 2, 1);
+                return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+              }
+              const prevYear = selectedDateYear - 1;
+              return yearType === "CY" ? `CY ${prevYear}` : fyLabel(prevYear - 1);
+            })();
             return (
               <div
                 key={row.id}
@@ -3613,6 +3709,39 @@ const UserDataEntryPage = () => {
                       {emissionResult.status === "converted" && (
                         <span className="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded">
                           (unit converted)
+                        </span>
+                      )}
+                      
+                      {!row._isFeraRow && rowPreviousTotal !== null && (
+                        <span className="text-sm text-gray-500 border-l border-gray-200 pl-3">
+                          {previousPeriodLabel} ({row.emission_category}):{" "}
+                          {rowPreviousTotal.toFixed(2)} tCO2e
+
+                          {rowEmissionVariation !== null && (
+                            <span
+                              className={`ml-1 font-semibold ${
+                                rowEmissionVariation < 0
+                                  ? "text-green-600"
+                                  : rowEmissionVariation <= emissionThreshold
+                                  ? "text-black"
+                                  : "text-red-600"
+                              }`}
+                            >
+                              {rowEmissionVariation < 0 ? (
+                                <>
+                                  (The calculated emission is {Math.abs(rowEmissionVariation).toFixed(2)}% below than{" "}
+                                  {previousPeriodLabel})
+                                </>
+                              ) : rowEmissionVariation <= emissionThreshold ? (
+                                <>(The calculated emission is {rowEmissionVariation.toFixed(2)}% greater than {previousPeriodLabel} - Within the threshold range)</>
+                              ) : (
+                                <>
+                                  (The calculated emission is +{rowEmissionVariation.toFixed(2)}% greater than{" "}
+                                  {previousPeriodLabel})
+                                </>
+                              )}
+                            </span>
+                          )}
                         </span>
                       )}
                     </div>

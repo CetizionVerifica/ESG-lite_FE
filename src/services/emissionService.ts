@@ -66,7 +66,15 @@ export interface PaginatedEmissions {
   total: number;
   summary: EmissionsSummary;
 }
-
+export interface PreviousPeriodTotalParams {
+  siteId: number;
+  categoryId: number;
+  emissionCategory: string;
+  year: number;
+  reportingPeriod: "monthly" | "yearly"; 
+  month?: number;                         
+  yearType?: "CY" | "FY";                 
+}
 export const getEmissionsBySite = async (siteId: string | number) => {
   const response = await api.get("/user/emissions", {
     params: { siteId },
@@ -334,4 +342,23 @@ export const exportMonthlyEmissions = async (params: {
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+};
+
+export const getPreviousPeriodTotal = async (
+  params: PreviousPeriodTotalParams,
+): Promise<number> => {
+  const query: Record<string, string | number> = {
+    site_id: params.siteId,
+    category_id: params.categoryId,
+    emission_category: params.emissionCategory,
+    year: params.year,
+    reporting_period: params.reportingPeriod,
+  };
+  if (params.month != null) query.month = params.month;
+  if (params.yearType) query.year_type = params.yearType;
+
+  const response = await api.get("/user/emissions/previous-period-total", {
+    params: query,
+  });
+  return response.data.total_emission;
 };

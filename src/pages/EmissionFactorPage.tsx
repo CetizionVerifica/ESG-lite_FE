@@ -4,8 +4,8 @@ import Dropdown, { DropdownOption } from "../components/Dropdown";
 import Modal from "../components/Modal";
 import { getSites } from "../services/siteService";
 import { getCategories } from "../services/categoryService";
-import { createEmissionFactor, bulkCreateEmissionFactors } from "../services/emissionFactorService";
-import EmissionFactorList from "../components/EmissionFactorList";
+import { createEmissionFactor, bulkCreateEmissionFactors, updateEmissionFactor } from "../services/emissionFactorService";
+import EmissionFactorList, { type EmissionFactor } from "../components/EmissionFactorList";
 import SmartUploadModal from "../components/SmartUploadModal";
 
 interface Category {
@@ -51,6 +51,8 @@ const EmissionFactorPage = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [smartUploadOpen, setSmartUploadOpen] = useState(false);
+  const [editingFactor, setEditingFactor] = useState<EmissionFactor | null>(null);
+  
 
   const [formState, formAction] = useActionState(
     async (_prevData: any, data: FormData) => {
@@ -71,20 +73,27 @@ const EmissionFactorPage = () => {
           return { error: "Year and factor value are required" };
         }
 
-        await createEmissionFactor({
-          site_id: formSiteId,
-          category_id: formCategoryId,
-          year,
-          factor_value,
-          denominator_unit: denominator_unit || undefined,
-          source: source || undefined,
-          emission_category_name: emission_category_name || undefined,
-        });
+        const payload = {
+        site_id: formSiteId,
+        category_id: formCategoryId,
+        year,
+        factor_value,
+        denominator_unit: denominator_unit || undefined,
+        source: source || undefined,
+        emission_category_name: emission_category_name || undefined,
+      };
+
+      if (editingFactor) {
+        await updateEmissionFactor(editingFactor.emission_factor_id, payload);
+      } else {
+        await createEmissionFactor(payload);
+      }
 
         setModalOpen(false);
         resetForm();
         setRefreshTrigger((prev) => prev + 1);
-        return { success: true };
+        return { success: true, wasEdit: !!editingFactor };
+
       } catch (error: any) {
         console.error("Error creating emission factor:", error);
         return { error: error?.response?.data?.message || "Failed to create emission factor" };
@@ -96,6 +105,7 @@ const EmissionFactorPage = () => {
   const resetForm = () => {
     setFormSiteId(null);
     setFormCategoryId(null);
+    setEditingFactor(null);
   };
 
   const resetBulkForm = () => {
@@ -298,15 +308,14 @@ const EmissionFactorPage = () => {
 
       {/* Single Add Modal */}
       <Modal
-        title="Add Emission Factor"
-        isOpen={modalOpen}
+      title={editingFactor ? "Edit Emission Factor" : "Add Emission Factor"}        isOpen={modalOpen}
         onClose={() => {
           setModalOpen(false);
           resetForm();
         }}
       >
-        <form action={formAction}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <form key={editingFactor?.emission_factor_id ?? "new"} action={formAction}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="mb-4">
               <label className="block text-sm font-medium mb-1">Site *</label>
               <Dropdown
@@ -341,7 +350,7 @@ const EmissionFactorPage = () => {
                 required
                 min="1900"
                 max="2100"
-                defaultValue={new Date().getFullYear()}
+                defaultValue={editingFactor?.year ?? new Date().getFullYear()}
                 className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
               />
             </div>
@@ -352,6 +361,7 @@ const EmissionFactorPage = () => {
                 name="factor_value"
                 required
                 step="0.0001"
+                defaultValue={editingFactor?.factor_value}
                 className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
               />
             </div>
@@ -363,6 +373,7 @@ const EmissionFactorPage = () => {
                 type="text"
                 name="denominator_unit"
                 placeholder="e.g., kg CO2e/kWh"
+                defaultValue={editingFactor?.denominator_unit ?? ""}
                 className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
               />
             </div>
@@ -372,6 +383,7 @@ const EmissionFactorPage = () => {
                 type="text"
                 name="source"
                 placeholder="e.g., EPA, IPCC"
+                defaultValue={editingFactor?.source ?? ""}
                 className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
               />
             </div>
@@ -382,6 +394,7 @@ const EmissionFactorPage = () => {
               type="text"
               name="emission_category_name"
               placeholder="e.g., Electricity, Natural Gas"
+              defaultValue={editingFactor?.emission_category_name ?? ""}
               className="w-full border px-3 py-2 rounded focus:outline-none focus:ring"
             />
           </div>
@@ -390,11 +403,11 @@ const EmissionFactorPage = () => {
               {formState.error}
             </div>
           )}
-          {formState?.success && (
+          {/* {formState?.success && (
             <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded text-sm">
-              Emission factor created successfully.
+                  Emission factor {formState.wasEdit ? "updated" : "created"} successfully.
             </div>
-          )}
+          )} */}
           <div className="flex justify-end gap-2 mt-4">
             <button
               type="button"
@@ -410,7 +423,7 @@ const EmissionFactorPage = () => {
               type="submit"
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
             >
-              Save
+              {editingFactor ? "Update" : "Save"}
             </button>
           </div>
         </form>
@@ -571,7 +584,14 @@ const EmissionFactorPage = () => {
           </div>
         </div>
       )}
-      <EmissionFactorList siteId={selectedSite} categoryId={selectedCategory} refreshTrigger={refreshTrigger} />
+      <EmissionFactorList siteId={selectedSite} categoryId={selectedCategory} refreshTrigger={refreshTrigger}
+      onEdit={(row) => {
+    setEditingFactor(row);
+    setFormSiteId(row.site?.site_id ?? null);
+    setFormCategoryId(row.category?.category_id ?? null);
+    setModalOpen(true);
+  }}
+   />
 
       {/* Smart Upload Modal */}
       <SmartUploadModal
