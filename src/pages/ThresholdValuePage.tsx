@@ -16,6 +16,9 @@ interface Company {
   name: string;
 }
 
+// null once the save succeeds, so the message clears on the next attempt.
+type FormError = { error: string } | null;
+
 const MIN_THRESHOLD = 2;
 const MAX_THRESHOLD = 5;
 
@@ -26,14 +29,13 @@ const ThresholdValuePage = () => {
   const [loading, setLoading] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
 
-  const [_formState, formAction] = useActionState(
-    async (_prevData: any, data: any) => {
+  const [formState, formAction] = useActionState<FormError, FormData>(
+    async (_prevData, data) => {
       try {
         const threshold_percentage = data.get("threshold_percentage");
 
         if (!selectedCompany) {
-          console.error("Please select a company");
-          return;
+          return { error: "Please select a company" };
         }
 
         const result = await createThreshold({
@@ -45,8 +47,14 @@ const ThresholdValuePage = () => {
         setModalOpen(false);
         setSelectedCompany(null);
         handleLoadData();
-      } catch (error) {
-        console.error(error);
+        return null;
+      } catch (error: any) {
+        // The API answers a duplicate company with 409 + a message. Surfacing it
+        // matters: without it Save appears to do nothing at all.
+        return {
+          error:
+            error?.response?.data?.message || "Failed to save threshold value",
+        };
       }
     },
     null,
@@ -187,6 +195,11 @@ const ThresholdValuePage = () => {
               Must be between {MIN_THRESHOLD}% and {MAX_THRESHOLD}%.
             </p>
           </div>
+          {formState?.error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded text-sm mb-4">
+              {formState.error}
+            </div>
+          )}
           <div className="flex justify-end">
             <button
               type="button"
