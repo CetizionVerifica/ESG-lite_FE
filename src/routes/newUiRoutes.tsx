@@ -29,7 +29,6 @@ const Legacy = {
   UserDataEntry: lazy(() => import("../pages/UserDataEntryPage")),
   UserEmissions: lazy(() => import("../pages/UserEmissionsPage")),
   ProductionData: lazy(() => import("../pages/ProductionDataPage")),
-  ManagerUsers: lazy(() => import("../pages/ManagerUsers")),
   GhgReport: lazy(() => import("../pages/GhgReport/GhgReport")),
   EdeReports: lazy(() => import("../pages/Reports/EdePreports")),
   Sbti: lazy(() => import("../pages/sbti/SbtiMain")),
@@ -62,6 +61,7 @@ const BrandViewPage = lazy(() => import("../features/brand-themes/Page").then((m
 const EmissionsPage = lazy(() => import("../features/approvals-ledger/Page"));
 const OverviewPage = lazy(() => import("../features/overview/Page"));
 const ProductionReviewPage = lazy(() => import("../features/production-review/Page"));
+const TeamAccessPage = lazy(() => import("../features/team-access/Page"));
 
 const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(id)} />;
 
@@ -76,7 +76,7 @@ const pages: Record<ShellRouteId, ReactNode> = {
   approvals: <EmissionsPage key="approvals" tab="approvals" />,
   ledger: <EmissionsPage key="ledger" tab="ledger" />,
   "production-review": <ProductionReviewPage />,
-  team: <Legacy.ManagerUsers />,
+  team: <TeamAccessPage />,
   "ghg-report": <Legacy.GhgReport />,
   "ede-report": <Legacy.EdeReports />,
   targets: <Legacy.Sbti />,
