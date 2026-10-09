@@ -96,6 +96,11 @@ export const getEmissionsPaginated = async (params: {
   status?: string | null;
   page: number;
   limit: number;
+  // B6: server sort (id, date, total_emission, status, category, scope, site,
+  // submitted_by, created_at, reviewed_at) and free-text search.
+  sort?: string | null;
+  order?: "asc" | "desc" | null;
+  search?: string | null;
 }): Promise<PaginatedEmissions> => {
   const query: Record<string, string | number> = {
     page: params.page,
@@ -112,6 +117,9 @@ export const getEmissionsPaginated = async (params: {
   if (params.year != null) query.year = params.year;
   if (params.month != null) query.month = params.month;
   if (params.status) query.status = params.status;
+  if (params.sort) query.sort = params.sort;
+  if (params.sort && params.order) query.order = params.order;
+  if (params.search?.trim()) query.search = params.search.trim();
 
   const response = await api.get("/user/emissions", { params: query });
   return response.data;

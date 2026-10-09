@@ -29,7 +29,7 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | `useContextParams` | `hooks/useContextParams.ts` | read/write the same URL context in a page: `const [ctx, update] = useContextParams(defaults)` |
 | `DataTable` | `table/` | column defs, sort (client or `onSortChange` for server), sticky header, selection + bulk bar, column picker + density (persisted with `storageKey`), client or server pagination, `onRowClick` (Enter too) → open a `Drawer`, numeric columns right-aligned mono, CSV/XLSX export (formula-safe CSV) |
 | `FilterBar` | `FilterBar.tsx`, `filterLogic.ts` | search (debounced) + filter chips (multi or single choice), Clear all, saved views in this browser (`storageKey`); keep the value in the URL with `useFilterParams(["status", "site"])` (`?q=&status=pending,approved`) |
-| `KpiStrip` | `KpiStrip.tsx` | 3–5 figures in one panel; `primary` is wider; `format: "emissions"` picks t/kg; delta ▲▼ with fixed good/bad colour; loading/error |
+| `KpiStrip` | `KpiStrip.tsx` | 3–5 figures in one panel; `primary` is wider; `onSelect` + `selected` make a figure a filter toggle; `format: "emissions"` picks t/kg; delta ▲▼ with fixed good/bad colour; loading/error |
 | `ScopeBar` | `ScopeBar.tsx` | stacked Scope 1/2/3 bar + legend from `--t-s1/2/3` only; loading/empty |
 | `ChartFrame` | `ChartFrame.tsx` | wraps ECharts with `useChartTheme()`; title + unit, Chart/Table toggle, PNG export, loading/empty/error. Pass `option={(t) => …}` to use `t.scopes.s1` etc. |
 | `Callout` | `Callout.tsx` | info / warn / brand tint; optional action and dismiss |

@@ -47,6 +47,16 @@ describe("KpiStrip", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Try again" }));
     expect(retry).toHaveBeenCalled();
   });
+
+  it("turns a figure into a pressed toggle with onSelect", async () => {
+    const select = vi.fn();
+    render(<KpiStrip items={[{ label: "Pending", value: 3, onSelect: select, selected: true }, { label: "Approved", value: 5 }]} />);
+    const toggle = screen.getByRole("button", { name: "Pending: show all" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    await userEvent.setup().click(toggle);
+    expect(select).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Approved/ })).toBeNull();
+  });
 });
 
 describe("ScopeBar", () => {
