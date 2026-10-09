@@ -5,9 +5,11 @@ import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/uni
 import { getMappingsByCompany, type CategoryMapping } from "../../services/categoryMappingService";
 
 export type { CategoryMapping };
-import { createEmission, getPeriodTotal } from "../../services/emissionService";
+import { createEmission, getEmissionsPaginated, getPeriodTotal, updateEmission } from "../../services/emissionService";
 import { getThresholdByCompany } from "../../services/thresholdService";
-import { linkInvoiceDocuments } from "../../services/documentService";
+import { linkInvoiceDocuments, uploadMultipleDocuments } from "../../services/documentService";
+import { calculateRoadDistance, calculateSeaDistance } from "../../services/distanceService";
+import { resolveLocationFromBackend, type ResolvedLocation } from "../../services/locationService";
 import {
   deleteInvoice,
   getInvoices,
@@ -17,6 +19,7 @@ import {
   type Invoice,
 } from "../../services/invoiceService";
 import { periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPeriod } from "./logic/entry";
+import { entriesQuery, entryInPeriod, type SavedEntry } from "./logic/existing";
 import type { ColumnConfig, EmissionFactor } from "./types";
 
 /** Everything the form needs for one site × category × factor year. */
@@ -117,11 +120,14 @@ export function usePeriodTotals(args: { siteId: number | null; categoryId: numbe
 
 export type SaveOutcome =
   | { kind: "saved"; emissionId: number | null }
-  | { kind: "duplicate"; message: string }
+  | { kind: "duplicate"; message: string; existing: { tco2e: number | null; status: string | null } | null }
   | { kind: "error"; message: string; modeLock: boolean };
 
 interface ApiError {
-  response?: { status?: number; data?: { message?: string; duplicate?: boolean; mode_lock?: boolean } };
+  response?: {
+    status?: number;
+    data?: { message?: string; duplicate?: boolean; mode_lock?: boolean; existing_emission?: { total_emission?: number | string; status?: string } };
+  };
   message?: string;
 }
 
@@ -134,7 +140,12 @@ export async function saveRow(payload: EmissionPayload, replace = false): Promis
     const e = err as ApiError;
     const data = e.response?.data;
     if (e.response?.status === 409 && data?.duplicate) {
-      return { kind: "duplicate", message: data.message ?? "An entry for this already exists in the period." };
+      const existing = data.existing_emission;
+      return {
+        kind: "duplicate",
+        message: data.message ?? "An entry for this already exists in the period.",
+        existing: existing ? { tco2e: existing.total_emission == null ? null : Number(existing.total_emission), status: existing.status ?? null } : null,
+      };
     }
     return {
       kind: "error",
@@ -142,6 +153,47 @@ export async function saveRow(payload: EmissionPayload, replace = false): Promis
       message: data?.message ?? e.message ?? "Couldn't save this row. Try again.",
     };
   }
+}
+
+/** Attach files picked on a typed row to its saved entry. True when they were all stored. */
+export async function uploadRowEvidence(emissionId: number, files: File[]): Promise<boolean> {
+  try {
+    const result = await uploadMultipleDocuments({ files, emission_id: emissionId, document_type: "other" });
+    return (result.documents?.length ?? 0) === files.length;
+  } catch {
+    return false;
+  }
+}
+
+/** Save changes to an entry loaded from "Already entered" (pending or rejected); the backend sets it back to pending. */
+export async function updateRow(id: number, payload: EmissionPayload): Promise<SaveOutcome> {
+  try {
+    const result = (await updateEmission(id, {
+      activity_data: payload.activity_data,
+      extra_data: payload.extra_data,
+      date_of_reporting: payload.date_of_reporting,
+      activity_data_unit: payload.activity_data_unit,
+    })) as { emission?: { pk_id?: number } } | undefined;
+    return { kind: "saved", emissionId: result?.emission?.pk_id ?? id };
+  } catch (err) {
+    const e = err as ApiError;
+    return { kind: "error", modeLock: false, message: e.response?.data?.message ?? e.message ?? "Couldn't save this row. Try again." };
+  }
+}
+
+/** Entries already saved for site × category × period (the user's own; the list endpoint scopes by role). */
+export function useExistingEntries(siteId: number | null, categoryId: number | null, period: EntryPeriod | null) {
+  return useQuery({
+    queryKey: ["add-data", "existing", siteId, categoryId, period],
+    enabled: siteId !== null && categoryId !== null && period !== null,
+    queryFn: async () => {
+      const q = entriesQuery(period as EntryPeriod);
+      const result = await getEmissionsPaginated({ siteIds: [siteId as number], categoryId, year: q.year, month: q.month, page: 1, limit: 100 });
+      const entries = (result.data as unknown as SavedEntry[]).filter((e) => entryInPeriod(e, period as EntryPeriod));
+      // More than one page: the list says so instead of showing a short count.
+      return { entries, more: result.total > result.data.length };
+    },
+  });
 }
 
 export type { ExtractionResponse, Invoice };
@@ -211,4 +263,34 @@ export async function linkBillEvidence(invoiceId: number, emissionIds: number[])
   } catch {
     return false;
   }
+}
+
+export type { ResolvedLocation } from "../../services/locationService";
+
+/** Look a typed or pasted address up on the backend (Google geocoding). */
+export const resolveLocation = (query: string) => resolveLocationFromBackend(query);
+
+export type RouteResult = { meters: number; durationText: string | null; polyline: string | null; seaPath: [number, number][] | null };
+
+const pointOf = (p: ResolvedLocation) => ({ address: p.display_name, lat: p.lat, lng: p.lon, placeId: p.place_id || undefined });
+
+/** Road or sea route between two places (backend routing; sea uses the AI service's sea-route). */
+export function useRoute(mode: "road" | "sea" | null, from: ResolvedLocation | null, to: ResolvedLocation | null) {
+  return useQuery({
+    queryKey: ["add-data", "route", mode, from?.lat, from?.lon, to?.lat, to?.lon],
+    enabled: mode !== null && !!from && !!to,
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async (): Promise<RouteResult> => {
+      const body = { origin: pointOf(from as ResolvedLocation), destination: pointOf(to as ResolvedLocation) };
+      if (mode === "sea") {
+        const r = await calculateSeaDistance({ ...body, mode: "sea" });
+        const coords = (r.seaGeometry as { coordinates?: unknown[] } | null)?.coordinates ?? [];
+        const seaPath = coords.filter((c): c is [number, number] => Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number");
+        return { meters: r.distanceMeters, durationText: r.durationText, polyline: null, seaPath: seaPath.length ? seaPath : null };
+      }
+      const r = await calculateRoadDistance({ ...body, mode: "road" });
+      return { meters: r.distanceMeters, durationText: r.durationText, polyline: r.encodedPolyline, seaPath: null };
+    },
+  });
 }

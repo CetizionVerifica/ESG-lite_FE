@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { Button, EmptyState, Loading, PageHeader, Skeleton, Stepper } from "../../ui";
+import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
 import { useEntrySetup, usePeriodTotals, useThreshold } from "./api";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
 import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
+import { useRowEvidence } from "./hooks/useRowEvidence";
 import { billGroups, billOf } from "./logic/bill";
 import { buildPayload, comparison, entryFactorYear, entryPeriodLabel, formatEntryPeriodParam, parseEntryPeriod, previousPeriod, rowIssue, type EntryPeriod } from "./logic/entry";
 import { formColumns, toFormModel } from "./logic/form";
@@ -13,6 +14,8 @@ import { ChooseContext } from "./steps/ChooseContext";
 import { EnterRows } from "./steps/EnterRows";
 import { Review } from "./steps/Review";
 import type { RowComparison } from "./components/EntryRow";
+import { ExistingEntries } from "./components/ExistingEntries";
+import { rowFromEntry, savedExcludingEdits } from "./logic/existing";
 
 const STEPS = [
   { id: "context", label: "What are you reporting?" },
@@ -66,6 +69,12 @@ export default function AddDataPage() {
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
   const draftKey = contextReady ? `add-data:${site.site_id}:${category.category_id}:${formatEntryPeriodParam(period)}` : null;
   const { rows, dispatch, clearDraft } = useEntryRows(model, draftKey);
+  const evidence = useRowEvidence(draftKey);
+  // Rows sent: nothing is left to lose (and the draft is cleared).
+  const [sentKey, setSentKey] = useState<string | null>(null);
+  const unsaved = !!draftKey && sentKey !== draftKey && rows.some(rowHasInput);
+  // The draft survives in-app navigation, but evidence files don't, and a half-entered form is easy to forget.
+  const blocker = useUnsavedGuard(unsaved);
 
   const calcInput = {
     targetYear: factorYear ?? undefined,
@@ -95,7 +104,7 @@ export default function AddDataPage() {
     if (!name || rows.findIndex((r) => r.emission_category === name) !== i || !period) return null;
     const inForm = rows.filter((r) => r.emission_category === name).reduce((s, r) => s + (calc.calculateEmission(r).value ?? 0), 0);
     const t = totals[name];
-    const c = inForm > 0 ? comparison(t?.saved == null ? null : inForm + t.saved, t?.previous ?? null, threshold.data ?? 5) : null;
+    const c = inForm > 0 ? comparison(t?.saved == null ? null : inForm + savedExcludingEdits(rows, name, t.saved), t?.previous ?? null, threshold.data ?? 5) : null;
     if (!c) return null;
     const arrow = c.pct > 0 ? "▲" : c.pct < 0 ? "▼" : "";
     return { text: `${arrow} ${Math.abs(c.pct).toFixed(1)}%`.trim(), overThreshold: c.overThreshold, threshold: threshold.data ?? 5, previousLabel: entryPeriodLabel(previousPeriod(period)) };
@@ -159,6 +168,7 @@ export default function AddDataPage() {
         factorYear={factorYear as number}
         reportingYear={(factorYear as number) + 1}
         classicHref={classicHref}
+        evidence={evidence}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
       />
@@ -169,8 +179,13 @@ export default function AddDataPage() {
         rows={activeRows}
         payloads={activeRows.map((r) => buildPayload(r, { siteId: site.site_id, categoryId: category.category_id, period }))}
         calc={calc}
+        evidenceFiles={evidence.filesOf}
         periodLabel={periodLabel}
         onBack={() => setStep(1)}
+        onFinished={() => {
+          clearDraft();
+          setSentKey(draftKey);
+        }}
         onAnother={() => {
           clearDraft();
           setContext({ category: null });
@@ -194,6 +209,23 @@ export default function AddDataPage() {
         onStepChange={setStep}
       />
       {body}
+      {contextReady && step > 0 && model && setup.data && (
+        <ExistingEntries
+          siteId={site.site_id}
+          categoryId={category.category_id}
+          period={period}
+          periodLabel={periodLabel}
+          onLoad={step === 1 ? (entry) => dispatch({ type: "load", row: rowFromEntry(entry, model, 0, period) }) : undefined}
+        />
+      )}
+      <Modal
+        open={blocker.state === "blocked"}
+        onClose={() => blocker.reset?.()}
+        title="Leave with rows not sent?"
+        description="Typed rows stay as a draft on this device for this site, category and period; evidence files you picked are dropped."
+        cancelLabel="Stay"
+        primaryAction={{ label: "Leave", onClick: () => blocker.proceed?.() }}
+      />
     </div>
   );
 }

@@ -31,6 +31,7 @@ export { ScopeBar, type ScopeBarProps, type ScopeTotals } from "./ScopeBar";
 export { ChartFrame, type ChartFrameProps, type ChartTableColumn } from "./ChartFrame";
 export { FilterBar, type FilterBarProps, type FilterDef } from "./FilterBar";
 export { useFilterParams } from "./hooks/useFilterParams";
+export { useUnsavedGuard } from "./hooks/useUnsavedGuard";
 export { EMPTY_FILTERS, activeCount, readFilterParams, writeFilterParams, type FilterValues, type SavedView } from "./filterLogic";
 export { Stepper, type Step, type StepperProps } from "./Stepper";
 export { UnitInput, type UnitInputProps, type UnitInputValue } from "./UnitInput";
