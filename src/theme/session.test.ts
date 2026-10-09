@@ -3,6 +3,7 @@ import { PLANETPULSE } from "./packs";
 import {
   companyIdFromUser,
   readStoredAppearance,
+  reconcileAppearance,
   resolveAppearance,
   selectPack,
   shouldLoadBrand,
@@ -93,5 +94,23 @@ describe("subscribeMediaQuery", () => {
 
   it("does nothing when neither API exists", () => {
     expect(() => subscribeMediaQuery({}, () => {})()).not.toThrow();
+  });
+});
+
+describe("reconcileAppearance", () => {
+  it("applies the account's saved choice", () => {
+    expect(reconcileAppearance("dark", "light")).toEqual({ apply: "dark" });
+    expect(reconcileAppearance("light", "system")).toEqual({ apply: "light" });
+    expect(reconcileAppearance("dark", "dark")).toBeNull();
+  });
+
+  it("saves this device's choice to an account still on the default", () => {
+    expect(reconcileAppearance("system", "dark")).toEqual({ push: "dark" });
+    expect(reconcileAppearance("system", "system")).toBeNull();
+  });
+
+  it("ignores a missing or unknown server value", () => {
+    expect(reconcileAppearance(undefined, "dark")).toBeNull();
+    expect(reconcileAppearance("neon", "dark")).toBeNull();
   });
 });

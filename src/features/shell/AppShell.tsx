@@ -3,6 +3,7 @@ import { Outlet, useLocation, useMatches, useNavigate, useParams } from "react-r
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
+import { useTheme } from "../../theme";
 import { shellUser } from "./account";
 import { brandForUser } from "./brand";
 import { type Command, routeCommands } from "./commands";
@@ -14,9 +15,7 @@ import { usePreviewStyle } from "./hooks/usePreviewStyle";
 import { navFor } from "./nav";
 import { type ShellRoute, asRole, clientIdFromRoute, homeFor, pathForClient } from "./routeMap";
 import { signOutSession } from "./signOut";
-import { useAppearance } from "./standins/appearance";
 import CommandPalette from "./standins/CommandPalette";
-import "./standins/tokens.css";
 
 /** Route `handle` the shell reads to find the current page's metadata. */
 export interface ShellHandle {
@@ -46,7 +45,7 @@ export default function AppShell() {
   const { role: rawRole, user, logout } = useAuth();
   const role = asRole(rawRole);
   const { clientId, setClientId } = useClientContext();
-  const { appearance, setAppearance, look } = useAppearance();
+  const { appearance, setAppearance, look, pack, resolvedAppearance } = useTheme();
   const palette = useCommandPalette();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -69,7 +68,7 @@ export default function AppShell() {
     }
   }, [role, urlClientId, clientId, setClientId]);
 
-  const previewStyle = usePreviewStyle(clientId, clientScoped);
+  const previewStyle = usePreviewStyle(clientId, clientScoped, resolvedAppearance);
   const nav = navFor(role);
   const commands = useMemo(() => routeCommands(role, clientId), [role, clientId]);
   const account = shellUser(user, rawRole);
@@ -102,7 +101,7 @@ export default function AppShell() {
         Skip to content
       </a>
       <TopBar
-        brand={brandForUser(rawRole, user)}
+        brand={brandForUser(rawRole, user, pack)}
         look={look}
         home={homeFor(role) ?? "/"}
         nav={nav}

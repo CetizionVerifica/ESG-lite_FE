@@ -2,7 +2,7 @@ import { Menu as MenuIcon, Search } from "lucide-react";
 import type { ShellUser } from "../account";
 import type { Look, ShellBrand } from "../brand";
 import type { NavItem } from "../nav";
-import type { Appearance } from "../standins/appearance";
+import type { Appearance } from "../../../theme";
 import AvatarMenu from "./AvatarMenu";
 import BellPopover from "./BellPopover";
 import DesktopNav from "./DesktopNav";

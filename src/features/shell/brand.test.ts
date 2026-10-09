@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PLANETPULSE, STORED_BRANDS } from "../../theme";
 import { PLATFORM_BRAND, brandForUser, pickLogo } from "./brand";
 import { initials, shellUser } from "./account";
 import { nextIndex } from "./menuKeys";
@@ -16,10 +17,18 @@ describe("logo slot", () => {
     expect(pickLogo({ name: "Glochem" }, "light")).toEqual({ kind: "name", name: "Glochem" });
   });
   it("shows the user's company, and ESGLite for staff", () => {
-    expect(brandForUser("Manager", { sites: [{ company: null }, { company: { name: "Midal Cables" } }] })).toEqual({ name: "Midal Cables" });
-    expect(brandForUser("User", { site: { company: { name: "Chieron" } } })).toEqual({ name: "Chieron" });
-    expect(brandForUser("Superadmin", { site: { company: { name: "Chieron" } } })).toBe(PLATFORM_BRAND);
-    expect(brandForUser("User", null)).toBe(PLATFORM_BRAND);
+    expect(brandForUser("Manager", { sites: [{ company: null }, { company: { name: "Midal Cables" } }] }, PLANETPULSE)).toEqual({ name: "Midal Cables" });
+    expect(brandForUser("User", { site: { company: { name: "Chieron" } } }, PLANETPULSE)).toEqual({ name: "Chieron" });
+    expect(brandForUser("Superadmin", { site: { company: { name: "Chieron" } } }, STORED_BRANDS[6])).toBe(PLATFORM_BRAND);
+    expect(brandForUser("User", null, PLANETPULSE)).toBe(PLATFORM_BRAND);
+  });
+  it("uses the loaded brand pack's name and logos", () => {
+    const pack = { ...STORED_BRANDS[1], logoUrl: "light.png", logoOnDarkUrl: "dark.png" };
+    expect(brandForUser("Manager", { site: { company: { name: "Midal" } } }, pack)).toEqual({
+      name: "Midal Cables",
+      logoUrl: "light.png",
+      logoOnDarkUrl: "dark.png",
+    });
   });
 });
 

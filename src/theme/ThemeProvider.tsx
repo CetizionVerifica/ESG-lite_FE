@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
+import { getMyAppearance, saveMyAppearance } from "../services/appearanceService";
 import { getMyBrand } from "../services/brandService";
 import { buildTheme, resolveLook, statusClashes, toCssVars } from "./buildTheme";
 import type { Appearance } from "./packs";
@@ -9,6 +10,7 @@ import {
   APPEARANCE_KEY,
   companyIdFromUser,
   readStoredAppearance,
+  reconcileAppearance,
   resolveAppearance,
   selectPack,
   shouldLoadBrand,
@@ -75,7 +77,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [pack, resolvedAppearance],
   );
 
-  const setAppearance = useCallback((next: Appearance) => {
+  const applyLocal = useCallback((next: Appearance) => {
     setAppearanceState(next);
     try {
       safeStorage()?.setItem(APPEARANCE_KEY, next);
@@ -83,6 +85,45 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       // Not persisted in private mode; the choice still applies this session.
     }
   }, []);
+
+  // The account's saved appearance (ESG-lite B2), so the choice follows the
+  // user across devices. Local storage stays as the cache for the first paint.
+  const queryClient = useQueryClient();
+  const accountKey = user?.user_id ?? user?.email ?? null;
+  const appearanceKey = useMemo(() => ["appearance", "me", accountKey] as const, [accountKey]);
+  const appearanceQuery = useQuery({
+    queryKey: appearanceKey,
+    queryFn: getMyAppearance,
+    enabled: isAuthenticated && accountKey !== null,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const localAppearance = useRef(appearance);
+  localAppearance.current = appearance;
+  const reconciled = useRef<unknown>(null);
+  useEffect(() => {
+    const data = appearanceQuery.data;
+    if (!data || reconciled.current === data) return;
+    reconciled.current = data;
+    const sync = reconcileAppearance(data.appearance, localAppearance.current);
+    if (sync && "apply" in sync) applyLocal(sync.apply);
+    // Best effort: an account that can't be saved keeps the local choice.
+    if (sync && "push" in sync) saveMyAppearance(sync.push).catch(() => {});
+  }, [appearanceQuery.data, applyLocal]);
+
+  const setAppearance = useCallback(
+    (next: Appearance) => {
+      applyLocal(next);
+      if (!isAuthenticated || accountKey === null) return;
+      const saved = { appearance: next };
+      // Mark as reconciled so the cache update doesn't re-apply it.
+      reconciled.current = saved;
+      void queryClient.cancelQueries({ queryKey: appearanceKey });
+      queryClient.setQueryData(appearanceKey, saved);
+      saveMyAppearance(next).catch(() => {});
+    },
+    [applyLocal, isAuthenticated, accountKey, appearanceKey, queryClient],
+  );
 
   useLayoutEffect(() => {
     const root = document.documentElement;

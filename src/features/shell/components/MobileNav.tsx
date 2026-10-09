@@ -2,7 +2,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { Search } from "lucide-react";
 import { APPEARANCES, type ShellUser } from "../account";
 import { type NavItem, isActiveLink, resolveNavTo } from "../nav";
-import type { Appearance } from "../standins/appearance";
+import type { Appearance } from "../../../theme";
 import Drawer from "../standins/Drawer";
 import { focusRing } from "./styles";
 

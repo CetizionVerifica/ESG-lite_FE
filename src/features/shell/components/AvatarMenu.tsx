@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { APPEARANCES, type ShellUser, initials } from "../account";
-import type { Appearance } from "../standins/appearance";
+import type { Appearance } from "../../../theme";
 import Menu, { type MenuEntry } from "../standins/Menu";
 import { chromeIconButton } from "./styles";
 
