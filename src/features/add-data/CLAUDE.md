@@ -78,3 +78,10 @@ Below the stepper (or as a tab "Already entered for Sep (4)") a compact `DataTab
 - Nothing AI-filled is saved until the user confirms each bill's rows ("Use these rows"); then the normal Review step saves them. The bill is linked as evidence (B8) on save.
 - "My bills" drawer: list earlier uploads, reuse or re-extract one.
 - "My bills" deletes one bill at a time with a confirmation; the legacy library's multi-select bulk delete is not carried over yet.
+
+## P03-C plan (distance, duplicates, existing entries, route switch; 2026-10-09)
+- Distance: a "Calculate distance" button on distance fields and composite `mult × dist` units, opening `DistanceDrawer` (road, rail, air, sea) built on `distanceService`, `routingService` and the AI service's `POST /v1/sea-route`.
+- Duplicates: one `DuplicateDialog` at Review that lists each 409 conflict, with Skip / Replace per row and "apply to all".
+- Existing entries: a compact table of entries already saved for site × category × period, with status, tCO₂e and actions. Rejected rows show the reason and a "Fix" action that loads the row into step 2.
+- Per-row evidence: `FileDrop` on a typed row, uploaded through `documentService` after save. An unsaved-rows guard on navigation.
+- Route switch: `/data-entry` and the legacy entry routes redirect to `/data/new`; `pages/UserDataEntry/*`, `UserDataEntryPage.tsx` and `/data/new/classic` are deleted, once nothing that is still needed lives only there (bulk upload is checked first).
