@@ -28,3 +28,8 @@ Side panel toggle "Breakdown": consumption/emission by type for selected categor
 
 ## Acceptance
 Filters visible without hover; rejected rows can be fixed and resubmitted in the drawer; same table component as P07.
+
+## Build notes (part 2)
+- Edit lives in `components/EditEntryForm.tsx` inside the drawer, shown for pending and rejected entries.
+- Uses the shared form and calc in `src/lib/emissions` and `DynamicField` from `src/ui`.
+- Saving calls `updateEmission` and refreshes the table; errors show inline in the drawer.
