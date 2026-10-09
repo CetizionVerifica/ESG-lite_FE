@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
@@ -7,6 +7,15 @@ import { getMappingsByCompany, type CategoryMapping } from "../../services/categ
 export type { CategoryMapping };
 import { createEmission, getPeriodTotal } from "../../services/emissionService";
 import { getThresholdByCompany } from "../../services/thresholdService";
+import { linkInvoiceDocuments } from "../../services/documentService";
+import {
+  deleteInvoice,
+  getInvoices,
+  reextractInvoice,
+  uploadAndExtractInvoice,
+  type ExtractionResponse,
+  type Invoice,
+} from "../../services/invoiceService";
 import { periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPeriod } from "./logic/entry";
 import type { ColumnConfig, EmissionFactor } from "./types";
 
@@ -107,7 +116,7 @@ export function usePeriodTotals(args: { siteId: number | null; categoryId: numbe
 }
 
 export type SaveOutcome =
-  | { kind: "saved" }
+  | { kind: "saved"; emissionId: number | null }
   | { kind: "duplicate"; message: string }
   | { kind: "error"; message: string; modeLock: boolean };
 
@@ -119,8 +128,8 @@ interface ApiError {
 /** Save one row. A 409 duplicate or mode-lock conflict comes back as an outcome, not a throw. */
 export async function saveRow(payload: EmissionPayload, replace = false): Promise<SaveOutcome> {
   try {
-    await createEmission(payload, replace);
-    return { kind: "saved" };
+    const result = (await createEmission(payload, replace)) as { emission?: { pk_id?: number } } | undefined;
+    return { kind: "saved", emissionId: result?.emission?.pk_id ?? null };
   } catch (err) {
     const e = err as ApiError;
     const data = e.response?.data;
@@ -132,5 +141,74 @@ export async function saveRow(payload: EmissionPayload, replace = false): Promis
       modeLock: !!data?.mode_lock,
       message: data?.message ?? e.message ?? "Couldn't save this row. Try again.",
     };
+  }
+}
+
+export type { ExtractionResponse, Invoice };
+
+type BillContext = { siteId: number; categoryId: number; userId: number | null; units: string[] };
+
+const aiError = (err: unknown, fallback: string) => {
+  const e = err as { response?: { data?: { detail?: unknown } }; message?: string };
+  const detail = e.response?.data?.detail;
+  return typeof detail === "string" ? detail : e.message || fallback;
+};
+
+/**
+ * Upload one bill to the AI service and read it. The service stores the file
+ * (an invoice row) and returns the entries it found. Throws a readable message.
+ */
+export async function readBill(file: File, ctx: BillContext): Promise<ExtractionResponse> {
+  try {
+    const response = await uploadAndExtractInvoice({
+      file,
+      site_id: ctx.siteId,
+      category_id: ctx.categoryId,
+      uploaded_by: ctx.userId ?? undefined,
+      unit_names: ctx.units.length ? ctx.units : undefined,
+    });
+    if (response.error && !response.emission?.length) throw new Error(response.error);
+    return response;
+  } catch (err) {
+    throw new Error(aiError(err, "Couldn't read this bill."));
+  }
+}
+
+/** Read a bill uploaded earlier again, for this site and category. */
+export async function rereadBill(invoiceId: number, ctx: BillContext): Promise<ExtractionResponse> {
+  try {
+    const response = await reextractInvoice(invoiceId, { site_id: ctx.siteId, category_id: ctx.categoryId, unit_names: ctx.units });
+    if (response.error && !response.emission?.length) throw new Error(response.error);
+    return response;
+  } catch (err) {
+    throw new Error(aiError(err, "Couldn't read this bill again."));
+  }
+}
+
+/** Bills uploaded for this site and category ("My bills"). */
+export function useBills(siteId: number | null, categoryId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["add-data", "bills", siteId, categoryId],
+    enabled: enabled && siteId !== null && categoryId !== null,
+    queryFn: () => getInvoices({ site_id: siteId as number, category_id: categoryId as number }),
+  });
+}
+
+export function useDeleteBill() {
+  const client = useQueryClient();
+  return useMutation({
+    // data-loss-reviewed: deletes one uploaded bill after the user confirms; files still linked as evidence are kept by the AI service
+    mutationFn: (invoiceId: number) => deleteInvoice(invoiceId),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["add-data", "bills"] }),
+  });
+}
+
+/** Attach a bill as evidence to the rows saved from it (B8). Resolves to false when that failed. */
+export async function linkBillEvidence(invoiceId: number, emissionIds: number[]): Promise<boolean> {
+  try {
+    await linkInvoiceDocuments(invoiceId, emissionIds);
+    return true;
+  } catch {
+    return false;
   }
 }

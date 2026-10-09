@@ -4,10 +4,11 @@ import { useAuth } from "../../context/AuthContext";
 import { Button, EmptyState, Loading, PageHeader, Skeleton, Stepper } from "../../ui";
 import { useEntrySetup, usePeriodTotals, useThreshold } from "./api";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
-import { useEntryRows } from "./hooks/useEntryRows";
+import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
+import { billGroups, billOf } from "./logic/bill";
 import { buildPayload, comparison, entryFactorYear, entryPeriodLabel, formatEntryPeriodParam, parseEntryPeriod, previousPeriod, rowIssue, type EntryPeriod } from "./logic/entry";
 import { formColumns, toFormModel } from "./logic/form";
-import { entryCategories, feraCategoryOf, sitesOf } from "./logic/sites";
+import { entryCategories, feraCategoryOf, sitesOf, userIdOf } from "./logic/sites";
 import { ChooseContext } from "./steps/ChooseContext";
 import { EnterRows } from "./steps/EnterRows";
 import { Review } from "./steps/Review";
@@ -75,7 +76,17 @@ export default function AddDataPage() {
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.
   const feraCalc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.feraFactors ?? [], fallbackToRaw: true });
 
-  const issues = rows.map((r) => rowIssue(r, calc));
+  // Rows that will be sent: bill rows, and typed rows with something in them
+  // (all typed rows when there is nothing else, so an empty form still says what's missing).
+  const hasBills = rows.some((r) => billOf(r));
+  // Bill rows only once their bill is confirmed: nothing AI-filled is sent unchecked.
+  const sendable = (r: (typeof rows)[number]) => {
+    const bill = billOf(r);
+    return bill ? bill.confirmed : rowHasInput(r) || !hasBills;
+  };
+  const activeRows = rows.filter(sendable);
+  const issues = rows.map((r) => (billOf(r) || sendable(r) ? rowIssue(r, calc) : null));
+  const unconfirmedBills = billGroups(rows).filter((g) => !g.bill.confirmed).length;
   const emissionCategories = [...new Set(rows.map((r) => r.emission_category).filter(Boolean) as string[])];
   const totals = usePeriodTotals({ siteId: site?.site_id ?? null, categoryId, period, emissionCategories });
   const comparisons: RowComparison[] = rows.map((row, i) => {
@@ -138,6 +149,12 @@ export default function AddDataPage() {
         calc={calc}
         feraCalc={setup.data.feraFactors.length > 0 ? feraCalc : null}
         issues={issues}
+        unconfirmedBills={unconfirmedBills}
+        siteId={site.site_id}
+        categoryId={category.category_id}
+        userId={userIdOf(user)}
+        period={period}
+        draftKey={draftKey}
         comparisons={comparisons}
         factorYear={factorYear as number}
         reportingYear={(factorYear as number) + 1}
@@ -149,8 +166,8 @@ export default function AddDataPage() {
   } else {
     body = (
       <Review
-        rows={rows}
-        payloads={rows.map((r) => buildPayload(r, { siteId: site.site_id, categoryId: category.category_id, period }))}
+        rows={activeRows}
+        payloads={activeRows.map((r) => buildPayload(r, { siteId: site.site_id, categoryId: category.category_id, period }))}
         calc={calc}
         periodLabel={periodLabel}
         onBack={() => setStep(1)}

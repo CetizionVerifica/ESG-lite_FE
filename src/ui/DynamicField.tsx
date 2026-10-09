@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { columnOptionsFor, columnTitle, isDependentColumn, isSelectColumn, parentColumnOf, rowValue, type FormModel } from "../lib/emissions/form";
 import type { ColumnEntity, ModalRow } from "../lib/emissions/types";
 import { NumberField, Select, TextField } from "./fields";
@@ -8,6 +9,8 @@ type Props = {
   row: ModalRow;
   onChange: (column: string, value: string) => void;
   error?: string;
+  /** Shown after the label, e.g. Add data's "AI" chip on a value read from a bill. */
+  labelExtra?: ReactNode;
 };
 
 const toNumber = (text: unknown): number | null => {
@@ -16,9 +19,17 @@ const toNumber = (text: unknown): number | null => {
 };
 
 /** One ColumnConfig column: a (dependent) select, a number or text. */
-export function DynamicField({ model, column, row, onChange, error }: Props) {
+export function DynamicField({ model, column, row, onChange, error, labelExtra }: Props) {
   const name = column.column_name;
-  const label = columnTitle(name);
+  const title = columnTitle(name);
+  const label = labelExtra ? (
+    <span className="inline-flex items-center gap-1.5">
+      {title}
+      {labelExtra}
+    </span>
+  ) : (
+    title
+  );
   const parent = parentColumnOf(model, name);
   const parentValue = parent ? rowValue(row, parent) : undefined;
   const options = columnOptionsFor(model, column, parentValue);
@@ -32,7 +43,7 @@ export function DynamicField({ model, column, row, onChange, error }: Props) {
         value={value === "" ? null : value}
         onChange={(v) => onChange(name, v ?? "")}
         options={options.map((o) => ({ value: String(o.id), label: o.label }))}
-        placeholder={`Select ${label.toLowerCase()}`}
+        placeholder={`Select ${title.toLowerCase()}`}
         emptyText={waiting && parent ? `Select ${columnTitle(parent).toLowerCase()} first` : "No options"}
         disabled={waiting}
       />
