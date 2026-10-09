@@ -44,11 +44,14 @@ export function useAdminSites(enabled: boolean) {
   });
 }
 
+/** The tables plus the query that produced them, so labels never run ahead of the numbers. */
+export type ReportTables = GhgReportTablesResponse & { query: ReportQuery };
+
 /** Totals, Table 1 and the by-location tables for both years. */
 export function useReportTables(q: ReportQuery | null) {
-  return useQuery<GhgReportTablesResponse>({
+  return useQuery<ReportTables>({
     queryKey: q ? keys.tables(q) : [...keys.all, "tables", null],
-    queryFn: () => getGhgReportTables(requestPayload(q!)),
+    queryFn: async () => ({ ...(await getGhgReportTables(requestPayload(q!))), query: q! }),
     enabled: !!q && q.siteIds.length > 0,
     placeholderData: keepPreviousData,
   });

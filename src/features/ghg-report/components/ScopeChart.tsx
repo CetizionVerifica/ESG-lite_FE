@@ -52,7 +52,7 @@ export function ScopeChart({ figures, prevLabel, selLabel }: { figures: ReportFi
           legend: { top: 0, data: [prevLabel, selLabel] },
           tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: fmt },
           xAxis: { type: "category", data: [...SCOPES] },
-          yAxis: { type: "value", axisLabel: pct ? { formatter: "{value}%" } : undefined },
+          yAxis: { type: "value", ...(pct ? { axisLabel: { formatter: "{value}%" } } : {}) },
           series: [
             {
               name: prevLabel,

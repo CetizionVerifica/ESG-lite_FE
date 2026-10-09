@@ -166,6 +166,19 @@ describe("figures", () => {
   });
 });
 
+describe("review fixes", () => {
+  it("counts only scope-less renewables as saved", () => {
+    const d = tables([row("Scope 3", "Solar panels purchased", [[1, "Hidd", 7]]), row("", "Renewable Electricity", [[1, "Hidd", 2]])], []);
+    expect(reportFigures(d, sites).renewable).toBe(2);
+  });
+
+  it("merges categories that differ only in case", () => {
+    const d = tables([row("Scope 1", "Natural Gas", [[1, "Hidd", 5]]), row("Scope 1", "natural gas", [[2, "Sitra", 4]])], [row("Scope 1", "NATURAL GAS", [[1, "Hidd", 3]])]);
+    expect(topCategories(d)).toEqual([{ category: "Natural Gas", scope: "Scope 1", previous: 3, selected: 9, change: 200 }]);
+    expect(reportFigures(d, sites).largestSource).toEqual({ name: "Natural Gas", value: 9, share: 100 });
+  });
+});
+
 describe("tables", () => {
   it("lists categories largest first with the change", () => {
     expect(topCategories(data)).toEqual([

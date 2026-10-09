@@ -6,6 +6,7 @@ import { useClientContext } from "../../lib/clientContext";
 import {
   Button,
   Callout,
+  cn,
   EmptyState,
   type Kpi,
   KpiStrip,
@@ -86,11 +87,15 @@ export default function GhgReportPage() {
   const data = tables.data;
   const fy = data?.filters.fiscalYearStartMonth ?? calendarFy;
 
-  const period = query.period;
+  // Labels and coverage follow the query behind the numbers on screen, which
+  // lags the filters while a new period loads.
+  const shown = data?.query ?? query;
+  const stale = tables.isPlaceholderData;
+  const period = shown.period;
   const prev = previousReportPeriod(period);
   const selLabel = shortPeriodLabel(period, fy);
   const prevLabel = shortPeriodLabel(prev, fy);
-  const askedSites = useMemo(() => sites.filter((s) => query.siteIds.includes(s.site_id)), [sites, query.siteIds]);
+  const askedSites = useMemo(() => sites.filter((s) => shown.siteIds.includes(s.site_id)), [sites, shown.siteIds]);
   const figures = useMemo(() => (data ? reportFigures(data, askedSites) : null), [data, askedSites]);
 
   const tab: Tab = params.get("tab") === "location" ? "location" : "summary";
@@ -196,9 +201,9 @@ export default function GhgReportPage() {
       {error ? (
         <EmptyState variant="error" title={error} action={<Button onClick={() => tables.refetch()}>Try again</Button>} />
       ) : (
-        <>
+        <div aria-busy={stale} className={cn("space-y-6 transition-opacity", stale && "opacity-60")}>
           <KpiStrip items={kpis} loading={firstLoad} />
-          {k && k.coverage.missing.length > 0 && (
+          {k && !stale && k.coverage.missing.length > 0 && (
             <Callout tone="warn" title={`${k.coverage.missing.length} of ${k.coverage.selected} sites have no data for ${selLabel}`}>
               {k.coverage.missing.join(", ")}. Their emissions aren't in these totals.
             </Callout>
@@ -225,7 +230,7 @@ export default function GhgReportPage() {
               </TabPanel>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

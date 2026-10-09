@@ -142,7 +142,7 @@ export interface ReportFigures {
   previous: ScopeSplit;
   /** % change of the total; null when last year had nothing. */
   yoy: number | null;
-  /** Renewable-linked tCO₂e this period, outside the scope totals. */
+  /** Renewable tCO₂e this period from scope-less rows, outside the scope totals. */
   renewable: number;
   coverage: { percent: number; withData: number; selected: number; missing: string[] };
   largestSource: { name: string; value: number; share: number } | null;
@@ -159,9 +159,17 @@ const split = (t: { scope1: number; scope2: number; scope3: number; total: numbe
 
 export const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 
-function categoryTotals(rows: OverviewRow[]): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const r of rows) if (isCore(r.scope)) map.set(r.category, (map.get(r.category) ?? 0) + r.total);
+/** Categories match whatever their case ("Natural Gas" = "natural gas"); the first spelling seen is shown. */
+const catKey = (name: string) => name.trim().toLowerCase();
+
+function categoryTotals(rows: OverviewRow[]): Map<string, { name: string; total: number }> {
+  const map = new Map<string, { name: string; total: number }>();
+  for (const r of rows) {
+    if (!isCore(r.scope)) continue;
+    const c = map.get(catKey(r.category)) ?? { name: r.category, total: 0 };
+    c.total += r.total;
+    map.set(catKey(r.category), c);
+  }
   return map;
 }
 
@@ -180,7 +188,7 @@ export function reportFigures(data: GhgReportTablesResponse, sites: { site_id: n
   const missing = sites.filter((s) => !withData.has(s.site_id)).map((s) => s.name);
   const asked = sites.length || withData.size;
 
-  const cats = [...categoryTotals(rows)].sort((a, b) => b[1] - a[1]);
+  const cats = [...categoryTotals(rows).values()].sort((a, b) => b.total - a.total);
   const top = cats[0];
 
   return {
@@ -189,14 +197,15 @@ export function reportFigures(data: GhgReportTablesResponse, sites: { site_id: n
     selected,
     previous,
     yoy: previous.total > 0 ? ((selected.total - previous.total) / previous.total) * 100 : null,
-    renewable: rows.filter((r) => RENEW_RE.test(r.category)).reduce((a, r) => a + r.total, 0),
+    // Only scope-less rows: a renewable-sounding Scope 3 purchase is already in the totals.
+    renewable: rows.filter((r) => !isCore(r.scope) && RENEW_RE.test(r.category)).reduce((a, r) => a + r.total, 0),
     coverage: {
       percent: asked ? Math.round((Math.min(withData.size, asked) / asked) * 100) : 100,
       withData: Math.min(withData.size, asked),
       selected: asked,
       missing,
     },
-    largestSource: top ? { name: top[0], value: top[1], share: share(top[1], selected.total) } : null,
+    largestSource: top ? { name: top.name, value: top.total, share: share(top.total, selected.total) } : null,
     empty: rows.length === 0 && selected.total === 0,
   };
 }
@@ -224,7 +233,7 @@ export type CategoryRow = { category: string; scope: string; previous: number; s
 
 /** Scope 1–3 categories by this period's emissions, largest first. */
 export function topCategories(data: GhgReportTablesResponse, limit = 10): CategoryRow[] {
-  const key = (r: OverviewRow) => `${r.scope}||${r.category}`;
+  const key = (r: OverviewRow) => `${r.scope}||${catKey(r.category)}`;
   const map = new Map<string, CategoryRow>();
   const add = (rows: OverviewRow[], field: "previous" | "selected") => {
     for (const r of rows) {
@@ -234,8 +243,9 @@ export function topCategories(data: GhgReportTablesResponse, limit = 10): Catego
       map.set(key(r), row);
     }
   };
-  add(data.tables.table_overviewByLocations_compareYear.rows, "previous");
+  // This period first, so its spelling of a category is the one shown.
   add(data.tables.table_overviewByLocations_selectedYear.rows, "selected");
+  add(data.tables.table_overviewByLocations_compareYear.rows, "previous");
   return [...map.values()]
     .map((r) => ({ ...r, change: changePct(r.selected, r.previous) }))
     .sort((a, b) => b.selected - a.selected || b.previous - a.previous || a.category.localeCompare(b.category))
