@@ -165,13 +165,7 @@ function SiteEditor({ sites, value, onApply }: { sites: Option<number>[]; value:
     () => sites.filter((s) => s.label.toLowerCase().includes(query.trim().toLowerCase())),
     [sites, query],
   );
-  const toggle = (id: number) =>
-    setDraft((d) => {
-      const n = new Set(d);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
+  const toggle = (id: number) => setDraft((d) => new Set(d.has(id) ? [...d].filter((x) => x !== id) : [...d, id]));
   return (
     <div className="w-64 space-y-2">
       {sites.length > 8 && (

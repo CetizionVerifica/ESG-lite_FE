@@ -35,7 +35,9 @@ export function readContext(params: URLSearchParams): ContextValues {
 /** Returns new params with the patch applied; other query keys are kept. */
 export function writeContext(params: URLSearchParams, patch: ContextPatch): URLSearchParams {
   const next = new URLSearchParams(params);
-  const set = (key: string, value: string | null) => (value ? next.set(key, value) : next.delete(key));
+  const set = (key: string, value: string | null) =>
+    // data-loss-reviewed: removes a query-string key from the URL; no record is deleted.
+    value ? next.set(key, value) : next.delete(key);
   if ("period" in patch) set(CONTEXT_KEYS.period, patch.period ? serializePeriod(patch.period) : null);
   if ("siteIds" in patch) set(CONTEXT_KEYS.site, patch.siteIds?.length ? [...patch.siteIds].sort((a, b) => a - b).join(",") : null);
   if ("categoryId" in patch) set(CONTEXT_KEYS.category, patch.categoryId ? String(patch.categoryId) : null);
