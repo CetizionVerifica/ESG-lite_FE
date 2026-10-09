@@ -256,7 +256,7 @@ export function DataTable<T>({
       </div>
 
       {selectable && selected.length > 0 && (
-        <div role="region" aria-label="Bulk actions" className="flex flex-wrap items-center gap-2 border-b border-line bg-brand-50 px-3 py-2 text-sm text-ink">
+        <div role="region" aria-label="Bulk actions" className="flex flex-wrap items-center gap-2 border-b border-line bg-tint px-3 py-2 text-sm text-ink">
           <span className="font-medium">{selected.length} selected</span>
           {notLoaded > 0 && (
             <span className="text-muted">Selection spans pages: {formatNumber(notLoaded)} not loaded here</span>
@@ -355,7 +355,7 @@ export function DataTable<T>({
                     }
                     className={cn(
                       "h-row border-t border-line",
-                      isSelected && "bg-brand-50",
+                      isSelected && "bg-tint",
                       onRowClick && "cursor-pointer hover:bg-tint focus-visible:bg-tint focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
                     )}
                   >

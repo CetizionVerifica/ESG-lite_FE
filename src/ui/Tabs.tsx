@@ -46,7 +46,7 @@ export function Tabs<V extends string>({ label, items, value, onChange, idBase, 
           >
             {t.label}
             {t.count !== undefined && (
-              <span className={cn("rounded-full px-1.5 text-[11px] font-num", selected ? "bg-brand-50 text-brand-text" : "bg-tint text-muted")}>{t.count}</span>
+              <span className={cn("rounded-full px-1.5 text-[11px] font-num", selected ? "bg-tint text-brand-text" : "bg-tint text-muted")}>{t.count}</span>
             )}
           </button>
         );

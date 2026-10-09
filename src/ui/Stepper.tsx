@@ -42,7 +42,7 @@ export function Stepper({ steps, current, completed = [], canJump, onStepChange,
               aria-hidden
               className={cn(
                 "flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
-                isCurrent ? "border-brand bg-brand text-on-brand" : isDone ? "border-brand bg-brand-50 text-brand-text" : "border-line bg-panel text-muted",
+                isCurrent ? "border-brand bg-brand text-on-brand" : isDone ? "border-brand bg-tint text-brand-text" : "border-line bg-panel text-muted",
               )}
             >
               {isDone && !isCurrent ? <Check className="size-3.5" /> : i + 1}
