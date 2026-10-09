@@ -104,3 +104,30 @@ export function reconcileAppearance(server: unknown, local: Appearance): Appeara
   if (server !== "system") return server === local ? null : { apply: server };
   return local === "system" ? null : { push: local };
 }
+
+/** Last brand this browser loaded, so a reload paints it at once instead of PlanetPulse first. */
+export const BRAND_CACHE_KEY = "esglite.brand";
+
+/** The cached brand, only when it belongs to `companyId`. */
+export function readCachedBrand(storage: Pick<Storage, "getItem"> | null, companyId: number | null): BrandLike | null {
+  if (!storage || companyId === null) return null;
+  try {
+    const raw = storage.getItem(BRAND_CACHE_KEY);
+    if (!raw) return null;
+    const brand = JSON.parse(raw) as BrandLike | null;
+    return brand && typeof brand === "object" && brand.companyId === companyId ? brand : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Stores the brand just loaded from the API, or forgets it (null) when there is none. */
+export function writeCachedBrand(storage: Pick<Storage, "setItem" | "removeItem"> | null, brand: BrandLike | null): void {
+  if (!storage) return;
+  try {
+    if (brand) storage.setItem(BRAND_CACHE_KEY, JSON.stringify(brand));
+    else storage.removeItem(BRAND_CACHE_KEY);
+  } catch {
+    // Storage full or blocked: the next reload shows PlanetPulse until the brand loads.
+  }
+}
