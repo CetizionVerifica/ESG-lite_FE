@@ -65,10 +65,14 @@ export function readPeriod(params: URLSearchParams, now: Date, fyStartMonth = DE
   return p;
 }
 
+/** A copy of `params` without `keys`. */
+export function withoutKeys(params: URLSearchParams, keys: readonly string[]): URLSearchParams {
+  return new URLSearchParams([...params].filter(([k]) => !keys.includes(k)));
+}
+
 /** Writes a period back into the URL params; unused keys are removed so links stay short. */
 export function writePeriod(params: URLSearchParams, p: ReportPeriod): URLSearchParams {
-  const next = new URLSearchParams(params);
-  for (const k of PERIOD_KEYS) next.delete(k);
+  const next = withoutKeys(params, PERIOD_KEYS);
   next.set("cal", p.yearType);
   next.set("freq", PARAM_FREQ[p.frequency]);
   next.set("year", String(p.year));

@@ -35,6 +35,7 @@ import {
   serverMessage,
   shortPeriodLabel,
   topCategories,
+  withoutKeys,
   writePeriod,
 } from "./logic";
 
@@ -96,9 +97,8 @@ export default function GhgReportPage() {
   const setTab = (t: Tab) =>
     setParams(
       (p) => {
-        const next = new URLSearchParams(p);
-        if (t === "summary") next.delete("tab");
-        else next.set("tab", t);
+        const next = withoutKeys(p, ["tab"]);
+        if (t !== "summary") next.set("tab", t);
         return next;
       },
       { replace: true },
