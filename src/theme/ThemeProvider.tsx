@@ -125,13 +125,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setAppearance = useCallback(
     (next: Appearance) => {
       applyLocal(next);
-      if (!isAuthenticated || accountKey === null) return;
+      if (!isAuthenticated || accountKey === null) return Promise.resolve(true);
       const saved = { appearance: next };
       // Mark as reconciled so the cache update doesn't re-apply it.
       reconciled.current = saved;
       void queryClient.cancelQueries({ queryKey: appearanceKey });
       queryClient.setQueryData(appearanceKey, saved);
-      saveMyAppearance(next).catch(() => {});
+      return saveMyAppearance(next).then(
+        () => true,
+        () => false,
+      );
     },
     [applyLocal, isAuthenticated, accountKey, appearanceKey, queryClient],
   );
@@ -158,7 +161,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       statusClashes: statusClashes(pack),
       isDark: resolvedAppearance === "dark",
       theme: resolvedAppearance,
-      toggleTheme: () => setAppearance(resolvedAppearance === "dark" ? "light" : "dark"),
+      toggleTheme: () => void setAppearance(resolvedAppearance === "dark" ? "light" : "dark"),
     }),
     [appearance, setAppearance, look, pack, tokens, resolvedAppearance],
   );
