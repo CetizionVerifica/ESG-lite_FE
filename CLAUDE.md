@@ -29,6 +29,7 @@ React 19 + Vite + TypeScript + Tailwind. Backend is ESG-lite (Node), AI/OCR endp
 - New pages ship behind `VITE_NEW_UI=1` (set it in `.env.local` or the shell, then restart `npm run dev`).
 - `isNewUiEnabled()` in `src/lib/featureFlags.ts` reads the flag.
 - Register redesigned routes in `src/routes/newUiRoutes.tsx`. They are mounted in front of the legacy routes only when the flag is on, so a new route with the same path takes over the old one; with the flag off the app is unchanged.
+- Dev-only pages (not behind the flag, never in production builds) go in `src/routes/devRoutes.tsx`. `/dev/theme` previews every theme token in PlanetPulse, Midal Classic, Midal Light and Midal Night.
 - In the PR that switches a route for good: the old route redirects to the new one and the old files are deleted.
 
 ## Definition of done (every module)
@@ -54,6 +55,6 @@ Run after `npm ci`:
 | Playwright smoke tests | `npm run test:e2e` (first time on a machine: `npx playwright install chromium`) |
 | Build | `npm run build` |
 
-- `lint:new` covers `src/lib`, `src/ui`, `src/theme`, `src/features`, `src/routes/newUiRoutes.tsx`, `src/main.tsx`, `e2e/` and the test configs. Add any new top-level location you create for redesign code to that script.
+- `lint:new` covers `src/lib`, `src/ui`, `src/theme`, `src/features`, `src/routes/newUiRoutes.tsx`, `src/routes/devRoutes.tsx`, `src/main.tsx`, `e2e/` and the test configs. Add any new top-level location you create for redesign code to that script.
 - Unit tests live next to the code as `*.test.ts(x)` under `src/`. Playwright specs live in `e2e/`; the config starts the Vite dev server on port 4173 itself (or reuses one already running there). Try a flagged route with `VITE_NEW_UI=1 npm run test:e2e`.
 - Run lint:new, typecheck and unit tests before every push.
