@@ -30,7 +30,6 @@ const Legacy = {
   UserEmissions: lazy(() => import("../pages/UserEmissionsPage")),
   ProductionData: lazy(() => import("../pages/ProductionDataPage")),
   ManagerUsers: lazy(() => import("../pages/ManagerUsers")),
-  EdeReports: lazy(() => import("../pages/Reports/EdePreports")),
   Sbti: lazy(() => import("../pages/sbti/SbtiMain")),
   Notifications: lazy(() => import("../pages/NotificationsPage")),
   CompanyAdminUsers: lazy(() => import("../pages/CompanyAdmin/CompanyAdminUsersPage")),
@@ -62,6 +61,7 @@ const OverviewPage = lazy(() => import("../features/overview/Page"));
 const ProductionReviewPage = lazy(() => import("../features/production-review/Page"));
 const SettingsPage = lazy(() => import("../features/settings/Page"));
 const GhgReportPage = lazy(() => import("../features/ghg-report/Page"));
+const EdeReportPage = lazy(() => import("../features/ede-report/Page"));
 
 const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(id)} />;
 
@@ -78,7 +78,7 @@ const pages: Record<ShellRouteId, ReactNode> = {
   "production-review": <ProductionReviewPage />,
   team: <Legacy.ManagerUsers />,
   "ghg-report": <GhgReportPage />,
-  "ede-report": <Legacy.EdeReports />,
+  "ede-report": <EdeReportPage />,
   targets: <Legacy.Sbti />,
   pcf: placeholder("pcf"),
   notifications: <Legacy.Notifications />,
