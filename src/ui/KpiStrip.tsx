@@ -3,6 +3,7 @@ import { Button } from "./Button";
 import { EmptyState } from "./EmptyState";
 import { SkeletonKpi } from "./Skeleton";
 import { cn } from "./cn";
+import { focusRing } from "./styles";
 import { EMPTY_VALUE, emissionsParts, formatDelta, formatNumber, formatPercent, type Delta } from "./format";
 
 export type KpiFormat = "emissions" | "number" | "percent";
@@ -24,6 +25,10 @@ export type Kpi = {
   hint?: ReactNode;
   /** The headline figure: wider and larger. Use on one KPI only. */
   primary?: boolean;
+  /** Makes the figure a toggle, e.g. "show only pending". */
+  onSelect?: () => void;
+  /** Pressed state of an `onSelect` figure. */
+  selected?: boolean;
 };
 
 export type KpiStripProps = {
@@ -66,15 +71,30 @@ export function KpiStrip({ items, loading, error, onRetry, className }: KpiStrip
         return (
           <div
             key={k.label}
-            className={cn("min-w-0 p-4 sm:p-5", k.primary ? "col-span-2 sm:flex-[1.6]" : "sm:flex-1")}
+            className={cn(
+              "relative min-w-0 p-4 sm:p-5",
+              k.primary ? "col-span-2 sm:flex-[1.6]" : "sm:flex-1",
+              k.onSelect && "[&>dt]:pointer-events-none [&>dd]:pointer-events-none",
+              k.selected && "bg-tint",
+            )}
           >
-            <dt className="truncate text-xs font-medium text-muted">{k.label}</dt>
-            <dd className="mt-1">
+            {k.onSelect && (
+              // A full-cell toggle behind the figure (a button can't wrap dt/dd).
+              <button
+                type="button"
+                aria-pressed={k.selected ?? false}
+                aria-label={`${k.label}: ${k.selected ? "show all" : "show only these"}`}
+                onClick={k.onSelect}
+                className={cn("absolute inset-0 rounded-card hover:bg-tint/60", focusRing)}
+              />
+            )}
+            <dt className="relative truncate text-xs font-medium text-muted">{k.label}</dt>
+            <dd className="relative mt-1">
               <span className={cn("font-num font-semibold tabular-nums text-ink", k.primary ? "text-3xl" : "text-2xl")}>{value}</span>
               {unit && value !== EMPTY_VALUE && <span className="ml-1 text-xs text-muted">{unit}</span>}
             </dd>
             {(delta || k.hint) && (
-              <dd className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-xs">
+              <dd className="relative mt-1 flex flex-wrap items-baseline gap-x-1.5 text-xs">
                 {delta && <span className={cn("font-num font-medium", toneClass[delta.tone])}>{delta.text}</span>}
                 {delta && k.compareLabel && <span className="text-muted">{k.compareLabel}</span>}
                 {k.hint && <span className="text-muted">{k.hint}</span>}

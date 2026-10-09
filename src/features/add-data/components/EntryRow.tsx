@@ -7,7 +7,7 @@ import type { RowIssue } from "../logic/entry";
 import type { CategoryMapping } from "../api";
 import type { EmissionFactor, ModalRow } from "../types";
 import { billOf, isAiField, LOW_CONFIDENCE } from "../logic/bill";
-import { AiLabel, ConfidenceBadge } from "./AiMarks";
+import { AiChip, AiLabel, ConfidenceBadge } from "./AiMarks";
 import { DynamicField } from "./DynamicField";
 import { ExtraFields } from "./ExtraFields";
 
@@ -110,7 +110,14 @@ export function EntryRow(p: Props) {
         {formColumns(model)
           .filter((c) => isColumnVisible(model, c, row))
           .map((c) => (
-            <DynamicField key={c.pk_id} model={model} column={c} row={row} onChange={p.onChange} />
+            <DynamicField
+              key={c.pk_id}
+              model={model}
+              column={c}
+              row={row}
+              onChange={p.onChange}
+              labelExtra={isAiField(row, c.column_name) ? <AiChip /> : undefined}
+            />
           ))}
         <Select<string>
           label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}

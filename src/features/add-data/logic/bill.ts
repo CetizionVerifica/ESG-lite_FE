@@ -7,8 +7,8 @@
 import type { CategorySuggestion, ExtractionResponse, InvoiceData, ValidationCheck } from "../../../services/invoiceService";
 import { formatDate } from "../../../ui/format";
 import { entryDate, entryPeriodLabel, type EntryPeriod } from "./entry";
-import { autoEmissionCategory, columnOptionsFor, isSelectColumn, newRow, parentColumnOf, type FormModel } from "./form";
-import type { EmissionFactor, ModalRow } from "../types";
+import { autoEmissionCategory, columnOptionsFor, isSelectColumn, newRow, parentColumnOf, type FormModel } from "../../../lib/emissions/form";
+import type { EmissionFactor, ModalRow } from "../../../lib/emissions/types";
 
 /** Category confidence (0–100) below which the suggestion is shown as unsure. */
 export const LOW_CONFIDENCE = 60;

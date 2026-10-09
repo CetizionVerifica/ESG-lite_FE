@@ -10,7 +10,7 @@ import {
   toFormModel,
   visibleExtraFields,
 } from "./form";
-import type { ColumnConfig, ColumnEntity } from "../types";
+import type { ColumnConfig, ColumnEntity } from "./types";
 
 const col = (pk_id: number, column_name: string, column_type = "select"): ColumnEntity => ({ pk_id, column_name, column_type });
 
