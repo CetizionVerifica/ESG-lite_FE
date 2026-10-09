@@ -21,6 +21,8 @@ import {
   useContextParams,
   useFilterParams,
   useToast,
+  writeContext,
+  writeFilterParams,
 } from "../../ui";
 import { commitApprove, errorMessage, useColumnConfigs, useEmissionList, useReviewMutations, useStatusCounts } from "./api";
 import { RecordDrawer } from "./components/RecordDrawer";
@@ -54,16 +56,19 @@ function useManagerSites(): SiteOption[] {
   }, [user]);
 }
 
+/** FilterBar keys kept in the URL per tab; Approvals is always pending, so it has no status chip. */
+const FILTER_KEYS: Record<Tab, string[]> = { approvals: [], ledger: ["status"] };
+
 const describe = (r: LedgerRow) => `${r.category?.category_name ?? "Entry"} · ${r.site?.name ?? "—"} · ${rowPeriodLabel(r)}`;
 
 /** P07: `/data/approvals` and `/data/ledger`, one page with two tabs. */
 export default function EmissionsPage({ tab }: { tab: Tab }) {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const { toast } = useToast();
   const sites = useManagerSites();
-  const [ctx, updateCtx] = useContextParams();
-  const [filters, setFilters] = useFilterParams(tab === "ledger" ? ["status"] : []);
+  const [ctx] = useContextParams();
+  const [filters, setFilters] = useFilterParams(FILTER_KEYS[tab]);
   const status = tab === "ledger" ? asStatus(filters.filters.status?.[0]) : null;
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT[tab]);
   const [page, setPage] = useState(0);
@@ -149,8 +154,16 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
       description: describe(row),
       tone: "good",
       duration: UNDO_MS,
-      action: { label: "Undo", onClick: () => undoable.undo(row.pk_id) },
+      action: {
+        label: "Undo",
+        onClick: () => {
+          // The toast pauses on hover and outlives a tab switch; the approval doesn't wait for it.
+          if (!undoable.undo(row.pk_id)) toast({ title: "Too late to undo", description: "This entry was already approved. Reject it if it's wrong." });
+        },
+      },
     });
+    // An approved row leaves the selection, so bulk actions don't count it as pending again.
+    setSelected((s) => s.filter((id) => Number(id) !== row.pk_id));
     if (tab === "approvals") {
       if (drawer?.pk_id === row.pk_id) setDrawer(null);
       if (index !== undefined) focusRow(index);
@@ -198,6 +211,8 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
   const confirmDelete = () => {
     if (!deleting) return;
     const ids = deleting.map((r) => r.pk_id);
+    // A deleted row has nothing left to approve.
+    for (const id of ids) undoable.undo(id);
     review.remove.mutate(ids, {
       onSuccess: () => {
         setDeleting(null);
@@ -227,12 +242,15 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
   const pendingCount = counts.data?.pending_count;
 
   const filtered = !!filters.q.trim() || !!status || ctx.categoryId !== null || ctx.period !== null;
-  const clearFilters = () => {
-    setFilters(EMPTY_FILTERS);
-    updateCtx({ categoryId: null, period: null });
-  };
-  const empty =
-    tab === "approvals" && !filtered ? (
+  // One URL write: two functional setSearchParams calls in one tick both start from the
+  // same params, so the second would undo the first.
+  const clearFilters = () =>
+    setParams((p) => writeContext(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS[tab]), { categoryId: null, period: null }), { replace: true });
+  // Every row shown was just approved, but the server still lists them (undo window): more may follow.
+  const savingApprovals = tab === "approvals" && rows.length === 0 && (list.data?.total ?? 0) > 0;
+  const empty = savingApprovals ? (
+    <EmptyState icon={CheckCircle2} title="Saving your approvals" description="The rest of the queue appears once they're saved." />
+  ) : tab === "approvals" && !filtered ? (
       <EmptyState
         icon={CheckCircle2}
         title="You're all caught up"
@@ -353,7 +371,7 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
         onClose={() => setRejecting(null)}
         onConfirm={confirmReject}
       />
-      <DeleteModal rows={deleting} busy={review.remove.isPending} error={review.remove.error} onClose={() => setDeleting(null)} onConfirm={confirmDelete} />
+      <DeleteModal rows={deleting} statusOf={statusOf} busy={review.remove.isPending} error={review.remove.error} onClose={() => setDeleting(null)} onConfirm={confirmDelete} />
     </div>
   );
 }
@@ -364,19 +382,21 @@ function Kbd({ children }: { children: string }) {
 
 function DeleteModal({
   rows,
+  statusOf,
   busy,
   error,
   onClose,
   onConfirm,
 }: {
   rows: LedgerRow[] | null;
+  statusOf: (r: LedgerRow) => EmissionStatus;
   busy: boolean;
   error: unknown;
   onClose: () => void;
   onConfirm: () => void;
 }) {
   const n = rows?.length ?? 0;
-  const byStatus = (s: EmissionStatus) => rows?.filter((r) => r.status === s).length ?? 0;
+  const byStatus = (s: EmissionStatus) => rows?.filter((r) => statusOf(r) === s).length ?? 0;
   const approved = byStatus("approved");
   return (
     <Modal

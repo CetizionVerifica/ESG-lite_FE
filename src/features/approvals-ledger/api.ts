@@ -114,8 +114,8 @@ export function useFactor(emissionId: number | null) {
 }
 
 /** Approve one entry now (the page delays it for the undo window). */
-export function commitApprove(id: number) {
-  return approveEmission(id);
+export function commitApprove(id: number, opts?: { keepalive?: boolean }) {
+  return approveEmission(id, undefined, opts);
 }
 
 export function useReviewMutations() {

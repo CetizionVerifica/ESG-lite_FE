@@ -191,8 +191,10 @@ export const getPendingEmissions = async (params?: {
   return response.data;
 };
 
-export const approveEmission = async (id: string | number, comment?: string) => {
-  const response = await api.put(`/user/emissions/${id}/approve`, { comment });
+/** `keepalive` lets the request finish after the tab closes (sent with fetch instead of XHR). */
+export const approveEmission = async (id: string | number, comment?: string, opts?: { keepalive?: boolean }) => {
+  const config = opts?.keepalive ? { adapter: "fetch" as const, fetchOptions: { keepalive: true } } : undefined;
+  const response = await api.put(`/user/emissions/${id}/approve`, { comment }, config);
   return response.data;
 };
 

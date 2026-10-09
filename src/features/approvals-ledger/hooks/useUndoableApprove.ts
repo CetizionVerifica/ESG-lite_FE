@@ -6,8 +6,8 @@ export const UNDO_MS = 8000;
 /**
  * Approve with an undo window. The row shows as approved at once, but the
  * request is only sent when the window closes, so Undo leaves nothing behind
- * (no status flip, no audit entry). Leaving the page or closing the tab sends
- * whatever is still waiting.
+ * (no status flip, no audit entry). Leaving the page sends whatever is still
+ * waiting; closing the tab sends it as keepalive requests, which outlive the page.
  *
  * `optimistic` maps a row id to the status to show until the list refetches.
  */
@@ -17,7 +17,7 @@ export function useUndoableApprove({
   onFailed,
   delay = UNDO_MS,
 }: {
-  commit: (id: number) => Promise<unknown>;
+  commit: (id: number, opts?: { keepalive?: boolean }) => Promise<unknown>;
   onCommitted: () => void;
   onFailed: (id: number, error: unknown) => void;
   delay?: number;
@@ -36,10 +36,10 @@ export function useUndoableApprove({
       return next;
     });
 
-  const send = useCallback((id: number) => {
+  const send = useCallback((id: number, keepalive = false) => {
     timers.current.delete(id); // data-loss-reviewed: Map entry (timer handle), not a record
     cb.current
-      .commit(id)
+      .commit(id, keepalive ? { keepalive } : undefined)
       .then(() => cb.current.onCommitted())
       .catch((e: unknown) => {
         setStatus(id, null);
@@ -66,17 +66,21 @@ export function useUndoableApprove({
   }, []);
 
   /** Sends every approval still in its undo window. */
-  const flush = useCallback(() => {
-    for (const [id, t] of [...timers.current]) {
-      clearTimeout(t);
-      send(id);
-    }
-  }, [send]);
+  const flush = useCallback(
+    (keepalive = false) => {
+      for (const [id, t] of [...timers.current]) {
+        clearTimeout(t);
+        send(id, keepalive);
+      }
+    },
+    [send],
+  );
 
   useEffect(() => {
-    window.addEventListener("pagehide", flush);
+    const onPageHide = () => flush(true);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
-      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("pagehide", onPageHide);
       flush();
     };
   }, [flush]);

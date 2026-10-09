@@ -161,3 +161,15 @@ test("a row opens in the drawer with its calculation", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
 });
+
+test("Clear filters clears the search, status and category together", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/ledger?status=rejected&q=diesel&category=10");
+  await expect(page.getByText("No records match")).toBeVisible();
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(page.getByRole("table", { name: "Emission entries" }).getByRole("row")).toHaveCount(4);
+  const url = new URL(page.url());
+  expect(url.searchParams.get("status")).toBeNull();
+  expect(url.searchParams.get("q")).toBeNull();
+  expect(url.searchParams.get("category")).toBe("all");
+});

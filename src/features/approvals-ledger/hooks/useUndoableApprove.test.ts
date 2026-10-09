@@ -26,7 +26,7 @@ describe("useUndoableApprove", () => {
     await act(async () => {
       vi.advanceTimersByTime(8000);
     });
-    expect(commit).toHaveBeenCalledWith(7);
+    expect(commit).toHaveBeenCalledWith(7, undefined);
     expect(onCommitted).toHaveBeenCalled();
   });
 
@@ -49,6 +49,14 @@ describe("useUndoableApprove", () => {
     act(() => hook.result.current.approve(2));
     hook.unmount();
     expect(commit.mock.calls.map((c) => c[0])).toEqual([1, 2]);
+  });
+
+  it("sends keepalive requests when the tab closes, so they outlive the page", () => {
+    const { hook, commit } = setup();
+    act(() => hook.result.current.approve(4));
+    window.dispatchEvent(new Event("pagehide"));
+    expect(commit).toHaveBeenCalledWith(4, { keepalive: true });
+    expect(hook.result.current.undo(4)).toBe(false);
   });
 
   it("puts the row back when the request fails", async () => {

@@ -55,10 +55,11 @@ export function useRowKeys(container: RefObject<HTMLElement | null>, handlers: H
         rows[stepIndex(index, key === "j" ? 1 : -1, rows.length)]?.focus();
       } else if (Number.isFinite(id) && key === "a") {
         e.preventDefault();
-        h.current.onApprove(id, index);
+        // A held key repeats; one press is one decision.
+        if (!e.repeat) h.current.onApprove(id, index);
       } else if (Number.isFinite(id) && key === "r") {
         e.preventDefault();
-        h.current.onReject(id, index);
+        if (!e.repeat) h.current.onReject(id, index);
       } else if (Number.isFinite(id) && e.key === " " && target === row) {
         e.preventDefault();
         h.current.onToggle(id);
