@@ -6,9 +6,10 @@ import {
   intensityMonthly,
   recentYears,
   scope2Monthly,
+  siteIntensity,
   yearsOf,
   categoryBars,
-  combineIntensity,
+  combinedIntensity,
   defaultPeriod,
   headerText,
   insightText,
@@ -130,11 +131,17 @@ describe("sites", () => {
 });
 
 describe("intensity", () => {
-  it("divides emissions by production, combining several units", () => {
-    expect(combineIntensity(10, [{ production: 5, unit: "t" }])).toEqual({ value: 2, unit: "t", combined: false });
-    expect(combineIntensity(10, [{ production: 4, unit: "t" }, { production: 1, unit: "m" }])).toEqual({ value: 2, unit: "Combined", combined: true });
-    expect(combineIntensity(10, [{ production: 0, unit: "t" }])).toBeNull();
-    expect(combineIntensity(10, [])).toBeNull();
+  it("never adds production in different units for one site", () => {
+    // Today's dashboard: 400 t and 1,000,000 kg on one site shows 800 / 400 = 2 tCO₂e/t.
+    expect(siteIntensity(800, [{ production: 400, unit: "t" }, { production: 1_000_000, unit: "kg" }])).toEqual({ value: 2, unit: "t", combined: false, otherUnits: 1 });
+    expect(siteIntensity(10, [{ production: 5, unit: "t" }])).toEqual({ value: 2, unit: "t", combined: false, otherUnits: 0 });
+    expect(siteIntensity(10, [{ production: 0, unit: "t" }])).toBeNull();
+    expect(siteIntensity(10, [])).toBeNull();
+  });
+
+  it("combines several sites over their summed production", () => {
+    expect(combinedIntensity([{ emissions: 4, production: 10 }, { emissions: 6, production: 10 }, { emissions: 9, production: 0 }])).toEqual({ value: 0.5, unit: "Combined", combined: true, otherUnits: 0 });
+    expect(combinedIntensity([{ emissions: 4, production: 0 }])).toBeNull();
   });
 });
 
@@ -169,7 +176,7 @@ describe("links and text", () => {
   it("adds the yearly filing as its own table row", () => {
     expect(trendTable([{ month: "2025-09", gross: 2, saved: 1, net: 1 }], 5)).toEqual([
       { month: "Sep 2025", gross: 2, saved: 1, net: 1 },
-      { month: "Yearly filing", gross: 5, saved: null, net: 5 },
+      { month: "Yearly filing (all categories)", gross: 5, saved: null, net: null },
     ]);
     expect(trendTable([], 0)).toEqual([]);
   });

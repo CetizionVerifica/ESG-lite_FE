@@ -119,7 +119,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
     approved: listLink("/data/ledger", { siteIds: ctx.siteIds, categoryId: ctx.categoryId, period, status: "approved" }),
     site: (id: number) => listLink("/data/ledger", { siteIds: [id], categoryId: ctx.categoryId, period, status: "approved" }),
     category: (id: number) => listLink("/data/ledger", { siteIds: ctx.siteIds, categoryId: id, period, status: "approved" }),
-    production: "/data/production?status=pending",
+    production: `/data/production?status=pending${ctx.siteIds.length ? `&site=${[...ctx.siteIds].sort((a, b) => a - b).join(",")}` : ""}`,
   };
 
   const k = data?.kpis;
@@ -156,6 +156,8 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
           </Link>
         ) : intensity.isError ? (
           "Couldn't load intensity"
+        ) : intensity.data?.otherUnits ? (
+          `Products in ${intensity.data.otherUnits} other ${intensity.data.otherUnits === 1 ? "unit" : "units"} not included`
         ) : undefined,
     },
     { label: "Saved (renewables)", value: figure(k?.saved), format: "emissions" },
@@ -217,7 +219,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
           className="lg:col-span-2 lg:col-start-4 lg:row-start-1 lg:self-start"
           items={attention}
           loading={overview.isPending || pendingEntries.isPending}
-          error={overview.isError && pendingEntries.isError ? LOAD_ERROR : null}
+          error={overview.isError || pendingEntries.isError ? LOAD_ERROR : null}
           onRetry={() => {
             overview.refetch();
             pendingEntries.refetch();

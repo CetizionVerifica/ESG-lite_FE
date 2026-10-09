@@ -133,24 +133,37 @@ export function thresholdAlerts(current: OverviewCategory[], previous: OverviewC
 /** Trend rows for the chart and its table, with the yearly filing as its own row. */
 export function trendTable(trend: OverviewMonth[], yearlyTotal: number) {
   const rows: Array<Record<string, string | number | null>> = trend.map((t) => ({ month: monthLabel(t.month), gross: t.gross, saved: t.saved, net: t.net }));
-  if (yearlyTotal > 0) rows.push({ month: "Yearly filing", gross: yearlyTotal, saved: null, net: yearlyTotal });
+  if (yearlyTotal > 0) rows.push({ month: "Yearly filing (all categories)", gross: yearlyTotal, saved: null, net: null });
   return rows;
 }
 
-export type Intensity = { value: number; unit: string; combined: boolean } | null;
+export type Intensity = { value: number; unit: string; combined: boolean; otherUnits: number } | null;
 
 /**
- * One intensity figure: total emissions over total production. A single
- * product unit reads "tCO₂e/{unit}"; several units are summed into a
- * "Combined" figure, as today's page does for several sites.
+ * One site's intensity: total emissions over its production. Production in
+ * different units can't be added, so with several units the first one is
+ * used, as today's dashboard does, and `otherUnits` says how many were left out.
  */
-export function combineIntensity(emissions: number, parts: { production: number; unit: string }[]): Intensity {
+export function siteIntensity(emissions: number, parts: { production: number; unit: string }[]): Intensity {
   const withOutput = parts.filter((p) => p.production > 0);
   if (!withOutput.length) return null;
-  const units = new Set(withOutput.map((p) => p.unit));
-  const production = withOutput.reduce((s, p) => s + p.production, 0);
-  const combined = units.size > 1;
-  return { value: emissions / production, unit: combined ? "Combined" : [...units][0], combined };
+  const unit = withOutput[0].unit;
+  const production = withOutput.filter((p) => p.unit === unit).reduce((s, p) => s + p.production, 0);
+  const otherUnits = new Set(withOutput.map((p) => p.unit)).size - 1;
+  return { value: emissions / production, unit, combined: false, otherUnits };
+}
+
+/**
+ * Several sites' intensity: emissions over production summed across sites.
+ * The comparison endpoint gives no units, so this is the "Combined" figure
+ * today's dashboard shows for several sites.
+ */
+export function combinedIntensity(sites: { emissions: number; production: number }[]): Intensity {
+  const withOutput = sites.filter((s) => s.production > 0);
+  if (!withOutput.length) return null;
+  const emissions = withOutput.reduce((s, x) => s + x.emissions, 0);
+  const production = withOutput.reduce((s, x) => s + x.production, 0);
+  return { value: emissions / production, unit: "Combined", combined: true, otherUnits: 0 };
 }
 
 /** Query string for a P07 list, keeping only what's set. */

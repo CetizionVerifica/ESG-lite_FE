@@ -17,8 +17,10 @@ export function TrendChart(props: { trend: OverviewMonth[] | undefined; yearlyTo
   const { trend = [], yearlyTotal, loading, error, onRetry } = props;
   const { tokens } = useTheme();
   const [measure, setMeasure] = useState<Measure>("net");
-  const hasYearly = yearlyTotal > 0;
-  const empty = !trend.some((t) => t.gross !== 0 || t.saved !== 0) && !hasYearly;
+  // Yearly filings hold every category, renewables included, so they have no
+  // net figure: the bar shows in the Gross view only.
+  const hasYearly = yearlyTotal > 0 && measure === "gross";
+  const empty = !trend.some((t) => t.gross !== 0 || t.saved !== 0) && !(yearlyTotal > 0);
   const months = trend.map((t) => shortMonth(t.month));
   const values = trend.map((t) => t[measure]);
   const label = measure === "net" ? "Net" : "Gross";
@@ -27,7 +29,13 @@ export function TrendChart(props: { trend: OverviewMonth[] | undefined; yearlyTo
     <ChartFrame
       title={`Monthly ${label.toLowerCase()} emissions`}
       unit="tCO₂e"
-      subtitle={hasYearly ? "Yearly filings are shown as their own bar, not spread over months." : undefined}
+      subtitle={
+        yearlyTotal > 0
+          ? measure === "gross"
+            ? "Yearly filings (all categories) are their own bar, not spread over months."
+            : "Yearly filings aren't in the net view; switch to Gross to see them."
+          : undefined
+      }
       loading={loading}
       error={error}
       onRetry={onRetry}

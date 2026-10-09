@@ -3,7 +3,7 @@ import { getEmissionsPaginated } from "../../services/emissionService";
 import { type OverviewResponse, type SubmissionUser, getManagerOverview, getSubmissionStatus } from "../../services/overviewService";
 import { getEmissionIntensity, getEmissionIntensityComparison, getProductionDataForManager } from "../../services/productionDataService";
 import { getThresholdByCompany } from "../../services/thresholdService";
-import { type Intensity, combineIntensity } from "./logic";
+import { type Intensity, combinedIntensity, siteIntensity } from "./logic";
 
 export const keys = {
   all: ["overview"] as const,
@@ -46,14 +46,11 @@ export function useIntensity(siteIds: number[], from: string, to: string) {
       const params = { startDate: from, endDate: to };
       if (siteIds.length === 1) {
         const d = await getEmissionIntensity(siteIds[0], params);
-        return combineIntensity(d.totalEmissions, d.productionByUnit.map((u) => ({ production: u.totalProduction, unit: u.unit })));
+        return siteIntensity(d.totalEmissions, d.productionByUnit.map((u) => ({ production: u.totalProduction, unit: u.unit })));
       }
       // Several sites: one combined figure, whatever their units.
       const d = await getEmissionIntensityComparison(siteIds, params);
-      const sites = d.comparison.filter((s) => siteIds.includes(s.siteId));
-      const emissions = sites.reduce((s, x) => s + x.totalEmissions, 0);
-      const intensity = combineIntensity(emissions, sites.map((s) => ({ production: s.totalProduction || 0, unit: "Combined" })));
-      return intensity && { ...intensity, combined: true };
+      return combinedIntensity(d.comparison.filter((s) => siteIds.includes(s.siteId)).map((s) => ({ emissions: s.totalEmissions, production: s.totalProduction || 0 })));
     },
     placeholderData: keepPreviousData,
   });
@@ -87,7 +84,8 @@ export function useThreshold(companyId: number | null) {
     enabled: !!companyId,
     queryFn: async () => {
       try {
-        return Number(await getThresholdByCompany(companyId!));
+        const pct = Number(await getThresholdByCompany(companyId!));
+        return Number.isFinite(pct) ? pct : 5;
       } catch {
         return 5;
       }
@@ -122,14 +120,16 @@ export function useScope2Entries(siteIds: number[], categoryId: number | null, y
   return useQueries({
     queries: years.map((year) => ({
       queryKey: keys.scope2(siteIds, categoryId, year),
-      queryFn: async () =>
-        (await getEmissionsPaginated({ siteIds, categoryId, scope: "Scope 2", status: "approved", year, page: 1, limit: SCOPE2_CAP })).data,
+      queryFn: async () => {
+        const res = await getEmissionsPaginated({ siteIds, categoryId, scope: "Scope 2", status: "approved", year, page: 1, limit: SCOPE2_CAP });
+        return { rows: res.data, truncated: (res.total ?? 0) > res.data.length };
+      },
     })),
     combine,
   });
 }
 
-const SCOPE2_CAP = 5000;
+export const SCOPE2_CAP = 5000;
 
 /** B4 for whole calendar years: their 12-month trend feeds the year-over-year lines. */
 export function useYearTrends(years: number[], siteIds: number[], categoryId: number | null) {

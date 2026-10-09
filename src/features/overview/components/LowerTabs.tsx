@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { OverviewResponse } from "../../../services/overviewService";
 import { useTheme } from "../../../theme";
 import { ChartFrame, MONTH_SHORT, TabPanel, Tabs, cn, focusRing, formatEmissions, formatNumber } from "../../../ui";
-import { useScope2Entries, useSiteIntensityMonthly, useYearTrends } from "../api";
+import { SCOPE2_CAP, useScope2Entries, useSiteIntensityMonthly, useYearTrends } from "../api";
 import { intensityMonthly, lastYearCaption, monthLabel, recentYears, scope2Monthly, shortMonth, yearsOf } from "../logic";
 
 type View = "intensity" | "scope2" | "yoy" | "sites";
@@ -110,12 +110,17 @@ function IntensityChart({ siteIds, months }: { siteIds: number[]; months: string
 function Scope2Chart({ siteIds, categoryId, months }: { siteIds: number[]; categoryId: number | null; months: string[] }) {
   const { tokens } = useTheme();
   const q = useScope2Entries(siteIds, categoryId, yearsOf(months));
-  const { unit, rows } = scope2Monthly(q.data?.flat() ?? [], months);
+  const { unit, rows } = scope2Monthly(q.data?.flatMap((y) => y.rows) ?? [], months);
+  const truncated = q.data?.some((y) => y.truncated) ?? false;
   return (
     <ChartFrame
       title="Scope 2 electricity"
       unit="tCO₂e"
-      subtitle={`Approved monthly entries; the line is the ${unit} reported (right axis).`}
+      subtitle={
+        truncated
+          ? `Showing the first ${formatNumber(SCOPE2_CAP)} entries of a year; narrow the sites or category to see all.`
+          : `Approved monthly entries; the line is the ${unit} reported (right axis).`
+      }
       loading={q.isPending}
       error={q.isError ? LOAD_ERROR : null}
       onRetry={q.refetch}
