@@ -1,2 +1,3 @@
-// Theme tokens and engine. Empty until F1 (docs/redesign/foundation/01-theme-tokens/CLAUDE.md) lands.
-export {};
+// Theme tokens and engine (F1). Spec: ./CLAUDE.md.
+export { RAMP_STEPS, TOKEN_NAMES } from "./tokens";
+export type { RampStep, ThemeTokens, TokenName } from "./tokens";
