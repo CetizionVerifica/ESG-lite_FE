@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePeriod, periodContaining, periodLabel, periodRange, serializePeriod, type Period } from "./period";
+import { parsePeriod, periodContaining, periodLabel, periodRange, serializePeriod, shiftPeriod, type Period } from "./period";
 
 const cases: Array<[string, Period, string]> = [
   ["2025-09", { kind: "month", year: 2025, month: 9 }, "Sep 2025"],
@@ -50,5 +50,21 @@ describe("periodContaining", () => {
   it("puts months before the FY start in the previous FY", () => {
     expect(periodContaining("fy", sep)).toEqual({ kind: "fy", startYear: 2025 });
     expect(periodContaining("fy", feb)).toEqual({ kind: "fy", startYear: 2025 });
+  });
+});
+
+describe("shiftPeriod", () => {
+  it("steps across year boundaries", () => {
+    expect(shiftPeriod({ kind: "month", year: 2025, month: 1 }, -1)).toEqual({ kind: "month", year: 2024, month: 12 });
+    expect(shiftPeriod({ kind: "month", year: 2025, month: 12 }, 1)).toEqual({ kind: "month", year: 2026, month: 1 });
+    expect(shiftPeriod({ kind: "quarter", year: 2025, quarter: 1 }, -1)).toEqual({ kind: "quarter", year: 2024, quarter: 4 });
+    expect(shiftPeriod({ kind: "fy", startYear: 2025 }, 1)).toEqual({ kind: "fy", startYear: 2026 });
+  });
+  it("moves a custom range by its own length", () => {
+    expect(shiftPeriod({ kind: "custom", from: "2025-01-01", to: "2025-01-10" }, 1)).toEqual({
+      kind: "custom",
+      from: "2025-01-11",
+      to: "2025-01-20",
+    });
   });
 });

@@ -43,12 +43,12 @@ export function SkeletonTableRows({ rows = 5, columns = 4, className }: { rows?:
 
 export function SkeletonKpi({ count = 4, className }: { count?: number; className?: string }) {
   return (
-    <Loading label="Loading figures" className={cn("flex gap-6", className)}>
+    <Loading label="Loading figures" className={cn("flex gap-4 sm:gap-6", className)}>
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="flex-1 space-y-2">
-          <Skeleton className="h-3 w-20" />
-          <Skeleton className="h-7 w-28" />
-          <Skeleton className="h-3 w-14" />
+        <div key={i} className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-3 w-full max-w-20" />
+          <Skeleton className="h-7 w-full max-w-28" />
+          <Skeleton className="h-3 w-2/3 max-w-14" />
         </div>
       ))}
     </Loading>

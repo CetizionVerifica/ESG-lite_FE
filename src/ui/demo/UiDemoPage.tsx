@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { cn } from "../cn";
 import { focusRing } from "../styles";
 import { ButtonsDemo, EmptyStateDemo, FieldsDemo, FormatDemo, OverlaysDemo, SkeletonDemo, StatusPillDemo } from "./CoreDemos";
+import { DataTableDemo, PageHeaderDemo } from "./TableDemos";
 import { DEMO_THEMES, DEMO_THEME_LABEL, applyDemoTheme, type DemoTheme } from "./demoTheme";
 
 /**
@@ -40,6 +41,8 @@ export default function UiDemoPage() {
         </div>
       </header>
       <main className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
+        <PageHeaderDemo />
+        <DataTableDemo />
         <FormatDemo />
         <ButtonsDemo />
         <StatusPillDemo />

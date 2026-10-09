@@ -147,3 +147,29 @@ export function periodContaining(kind: PeriodKind, date: Date, fyStartMonth = DE
     }
   }
 }
+
+/** The period `steps` before (negative) or after (positive) `p`. Custom ranges move by their own length. */
+export function shiftPeriod(p: Period, steps: number): Period {
+  switch (p.kind) {
+    case "month": {
+      const index = p.year * 12 + (p.month - 1) + steps;
+      return { kind: "month", year: Math.floor(index / 12), month: (((index % 12) + 12) % 12) + 1 };
+    }
+    case "quarter": {
+      const index = p.year * 4 + (p.quarter - 1) + steps;
+      return { kind: "quarter", year: Math.floor(index / 4), quarter: (((index % 4) + 4) % 4) + 1 };
+    }
+    case "cy":
+      return { kind: "cy", year: p.year + steps };
+    case "fy":
+      return { kind: "fy", startYear: p.startYear + steps };
+    case "custom": {
+      const day = 86_400_000;
+      const from = Date.parse(`${p.from}T00:00:00Z`);
+      const to = Date.parse(`${p.to}T00:00:00Z`);
+      const span = (to - from) / day + 1;
+      const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+      return { kind: "custom", from: iso(from + steps * span * day), to: iso(to + steps * span * day) };
+    }
+  }
+}
