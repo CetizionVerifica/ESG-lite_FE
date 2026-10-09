@@ -234,6 +234,11 @@ describe("scope tabs", () => {
       { category: "LPG", previous: 0, selected: 10, previousPct: 0, selectedPct: 25 },
     ]);
   });
+
+  it("merges category names that differ only in case, keeping this period's spelling", () => {
+    const mixed = [detail("Scope 1", "diesel", "Hidd", 20, 0, "Diesel"), detail("Scope 1", "Diesel", "Sitra", 20, 40, "Diesel")];
+    expect(scopeDistribution(mixed, "Scope 1")).toEqual([{ category: "Diesel", previous: 40, selected: 40, previousPct: 100, selectedPct: 100 }]);
+  });
 });
 
 describe("findings", () => {

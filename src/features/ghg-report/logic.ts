@@ -220,18 +220,21 @@ export type Distribution = { category: string; previous: number; selected: numbe
 
 /** Each category's share of the scope, both periods. */
 export function scopeDistribution(rows: GhgDetailsRow[], scope: ScopeName): Distribution[] {
-  const map = new Map<string, { previous: number; selected: number }>();
+  // Case-insensitive like categoryTotals; this period's spelling wins.
+  const map = new Map<string, { category: string; named: boolean; previous: number; selected: number }>();
   for (const r of rows) {
     if (r.scope !== scope) continue;
-    const d = map.get(r.categoryName) ?? { previous: 0, selected: 0 };
+    const key = catKey(r.categoryName);
+    const d = map.get(key) ?? { category: r.categoryName, named: false, previous: 0, selected: 0 };
+    if (!d.named && r.selected.emissions > 0) Object.assign(d, { category: r.categoryName, named: true });
     d.previous += r.compare.emissions;
     d.selected += r.selected.emissions;
-    map.set(r.categoryName, d);
+    map.set(key, d);
   }
   const prevTotal = [...map.values()].reduce((a, d) => a + d.previous, 0);
   const selTotal = [...map.values()].reduce((a, d) => a + d.selected, 0);
-  return [...map]
-    .map(([category, d]) => ({ category, ...d, previousPct: share(d.previous, prevTotal), selectedPct: share(d.selected, selTotal) }))
+  return [...map.values()]
+    .map(({ category, previous, selected }) => ({ category, previous, selected, previousPct: share(previous, prevTotal), selectedPct: share(selected, selTotal) }))
     .sort((a, b) => b.selected - a.selected || b.previous - a.previous);
 }
 
@@ -332,7 +335,7 @@ export function exportSheets(args: {
       rows: [
         ["Scope", "Category", "Location", "Emission category", `${p} consumption`, `${p} unit`, `${p} tCO2e`, `${s} consumption`, `${s} unit`, `${s} tCO2e`],
         ...SCOPES.flatMap((sc) =>
-          scopeDetails(details, sc).map((r) => [sc, r.categoryName, r.siteName, r.fuelType, r.compare.consumption, r.compare.unit, r.compare.emissions, r.selected.consumption, r.selected.unit, r.selected.emissions]),
+          scopeDetails(details, sc).map((r) => [sc, r.categoryName, r.siteName, r.fuelType, r.compare.consumption, r.compare.unit || r.selected.unit, r.compare.emissions, r.selected.consumption, r.selected.unit || r.compare.unit, r.selected.emissions]),
         ),
       ],
     });

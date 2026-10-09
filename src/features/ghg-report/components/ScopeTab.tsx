@@ -23,10 +23,10 @@ export function ScopeTab({ scope, rows, distribution, prevLabel, selLabel, loadi
     { id: "site", header: "Location", value: (r) => r.siteName },
     { id: "fuel", header: "Emission category", value: (r) => r.fuelType || "—" },
     { id: "p-qty", header: `${prevLabel} consumption`, value: (r) => r.compare.consumption, cell: (r) => formatNumber(r.compare.consumption, 2), numeric: true },
-    { id: "p-unit", header: "Unit", value: (r) => r.compare.unit || "—" },
+    { id: "p-unit", header: `${prevLabel} unit`, value: (r) => r.compare.unit || r.selected.unit || "—" },
     { id: "p-t", header: `${prevLabel} tCO₂e`, value: (r) => r.compare.emissions, cell: (r) => formatEmissions(r.compare.emissions), numeric: true },
     { id: "s-qty", header: `${selLabel} consumption`, value: (r) => r.selected.consumption, cell: (r) => formatNumber(r.selected.consumption, 2), numeric: true },
-    { id: "s-unit", header: "Unit", value: (r) => r.selected.unit || "—" },
+    { id: "s-unit", header: `${selLabel} unit`, value: (r) => r.selected.unit || r.compare.unit || "—" },
     { id: "s-t", header: `${selLabel} tCO₂e`, value: (r) => r.selected.emissions, cell: (r) => <strong>{formatEmissions(r.selected.emissions)}</strong>, numeric: true },
     { id: "change", header: "Change", value: (r) => r.selected.emissions - r.compare.emissions, cell: (r) => <Change now={r.selected.emissions} before={r.compare.emissions} />, numeric: true },
   ];
