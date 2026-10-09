@@ -34,7 +34,7 @@ export function editRow(model: FormModel, row: ModalRow, column: string, value: 
   return next;
 }
 
-function reducer(state: State, action: Action): State {
+export function rowsReducer(state: State, action: Action): State {
   switch (action.type) {
     case "reset":
       return { rows: action.rows, nextId: nextIdOf(action.rows) };
@@ -43,7 +43,11 @@ function reducer(state: State, action: Action): State {
     case "duplicate": {
       const i = state.rows.findIndex((r) => r.id === action.id);
       if (i < 0) return state;
-      const copy = { ...state.rows[i], id: state.nextId, _extra_data: { ...(state.rows[i]._extra_data ?? {}) } };
+      // A copy is a new entry: it doesn't edit the saved entry the original was loaded from.
+      const source = { ...state.rows[i] };
+      delete source._editOf;
+      delete source._editSaved;
+      const copy = { ...source, id: state.nextId, _extra_data: { ...(source._extra_data ?? {}) } };
       return { rows: [...state.rows.slice(0, i + 1), copy, ...state.rows.slice(i + 1)], nextId: state.nextId + 1 };
     }
     case "remove":
@@ -92,7 +96,7 @@ export const rowHasInput = (row: ModalRow) =>
   Object.entries(row).some(([k, v]) => (k === "_extra_data" ? Object.values(v ?? {}).some(Boolean) : k !== "id" && !k.startsWith("_") && !!v));
 
 export function useEntryRows(model: FormModel | null, draftKey: string | null) {
-  const [state, dispatch] = useReducer(reducer, { rows: [], nextId: 1 });
+  const [state, dispatch] = useReducer(rowsReducer, { rows: [], nextId: 1 });
 
   // Start (or restore) the rows whenever the form for a new context arrives.
   useEffect(() => {

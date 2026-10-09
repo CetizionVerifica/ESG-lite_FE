@@ -62,7 +62,7 @@ export function rowFromEntry(e: SavedEntry, model: FormModel, id: number, period
   row._editOf = e.pk_id;
   // A pending entry counts in the period's saved ("entered") total; remember it so the comparison doesn't count it twice.
   if (e.status === "pending") {
-    row._editSaved = { category: String(e.activity_data?.emission_category ?? ""), tco2e: Number(e.total_emission) || 0 };
+    row._editSaved = { category: String(row.emission_category ?? ""), tco2e: Number(e.total_emission) || 0 };
   }
   return row;
 }
