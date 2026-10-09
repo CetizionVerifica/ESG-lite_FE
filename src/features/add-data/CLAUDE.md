@@ -77,3 +77,4 @@ Below the stepper (or as a tab "Already entered for Sep (4)") a compact `DataTab
 - Extracted entries become ordinary rows in `useEntryRows`, rendered with the same `EntryRow`, so validation, period mode, FERA and `buildPayload` are shared with manual entry. AI-filled fields carry an AI chip; the category suggestion shows its confidence, with a warn tint below 60%.
 - Nothing AI-filled is saved until the user confirms each bill's rows ("Use these rows"); then the normal Review step saves them. The bill is linked as evidence (B8) on save.
 - "My bills" drawer: list earlier uploads, reuse or re-extract one.
+- "My bills" deletes one bill at a time with a confirmation; the legacy library's multi-select bulk delete is not carried over yet.

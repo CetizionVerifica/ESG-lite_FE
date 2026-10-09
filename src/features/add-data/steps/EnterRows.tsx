@@ -29,6 +29,7 @@ type Props = {
   categoryId: number;
   userId: number | null;
   period: EntryPeriod;
+  draftKey: string | null;
   comparisons: RowComparison[];
   factorYear: number;
   reportingYear: number;
@@ -44,6 +45,8 @@ export function EnterRows(p: Props) {
     p.rows.some((r) => billOf(r)) && !manualRows.some(rowHasInput) ? "bill" : "manual",
   );
   const [showIssues, setShowIssues] = useState(false);
+  // Bills still being read; Review waits so their rows can't skip the check.
+  const [reading, setReading] = useState(0);
   const total = p.rows.reduce((sum, r) => sum + (p.calc.calculateEmission(r).value ?? 0), 0);
   const invalid = p.issues.filter(Boolean).length;
   const position = new Map(p.rows.map((r, i) => [r.id, i]));
@@ -76,7 +79,7 @@ export function EnterRows(p: Props) {
   };
 
   const next = () => {
-    if (invalid > 0 || p.unconfirmedBills > 0) {
+    if (invalid > 0 || p.unconfirmedBills > 0 || reading > 0) {
       setShowIssues(true);
       return;
     }
@@ -110,7 +113,7 @@ export function EnterRows(p: Props) {
         ]}
       />
 
-      <TabPanel idBase="add-data-source" value="bill" current={tab}>
+      <TabPanel idBase="add-data-source" value="bill" current={tab} keepMounted>
         <FromBill
           rows={p.rows}
           dispatch={p.dispatch}
@@ -120,6 +123,8 @@ export function EnterRows(p: Props) {
           categoryId={p.categoryId}
           userId={p.userId}
           period={p.period}
+          draftKey={p.draftKey}
+          onReading={(delta) => setReading((n) => n + delta)}
           renderRow={(row, index) => renderRow(row, index, true)}
         />
         <p className="mt-3 text-xs text-muted">
@@ -144,6 +149,11 @@ export function EnterRows(p: Props) {
         <Callout tone="warn" title={`${invalid} row${invalid === 1 ? " needs" : "s need"} attention`}>
           Fix the rows marked in red
           {invalidIn(false) && invalidIn(true) ? " in both tabs" : invalidIn(true) ? ' under "Start from a bill"' : ' under "Type it in"'}, then continue.
+        </Callout>
+      )}
+      {showIssues && reading > 0 && (
+        <Callout tone="info" title={`${reading} bill${reading === 1 ? " is" : "s are"} still being read`}>
+          Wait for the rows to appear and check them before review.
         </Callout>
       )}
       {showIssues && p.unconfirmedBills > 0 && (

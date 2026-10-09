@@ -56,7 +56,7 @@ const extraction = {
   ],
 };
 
-async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = []) {
+async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>) {
   const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [site] };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
@@ -66,7 +66,7 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
   let duplicate = duplicateOnce;
   await page.route(
     (url) => url.port !== "4174",
-    (route) => {
+    async (route) => {
       const request = route.request();
       const url = new URL(request.url());
       const path = url.pathname;
@@ -95,6 +95,7 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
         return json({ emission: { pk_id: created.length + 100 } }, 201);
       }
       if (path.endsWith("/v1/invoices/upload")) {
+        if (uploadGate) await uploadGate;
         // An August bill dropped on the September page.
         const august = (request.postData() ?? "").includes("bapco-aug.pdf");
         return json(august ? { ...extraction, invoice_id: 42, data: [{ ...extraction.data[0], invoice_number: "INV-6", billing_month_end: "2025-08-31" }] } : extraction);
@@ -228,4 +229,25 @@ test("a bill dated outside the period can't be used on this page", async ({ page
   await expect(page.getByText("1 bill is not checked yet")).toBeVisible();
   await bill.getByRole("button", { name: "Remove bill" }).click();
   await expect(page.getByRole("region", { name: "Bill Bapco" })).toHaveCount(0);
+});
+
+test("review waits for a bill that is still being read, and its rows still need checking", async ({ page }) => {
+  let release = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  await signIn(page, [], false, [], gate);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await page.getByRole("tab", { name: /Start from a bill/ }).click();
+  await page.locator('input[type="file"]').setInputFiles({ name: "bapco-sep.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test") });
+  await expect(page.getByText("Uploading and reading bapco-sep.pdf", { exact: false })).toBeVisible();
+
+  // Switching tabs keeps the read going.
+  await page.getByRole("tab", { name: "Type it in" }).click();
+  await page.getByRole("button", { name: "Review", exact: true }).click();
+  await expect(page.getByText("1 bill is still being read")).toBeVisible();
+
+  release();
+  await page.getByRole("tab", { name: /Start from a bill/ }).click();
+  await expect(page.getByRole("region", { name: "Bill Bapco" })).toBeVisible();
+  await page.getByRole("button", { name: "Review", exact: true }).click();
+  await expect(page.getByText("1 bill is not checked yet")).toBeVisible();
 });

@@ -79,9 +79,13 @@ export default function AddDataPage() {
   // Rows that will be sent: bill rows, and typed rows with something in them
   // (all typed rows when there is nothing else, so an empty form still says what's missing).
   const hasBills = rows.some((r) => billOf(r));
-  const sendable = (r: (typeof rows)[number]) => !!billOf(r) || rowHasInput(r) || !hasBills;
+  // Bill rows only once their bill is confirmed: nothing AI-filled is sent unchecked.
+  const sendable = (r: (typeof rows)[number]) => {
+    const bill = billOf(r);
+    return bill ? bill.confirmed : rowHasInput(r) || !hasBills;
+  };
   const activeRows = rows.filter(sendable);
-  const issues = rows.map((r) => (sendable(r) ? rowIssue(r, calc) : null));
+  const issues = rows.map((r) => (billOf(r) || sendable(r) ? rowIssue(r, calc) : null));
   const unconfirmedBills = billGroups(rows).filter((g) => !g.bill.confirmed).length;
   const emissionCategories = [...new Set(rows.map((r) => r.emission_category).filter(Boolean) as string[])];
   const totals = usePeriodTotals({ siteId: site?.site_id ?? null, categoryId, period, emissionCategories });
@@ -150,6 +154,7 @@ export default function AddDataPage() {
         categoryId={category.category_id}
         userId={userIdOf(user)}
         period={period}
+        draftKey={draftKey}
         comparisons={comparisons}
         factorYear={factorYear as number}
         reportingYear={(factorYear as number) + 1}

@@ -19,6 +19,10 @@ type Props = {
   categoryId: number;
   userId: number | null;
   period: EntryPeriod;
+  /** The open context's draft key; rows read for another context are dropped. */
+  draftKey: string | null;
+  /** +1 when a bill starts being read, -1 when it is done, so Review can wait for it. */
+  onReading: (delta: number) => void;
   renderRow: (row: ModalRow, index: number) => ReactNode;
 };
 
@@ -35,9 +39,10 @@ export function FromBill(p: Props) {
   const ctx = { siteId: p.siteId, categoryId: p.categoryId, userId: p.userId, units: p.setup.units };
   const groups = billGroups(p.rows);
 
+  const draftKey = p.draftKey;
   const addRows = (response: ExtractionResponse, source: BillSource): boolean => {
     const rows = billRowsFrom(p.model, response, { source, units: p.setup.units, factors: p.setup.factors, firstId: 1 });
-    if (rows.length > 0) p.dispatch({ type: "append", rows });
+    if (rows.length > 0) p.dispatch({ type: "append", rows, draftKey });
     return rows.length > 0;
   };
 
@@ -49,6 +54,7 @@ export function FromBill(p: Props) {
     // One at a time: each read runs OCR and the model on the AI service.
     for (const item of queued) {
       patch(item.id, { status: "uploading" });
+      p.onReading(1);
       try {
         const response = await readBill(item.file, ctx);
         const found = addRows(response, {
@@ -62,6 +68,8 @@ export function FromBill(p: Props) {
         else patch(item.id, { status: "error", error: "No entries were found on this bill." });
       } catch (err) {
         patch(item.id, { status: "error", error: (err as Error).message });
+      } finally {
+        p.onReading(-1);
       }
     }
   };
@@ -69,6 +77,7 @@ export function FromBill(p: Props) {
   const reuse = async (invoice: Invoice) => {
     setRereading(invoice.invoice_id);
     setError(null);
+    p.onReading(1);
     try {
       const response = await rereadBill(invoice.invoice_id, ctx);
       const found = addRows(response, {
@@ -84,11 +93,12 @@ export function FromBill(p: Props) {
       setError((err as Error).message);
     } finally {
       setRereading(null);
+      p.onReading(-1);
     }
   };
 
   const addItem = (bill: BillMeta) =>
-    p.dispatch({ type: "append", rows: [{ ...newRow(p.model, 1), _bill: { ...bill, ai: [], confidence: null } }] });
+    p.dispatch({ type: "append", rows: [{ ...newRow(p.model, 1), _bill: { ...bill, ai: [], confidence: null } }], draftKey });
 
   const busy = items.find((i) => i.status === "uploading");
 
