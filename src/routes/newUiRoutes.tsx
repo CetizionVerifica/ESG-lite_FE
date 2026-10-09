@@ -42,7 +42,6 @@ const Legacy = {
   SuperAdmin: lazy(() => import("../pages/SuperAdminPage")),
   Companies: lazy(() => import("../pages/CompanyPage")),
   CompanyOnboarding: lazy(() => import("../pages/CompanyOnboardingPage")),
-  BrandSettings: lazy(() => import("../pages/BrandSettings/BrandSettings")),
   Sites: lazy(() => import("../pages/SitePage")),
   Users: lazy(() => import("../pages/UserPage")),
   Countries: lazy(() => import("../pages/CountryPage")),
@@ -56,6 +55,10 @@ const Legacy = {
   ColumnConfig: lazy(() => import("../pages/ColumnConfig")),
   Upload: lazy(() => import("../pages/UploadPage")),
 };
+
+// Redesigned pages, loaded on demand.
+const BrandThemesPage = lazy(() => import("../features/brand-themes/Page"));
+const BrandViewPage = lazy(() => import("../features/brand-themes/Page").then((m) => ({ default: m.BrandViewPage })));
 
 const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(id)} />;
 
@@ -80,7 +83,8 @@ const pages: Record<ShellRouteId, ReactNode> = {
   clients: <Legacy.Companies />,
   "client-new": <Legacy.CompanyOnboarding />,
   "client-detail": placeholder("client-detail"),
-  "brand-themes": <Legacy.BrandSettings />,
+  "brand-themes": <BrandThemesPage />,
+  "brand-view": <BrandViewPage />,
   sites: <Legacy.Sites />,
   "users-global": <Legacy.Users />,
   "reference-data": (

@@ -39,7 +39,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     link("Products (PCF)", "/products"),
     link("Team", "/team"),
   ],
-  Admin: [link("Users", "/users")],
+  Admin: [link("Users", "/users"), link("Brand theme", "/brand")],
   Superadmin: [
     link("Console", "/console"),
     group("Clients", [

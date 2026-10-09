@@ -4,7 +4,7 @@ import { pushRecent, routeCommands } from "./commands";
 describe("command registry", () => {
   it("lists the role's pages plus account pages", () => {
     const labels = routeCommands("Admin", null).map((c) => c.label);
-    expect(labels).toEqual(["Users", "Notifications", "Settings"]);
+    expect(labels).toEqual(["Users", "Brand theme", "Notifications", "Settings"]);
     expect(routeCommands(null, null)).toEqual([]);
   });
 
