@@ -51,13 +51,13 @@ export function readFilterParams(params: URLSearchParams, keys: string[]): Filte
 
 /** Writes the values back, dropping empty params. Other params are kept. */
 export function writeFilterParams(params: URLSearchParams, value: FilterValues, keys: string[]): URLSearchParams {
-  const next = new URLSearchParams(params);
+  // Rebuilt rather than edited in place, so the managed keys are simply left out when empty.
+  const managed = new Set(["q", ...keys]);
+  const next = new URLSearchParams([...params].filter(([k]) => !managed.has(k)));
   if (value.q.trim()) next.set("q", value.q);
-  else next.delete("q");
   for (const k of keys) {
     const v = value.filters[k] ?? [];
     if (v.length) next.set(k, v.join(","));
-    else next.delete(k);
   }
   return next;
 }
