@@ -22,3 +22,18 @@ The only place in new code where raw colour values may appear. Everything else r
 |---|---|
 | `tokens.css` | Static tokens + PlanetPulse defaults on `:root`, Tailwind `@theme` mapping |
 | `tokens.ts` | Token names (the contract) |
+| `color.ts` | Hex parsing, mixing, WCAG contrast, hue helpers |
+| `packs.ts` | `ThemePack` type, PlanetPulse pack, `packFromBrand()`, the four stored brands (companies 1, 2, 3, 6) |
+| `buildTheme.ts` | `buildTheme(pack, look, appearance)` → every colour token; contrast gate, status-hue rule |
+| `preview/ThemePreviewPage.tsx` | Dev-only `/dev/theme`: every token in PlanetPulse, Midal Classic, Midal Light, Midal Night |
+
+## Engine rules in short
+
+- Ramps: 10 steps per colour (50–400 toward white, 500 = input, 600–900 toward black).
+- Light: brand = primary; brand text = brand-600, darkened until AA on page, panel and tint.
+- Classic: top bar = primary (darkened until white text passes AA); Light: white top bar.
+- Night (or any dark appearance): brand and accent lifted from the 400 step until they pass 3:1 on the dark panel.
+  A primary that lifts to grey (saturation < 0.3, e.g. Midal navy) borrows the accent ramp.
+- Every fill gets white or near-black text, whichever passes 4.5:1; if neither does, the fill moves step by step.
+- `contrastReport(tokens)` lists every checked pair; `buildTheme.test.ts` requires all to pass for the stored brands.
+- `statusClashes(pack)` names statuses whose hue is near the brand's; status pills always show icon + label anyway.
