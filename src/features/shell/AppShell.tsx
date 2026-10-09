@@ -93,7 +93,7 @@ export default function AppShell() {
     });
 
   return (
-    <div className="min-h-screen bg-(--t-page) text-(--t-ink)">
+    <div style={previewStyle} className="min-h-screen bg-(--t-page) text-(--t-ink)">
       <a
         href="#main"
         className="sr-only z-50 rounded-(--r-md) bg-(--t-panel) px-3 py-2 text-sm focus:not-sr-only focus:fixed focus:left-2 focus:top-2"
@@ -134,7 +134,7 @@ export default function AppShell() {
         placeholder="Search pages…"
         inputLabel="Search pages"
       />
-      <main id="main" tabIndex={-1} style={previewStyle} className="mx-auto max-w-[1440px] px-4 pb-10 outline-none sm:px-6">
+      <main id="main" tabIndex={-1} className="mx-auto max-w-[1440px] px-4 pb-10 outline-none sm:px-6">
         <ContextBar route={route} showClientSwitcher={clientScoped} onClientPicked={onClientPicked} />
         <Suspense fallback={<PageSkeleton />}>
           <Outlet />

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PLANETPULSE, STORED_BRANDS } from "../../theme";
 import { PLATFORM_BRAND, brandForUser, pickLogo } from "./brand";
+import { previewVars } from "./hooks/usePreviewStyle";
 import { initials, shellUser } from "./account";
 import { nextIndex } from "./menuKeys";
 import { timeAgo } from "./timeAgo";
@@ -64,5 +65,21 @@ describe("timeAgo", () => {
     expect(timeAgo("2026-10-09T11:55:00Z", now)).toBe("5m ago");
     expect(timeAgo("2026-10-09T09:00:00Z", now)).toBe("3h ago");
     expect(timeAgo("2026-10-07T12:00:00Z", now)).toBe("2d ago");
+  });
+});
+
+describe("client theme preview", () => {
+  const midal = { companyId: 1, name: "Midal Cables", primary: "#0b2e5c", accent: "#2f6fb0" };
+  it("keeps the staff chrome and paints the brand's page", () => {
+    const vars = previewVars({ ...midal, defaultLook: "classic" }, "light");
+    expect(Object.keys(vars).some((k) => k.startsWith("--t-chrome"))).toBe(false);
+    expect(vars["--t-page"]).toBeTruthy();
+    expect(vars["--t-ink"]).toBeTruthy();
+  });
+  it("gives a Night-look brand its dark page with its light ink", () => {
+    const night = previewVars({ ...midal, defaultLook: "night" }, "light");
+    const light = previewVars({ ...midal, defaultLook: "light" }, "light");
+    expect(night["--t-page"]).not.toBe(light["--t-page"]);
+    expect(night["--t-ink"]).not.toBe(light["--t-ink"]);
   });
 });
