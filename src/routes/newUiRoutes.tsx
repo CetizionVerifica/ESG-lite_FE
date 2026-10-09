@@ -57,7 +57,9 @@ const Legacy = {
 
 // Redesigned pages, loaded on demand.
 const BrandThemesPage = lazy(() => import("../features/brand-themes/Page"));
+const AddDataPage = lazy(() => import("../features/add-data/Page"));
 const MyMonthPage = lazy(() => import("../features/my-month/Page"));
+const MyEntriesPage = lazy(() => import("../features/my-entries/Page"));
 const BrandViewPage = lazy(() => import("../features/brand-themes/Page").then((m) => ({ default: m.BrandViewPage })));
 const EmissionsPage = lazy(() => import("../features/approvals-ledger/Page"));
 
@@ -65,8 +67,9 @@ const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(
 
 const pages: Record<ShellRouteId, ReactNode> = {
   "my-month": <MyMonthPage />,
-  "add-data": <Legacy.UserDataEntry />,
-  "my-entries": <Legacy.UserEmissions />,
+  "add-data": <AddDataPage />,
+  "add-data-classic": <Legacy.UserDataEntry />,
+  "my-entries": <MyEntriesPage />,
   production: <Legacy.ProductionData />,
   overview: <Legacy.ManagerDashboard />,
   // Keyed so switching tabs remounts: each tab starts from its own defaults.

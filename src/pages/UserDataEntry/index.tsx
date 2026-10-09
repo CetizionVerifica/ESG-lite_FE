@@ -38,6 +38,8 @@ import {
   type CategoryMapping,
 } from "../../services/categoryMappingService";
 import { useEmissionCalculation, resolveSpecMethod, specNumericColumns } from "./useEmissionCalculation";
+import { factorYearForDate, isYearlyAllowed, yearlyPeriodEndDate } from "../../features/add-data/hooks/reportingPeriod";
+import { buildPayload, type EntryPeriod } from "../../features/add-data/logic/entry";
 import {
   UnitSelector,
   ValidationError,
@@ -268,9 +270,7 @@ const UserDataEntryPage = () => {
   // Derived Data
   // ---------------------------------------------------------------------------
   // Calculate target year for emission factors (reporting year - 1)
-  const targetYear = selectedDate
-    ? parseInt(selectedDate.substring(0, 4)) - 1
-    : undefined;
+  const targetYear = factorYearForDate(selectedDate);
 
   // Compute select column names (columns that are dropdowns, not numeric activity data)
   const selectColumnNames = useMemo(() => {
@@ -410,7 +410,7 @@ const UserDataEntryPage = () => {
   // toggle just needs a category selected so the period has something to
   // attach to.
   const yearlyAllowed = useMemo(
-    () => selectedCategory !== null && selectedCategory !== undefined,
+    () => isYearlyAllowed(selectedCategory),
     [selectedCategory],
   );
 
@@ -440,7 +440,7 @@ const UserDataEntryPage = () => {
       return;
     }
     setSelectedDate(
-      yearType === "CY" ? `${yearlyYear}-12-31` : `${yearlyYear + 1}-03-31`,
+      yearlyPeriodEndDate(yearType, yearlyYear),
     );
   }, [periodMode, yearType, yearlyYear]);
 
@@ -1629,6 +1629,13 @@ const UserDataEntryPage = () => {
     });
   };
 
+  // The period being saved, in the form the shared payload builder takes.
+  // Monthly: the month of the selected date (rows are filed on its last day).
+  const entryPeriodOf = (date: string | null): EntryPeriod =>
+    periodMode === "yearly"
+      ? { mode: "yearly", yearType, year: yearlyYear ?? NaN }
+      : { mode: "monthly", year: Number(date?.slice(0, 4)), month: Number(date?.slice(5, 7)) };
+
   const handleSaveAll = async () => {
     const allRowsHaveDates = modalRows.every((row) => row.date_of_reporting);
     if (
@@ -1706,47 +1713,17 @@ const UserDataEntryPage = () => {
 
       for (let i = 0; i < modalRows.length; i++) {
         const row = modalRows[i];
-        const {
-          id,
-          activity_data_unit,
-          date_of_reporting: rowDate,
-          ...activityData
-        } = row;
-
-        // Strip composite-unit helper keys — backend only needs the computed product
-        for (const key of Object.keys(activityData)) {
-          if (key.endsWith("__multiplier") || key.endsWith("__distance")) {
-            delete activityData[key];
-          }
-        }
-
-        // Extract extra_data before stripping internal fields
-        const extraData = activityData._extra_data || {};
-        delete activityData._extra_data;
-
-        // Strip internal flags before sending to backend
-        delete activityData._isFeraRow;
-        delete activityData._ecmKey;
 
         // Skip FERA rows — backend auto-creates them
         if (row._isFeraRow) continue;
 
-        const payload = {
-          site_id: siteId,
-          category_id: selectedCategory,
-          activity_data: activityData,
-          extra_data: extraData,
-          total_emission: 0,
-          unit: "kg CO2e",
-          // Yearly batches are always filed on the period-end date; a per-row
-          // Received Date stays in activity_data but must not move the row
-          // out of its reporting year.
-          date_of_reporting:
-            periodMode === "yearly" ? dateOfReporting : rowDate || dateOfReporting,
-          activity_data_unit: activity_data_unit || undefined,
-          reporting_period: periodMode,
-          year_type: periodMode === "yearly" ? yearType : undefined,
-        };
+        // Same payload as the new Add data page (features/add-data/logic/entry.ts):
+        // helper keys stripped, yearly rows always filed on the period end.
+        const payload = buildPayload(row, {
+          siteId,
+          categoryId: selectedCategory,
+          period: entryPeriodOf(dateOfReporting),
+        });
 
         try {
           const result = await createEmission(payload);
