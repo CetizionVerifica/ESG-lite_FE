@@ -30,11 +30,21 @@ const row = (over: object) => ({
 });
 
 const rows = [
-  row({ pk_id: 41, status: "rejected", review_comment: "Wrong unit, should be litres", reviewed_by: { user_id: 2, name: "Mia Manager" }, reviewed_at: "2025-10-03T09:00:00.000Z" }),
+  row({ pk_id: 41, activity_data: { emission_category: "Diesel", quantity: "1000" }, status: "rejected", review_comment: "Wrong unit, should be litres", reviewed_by: { user_id: 2, name: "Mia Manager" }, reviewed_at: "2025-10-03T09:00:00.000Z" }),
   row({ pk_id: 42, category: categories[1], activity_data: { emission_category: "Grid Electricity", consumption: "25000" }, activity_data_unit: "kwh", total_emission: 12.3, status: "pending" }),
 ];
 
-async function signIn(page: Page, requests: URLSearchParams[] = []) {
+const dieselConfig = {
+  pk_id: 9,
+  config_name: "Diesel",
+  columns: [
+    { pk_id: 1, column_name: "quantity", column_type: "number" },
+    { pk_id: 2, column_name: "emission_category", column_type: "text" },
+  ],
+};
+const dieselFactors = [{ emission_factor_id: 5, emission_category_name: "Diesel", factor_value: 2.68, denominator_unit: "litre", year: 2024 }];
+
+async function signIn(page: Page, requests: URLSearchParams[] = [], saved: { url: string; body: unknown }[] = []) {
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "User");
@@ -45,10 +55,15 @@ async function signIn(page: Page, requests: URLSearchParams[] = []) {
     (route) => {
       const url = new URL(route.request().url());
       const json = (body: unknown) => route.fulfill({ json: body });
+      if (route.request().method() === "PUT" && url.pathname.includes("/user/emissions/")) {
+        saved.push({ url: url.pathname, body: route.request().postDataJSON() });
+        return json({ message: "Emission updated" });
+      }
       if (url.pathname.endsWith("/user/emissions")) {
         requests.push(url.searchParams);
         const status = url.searchParams.get("status");
-        const data = status ? rows.filter((r) => r.status === status) : rows;
+        const categoryId = Number(url.searchParams.get("categoryId")) || null;
+        const data = rows.filter((r) => (!status || r.status === status) && (!categoryId || r.category.category_id === categoryId));
         return json({
           data,
           total: data.length,
@@ -60,7 +75,10 @@ async function signIn(page: Page, requests: URLSearchParams[] = []) {
           },
         });
       }
+      if (url.pathname.endsWith("/user/column-configs/site/7/category/1")) return json([dieselConfig]);
       if (url.pathname.includes("/user/column-configs/")) return json([]);
+      if (url.pathname.endsWith("/user/emission-factors/site/7/category/1")) return json(dieselFactors);
+      if (url.pathname.includes("/user/units/site/7/category/1")) return json([{ unit_name: "litre" }]);
       if (url.pathname.includes("/user/documents/emission/")) return json([]);
       if (url.pathname.includes("/audit-logs")) return json([]);
       if (url.pathname.endsWith("/auth/me")) return json({ role: "User", user });
@@ -88,7 +106,47 @@ test("old path redirects; filters are visible and a status figure filters the ta
   await page.getByRole("button", { name: "Rejected: show only these" }).click();
   await expect(page).toHaveURL(/status=rejected/);
   await expect(table.getByText("Grid electricity", { exact: true })).toHaveCount(0);
-  expect(requests.at(-1)?.get("status")).toBe("rejected");
+  expect(requests.some((r) => r.get("status") === "rejected")).toBe(true);
+  // The other figures still count every status.
+  await expect(page.locator("dl > div").filter({ hasText: "Pending" }).locator("dd").first()).toHaveText("1");
+});
+
+test("clear filters empties status, category and period in one go", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/mine?status=rejected&category=2&period=2025-09");
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(page).not.toHaveURL(/status=|category=2|period=2025/);
+  await expect(page.getByRole("table", { name: "My entries" }).getByText("Grid electricity", { exact: true })).toBeVisible();
+});
+
+test("a rejected entry is fixed and resubmitted in the drawer", async ({ page }) => {
+  const saved: { url: string; body: unknown }[] = [];
+  await signIn(page, [], saved);
+  await page.goto("/data/mine");
+  await page.getByRole("table", { name: "My entries" }).getByRole("row").filter({ hasText: "Wrong unit" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByRole("button", { name: "Fix and resubmit" }).click();
+
+  const quantity = drawer.getByLabel("Quantity");
+  await expect(quantity).toHaveValue("1000");
+  await quantity.fill("1200");
+  await expect(drawer.getByText("= 3.22 tCO₂e")).toBeVisible();
+
+  await drawer.getByRole("button", { name: "Resubmit" }).click();
+  await expect(drawer.getByText("Say what you changed so the reviewer can check it.")).toBeVisible();
+  expect(saved).toHaveLength(0);
+
+  await drawer.getByLabel("What did you change?").fill("Corrected the litres");
+  await drawer.getByRole("button", { name: "Resubmit" }).click();
+  await expect(page.getByText("Resubmitted for review")).toBeVisible();
+  await expect(drawer).toHaveCount(0);
+  expect(saved[0]?.url).toMatch(/\/user\/emissions\/41$/);
+  expect(saved[0]?.body).toMatchObject({
+    activity_data: { emission_category: "Diesel", quantity: "1200" },
+    activity_data_unit: "litre",
+    date_of_reporting: "2025-09-30",
+    reason: "Corrected the litres",
+  });
 });
 
 test("a My month link filters by site, category and month; a row opens its drawer", async ({ page }) => {

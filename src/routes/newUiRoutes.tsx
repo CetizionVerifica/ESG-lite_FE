@@ -27,7 +27,6 @@ import ProtectedRoute from "./ProtectedRoute";
 // Today's pages, loaded on demand so they stay out of the shell's bundle.
 const Legacy = {
   UserDataEntry: lazy(() => import("../pages/UserDataEntryPage")),
-  UserEmissions: lazy(() => import("../pages/UserEmissionsPage")),
   ProductionData: lazy(() => import("../pages/ProductionDataPage")),
   ManagerDashboard: lazy(() => import("../pages/ManagerDashboard/ManagerDashboard")),
   Manager: lazy(() => import("../pages/ManagerPage")),

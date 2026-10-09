@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Paperclip, Plus } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -30,6 +30,8 @@ import {
   useContextParams,
   useFilterParams,
   useToast,
+  writeContext,
+  writeFilterParams,
 } from "../../ui";
 import { useEntries } from "./api";
 import { EntryDrawer } from "./components/EntryDrawer";
@@ -50,6 +52,7 @@ import {
 } from "./logic";
 
 const PAGE_SIZE = 25;
+const FILTER_KEYS = ["category", "status"];
 const STATUS_LABEL = { pending: "Pending", approved: "Approved", rejected: "Rejected" } as const;
 
 function serverMessage(e: unknown): string {
@@ -66,7 +69,8 @@ export default function MyEntriesPage() {
 
   const sites = useMemo(() => userSites(user), [user]);
   const [ctx, updateCtx] = useContextParams();
-  const [filters, setFilters] = useFilterParams(["category", "status"]);
+  const [filters, setFilters] = useFilterParams(FILTER_KEYS);
+  const [, setSearchParams] = useSearchParams();
 
   // /user/emissions filters by calendar month or year only (see toSupportedPeriod).
   const period = toSupportedPeriod(ctx.period);
@@ -90,7 +94,11 @@ export default function MyEntriesPage() {
 
   const query = useEntries({ ...queryShape, page, pageSize: PAGE_SIZE });
   const rows = useMemo(() => attachFera(query.data?.data ?? [], feraSelected), [query.data, feraSelected]);
-  const summary = query.data?.summary;
+  // The summary is filtered by status like the rows, so with a status chosen
+  // the KPIs come from the same query without it (one row).
+  const overall = useEntries({ ...queryShape, status: null, sort: null, page: 1, pageSize: 1 }, status !== null);
+  const kpiSource = status === null ? query : overall;
+  const summary = kpiSource.data?.summary;
 
   const [open, setOpen] = useState<EntryRow | null>(null);
   const [viewer, setViewer] = useState<{ file: ViewerFile; files: ViewerFile[] } | null>(null);
@@ -195,10 +203,9 @@ export default function MyEntriesPage() {
   ];
 
   const filtersActive = activeCount(filters) > 0 || ctx.period !== null || siteIds.length > 0;
-  const clearAll = () => {
-    setFilters(EMPTY_FILTERS);
-    updateCtx({ period: null, siteIds: [] });
-  };
+  // One URL write: two in the same tick and the second undoes the first.
+  const clearAll = () =>
+    setSearchParams((p) => writeContext(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS), { period: null, siteIds: [] }), { replace: true });
 
   const addData = () => {
     const p = new URLSearchParams();
@@ -224,11 +231,12 @@ export default function MyEntriesPage() {
       />
 
       <KpiStrip
-        loading={query.isPending}
-        error={query.isError && !query.data ? serverMessage(query.error) : null}
-        onRetry={() => void query.refetch()}
+        loading={kpiSource.isPending}
+        error={kpiSource.isError && !kpiSource.data ? serverMessage(kpiSource.error) : null}
+        onRetry={() => void kpiSource.refetch()}
         items={[
-          { label: "Entries", value: query.data?.total ?? null },
+          // Counts stored entries, FERA rows included, though the table shows FERA on its parent row.
+          { label: "Entries", value: kpiSource.data?.total ?? null },
           { label: "tCO₂e entered", value: summary?.total_emission ?? null, format: "emissions", primary: true },
           { label: "Pending", value: summary?.pending_count ?? null, onSelect: () => toggleStatus("pending"), selected: status === "pending" },
           { label: "Approved", value: summary?.approved_count ?? null, onSelect: () => toggleStatus("approved"), selected: status === "approved" },
