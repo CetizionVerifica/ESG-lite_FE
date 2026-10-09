@@ -1,5 +1,6 @@
 // Shared UI components (F3). Spec: src/ui/CLAUDE.md. Pages import from "src/ui" only.
 export { cn } from "./cn";
+export { focusRing, inputBase, panel } from "./styles";
 export * from "./format";
 export * from "./period";
 export { Button, type ButtonProps, type ButtonVariant } from "./Button";
