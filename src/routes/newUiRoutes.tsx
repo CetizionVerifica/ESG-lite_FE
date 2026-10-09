@@ -33,7 +33,6 @@ const Legacy = {
   EdeReports: lazy(() => import("../pages/Reports/EdePreports")),
   Sbti: lazy(() => import("../pages/sbti/SbtiMain")),
   Notifications: lazy(() => import("../pages/NotificationsPage")),
-  CompanyAdminUsers: lazy(() => import("../pages/CompanyAdmin/CompanyAdminUsersPage")),
   SuperAdmin: lazy(() => import("../pages/SuperAdminPage")),
   Companies: lazy(() => import("../pages/CompanyPage")),
   CompanyOnboarding: lazy(() => import("../pages/CompanyOnboardingPage")),
@@ -61,6 +60,7 @@ const EmissionsPage = lazy(() => import("../features/approvals-ledger/Page"));
 const OverviewPage = lazy(() => import("../features/overview/Page"));
 const ProductionReviewPage = lazy(() => import("../features/production-review/Page"));
 const TeamAccessPage = lazy(() => import("../features/team-access/Page"));
+const CompanyUsersPage = lazy(() => import("../features/company-users/Page"));
 const SettingsPage = lazy(() => import("../features/settings/Page"));
 
 const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(id)} />;
@@ -83,7 +83,7 @@ const pages: Record<ShellRouteId, ReactNode> = {
   pcf: placeholder("pcf"),
   notifications: <Legacy.Notifications />,
   settings: <SettingsPage />,
-  "company-users": <Legacy.CompanyAdminUsers />,
+  "company-users": <CompanyUsersPage />,
   console: <Legacy.SuperAdmin />,
   clients: <Legacy.Companies />,
   "client-new": <Legacy.CompanyOnboarding />,
