@@ -9,6 +9,10 @@ import type { FormModel } from "../logic/form";
 import type { EntrySetup } from "../api";
 import type { ModalRow } from "../types";
 import { EntryRow, type RowComparison } from "../components/EntryRow";
+import { billOf } from "../logic/bill";
+import type { EntryPeriod } from "../logic/entry";
+import { rowHasInput } from "../hooks/useEntryRows";
+import { FromBill } from "./FromBill";
 
 type Props = {
   rows: ModalRow[];
@@ -17,7 +21,14 @@ type Props = {
   setup: EntrySetup;
   calc: EmissionCalculator;
   feraCalc: EmissionCalculator | null;
+  /** Per row of `rows`; null when the row is fine or won't be sent (an empty typed row next to bill rows). */
   issues: (RowIssue | null)[];
+  /** Bills whose rows the user hasn't checked yet. */
+  unconfirmedBills: number;
+  siteId: number;
+  categoryId: number;
+  userId: number | null;
+  period: EntryPeriod;
   comparisons: RowComparison[];
   factorYear: number;
   reportingYear: number;
@@ -28,13 +39,44 @@ type Props = {
 
 /** Step 2: rows typed in by hand, each with its live tCO₂e. */
 export function EnterRows(p: Props) {
-  const [tab, setTab] = useState<"manual" | "bill">("manual");
+  const manualRows = p.rows.filter((r) => !billOf(r));
+  const [tab, setTab] = useState<"manual" | "bill">(() =>
+    p.rows.some((r) => billOf(r)) && !manualRows.some(rowHasInput) ? "bill" : "manual",
+  );
   const [showIssues, setShowIssues] = useState(false);
   const total = p.rows.reduce((sum, r) => sum + (p.calc.calculateEmission(r).value ?? 0), 0);
   const invalid = p.issues.filter(Boolean).length;
+  const position = new Map(p.rows.map((r, i) => [r.id, i]));
+
+  const renderRow = (row: ModalRow, index: number, canRemove: boolean) => {
+    const i = position.get(row.id) ?? 0;
+    return (
+      <EntryRow
+        key={row.id}
+        index={index}
+        row={row}
+        model={p.model}
+        calc={p.calc}
+        feraCalc={p.feraCalc}
+        factors={p.setup.factors}
+        mappings={p.setup.mappings}
+        units={p.setup.units}
+        factorYear={p.factorYear}
+        reportingYear={p.reportingYear}
+        issue={p.issues[i]}
+        showIssue={showIssues}
+        comparison={p.comparisons[i]}
+        canRemove={canRemove}
+        onChange={(column, value) => p.dispatch({ type: "change", model: p.model, id: row.id, column, value })}
+        onExtraChange={(key, value) => p.dispatch({ type: "extra", id: row.id, key, value })}
+        onDuplicate={() => p.dispatch({ type: "duplicate", id: row.id })}
+        onRemove={() => p.dispatch({ type: "remove", id: row.id })}
+      />
+    );
+  };
 
   const next = () => {
-    if (invalid > 0) {
+    if (invalid > 0 || p.unconfirmedBills > 0) {
       setShowIssues(true);
       return;
     }
@@ -63,44 +105,29 @@ export function EnterRows(p: Props) {
       />
 
       <TabPanel idBase="add-data-source" value="bill" current={tab}>
-        <Callout
-          tone="brand"
-          title="Reading bills is moving here next"
-          action={
-            <Link className="text-sm font-medium text-brand-text underline" to={p.classicHref}>
-              Open the current Add data page
-            </Link>
-          }
-        >
-          Until then, upload bills on the current Add data page. It keeps the same site, category and period.
-        </Callout>
+        <FromBill
+          rows={p.rows}
+          dispatch={p.dispatch}
+          model={p.model}
+          setup={p.setup}
+          siteId={p.siteId}
+          categoryId={p.categoryId}
+          userId={p.userId}
+          period={p.period}
+          renderRow={(row, index) => renderRow(row, index, true)}
+        />
+        <p className="mt-3 text-xs text-muted">
+          Bulk upload from a spreadsheet is still on the{" "}
+          <Link className="font-medium text-brand-text underline" to={p.classicHref}>
+            current Add data page
+          </Link>
+          .
+        </p>
       </TabPanel>
 
       <TabPanel idBase="add-data-source" value="manual" current={tab}>
         <div className="space-y-3" onKeyDown={onKeyDown}>
-          {p.rows.map((row, i) => (
-            <EntryRow
-              key={row.id}
-              index={i}
-              row={row}
-              model={p.model}
-              calc={p.calc}
-              feraCalc={p.feraCalc}
-              factors={p.setup.factors}
-              mappings={p.setup.mappings}
-              units={p.setup.units}
-              factorYear={p.factorYear}
-              reportingYear={p.reportingYear}
-              issue={p.issues[i]}
-              showIssue={showIssues}
-              comparison={p.comparisons[i]}
-              canRemove={p.rows.length > 1}
-              onChange={(column, value) => p.dispatch({ type: "change", model: p.model, id: row.id, column, value })}
-              onExtraChange={(key, value) => p.dispatch({ type: "extra", id: row.id, key, value })}
-              onDuplicate={() => p.dispatch({ type: "duplicate", id: row.id })}
-              onRemove={() => p.dispatch({ type: "remove", id: row.id })}
-            />
-          ))}
+          {manualRows.map((row, i) => renderRow(row, i, manualRows.length > 1))}
           <Button variant="secondary" icon={<Plus className="size-4" />} onClick={() => p.dispatch({ type: "add", model: p.model })}>
             Add row
           </Button>
@@ -110,6 +137,11 @@ export function EnterRows(p: Props) {
       {showIssues && invalid > 0 && (
         <Callout tone="warn" title={`${invalid} row${invalid === 1 ? " needs" : "s need"} attention`}>
           Fix the rows marked in red, then continue.
+        </Callout>
+      )}
+      {showIssues && p.unconfirmedBills > 0 && (
+        <Callout tone="warn" title={`${p.unconfirmedBills} bill${p.unconfirmedBills === 1 ? " is" : "s are"} not checked yet`}>
+          Under "Start from a bill", check what the AI read and choose Use these rows. Nothing from a bill is sent before that.
         </Callout>
       )}
 

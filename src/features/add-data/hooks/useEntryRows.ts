@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer } from "react";
+import { billOf, markEdited } from "../logic/bill";
 import { applyChange, newRow, setExtraField, type FormModel } from "../logic/form";
 import type { ModalRow } from "../types";
 
@@ -13,9 +14,18 @@ type Action =
   | { type: "duplicate"; id: number }
   | { type: "remove"; id: number }
   | { type: "change"; model: FormModel; id: number; column: string; value: string }
-  | { type: "extra"; id: number; key: string; value: string };
+  | { type: "extra"; id: number; key: string; value: string }
+  | { type: "append"; rows: ModalRow[] }
+  | { type: "confirmBill"; key: string }
+  | { type: "removeBill"; key: string };
 
 const nextIdOf = (rows: ModalRow[]) => rows.reduce((max, r) => Math.max(max, r.id), 0) + 1;
+
+/** A person's edit: the field (and a category it re-derives) stops being AI-filled. */
+function editRow(model: FormModel, row: ModalRow, column: string, value: string): ModalRow {
+  const next = applyChange(model, markEdited(row, column), column, value);
+  return next.emission_category !== row.emission_category ? markEdited(next, "emission_category") : next;
+}
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -32,9 +42,27 @@ function reducer(state: State, action: Action): State {
     case "remove":
       return { ...state, rows: state.rows.filter((r) => r.id !== action.id) };
     case "change":
-      return { ...state, rows: state.rows.map((r) => (r.id === action.id ? applyChange(action.model, r, action.column, action.value) : r)) };
+      return {
+        ...state,
+        rows: state.rows.map((r) => (r.id === action.id ? editRow(action.model, r, action.column, action.value) : r)),
+      };
     case "extra":
       return { ...state, rows: state.rows.map((r) => (r.id === action.id ? setExtraField(r, action.key, action.value) : r)) };
+    case "append": {
+      // Ids are renumbered from nextId so rows read earlier never collide.
+      const added = action.rows.map((r, i) => ({ ...r, id: state.nextId + i }));
+      return { rows: [...state.rows, ...added], nextId: state.nextId + added.length };
+    }
+    case "confirmBill":
+      return {
+        ...state,
+        rows: state.rows.map((r) => {
+          const bill = billOf(r);
+          return bill?.key === action.key ? { ...r, _bill: { ...bill, confirmed: true } } : r;
+        }),
+      };
+    case "removeBill":
+      return { ...state, rows: state.rows.filter((r) => billOf(r)?.key !== action.key) };
   }
 }
 

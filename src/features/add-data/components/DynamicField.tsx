@@ -1,6 +1,8 @@
 import { NumberField, Select, TextField } from "../../../ui";
 import { columnOptionsFor, columnTitle, isDependentColumn, isSelectColumn, parentColumnOf, rowValue, type FormModel } from "../logic/form";
+import { isAiField } from "../logic/bill";
 import type { ColumnEntity, ModalRow } from "../types";
+import { AiLabel } from "./AiMarks";
 
 type Props = {
   model: FormModel;
@@ -18,7 +20,8 @@ const toNumber = (text: unknown): number | null => {
 /** One ColumnConfig column: a (dependent) select, a number or text. */
 export function DynamicField({ model, column, row, onChange, error }: Props) {
   const name = column.column_name;
-  const label = columnTitle(name);
+  const title = columnTitle(name);
+  const label = <AiLabel text={title} ai={isAiField(row, name)} />;
   const parent = parentColumnOf(model, name);
   const parentValue = parent ? rowValue(row, parent) : undefined;
   const options = columnOptionsFor(model, column, parentValue);
@@ -32,7 +35,7 @@ export function DynamicField({ model, column, row, onChange, error }: Props) {
         value={value === "" ? null : value}
         onChange={(v) => onChange(name, v ?? "")}
         options={options.map((o) => ({ value: String(o.id), label: o.label }))}
-        placeholder={`Select ${label.toLowerCase()}`}
+        placeholder={`Select ${title.toLowerCase()}`}
         emptyText={waiting && parent ? `Select ${columnTitle(parent).toLowerCase()} first` : "No options"}
         disabled={waiting}
       />

@@ -32,7 +32,31 @@ const factors = [
   { emission_factor_id: 2, emission_category_name: "LPG", factor_value: 1.56, denominator_unit: "litre", year: 2024 },
 ];
 
-async function signIn(page: Page, created: unknown[], duplicateOnce = false) {
+// What the AI service returns for one bill: one diesel line it is unsure about.
+const extraction = {
+  filename: "bapco-sep.pdf",
+  invoice_id: 41,
+  cloudinary_url: "https://files.example/bapco-sep.pdf",
+  error: null,
+  data: [{ vendor_name: "Bapco", invoice_number: "INV-7", invoice_date: "2025-09-12", billing_month_end: "2025-09-30", total_amount: 812.5, currency: "BHD", line_items: [], activities: [] }],
+  validations: [[{ check: "subtotal_plus_tax_equals_total", ok: false, delta: 12 }]],
+  suggested_categories: [null],
+  emission: [
+    {
+      invoice_index: 0,
+      activity_index: 0,
+      site_id: 4,
+      category_id: 9,
+      activity_data: { fuel_type: "Diesel", quantity: "1600", description: "Diesel delivery" },
+      activity_data_unit: "Litre",
+      date_of_reporting: "2025-09-30",
+      total_emission: 0,
+      unit: "kg CO2e",
+    },
+  ],
+};
+
+async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = []) {
   const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [site] };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
@@ -69,6 +93,11 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false) {
         }
         created.push({ body: request.postDataJSON(), replace: url.searchParams.get("replace") === "true" });
         return json({ emission: { pk_id: created.length + 100 } }, 201);
+      }
+      if (path.endsWith("/v1/invoices/upload")) return json(extraction);
+      if (path.endsWith("/user/documents/from-invoice")) {
+        linked.push(request.postDataJSON());
+        return json({ message: "Invoice linked", documents: [] }, 201);
       }
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
@@ -137,4 +166,47 @@ test("an incomplete row blocks review and a duplicate can be replaced", async ({
     replace: true,
     body: { date_of_reporting: "2026-03-31", reporting_period: "yearly", year_type: "FY" },
   });
+});
+
+test("a bill is read into a row that is checked before it is sent, then attached as evidence", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  const linked: unknown[] = [];
+  await signIn(page, created, false, linked);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+
+  await page.getByRole("tab", { name: /Start from a bill/ }).click();
+  await page.locator('input[type="file"]').setInputFiles({ name: "bapco-sep.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test") });
+
+  const bill = page.getByRole("region", { name: "Bill Bapco" });
+  await expect(bill.getByText("No. INV-7 · 30 Sep 2025 · 812.50 BHD")).toBeVisible();
+  await expect(bill.getByText("The total doesn't match subtotal plus tax (off by 12).")).toBeVisible();
+  const row = bill.getByRole("region", { name: "Row 1" });
+  // The AI's labels became the form's values; each filled field is marked.
+  await expect(row.getByLabel(/Fuel Type/)).toHaveValue("diesel");
+  await expect(row.getByText("AI filled, check it")).toHaveCount(4);
+  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
+
+  // Nothing from the bill goes to review before the user checks it.
+  await page.getByRole("button", { name: "Review", exact: true }).click();
+  await expect(page.getByText("1 bill is not checked yet")).toBeVisible();
+  await row.getByLabel(/Quantity/).fill("1500");
+  await expect(row.getByText("AI filled, check it")).toHaveCount(3);
+  await bill.getByRole("button", { name: "Use this row" }).click();
+  await expect(bill.getByText("Checked")).toBeVisible();
+
+  await page.getByRole("button", { name: "Review", exact: true }).click();
+  // The empty typed row isn't sent alongside the bill row.
+  await expect(page.getByRole("table").getByRole("row")).toHaveCount(2);
+  await expect(page.getByRole("table")).toContainText("Bill, attached on send");
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+
+  expect(created).toHaveLength(1);
+  expect(created[0].body).toMatchObject({
+    activity_data: { fuel_type: "diesel", quantity: "1500", emission_category: "Diesel (avg biofuel blend)", description: "Diesel delivery" },
+    activity_data_unit: "litre",
+    date_of_reporting: "2025-09-30",
+  });
+  expect(JSON.stringify(created[0].body)).not.toContain("_bill");
+  expect(linked).toEqual([{ invoice_id: 41, emission_ids: [101] }]);
 });
