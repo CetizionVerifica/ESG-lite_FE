@@ -1,26 +1,2 @@
-import { useMemo } from "react";
-import { createEmissionCalculator, type EmissionCalcInput } from "./emissionCalc";
-
-// React binding of the pure calculator: recomputed only when an input changes.
-export const useEmissionCalc = ({
-  emissionFactors,
-  targetYear,
-  columns,
-  selectColumnNames,
-  emissionCategoryMapping,
-  fallbackToRaw,
-  calculationSpec,
-}: EmissionCalcInput) =>
-  useMemo(
-    () =>
-      createEmissionCalculator({
-        emissionFactors,
-        targetYear,
-        columns,
-        selectColumnNames,
-        emissionCategoryMapping,
-        fallbackToRaw,
-        calculationSpec,
-      }),
-    [emissionFactors, targetYear, columns, selectColumnNames, emissionCategoryMapping, fallbackToRaw, calculationSpec],
-  );
+// Moved to shared code so P04 can reuse it; this path stays for existing imports.
+export * from "../../../lib/emissions/useEmissionCalc";

@@ -29,7 +29,7 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | `useContextParams` | `hooks/useContextParams.ts` | read/write the same URL context in a page: `const [ctx, update] = useContextParams(defaults)` |
 | `DataTable` | `table/` | column defs, sort (client or `onSortChange` for server), sticky header, selection + bulk bar, column picker + density (persisted with `storageKey`), client or server pagination, `onRowClick` (Enter too) → open a `Drawer`, numeric columns right-aligned mono, CSV/XLSX export (formula-safe CSV) |
 | `FilterBar` | `FilterBar.tsx`, `filterLogic.ts` | search (debounced) + filter chips (multi or single choice), Clear all, saved views in this browser (`storageKey`); keep the value in the URL with `useFilterParams(["status", "site"])` (`?q=&status=pending,approved`) |
-| `KpiStrip` | `KpiStrip.tsx` | 3–5 figures in one panel; `primary` is wider; `format: "emissions"` picks t/kg; delta ▲▼ with fixed good/bad colour; loading/error |
+| `KpiStrip` | `KpiStrip.tsx` | 3–5 figures in one panel; `primary` is wider; `onSelect` + `selected` make a figure a filter toggle; `format: "emissions"` picks t/kg; delta ▲▼ with fixed good/bad colour; loading/error |
 | `ScopeBar` | `ScopeBar.tsx` | stacked Scope 1/2/3 bar + legend from `--t-s1/2/3` only; loading/empty |
 | `ChartFrame` | `ChartFrame.tsx` | wraps ECharts with `useChartTheme()`; title + unit, Chart/Table toggle, PNG export, loading/empty/error. Pass `option={(t) => …}` to use `t.scopes.s1` etc. |
 | `Callout` | `Callout.tsx` | info / warn / brand tint; optional action and dismiss |
@@ -45,6 +45,7 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | `DocumentViewer` | `DocumentViewer.tsx`, `documentKind.ts` | full-screen preview (image, PDF, video, audio, Office via Office Online), ‹ › and arrow keys, download; `fromEmissionDocument(doc)` adapts documentService records |
 | `AuditTimeline` | `AuditTimeline.tsx`, `auditFormat.ts` | who / when / action / old → new / reason; `EntityAuditTimeline` fetches `/user/audit-logs` with TanStack Query |
 | `CommandPalette` | `CommandPalette.tsx`, `paletteFilter.ts` | ⌘K dialog; same props as the shell's stand-in (`commands`, `recent`, `onRun`) plus `results` / `onQueryChange` for entity search |
+| `DynamicField` | `DynamicField.tsx` | one ColumnConfig column (dependent select, number or text) from a `FormModel` in `src/lib/emissions`; used by Add data and the My entries edit drawer |
 | `PoweredBy` | `PoweredBy.tsx` | "Powered by PlanetPulse ESGLite"; `onDark` on cover/brand fills; `POWERED_BY_TEXT` for emails and PDFs |
 
 The legacy `components/DocumentViewerModal.tsx`, `AuditTrailTimeline.tsx` and `pages/UserDataEntry/components/UnitSelector.tsx` stay until their last page migrates; the new versions reuse their services and conversion rules but not their markup (it is hard-coded to `isDark` and slate/gray colours).

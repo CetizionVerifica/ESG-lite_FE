@@ -44,3 +44,4 @@ export { CommandPalette, type CommandPaletteProps } from "./CommandPalette";
 export { filterPalette, type PaletteCommand } from "./paletteFilter";
 export { PoweredBy } from "./PoweredBy";
 export { POWERED_BY_TEXT } from "./poweredByText";
+export { DynamicField } from "./DynamicField";

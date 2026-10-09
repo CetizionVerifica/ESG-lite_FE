@@ -28,6 +28,28 @@ function renderAt(url: string) {
 const search = () => decodeURIComponent(screen.getByTestId("search").textContent ?? "");
 
 describe("ContextChips", () => {
+  it("offers Any period when allowed, and shows it without arrows", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/x?period=2025-08"]}>
+        <ContextChips chips={["period"]} allowAnyPeriod />
+        <Search />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("button", { name: /Period:/ }));
+    await user.click(screen.getByRole("button", { name: "Any period" }));
+    expect(search()).toBe("?period=all");
+    expect(screen.getByRole("button", { name: /Period: Any period/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Previous period" })).toBeNull();
+  });
+
+  it("has no Any period option by default", async () => {
+    const user = userEvent.setup();
+    renderAt("/x?period=2025-08");
+    await user.click(screen.getByRole("button", { name: /Period:/ }));
+    expect(screen.queryByRole("button", { name: "Any period" })).toBeNull();
+  });
+
   it("reads the period and sites from the URL", () => {
     renderAt("/x?period=FY2025&site=2");
     expect(screen.getByRole("button", { name: /Period: FY 2025-26/ })).toBeTruthy();
