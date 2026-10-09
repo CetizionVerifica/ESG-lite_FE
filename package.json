@@ -7,10 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "lint:new": "eslint src/lib src/ui src/theme src/features src/routes/newUiRoutes.tsx src/main.tsx e2e playwright.config.ts vitest.config.ts --ext ts,tsx --max-warnings 0 --no-error-on-unmatched-pattern",
+    "lint:new": "eslint src/lib src/ui src/theme src/features src/routes/newUiRoutes.tsx src/main.tsx e2e playwright.config.ts playwright.ui.config.ts vitest.config.ts --ext ts,tsx --max-warnings 0 --no-error-on-unmatched-pattern",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:ui-snapshots": "playwright test -c playwright.ui.config.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -37,6 +38,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/leaflet": "^1.9.21",
     "@types/react": "19.2.8",
     "@types/react-dom": "19.2.3",
@@ -46,6 +50,7 @@
     "eslint": "^8.45.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.3",
+    "jsdom": "^25.0.1",
     "typescript": "^5.0.2",
     "vite": "^4.4.5",
     "vitest": "^0.34.6"
