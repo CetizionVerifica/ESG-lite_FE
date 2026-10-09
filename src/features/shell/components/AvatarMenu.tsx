@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { APPEARANCES, type ShellUser, initials } from "../account";
 import type { Appearance } from "../../../theme";
-import Menu, { type MenuEntry } from "../standins/Menu";
+import { Menu, type MenuEntry } from "../../../ui";
 import { chromeIconButton } from "./styles";
 
 interface AvatarMenuProps {
@@ -27,28 +27,26 @@ export default function AvatarMenu({ user, appearance, onAppearance, onSignOut }
     { kind: "separator" },
     { kind: "heading", content: <div className="text-[11px] font-semibold uppercase tracking-wide text-(--t-muted)">Appearance</div> },
     ...APPEARANCES.map((a) => ({
-      kind: "radio" as const,
       label: a.label,
       checked: appearance === a.value,
       onSelect: () => onAppearance(a.value),
     })),
     { kind: "separator" },
-    { kind: "item", label: "Settings", onSelect: () => navigate("/settings") },
-    { kind: "item", label: "Sign out", onSelect: onSignOut },
+    { label: "Settings", onSelect: () => navigate("/settings") },
+    { label: "Sign out", onSelect: onSignOut },
   ];
 
   return (
     <Menu
-      label={
-        <span className="flex size-7 items-center justify-center rounded-full bg-(--t-chrome-active) text-xs font-semibold text-(--t-chrome-fg) ring-1 ring-(--t-chrome-line)">
-          {initials(user.name)}
-        </span>
-      }
-      ariaLabel={`Account menu for ${user.name}`}
       align="end"
-      showChevron={false}
-      buttonClassName={chromeIconButton}
-      entries={entries}
+      items={entries}
+      trigger={(props) => (
+        <button {...props} type="button" aria-label={`Account menu for ${user.name}`} className={chromeIconButton}>
+          <span className="flex size-7 items-center justify-center rounded-full bg-(--t-chrome-active) text-xs font-semibold text-(--t-chrome-fg) ring-1 ring-(--t-chrome-line)">
+            {initials(user.name)}
+          </span>
+        </button>
+      )}
     />
   );
 }

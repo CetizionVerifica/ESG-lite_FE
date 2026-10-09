@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
 import { useTheme } from "../../theme";
+import { CommandPalette } from "../../ui";
 import { shellUser } from "./account";
 import { brandForUser } from "./brand";
 import { type Command, routeCommands } from "./commands";
@@ -15,7 +16,6 @@ import { usePreviewStyle } from "./hooks/usePreviewStyle";
 import { navFor } from "./nav";
 import { type ShellRoute, asRole, clientIdFromRoute, homeFor, pathForClient } from "./routeMap";
 import { signOutSession } from "./signOut";
-import CommandPalette from "./standins/CommandPalette";
 
 /** Route `handle` the shell reads to find the current page's metadata. */
 export interface ShellHandle {
@@ -131,6 +131,8 @@ export default function AppShell() {
         commands={commands}
         recent={palette.recent}
         onRun={runCommand}
+        placeholder="Search pages…"
+        inputLabel="Search pages"
       />
       <main id="main" tabIndex={-1} style={previewStyle} className="mx-auto max-w-[1440px] px-4 pb-10 outline-none sm:px-6">
         <ContextBar route={route} showClientSwitcher={clientScoped} onClientPicked={onClientPicked} />

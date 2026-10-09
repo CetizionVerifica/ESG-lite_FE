@@ -130,6 +130,36 @@ describe("Menu", () => {
   });
 });
 
+describe("Menu radio items and dividers", () => {
+  it("skips separators and headings, and marks checked and current items", async () => {
+    const user = userEvent.setup();
+    const dark = vi.fn();
+    render(
+      <Menu
+        trigger={(p) => <button {...p}>Account</button>}
+        items={[
+          { kind: "heading", content: <span>Ada Admin</span> },
+          { kind: "separator" },
+          { label: "Light", onSelect: () => {}, checked: true },
+          { label: "Dark", onSelect: dark, checked: false },
+          { kind: "separator" },
+          { label: "Settings", onSelect: () => {}, current: true },
+        ]}
+      />,
+    );
+    screen.getByRole("button", { name: "Account" }).focus();
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "Light" }));
+    expect(screen.getByRole("menuitemradio", { name: "Light" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("menuitem", { name: "Settings" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getAllByRole("separator")).toHaveLength(2);
+    await user.keyboard("{End}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Settings" }));
+    await user.keyboard("{ArrowUp}{Enter}");
+    expect(dark).toHaveBeenCalledOnce();
+  });
+});
+
 describe("Toast", () => {
   function Fire({ onUndo }: { onUndo: () => void }) {
     const { toast } = useToast();

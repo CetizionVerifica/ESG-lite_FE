@@ -21,7 +21,7 @@ export { initials } from "./initials";
 export { Tooltip, type TooltipProps } from "./Tooltip";
 export { Tabs, TabPanel, type TabItem, type TabsProps } from "./Tabs";
 export { SegmentedControl, type SegmentedControlProps, type SegmentedOption } from "./SegmentedControl";
-export { Menu, type MenuItem, type MenuProps } from "./Menu";
+export { Menu, type MenuDivider, type MenuEntry, type MenuItem, type MenuProps } from "./Menu";
 export { Callout, type CalloutProps, type CalloutTone } from "./Callout";
 export { ToastProvider } from "./Toast";
 export { useToast, type ToastInput, type ToastTone } from "./toastStore";

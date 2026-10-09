@@ -21,6 +21,8 @@ export type CommandPaletteProps<C extends PaletteCommand> = {
   resultsLoading?: boolean;
   onQueryChange?: (query: string) => void;
   placeholder?: string;
+  /** Accessible name of the search box. */
+  inputLabel?: string;
 };
 
 function groupBy<C extends PaletteCommand>(items: C[]): Array<{ title: string; items: C[] }> {
@@ -44,6 +46,7 @@ function PaletteDialog<C extends PaletteCommand>({
   resultsLoading,
   onQueryChange,
   placeholder = "Search pages, sites, categories…",
+  inputLabel = "Search",
 }: CommandPaletteProps<C>) {
   const ref = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -81,7 +84,7 @@ function PaletteDialog<C extends PaletteCommand>({
             aria-expanded="true"
             aria-controls={listId}
             aria-activedescendant={flat.length ? optionId(current) : undefined}
-            aria-label="Search"
+            aria-label={inputLabel}
             autoComplete="off"
             placeholder={placeholder}
             value={query}

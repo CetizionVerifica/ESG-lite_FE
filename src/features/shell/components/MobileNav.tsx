@@ -3,7 +3,7 @@ import { Search } from "lucide-react";
 import { APPEARANCES, type ShellUser } from "../account";
 import { type NavItem, isActiveLink, resolveNavTo } from "../nav";
 import type { Appearance } from "../../../theme";
-import Drawer from "../standins/Drawer";
+import { Drawer } from "../../../ui";
 import { focusRing } from "./styles";
 
 interface MobileNavProps {
@@ -41,7 +41,7 @@ export default function MobileNav({ open, onClose, items, clientId, user, appear
   };
 
   return (
-    <Drawer open={open} onClose={onClose} title="Menu">
+    <Drawer open={open} onClose={onClose} title="Menu" side="left" size="nav" padded={false}>
       <nav aria-label="Main" className="py-2">
         {items.map((item) =>
           item.kind === "link" ? (
