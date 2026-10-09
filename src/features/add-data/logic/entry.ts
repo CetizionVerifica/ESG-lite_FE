@@ -107,8 +107,8 @@ export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: n
   for (const [key, value] of Object.entries(rest)) {
     if (key === "id") continue;
     if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
-    // Private row state: FERA flag, mapping key, and the bill a row came from.
-    if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill") continue;
+    // Private row state: FERA flag, mapping key, the bill a row came from, the saved entry it edits.
+    if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf") continue;
     activity[key] = value;
   }
   const date = entryDate(ctx.period);

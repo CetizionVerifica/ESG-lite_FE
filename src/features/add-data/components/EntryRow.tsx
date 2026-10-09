@@ -1,5 +1,5 @@
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
-import { Badge, Button, Select, cn, formatNumber, panel } from "../../../ui";
+import { Badge, Button, FileDrop, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
 import { formColumns, isColumnVisible, visibleExtraFields, type FormModel } from "../logic/form";
@@ -36,6 +36,8 @@ type Props = {
   onRemove: () => void;
   /** Opens the distance drawer for a distance column. */
   onCalculateDistance: (column: string, field: DistanceField) => void;
+  /** Evidence files for a typed row; bill rows have their bill. */
+  evidence?: { items: FileDropItem[]; onAdd: (files: File[]) => void; onRemove: (id: string) => void };
 };
 
 /** One entry as a card: what it is, its values, more details, and the live result. */
@@ -150,6 +152,27 @@ export function EntryRow(p: Props) {
           </summary>
           <div className="pt-3">
             <ExtraFields fields={extras} row={row} onChange={p.onExtraChange} />
+          </div>
+        </details>
+      )}
+
+      {p.evidence && (
+        <details className="group" open={p.evidence.items.length > 0}>
+          <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-brand-text">
+            <ChevronDown aria-hidden className="size-4 transition-transform group-open:rotate-180" />
+            Evidence{p.evidence.items.length > 0 && ` (${p.evidence.items.length})`}
+          </summary>
+          <div className="pt-3">
+            <FileDrop
+              label={`Evidence for row ${p.index + 1}`}
+              help="PDF, image or spreadsheet, up to 10 MB each. Attached when you send."
+              accept={["application/pdf", "image/*", ".xlsx", ".xls", ".csv", ".doc", ".docx"]}
+              maxSize={10 * 1024 * 1024}
+              multiple
+              items={p.evidence.items}
+              onAdd={p.evidence.onAdd}
+              onRemove={p.evidence.onRemove}
+            />
           </div>
         </details>
       )}

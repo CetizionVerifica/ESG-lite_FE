@@ -13,6 +13,7 @@ import { billOf } from "../logic/bill";
 import type { EntryPeriod } from "../logic/entry";
 import { rowHasInput } from "../hooks/useEntryRows";
 import { FromBill } from "./FromBill";
+import type { RowEvidence } from "../hooks/useRowEvidence";
 import { DistanceDrawer } from "../components/distance/DistanceDrawer";
 import { distanceTarget, type DistanceField } from "../logic/distance";
 
@@ -36,6 +37,7 @@ type Props = {
   factorYear: number;
   reportingYear: number;
   classicHref: string;
+  evidence: RowEvidence;
   onBack: () => void;
   onNext: () => void;
 };
@@ -80,6 +82,15 @@ export function EnterRows(p: Props) {
         onDuplicate={() => p.dispatch({ type: "duplicate", id: row.id })}
         onRemove={() => p.dispatch({ type: "remove", id: row.id })}
         onCalculateDistance={(column, field) => setDistanceFor({ rowId: row.id, column, field })}
+        evidence={
+          billOf(row)
+            ? undefined
+            : {
+                items: p.evidence.items[row.id] ?? [],
+                onAdd: (files) => p.evidence.add(row.id, files),
+                onRemove: (id) => p.evidence.remove(row.id, id),
+              }
+        }
       />
     );
   };

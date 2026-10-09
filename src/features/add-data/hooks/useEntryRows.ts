@@ -19,7 +19,9 @@ type Action =
   /** Rows read from a bill; dropped when `draftKey` is no longer the open context. */
   | { type: "append"; rows: ModalRow[]; draftKey: string | null }
   | { type: "confirmBill"; key: string }
-  | { type: "removeBill"; key: string };
+  | { type: "removeBill"; key: string }
+  /** A saved entry loaded back to fix or change; replaces an empty typed row and any earlier copy of it. */
+  | { type: "load"; row: ModalRow };
 
 const nextIdOf = (rows: ModalRow[]) => rows.reduce((max, r) => Math.max(max, r.id), 0) + 1;
 
@@ -68,6 +70,10 @@ function reducer(state: State, action: Action): State {
       };
     case "removeBill":
       return { ...state, rows: state.rows.filter((r) => billOf(r)?.key !== action.key) };
+    case "load": {
+      const kept = state.rows.filter((r) => (billOf(r) || rowHasInput(r)) && (r._editOf == null || r._editOf !== action.row._editOf));
+      return { rows: [...kept, { ...action.row, id: state.nextId }], nextId: state.nextId + 1 };
+    }
   }
 }
 

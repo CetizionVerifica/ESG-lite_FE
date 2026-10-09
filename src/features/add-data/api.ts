@@ -5,9 +5,9 @@ import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/uni
 import { getMappingsByCompany, type CategoryMapping } from "../../services/categoryMappingService";
 
 export type { CategoryMapping };
-import { createEmission, getPeriodTotal } from "../../services/emissionService";
+import { createEmission, getEmissionsPaginated, getPeriodTotal, updateEmission } from "../../services/emissionService";
 import { getThresholdByCompany } from "../../services/thresholdService";
-import { linkInvoiceDocuments } from "../../services/documentService";
+import { linkInvoiceDocuments, uploadMultipleDocuments } from "../../services/documentService";
 import { calculateRoadDistance, calculateSeaDistance } from "../../services/distanceService";
 import { resolveLocationFromBackend, type ResolvedLocation } from "../../services/locationService";
 import {
@@ -19,6 +19,7 @@ import {
   type Invoice,
 } from "../../services/invoiceService";
 import { periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPeriod } from "./logic/entry";
+import { entriesQuery, entryInPeriod, type SavedEntry } from "./logic/existing";
 import type { ColumnConfig, EmissionFactor } from "./types";
 
 /** Everything the form needs for one site × category × factor year. */
@@ -144,6 +145,45 @@ export async function saveRow(payload: EmissionPayload, replace = false): Promis
       message: data?.message ?? e.message ?? "Couldn't save this row. Try again.",
     };
   }
+}
+
+/** Attach files picked on a typed row to its saved entry. True when they were all stored. */
+export async function uploadRowEvidence(emissionId: number, files: File[]): Promise<boolean> {
+  try {
+    const result = await uploadMultipleDocuments({ files, emission_id: emissionId, document_type: "other" });
+    return (result.documents?.length ?? 0) === files.length;
+  } catch {
+    return false;
+  }
+}
+
+/** Save changes to an entry loaded from "Already entered" (pending or rejected); the backend sets it back to pending. */
+export async function updateRow(id: number, payload: EmissionPayload): Promise<SaveOutcome> {
+  try {
+    const result = (await updateEmission(id, {
+      activity_data: payload.activity_data,
+      extra_data: payload.extra_data,
+      date_of_reporting: payload.date_of_reporting,
+      activity_data_unit: payload.activity_data_unit,
+    })) as { emission?: { pk_id?: number } } | undefined;
+    return { kind: "saved", emissionId: result?.emission?.pk_id ?? id };
+  } catch (err) {
+    const e = err as ApiError;
+    return { kind: "error", modeLock: false, message: e.response?.data?.message ?? e.message ?? "Couldn't save this row. Try again." };
+  }
+}
+
+/** Entries already saved for site × category × period (the user's own; the list endpoint scopes by role). */
+export function useExistingEntries(siteId: number | null, categoryId: number | null, period: EntryPeriod | null) {
+  return useQuery({
+    queryKey: ["add-data", "existing", siteId, categoryId, period],
+    enabled: siteId !== null && categoryId !== null && period !== null,
+    queryFn: async () => {
+      const q = entriesQuery(period as EntryPeriod);
+      const result = await getEmissionsPaginated({ siteIds: [siteId as number], categoryId, year: q.year, month: q.month, page: 1, limit: 100 });
+      return (result.data as unknown as SavedEntry[]).filter((e) => entryInPeriod(e, period as EntryPeriod));
+    },
+  });
 }
 
 export type { ExtractionResponse, Invoice };
