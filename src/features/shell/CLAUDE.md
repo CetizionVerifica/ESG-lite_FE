@@ -71,3 +71,9 @@ Superadmin gets a **client switcher** in the page header that sets the company c
 - Each role sees only its items; deep links to a forbidden route show a 403 page, not the login.
 - Old paths redirect.
 - Works at 1280, 1024, 768 and 390px wide.
+
+## M0 clean-up (module M0-SHELL)
+Closes phase 0 gate blockers 2, 3, 4 and 6 (`/mnt/project-files/reviews/phase0-gate-2026-10-09.md`).
+- **PR 1/2** Theme: the shell reads `appearance`, `setAppearance`, `look` and the brand logos from F1 `useTheme()`; `standins/appearance.ts` and `standins/tokens.css` go. Appearance has one key (`appearance`) and is saved to the account via B2 `GET/PUT /auth/me/appearance` (server value wins on sign-in; local storage stays as the offline cache). A Playwright test loads the flagged shell with a mocked Midal brand.
+- **PR 2/2** Components: `standins/Drawer`, `Menu`, `CommandPalette` and `hooks/useFocusTrap` are replaced by `src/ui`; `standins/` is deleted.
+- Blocker 5 (a route on DataTable) closes with the first phase 1 page (P07 or P04), not here.
