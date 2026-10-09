@@ -13,4 +13,7 @@ test("theme preview shows the four reference themes and they all pass contrast",
   // Tokens reach Tailwind classes: Midal Classic's top bar is the navy primary.
   const bar = page.getByTestId("theme-midal-classic").locator("header");
   await expect(bar).toHaveCSS("background-color", "rgb(11, 46, 92)");
+
+  // Charts render with the token-built ECharts theme.
+  await expect(page.getByTestId("theme-midal-night").getByTestId("chart").locator("canvas")).toBeVisible();
 });

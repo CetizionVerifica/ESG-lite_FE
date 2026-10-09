@@ -103,6 +103,18 @@ function textOn(fill: string, min = AA_TEXT): string | null {
 }
 
 /**
+ * Text colour for a gradient (the sign-in and PDF covers): white while it
+ * passes AA on every part of the gradient, otherwise whichever of white and
+ * `ink` has the better worst-case contrast.
+ */
+export function textOnGradient(from: string, to: string, ink: string): string {
+  const stops = [from, mix(from, to, 0.5), to];
+  const worst = (fg: string) => Math.min(...stops.map((bg) => contrast(fg, bg)));
+  const white = worst(WHITE);
+  return white >= AA_TEXT || white >= worst(ink) ? WHITE : ink;
+}
+
+/**
  * A fill colour plus its text colour. The fill must stand out from the
  * surfaces as a UI element (3:1); if no text colour reads on it, the fill is
  * moved step by step (darker in light looks, lighter in Night) until one does.

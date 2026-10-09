@@ -28,6 +28,8 @@ The only place in new code where raw colour values may appear. Everything else r
 | `ThemeProvider.tsx` | Picks the pack after login, resolves look × appearance, writes the tokens on `<html>` |
 | `useTheme.ts` | `useTheme()` → `{ appearance, setAppearance, look, pack, tokens }` (`isDark` deprecated) |
 | `session.ts` | Pure helpers: company id from the session user, pack choice, stored appearance |
+| `chartTheme.ts` | `useChartTheme()` → ECharts theme object from the current tokens (`theme.scopes` for Scope 1/2/3) |
+| `pdfTheme.ts` | `pdfTheme(brand)` → print colours for @react-pdf, always the Light look |
 | `preview/ThemePreviewPage.tsx` | Dev-only `/dev/theme`: every token in PlanetPulse, Midal Classic, Midal Light, Midal Night |
 
 ## Provider

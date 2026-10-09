@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Check, Circle, Info, X } from "lucide-react";
+import ReactECharts from "echarts-for-react";
+import { chartTheme } from "../chartTheme";
 import {
   accentIsFillOnly,
   buildTheme,
@@ -82,6 +84,33 @@ function Pill({ tone, icon, label }: { tone: "good" | "warn" | "bad" | "info"; i
   return <span className={`inline-flex items-center gap-1 rounded-chip px-2 py-0.5 text-xs font-medium ${cls}`}>{icon}{label}</span>;
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+const SCOPE_DATA = [
+  [1.3, 1.2, 1.4, 1.3, 1.2, 1.1],
+  [4.1, 4.3, 3.9, 4.0, 3.8, 3.7],
+  [44, 46, 43, 45, 42, 41],
+];
+
+function ScopeChart({ tokens }: { tokens: ThemeTokens }) {
+  const theme = chartTheme(tokens);
+  const scopes = [theme.scopes.s1, theme.scopes.s2, theme.scopes.s3];
+  const option = {
+    grid: { left: 36, right: 8, top: 28, bottom: 24 },
+    legend: { top: 0, left: 0, itemWidth: 10, itemHeight: 10 },
+    tooltip: { trigger: "axis" },
+    xAxis: { type: "category", data: MONTHS },
+    yAxis: { type: "value" },
+    series: ["Scope 1 (ktCO₂e)", "Scope 2", "Scope 3"].map((name, i) => ({
+      name,
+      type: "bar",
+      stack: "scope",
+      data: SCOPE_DATA[i],
+      itemStyle: { color: scopes[i] },
+    })),
+  };
+  return <ReactECharts option={option} theme={theme} style={{ height: 180 }} notMerge />;
+}
+
 function ThemeCard({ variant }: { variant: Variant }) {
   const tokens: ThemeTokens = buildTheme(variant.pack, variant.look, variant.appearance);
   const report = contrastReport(tokens);
@@ -113,6 +142,10 @@ function ThemeCard({ variant }: { variant: Variant }) {
           <div className="mt-1 flex gap-3 text-xs text-muted">
             <span>■ <span className="text-s1">S1</span></span><span>■ <span className="text-s2">S2</span></span><span>■ <span className="text-s3">S3</span></span>
           </div>
+        </div>
+
+        <div className="rounded-control border border-line bg-panel p-2" data-testid="chart">
+          <ScopeChart tokens={tokens} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
