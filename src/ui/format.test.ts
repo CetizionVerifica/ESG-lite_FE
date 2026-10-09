@@ -30,6 +30,20 @@ describe("formatEmissions", () => {
   it("handles negative values (removals)", () => {
     expect(formatEmissions(-1500)).toBe("-1,500 tCO₂e");
   });
+  it("picks the unit after rounding", () => {
+    expect(formatEmissions(0.9996)).toBe("1 tCO₂e");
+    expect(formatEmissions(-0.9996)).toBe("-1 tCO₂e");
+    expect(formatEmissions(0.9994)).toBe("999 kgCO₂e");
+    expect(formatEmissions(999.96)).toBe("1,000 tCO₂e");
+  });
+  it("never prints -0", () => {
+    expect(formatEmissions(-0.0004)).toBe("0 kgCO₂e");
+    expect(formatEmissions(-0)).toBe("0 tCO₂e");
+    expect(formatEmissions(-0.04)).toBe("-40 kgCO₂e");
+    expect(formatNumber(-0.4)).toBe("0");
+    expect(formatNumber(-0.004, 2)).toBe("0.00");
+    expect(formatIntensity(-0.04)).toBe("0.0 tCO₂e/t");
+  });
 });
 
 describe("formatIntensity", () => {
@@ -81,6 +95,12 @@ describe("dates", () => {
   it("formats days as '14 Sep 2025'", () => {
     expect(formatDate("2025-09-14")).toBe("14 Sep 2025");
     expect(formatDate(null)).toBe("—");
+  });
+  it("shows a dash for dates the calendar doesn't have", () => {
+    expect(formatDate("2025-02-30")).toBe("—");
+    expect(formatDate("2025-13-01")).toBe("—");
+    expect(formatMonth("2025-00")).toBe("—");
+    expect(formatDate("2024-02-29")).toBe("29 Feb 2024");
   });
   it("labels reporting years by year_type", () => {
     expect(formatReportingYear(2025, "CY")).toBe("CY 2025");

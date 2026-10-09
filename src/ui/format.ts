@@ -9,8 +9,14 @@ export { periodLabel, fyLabel } from "./period";
 /** Shown for missing values. */
 export const EMPTY_VALUE = "—";
 
-const nf = (min: number, max: number) =>
+const formatters = (min: number, max: number) =>
   new Intl.NumberFormat("en-US", { minimumFractionDigits: min, maximumFractionDigits: max });
+
+/** Like Intl.NumberFormat, but a value that rounds to zero never prints as "-0". */
+const nf = (min: number, max: number) => {
+  const f = formatters(min, max);
+  return { format: (n: number) => f.format(n).replace(/^-(?=[0.,]*$)/, "") };
+};
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -30,7 +36,11 @@ export type FormattedFigure = { value: string; unit: string };
 export function emissionsParts(tonnes: number | null | undefined): FormattedFigure {
   if (!isNum(tonnes)) return { value: EMPTY_VALUE, unit: "tCO₂e" };
   const abs = Math.abs(tonnes);
-  if (abs > 0 && abs < 1) return { value: nf(0, 0).format(tonnes * 1000), unit: "kgCO₂e" };
+  if (abs > 0 && abs < 1) {
+    // The unit is picked after rounding: 0.9996 t is 1,000 kg, so it shows as 1 t.
+    const kg = Math.round(tonnes * 1000);
+    if (Math.abs(kg) < 1000) return { value: nf(0, 0).format(kg), unit: "kgCO₂e" };
+  }
   return { value: abs >= 1000 ? nf(0, 0).format(tonnes) : nf(0, 1).format(tonnes), unit: "tCO₂e" };
 }
 
@@ -92,7 +102,12 @@ function toDate(value: DateInput): Date | null {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   // Bare dates and months are read as local calendar dates, not UTC midnight.
   const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(value);
-  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, m[3] ? Number(m[3]) : 1);
+  if (m) {
+    const [year, month, day] = [Number(m[1]), Number(m[2]) - 1, m[3] ? Number(m[3]) : 1];
+    const d = new Date(year, month, day);
+    // Reject dates the calendar doesn't have (2025-02-30 would roll over to 2 Mar).
+    return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day ? d : null;
+  }
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 }
