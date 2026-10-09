@@ -1,0 +1,55 @@
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { getReportingCalendar } from "../../services/companyService";
+import { type GhgReportTablesResponse, getGhgReportTables } from "../../services/ghgreportService";
+import { getSites } from "../../services/siteService";
+import { DEFAULT_FY_START_MONTH } from "../../ui";
+import { type ReportQuery, type SiteOption, requestPayload } from "./logic";
+
+export const keys = {
+  all: ["ghg-report"] as const,
+  tables: (q: ReportQuery) => [...keys.all, "tables", requestPayload(q)] as const,
+  calendar: ["reporting-calendar"] as const,
+  adminSites: ["admin", "sites"] as const,
+};
+
+/** `value`, once it has stopped changing for `ms`. */
+export function useDebounced<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setSettled(value), ms);
+    return () => window.clearTimeout(id);
+  }, [value, ms]);
+  return settled;
+}
+
+/** The company's FY start month (backend-owned); April until it arrives or if it can't be read. */
+export function useFyStartMonth(): number {
+  const q = useQuery({
+    queryKey: keys.calendar,
+    queryFn: getReportingCalendar,
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+  const m = Number(q.data?.fiscalYearStartMonth);
+  return Number.isInteger(m) && m >= 1 && m <= 12 ? m : DEFAULT_FY_START_MONTH;
+}
+
+/** Every site (Superadmin): the page keeps the picked client's. */
+export function useAdminSites(enabled: boolean) {
+  return useQuery<SiteOption[]>({
+    queryKey: keys.adminSites,
+    queryFn: async () => ((await getSites()) as SiteOption[]) ?? [],
+    enabled,
+  });
+}
+
+/** Totals, Table 1 and the by-location tables for both years. */
+export function useReportTables(q: ReportQuery | null) {
+  return useQuery<GhgReportTablesResponse>({
+    queryKey: q ? keys.tables(q) : [...keys.all, "tables", null],
+    queryFn: () => getGhgReportTables(requestPayload(q!)),
+    enabled: !!q && q.siteIds.length > 0,
+    placeholderData: keepPreviousData,
+  });
+}

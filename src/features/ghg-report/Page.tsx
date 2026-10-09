@@ -1,0 +1,232 @@
+import { type ReactNode, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import { FileBarChart } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+import { useClientContext } from "../../lib/clientContext";
+import {
+  Button,
+  Callout,
+  EmptyState,
+  type Kpi,
+  KpiStrip,
+  PageHeader,
+  SkeletonChart,
+  TabPanel,
+  Tabs,
+  formatEmissions,
+  previousReportPeriod,
+  reportPeriodLabel,
+  useFilterParams,
+} from "../../ui";
+import { useAdminSites, useDebounced, useFyStartMonth, useReportTables } from "./api";
+import { CategoryTable } from "./components/CategoryTable";
+import { LocationTab } from "./components/LocationTab";
+import { ReportFilters } from "./components/ReportFilters";
+import { ScopeChart } from "./components/ScopeChart";
+import { ScopeTable } from "./components/ScopeTable";
+import {
+  type ReportQuery,
+  type SiteOption,
+  categoryOptions,
+  clientSites,
+  locationRows,
+  readPeriod,
+  reportFigures,
+  serverMessage,
+  shortPeriodLabel,
+  topCategories,
+  writePeriod,
+} from "./logic";
+
+type Tab = "summary" | "location";
+const TABS: { value: Tab; label: string }[] = [
+  { value: "summary", label: "Summary" },
+  { value: "location", label: "By location" },
+];
+
+function useManagerSites(): SiteOption[] {
+  const { user } = useAuth();
+  return useMemo(() => {
+    const list = (user?.sites as SiteOption[] | undefined) ?? [];
+    return list.length > 0 ? list : user?.site ? [user.site as SiteOption] : [];
+  }, [user]);
+}
+
+const numbers = (values: string[] | undefined) => (values ?? []).map(Number).filter((n) => Number.isInteger(n));
+
+/**
+ * P10 GHG report: this period against the same period last year, on one live
+ * page. Filters live in the URL; results update in place (400ms debounce).
+ */
+export default function GhgReportPage() {
+  const { role } = useAuth();
+  const isStaff = role === "Superadmin";
+  const { clientId } = useClientContext();
+  const managerSites = useManagerSites();
+  const adminSites = useAdminSites(isStaff);
+  const sites = useMemo(() => (isStaff ? clientSites(adminSites.data ?? [], clientId) : managerSites), [isStaff, adminSites.data, clientId, managerSites]);
+
+  const calendarFy = useFyStartMonth();
+  const now = useMemo(() => new Date(), []);
+  const [params, setParams] = useSearchParams();
+  const [filters, setFilters] = useFilterParams(["site", "category"]);
+
+  // Results carry the FY start the server used; prefer it once it's known.
+  const draftPeriod = readPeriod(params, now, calendarFy);
+  const pickedSites = numbers(filters.filters.site).filter((id) => sites.some((s) => s.site_id === id));
+  const siteIds = pickedSites.length ? pickedSites : sites.map((s) => s.site_id);
+  const categories = categoryOptions(sites, pickedSites);
+  const categoryIds = numbers(filters.filters.category).filter((id) => categories.some((c) => c.value === id));
+
+  const draft: ReportQuery = { siteIds, categoryIds, period: draftPeriod };
+  const settledKey = useDebounced(JSON.stringify(draft), 400);
+  const query = useMemo(() => JSON.parse(settledKey) as ReportQuery, [settledKey]);
+  const tables = useReportTables(sites.length ? query : null);
+  const data = tables.data;
+  const fy = data?.filters.fiscalYearStartMonth ?? calendarFy;
+
+  const period = query.period;
+  const prev = previousReportPeriod(period);
+  const selLabel = shortPeriodLabel(period, fy);
+  const prevLabel = shortPeriodLabel(prev, fy);
+  const askedSites = useMemo(() => sites.filter((s) => query.siteIds.includes(s.site_id)), [sites, query.siteIds]);
+  const figures = useMemo(() => (data ? reportFigures(data, askedSites) : null), [data, askedSites]);
+
+  const tab: Tab = params.get("tab") === "location" ? "location" : "summary";
+  const setTab = (t: Tab) =>
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p);
+        if (t === "summary") next.delete("tab");
+        else next.set("tab", t);
+        return next;
+      },
+      { replace: true },
+    );
+  const setPeriod = (p: typeof period) => setParams((cur) => writePeriod(cur, p), { replace: true });
+
+  const company = sites[0]?.company?.name;
+  const header = (context?: ReactNode) => (
+    <PageHeader title="GHG report" crumb={company ? [{ label: company }] : undefined} context={context} />
+  );
+
+  if (isStaff && clientId === null)
+    return (
+      <div className="space-y-6">
+        {header()}
+        <Callout tone="warn" title="Pick a client first">
+          Choose a client with the switcher at the top; the report covers that client's sites.
+        </Callout>
+      </div>
+    );
+
+  if (isStaff && adminSites.isError)
+    return (
+      <div className="space-y-6">
+        {header()}
+        <EmptyState variant="error" title="Couldn't load this client's sites." action={<Button onClick={() => adminSites.refetch()}>Try again</Button>} />
+      </div>
+    );
+
+  if (sites.length === 0 && !(isStaff && adminSites.isPending))
+    return (
+      <div className="space-y-6">
+        {header()}
+        <Callout tone="warn" title={isStaff ? "This client has no sites yet" : "You don't have any sites yet"}>
+          {isStaff ? "Add a site for this client, then come back to report on it." : "Ask your admin to assign a site to you, then come back to report on it."}
+        </Callout>
+      </div>
+    );
+
+  const k = figures;
+  const kpis: Kpi[] = [
+    {
+      label: "Total emissions",
+      value: k?.selected.total,
+      format: "emissions",
+      previous: k?.previous.total,
+      compareLabel: `vs ${prevLabel}`,
+      primary: true,
+      hint: k && k.renewable > 0 ? `Saved ${formatEmissions(k.renewable)} from renewables` : undefined,
+    },
+    { label: "Scope 1", value: k?.selected["Scope 1"], format: "emissions", previous: k?.previous["Scope 1"] },
+    { label: "Scope 2", value: k?.selected["Scope 2"], format: "emissions", previous: k?.previous["Scope 2"] },
+    { label: "Scope 3", value: k?.selected["Scope 3"], format: "emissions", previous: k?.previous["Scope 3"] },
+    {
+      label: "Data coverage",
+      value: k?.coverage.percent,
+      format: "percent",
+      decimals: 0,
+      hint: k && `${k.coverage.withData} of ${k.coverage.selected} ${k.coverage.selected === 1 ? "site" : "sites"}`,
+    },
+    {
+      label: "Largest source",
+      value: k?.largestSource?.share ?? null,
+      format: "percent",
+      decimals: 0,
+      hint: k?.largestSource?.name ?? (k ? "No Scope 1–3 data" : undefined),
+    },
+  ];
+
+  const error = tables.isError ? serverMessage(tables.error, "Couldn't load the report.") : null;
+  const firstLoad = tables.isPending || (isStaff && adminSites.isPending);
+
+  return (
+    <div className="space-y-6">
+      {header(
+        <ReportFilters
+          sites={sites.map((s) => ({ value: s.site_id, label: s.name }))}
+          categories={categories}
+          filters={filters}
+          onFilters={setFilters}
+          period={draftPeriod}
+          onPeriod={setPeriod}
+          fyStartMonth={fy}
+          now={now}
+          loading={isStaff && adminSites.isPending}
+        />,
+      )}
+
+      <p className="text-sm text-muted" aria-live="polite">
+        Comparing <span className="font-medium text-ink">{reportPeriodLabel(period, fy)}</span> with{" "}
+        <span className="font-medium text-ink">{reportPeriodLabel(prev, fy)}</span>
+        {tables.isFetching && !firstLoad && <span className="ml-2">· Updating…</span>}
+      </p>
+
+      {error ? (
+        <EmptyState variant="error" title={error} action={<Button onClick={() => tables.refetch()}>Try again</Button>} />
+      ) : (
+        <>
+          <KpiStrip items={kpis} loading={firstLoad} />
+          {k && k.coverage.missing.length > 0 && (
+            <Callout tone="warn" title={`${k.coverage.missing.length} of ${k.coverage.selected} sites have no data for ${selLabel}`}>
+              {k.coverage.missing.join(", ")}. Their emissions aren't in these totals.
+            </Callout>
+          )}
+          {firstLoad || !data || !k ? (
+            <SkeletonChart />
+          ) : k.empty ? (
+            <EmptyState
+              icon={FileBarChart}
+              title={`Nothing recorded for ${reportPeriodLabel(period, fy)}.`}
+              description="Try another period or widen the sites and categories."
+              action={<Button onClick={() => setPeriod(prev)}>Try {reportPeriodLabel(prev, fy)}</Button>}
+            />
+          ) : (
+            <div className="space-y-4">
+              <Tabs<Tab> label="Report sections" idBase="ghg" items={TABS} value={tab} onChange={setTab} />
+              <TabPanel<Tab> idBase="ghg" value="summary" current={tab} className="space-y-6">
+                <ScopeChart figures={k} prevLabel={prevLabel} selLabel={selLabel} />
+                <ScopeTable figures={k} prevLabel={prevLabel} selLabel={selLabel} />
+                <CategoryTable rows={topCategories(data)} prevLabel={prevLabel} selLabel={selLabel} />
+              </TabPanel>
+              <TabPanel<Tab> idBase="ghg" value="location" current={tab}>
+                <LocationTab rows={locationRows(data, askedSites)} prevLabel={prevLabel} selLabel={selLabel} />
+              </TabPanel>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
