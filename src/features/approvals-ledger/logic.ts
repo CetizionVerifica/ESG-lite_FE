@@ -266,3 +266,31 @@ export function stepIndex(current: number, delta: number, count: number): number
   if (current < 0) return delta > 0 ? 0 : count - 1;
   return Math.min(count - 1, Math.max(0, current + delta));
 }
+
+// ── Excel reports (server files) ────────────────────────────────────────────
+
+export type ReportOption =
+  | { kind: "month"; label: string; year: number; month: number }
+  | { kind: "year"; label: string; year: number; yearType: "CY" | "FY" };
+
+/**
+ * Server Excel files for the chosen period: the month (existing export), its
+ * calendar year and the financial year it falls in (B7). FY is sent as the
+ * year it ends in, as the backend expects (Apr 2024 – Mar 2025 → 2025).
+ */
+export function reportOptions(period: Period | null, fyStartMonth = DEFAULT_FY_START_MONTH): ReportOption[] {
+  if (!period) return [];
+  if (period.kind === "cy") return [{ kind: "year", label: `Calendar year ${period.year}`, year: period.year, yearType: "CY" }];
+  if (period.kind !== "month") return [];
+  const { year, month } = period;
+  const options: ReportOption[] = [
+    { kind: "month", label: `${formatMonth(`${year}-${String(month).padStart(2, "0")}`)} (month)`, year, month },
+    { kind: "year", label: `Calendar year ${year}`, year, yearType: "CY" },
+  ];
+  // The backend's FY export runs April to March.
+  if (fyStartMonth === 4) {
+    const startYear = month >= 4 ? year : year - 1;
+    options.push({ kind: "year", label: formatReportingYear(startYear, "FY", 4), year: startYear + 1, yearType: "FY" });
+  }
+  return options;
+}

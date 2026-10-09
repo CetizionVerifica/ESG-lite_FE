@@ -358,6 +358,39 @@ export const exportMonthlyEmissions = async (params: {
   window.URL.revokeObjectURL(url);
 };
 
+// B7: a whole calendar or financial year as one Excel file. For FY, `year`
+// is the year the FY ends (FY 2024-25 → 2025), as the backend expects.
+// `truncated` is true when the server cut the file at its row cap.
+export const exportYearEmissions = async (params: {
+  siteIds: number[];
+  year: number;
+  yearType: "CY" | "FY";
+  categoryId?: number;
+  status?: string;
+}): Promise<{ truncated: boolean }> => {
+  const query: Record<string, string | number> = {
+    siteIds: params.siteIds.join(","),
+    year: params.year,
+    yearType: params.yearType,
+  };
+  if (params.categoryId != null) query.categoryId = params.categoryId;
+  if (params.status) query.status = params.status;
+
+  const response = await api.get("/user/emissions/export", { params: query, responseType: "blob" });
+  const disposition = response.headers["content-disposition"];
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  const fileName = match?.[1] || `emissions_${params.yearType}_${params.year}.xlsx`;
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", fileName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+  return { truncated: response.headers["x-export-truncated"] === "true" };
+};
+
 export const getPeriodTotal = async (
   params: PeriodTotalParams,
 ): Promise<number> => {
