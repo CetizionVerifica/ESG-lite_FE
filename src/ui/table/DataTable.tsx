@@ -340,6 +340,7 @@ export function DataTable<T>({
                 return (
                   <tr
                     key={id}
+                    data-row-id={String(id)}
                     aria-selected={selectable ? isSelected : undefined}
                     tabIndex={onRowClick ? 0 : undefined}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
