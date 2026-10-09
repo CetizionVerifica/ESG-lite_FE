@@ -69,6 +69,19 @@ async function signIn(page: Page) {
       if (path.includes("/user/column-configs/")) return json(config);
       if (path.includes("/user/documents/emission/")) return json([]);
       if (path.endsWith("/user/audit-logs")) return json([]);
+      if (path.includes("/user/units/")) return json([{ unit_id: 1, unit_name: "litre" }, { unit_id: 2, unit_name: "m3" }]);
+      if (path.endsWith("/user/emissions/batches"))
+        return json([
+          { upload_batch_id: "b-1", count: 40, pending_count: 30, approved_count: 10, rejected_count: 0, uploaded_at: "2025-10-03T09:00:00Z", site_id: 1, site_name: "Hidd", category_id: 10, category_name: "Diesel", uploaded_by: "Omar Contributor" },
+        ]);
+      if (/\/user\/emissions\/batch\/[^/]+\/(approve|reject)$/.test(path)) return json({ message: "ok" });
+
+      const edit = /\/user\/emissions\/manager-edit\/(\d+)$/.exec(path);
+      if (edit) {
+        const row = rows.find((r) => r.pk_id === Number(edit[1]))!;
+        row.activity_data = (request.postDataJSON() as { activity_data: Record<string, unknown> }).activity_data;
+        return json({ emission: row });
+      }
 
       const approve = /\/user\/emissions\/(\d+)\/approve$/.exec(path);
       if (approve) {
@@ -172,4 +185,43 @@ test("Clear filters clears the search, status and category together", async ({ p
   expect(url.searchParams.get("status")).toBeNull();
   expect(url.searchParams.get("q")).toBeNull();
   expect(url.searchParams.get("category")).toBe("all");
+});
+
+test("a manager edits an entry from the drawer with a reason", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  const drawer = page.getByRole("dialog", { name: "Diesel" });
+  await drawer.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByRole("dialog", { name: "Edit · Diesel" })).toBeVisible();
+  await page.getByLabel("Quantity").fill("150");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText(/Say why this changes/)).toBeVisible();
+  expect(calls.some((c) => c.path.includes("manager-edit"))).toBe(false);
+  await page.getByLabel("Reason for the change").fill("Meter read corrected");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toMatchObject({
+    activity_data: { fuel_type: "1", quantity: "150" },
+    activity_data_unit: "litre",
+    reason: "Meter read corrected",
+  });
+});
+
+test("rejecting a batch with approved rows needs an explicit tick", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/data/approvals");
+  await page.getByRole("tab", { name: /Upload batches/ }).click();
+  await expect(page).toHaveURL(/view=batches/);
+  const table = page.getByRole("table", { name: "Upload batches" });
+  await expect(table).toContainText("30 pending · 10 approved");
+  await table.getByRole("button", { name: "Reject…" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Reject 30 rows?" });
+  await dialog.getByLabel("Reason").fill("Wrong month in the sheet");
+  await expect(dialog.getByRole("button", { name: "Reject", exact: true })).toBeDisabled();
+  await dialog.getByLabel(/Reject the 10 approved rows too/).check();
+  await expect(page.getByRole("alertdialog", { name: "Reject 40 rows?" })).toBeVisible();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(page.getByText("Batch rejected")).toBeVisible();
+  expect(calls).toContainEqual({ method: "PUT", path: "/user/emissions/batch/b-1/reject", body: { comment: "Wrong month in the sheet" } });
 });

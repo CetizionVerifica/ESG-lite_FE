@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ExternalLink, FileText } from "lucide-react";
 import {
   Badge,
@@ -20,6 +20,7 @@ import {
 } from "../../../ui";
 import type { EmissionStatus } from "../../../services/emissionService";
 import { type LedgerDocument, useColumnConfig, useDocuments, useFactor } from "../api";
+import { EditForm } from "./EditForm";
 import { type FactorSnapshot, type LedgerRow, activityFields, quantityOf, rowPeriodLabel } from "../logic";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -47,6 +48,7 @@ export function RecordDrawer({
   onClose,
   onApprove,
   onReject,
+  onEdited,
 }: {
   row: LedgerRow | null;
   fera: LedgerRow | undefined;
@@ -55,31 +57,53 @@ export function RecordDrawer({
   onClose: () => void;
   onApprove: (row: LedgerRow) => void;
   onReject: (row: LedgerRow) => void;
+  /** After a saved edit. */
+  onEdited?: () => void;
 }) {
   const open = row !== null;
   const shown = status ?? row?.status;
+  const [editing, setEditing] = useState(false);
+  const id = row?.pk_id;
+  useEffect(() => setEditing(false), [id]);
   return (
     <Drawer
       open={open}
       onClose={onClose}
       size="lg"
-      title={row?.category?.category_name ?? "Entry"}
+      title={`${editing ? "Edit · " : ""}${row?.category?.category_name ?? "Entry"}`}
       subtitle={row ? `${row.site?.name ?? "—"} · ${rowPeriodLabel(row)}` : undefined}
       headerActions={shown ? <StatusPill status={shown} /> : undefined}
       footer={
-        row && shown === "pending" ? (
+        row && !editing ? (
           <>
-            <Button variant="danger" onClick={() => onReject(row)}>
-              Reject
-            </Button>
-            <Button variant="primary" onClick={() => onApprove(row)}>
-              Approve
-            </Button>
+            <Button onClick={() => setEditing(true)}>Edit</Button>
+            {shown === "pending" && (
+              <>
+                <Button variant="danger" onClick={() => onReject(row)}>
+                  Reject
+                </Button>
+                <Button variant="primary" onClick={() => onApprove(row)}>
+                  Approve
+                </Button>
+              </>
+            )}
           </>
         ) : undefined
       }
     >
-      {row && <Body row={row} fera={fera} />}
+      {row &&
+        (editing ? (
+          <EditForm
+            row={row}
+            onCancel={() => setEditing(false)}
+            onDone={() => {
+              setEditing(false);
+              onEdited?.();
+            }}
+          />
+        ) : (
+          <Body row={row} fera={fera} />
+        ))}
     </Drawer>
   );
 }

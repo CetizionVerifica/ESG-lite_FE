@@ -2,13 +2,20 @@ import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } f
 import { useCallback, useMemo } from "react";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { type EmissionDocument, getDocumentsByEmission } from "../../services/documentService";
+import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
+import { type UnitData, getUserUnitsBySiteAndCategory } from "../../services/unitService";
 import {
+  type EmissionUploadBatch,
   approveEmission,
+  approveEmissionsByBatch,
+  getEmissionBatches,
+  rejectEmissionsByBatch,
   bulkApproveEmissions,
   bulkDeleteEmissions,
   bulkRejectEmissions,
   getEmissionFactorForEmission,
   getEmissionsPaginated,
+  managerUpdateEmission,
   rejectEmission,
 } from "../../services/emissionService";
 import type { ColumnConfig, LedgerRow, listParams } from "./logic";
@@ -19,6 +26,9 @@ export const keys = {
   counts: (siteIds: number[]) => [...keys.all, "counts", siteIds] as const,
   documents: (id: number) => [...keys.all, "documents", id] as const,
   factor: (id: number) => [...keys.all, "factor", id] as const,
+  batches: (siteIds: number[], categoryId: number | null) => [...keys.all, "batches", siteIds, categoryId] as const,
+  units: (siteId: number, categoryId: number) => ["units", siteId, categoryId] as const,
+  factorNames: (siteId: number, categoryId: number, year: number) => [...keys.all, "factor-names", siteId, categoryId, year] as const,
   // Shared with other pages that read the same config.
   config: (siteId: number, categoryId: number) => ["column-config", siteId, categoryId] as const,
 };
@@ -129,4 +139,65 @@ export function useReviewMutations() {
   const approveMany = useMutation({ mutationFn: (ids: number[]) => bulkApproveEmissions(ids), onSettled: refresh });
   const remove = useMutation({ mutationFn: (ids: number[]) => bulkDeleteEmissions(ids), onSettled: refresh });
   return { reject, approveMany, remove, refresh };
+}
+
+export function useUnits(siteId: number | undefined, categoryId: number | undefined) {
+  return useQuery({
+    queryKey: keys.units(siteId ?? 0, categoryId ?? 0),
+    queryFn: async () => (await getUserUnitsBySiteAndCategory(siteId as number, categoryId as number)) as UnitData[],
+    enabled: !!siteId && !!categoryId,
+    staleTime: CONFIG_STALE,
+  });
+}
+
+/** Factor names a manager may pick when the form has no category mapping (the year before the entry, as before). */
+export function useFactorNames(siteId: number | undefined, categoryId: number | undefined, year: number, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.factorNames(siteId ?? 0, categoryId ?? 0, year),
+    queryFn: async () => {
+      const factors = (await getUserEmissionFactorsBySiteAndCategory(siteId as number, categoryId as number, year)) as Array<{ emission_category_name?: string }>;
+      return [...new Set(factors.map((f) => f.emission_category_name).filter((n): n is string => !!n))];
+    },
+    enabled: enabled && !!siteId && !!categoryId,
+    staleTime: CONFIG_STALE,
+  });
+}
+
+export function useManagerEdit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Parameters<typeof managerUpdateEmission>[1] }) => managerUpdateEmission(id, body),
+    onSettled: (_d, _e, v) => {
+      void qc.invalidateQueries({ queryKey: keys.all });
+      void qc.invalidateQueries({ queryKey: ["audit-logs", "emission", v.id] });
+    },
+  });
+}
+
+export function useBatches(siteIds: number[], categoryId: number | null) {
+  return useQuery({
+    queryKey: keys.batches(siteIds, categoryId),
+    queryFn: (): Promise<EmissionUploadBatch[]> => getEmissionBatches(siteIds.length ? siteIds : null, categoryId),
+  });
+}
+
+export function useBatchMutations() {
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: keys.all });
+  const approve = useMutation({ mutationFn: (batchId: string) => approveEmissionsByBatch(batchId), onSettled: refresh });
+  const reject = useMutation({
+    mutationFn: ({ batchId, reason }: { batchId: string; reason: string }) => rejectEmissionsByBatch(batchId, reason),
+    onSettled: refresh,
+  });
+  return { approve, reject };
+}
+
+/** The most rows "Export" fetches for the current filter in one go. */
+export const EXPORT_CAP = 10000;
+
+/** Every row matching the list filter (not just this page), up to EXPORT_CAP. */
+export async function fetchAllForExport(params: ReturnType<typeof listParams>, total: number) {
+  const limit = Math.min(Math.max(total, 1), EXPORT_CAP);
+  const res = await getEmissionsPaginated({ ...params, page: 1, limit });
+  return { rows: res.data as LedgerRow[], capped: res.total > limit };
 }
