@@ -90,3 +90,17 @@ export function subscribeMediaQuery(mq: MediaQueryLike, onChange: () => void): (
   }
   return () => {};
 }
+
+/** What to do with the account's appearance (B2) once it has loaded. */
+export type AppearanceSync = { apply: Appearance } | { push: Appearance } | null;
+
+/**
+ * The account's saved appearance wins, so the choice follows the user across
+ * devices. An account still on the server default ("system") picks up a choice
+ * already made on this device instead, which carries over the legacy toggle.
+ */
+export function reconcileAppearance(server: unknown, local: Appearance): AppearanceSync {
+  if (!isAppearance(server)) return null;
+  if (server !== "system") return server === local ? null : { apply: server };
+  return local === "system" ? null : { push: local };
+}

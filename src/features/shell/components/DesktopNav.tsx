@@ -1,6 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
+import { Menu } from "../../../ui";
 import { type NavItem, isActiveLink, isGroupActive, resolveNavTo } from "../nav";
-import Menu from "../standins/Menu";
 import { chromeItem } from "./styles";
 
 /** Top-bar nav for ≥ 1024px. Groups open on click or keyboard, never on hover. */
@@ -24,13 +25,17 @@ export default function DesktopNav({ items, clientId }: { items: NavItem[]; clie
         return (
           <Menu
             key={item.label}
-            label={item.label}
-            current={active}
-            buttonClassName={chromeItem(active)}
-            entries={item.items.map((child) => {
+            align="start"
+            items={item.items.map((child) => {
               const to = resolveNavTo(child.to, clientId);
-              return { kind: "item" as const, label: child.label, current: isActiveLink(to, pathname, search), onSelect: () => navigate(to) };
+              return { label: child.label, current: isActiveLink(to, pathname, search), onSelect: () => navigate(to) };
             })}
+            trigger={(props) => (
+              <button {...props} type="button" data-current={active || undefined} className={chromeItem(active)}>
+                {item.label}
+                <ChevronDown size={14} aria-hidden className={`transition-transform ${props["aria-expanded"] ? "rotate-180" : ""}`} />
+              </button>
+            )}
           />
         );
       })}

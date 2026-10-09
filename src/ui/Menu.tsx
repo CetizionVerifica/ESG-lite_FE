@@ -9,7 +9,20 @@ export type MenuItem = {
   /** Red text for destructive items (confirm them with a Modal). */
   danger?: boolean;
   disabled?: boolean;
+  /** Makes the item a menuitemradio (e.g. Light / Dark / System). */
+  checked?: boolean;
+  /** The page the item links to is open (aria-current="page"). */
+  current?: boolean;
 };
+
+/** Non-interactive rows: a divider, or a block such as the signed-in user or a group label. */
+export type MenuDivider = { kind: "separator" } | { kind: "heading"; content: ReactNode };
+
+export type MenuEntry = MenuItem | MenuDivider;
+
+function isItem(entry: MenuEntry): entry is MenuItem {
+  return !("kind" in entry);
+}
 
 export type MenuProps = {
   /** Renders the trigger; spread the props onto a button. */
@@ -22,12 +35,15 @@ export type MenuProps = {
     onKeyDown: (e: React.KeyboardEvent) => void;
     ref: (el: HTMLButtonElement | null) => void;
   }) => ReactNode;
-  items: MenuItem[];
+  items: MenuEntry[];
   align?: "start" | "end";
   label?: string;
 };
 
-/** Action menu (role="menu"). Arrows / Home / End move, Enter or Space selects, Esc closes and returns focus. */
+/**
+ * Action menu (role="menu"). Arrows / Home / End move, Enter or Space selects, Esc closes and returns focus.
+ * Items with `checked` are radio items; separators and headings are skipped by the keyboard.
+ */
 export function Menu({ trigger, items, align = "end", label }: MenuProps) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -35,7 +51,7 @@ export function Menu({ trigger, items, align = "end", label }: MenuProps) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const enabled = items.map((it, i) => (it.disabled ? -1 : i)).filter((i) => i >= 0);
+  const enabled = items.map((it, i) => (isItem(it) && !it.disabled ? i : -1)).filter((i) => i >= 0);
 
   const openAt = (index: number) => {
     setActive(index);
@@ -102,34 +118,52 @@ export function Menu({ trigger, items, align = "end", label }: MenuProps) {
             align === "end" ? "right-0" : "left-0",
           )}
         >
-          {items.map((it, i) => (
-            <button
-              key={it.label}
-              ref={(el) => {
-                itemRefs.current[i] = el;
-              }}
-              type="button"
-              role="menuitem"
-              tabIndex={i === active ? 0 : -1}
-              aria-disabled={it.disabled || undefined}
-              onClick={() => {
-                if (it.disabled) return;
-                close();
-                it.onSelect();
-              }}
-              onMouseEnter={() => !it.disabled && setActive(i)}
-              className={cn(
-                "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm",
-                it.danger ? "text-bad" : "text-ink",
-                i === active && "bg-tint",
-                it.disabled && "cursor-not-allowed opacity-50",
-                focusRing,
-              )}
-            >
-              {it.icon}
-              {it.label}
-            </button>
-          ))}
+          {items.map((it, i) => {
+            if (!isItem(it)) {
+              return it.kind === "separator" ? (
+                <div key={`sep-${i}`} role="separator" className="my-1 h-px bg-line" />
+              ) : (
+                <div key={`heading-${i}`} className="px-3 py-2">
+                  {it.content}
+                </div>
+              );
+            }
+            const radio = it.checked !== undefined;
+            return (
+              <button
+                key={it.label}
+                ref={(el) => {
+                  itemRefs.current[i] = el;
+                }}
+                type="button"
+                role={radio ? "menuitemradio" : "menuitem"}
+                aria-checked={radio ? it.checked : undefined}
+                aria-current={it.current ? "page" : undefined}
+                tabIndex={i === active ? 0 : -1}
+                aria-disabled={it.disabled || undefined}
+                onClick={() => {
+                  if (it.disabled) return;
+                  close();
+                  it.onSelect();
+                }}
+                onMouseEnter={() => !it.disabled && setActive(i)}
+                className={cn(
+                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm",
+                  it.danger ? "text-bad" : "text-ink",
+                  (it.checked || it.current) && "font-semibold text-brand-text",
+                  i === active && "bg-tint",
+                  it.disabled && "cursor-not-allowed opacity-50",
+                  focusRing,
+                )}
+              >
+                {radio && (
+                  <span aria-hidden className={cn("size-2 shrink-0 rounded-full", it.checked ? "bg-brand" : "border border-line")} />
+                )}
+                {it.icon}
+                {it.label}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

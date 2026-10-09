@@ -20,17 +20,21 @@ export type DrawerProps = {
   /** Sticky footer, e.g. Approve / Reject. */
   footer?: ReactNode;
   children?: ReactNode;
-  /** 480, 600 or 720px wide; full width on phones. */
-  size?: "sm" | "md" | "lg";
+  /** 480, 600 or 720px wide (full width on phones); "nav" is 320px, 85% on phones. */
+  size?: "nav" | "sm" | "md" | "lg";
+  /** "left" for navigation drawers; detail panels stay on the right. */
+  side?: "left" | "right";
+  /** Set false when the content brings its own spacing (e.g. a nav list). */
+  padded?: boolean;
   loading?: boolean;
   /** Replaces the body with an error state. */
   error?: string | null;
   onRetry?: () => void;
 };
 
-const widths = { sm: "sm:w-[480px]", md: "sm:w-[600px]", lg: "sm:w-[720px]" };
+const widths = { nav: "w-[min(20rem,85vw)]", sm: "w-full sm:w-[480px]", md: "w-full sm:w-[600px]", lg: "w-full sm:w-[720px]" };
 
-/** Right-side detail panel for record detail, audit trail and edit forms. */
+/** Right-side detail panel for record detail, audit trail and edit forms; `side="left"` for the < 1024px nav. */
 export function Drawer({
   open,
   onClose,
@@ -40,6 +44,8 @@ export function Drawer({
   footer,
   children,
   size = "md",
+  side = "right",
+  padded = true,
   loading,
   error,
   onRetry,
@@ -62,7 +68,7 @@ export function Drawer({
     );
 
   return createPortal(
-    <div className="fixed inset-0 z-40 flex justify-end">
+    <div className={cn("fixed inset-0 z-40 flex", side === "left" ? "justify-start" : "justify-end")}>
       <div aria-hidden className="absolute inset-0 bg-ink/30" onClick={onClose} data-testid="drawer-backdrop" />
       <aside
         ref={ref}
@@ -73,7 +79,8 @@ export function Drawer({
         tabIndex={-1}
         onKeyDown={trap.onKeyDown}
         className={cn(
-          "relative flex h-full w-full max-w-full flex-col border-l border-line bg-panel text-ink shadow-xl focus:outline-none",
+          "relative flex h-full max-w-full flex-col border-line bg-panel text-ink shadow-xl focus:outline-none",
+          side === "left" ? "border-r" : "border-l",
           widths[size],
         )}
       >
@@ -94,7 +101,7 @@ export function Drawer({
             <X aria-hidden className="size-4" />
           </button>
         </header>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{body}</div>
+        <div className={cn("flex-1 overflow-y-auto", padded && "px-5 py-4")}>{body}</div>
         {footer && !loading && !error && (
           <footer className="flex flex-wrap justify-end gap-2 border-t border-line px-5 py-3">{footer}</footer>
         )}

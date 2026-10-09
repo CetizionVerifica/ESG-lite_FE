@@ -1,4 +1,4 @@
-import type { Appearance } from "./standins/appearance";
+import type { Appearance } from "../../theme";
 
 export interface ShellUser {
   name: string;

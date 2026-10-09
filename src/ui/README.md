@@ -37,7 +37,7 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | `Tabs`, `TabPanel` | `Tabs.tsx` | ARIA tabs, arrow keys/Home/End, counts |
 | `SegmentedControl` | `SegmentedControl.tsx` | radiogroup with roving focus |
 | `Tooltip` | `Tooltip.tsx` | hover + focus, Esc hides; short hints only |
-| `Menu` | `Menu.tsx` | action menu: arrows, Enter, Esc returns focus; `danger` items |
+| `Menu` | `Menu.tsx` | action menu: arrows, Enter, Esc returns focus; `danger`, radio (`checked`) and `current` items, separators and headings |
 | `Avatar`, `Badge` | `Avatar.tsx`, `Badge.tsx` | initials fallback; neutral/brand/info/good/warn/bad badges |
 | `Stepper` | `Stepper.tsx` | steps, `current`, `completed`, `canJump` rule (default: done steps + the next open one); "Step 2 of 3" on phones |
 | `UnitInput` | `UnitInput.tsx`, `unitMatch.ts` | number + unit; same rules as UserDataEntry's `UnitSelector` (`utils/unitConversions`): mismatch error, or "Convert to kWh" when a factor exists |

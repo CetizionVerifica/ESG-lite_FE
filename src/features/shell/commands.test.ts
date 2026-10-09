@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterCommands, pushRecent, routeCommands, withRecentFirst } from "./commands";
+import { pushRecent, routeCommands } from "./commands";
 
 describe("command registry", () => {
   it("lists the role's pages plus account pages", () => {
@@ -19,22 +19,9 @@ describe("command registry", () => {
     expect(brand?.to).toBe("/clients/9/brand");
   });
 
-  it("matches every word against label and group", () => {
-    const commands = routeCommands("Manager", null);
-    expect(filterCommands(commands, "data prod").map((c) => c.label)).toEqual(["Production data"]);
-    expect(filterCommands(commands, "  ")).toHaveLength(commands.length);
-    expect(filterCommands(commands, "zzz")).toEqual([]);
-  });
-
   it("keeps recent items unique, newest first, capped", () => {
     expect(pushRecent(["a", "b"], "b")).toEqual(["b", "a"]);
     expect(pushRecent(["a", "b", "c"], "d", 3)).toEqual(["d", "a", "b"]);
   });
 
-  it("drops recent items the role can no longer open", () => {
-    const commands = routeCommands("Admin", null);
-    const { recent, rest } = withRecentFirst(commands, ["route:/settings", "route:/console"]);
-    expect(recent.map((c) => c.label)).toEqual(["Settings"]);
-    expect(rest.map((c) => c.label)).toEqual(["Users", "Notifications"]);
-  });
 });

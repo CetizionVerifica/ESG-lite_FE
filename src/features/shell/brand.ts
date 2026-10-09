@@ -1,12 +1,12 @@
+import type { Look, ThemePack } from "../../theme";
 import { asRole } from "./routeMap";
 
 /** Logo slot: logoOnDarkUrl on dark chrome (Classic, Night), logoUrl on Light. */
-export type Look = "classic" | "light" | "night";
+export type { Look };
 
 export interface ShellBrand {
   name: string;
   logoUrl?: string | null;
-  /** Proposed Brand field (entity map B1); absent from the API today. */
   logoOnDarkUrl?: string | null;
 }
 
@@ -31,12 +31,13 @@ interface SessionUser {
 }
 
 /**
- * Company shown in the logo slot. Staff (Superadmin) always see PlanetPulse
- * ESGLite; everyone else sees their company name until /brands is readable
- * by non-staff (entity map B1) and F1's theme pack carries the logos.
+ * Brand in the logo slot. Staff (Superadmin) always see PlanetPulse ESGLite.
+ * Client users see their company's brand pack (name and logos from
+ * GET /brands/mine); until it loads, or if it can't, their company name.
  */
-export function brandForUser(role: string | null, user: SessionUser | null | undefined): ShellBrand {
+export function brandForUser(role: string | null, user: SessionUser | null | undefined, pack: ThemePack): ShellBrand {
   if (asRole(role) === "Superadmin" || !user) return PLATFORM_BRAND;
+  if (pack.id !== "planetpulse") return { name: pack.name, logoUrl: pack.logoUrl, logoOnDarkUrl: pack.logoOnDarkUrl };
   const name = user.site?.company?.name ?? user.sites?.find((s) => s.company?.name)?.company?.name;
   return name ? { name } : PLATFORM_BRAND;
 }

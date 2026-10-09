@@ -15,7 +15,18 @@ const users: Record<Role, object> = {
   Superadmin: { name: "Sam Staff", email: "sam@example.com" },
 };
 
-async function signIn(page: Page, role: Role) {
+interface SignInOptions {
+  /** Body for GET /brands/mine; Glochem without logos by default. */
+  brand?: object;
+  /** Body for GET /auth/me/appearance. */
+  appearance?: string;
+  /** Collects the bodies of PUT /auth/me/appearance. */
+  saved?: unknown[];
+}
+
+const glochem = { companyId: 3, name: "Glochem", primary: "#a01c2c", accent: "#333333", coverFrom: "#a01c2c", coverTo: "#333333", logoUrl: null };
+
+async function signIn(page: Page, role: Role, options: SignInOptions = {}) {
   const user = users[role];
   await page.addInitScript(
     ([r, u]) => {
@@ -31,6 +42,15 @@ async function signIn(page: Page, role: Role) {
       const path = new URL(route.request().url()).pathname;
       const json = (body: unknown) => route.fulfill({ json: body });
       if (path.endsWith("/auth/me")) return json({ role, user });
+      if (path.endsWith("/auth/me/appearance")) {
+        if (route.request().method() === "PUT") {
+          const body = route.request().postDataJSON();
+          options.saved?.push(body);
+          return json(body);
+        }
+        return json({ appearance: options.appearance ?? "system" });
+      }
+      if (path.endsWith("/brands/mine")) return json(options.brand ?? glochem);
       if (path.endsWith("/notifications/unread")) return json({ count: 2 });
       if (path.endsWith("/notifications"))
         return json({
@@ -41,7 +61,7 @@ async function signIn(page: Page, role: Role) {
           ],
         });
       if (path.endsWith("/admin/companies")) return json({ companies: [company, { company_id: 1, name: "Midal Cables" }] });
-      if (path.includes("/brands/")) return json({ companyId: 3, name: "Glochem", primary: "#a01c2c", accent: "#333333", coverFrom: "#a01c2c", coverTo: "#333333", logoUrl: null });
+      if (path.includes("/brands/")) return json(glochem);
       return json({});
     },
   );
@@ -101,15 +121,62 @@ test("bell popover lists notifications and links to all", async ({ page }) => {
 });
 
 test("avatar menu has appearance, settings and sign out", async ({ page }) => {
-  await signIn(page, "Admin");
+  const saved: unknown[] = [];
+  await signIn(page, "Admin", { saved });
   await page.goto("/");
   await expect(page).toHaveURL(/\/users$/);
   await page.getByRole("button", { name: "Account menu for Ada Admin" }).click();
   await page.getByRole("menuitemradio", { name: "Dark" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect.poll(() => saved).toContainEqual({ appearance: "dark" });
   await page.getByRole("button", { name: "Account menu for Ada Admin" }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
+});
+
+const midal = {
+  companyId: 1,
+  name: "Midal Cables",
+  primary: "#0b2e5c",
+  accent: "#2f6fb0",
+  coverFrom: "#061933",
+  coverTo: "#0b2e5c",
+  logoUrl: "https://cdn.example.com/midal-light.png",
+  logoOnDarkUrl: "https://cdn.example.com/midal-dark.png",
+  scope3Colour: null,
+};
+
+for (const [look, logo] of [
+  ["classic", midal.logoOnDarkUrl],
+  ["light", midal.logoUrl],
+] as const) {
+  test(`Midal ${look} brand themes the shell`, async ({ page }) => {
+    await page.route("https://cdn.example.com/**", (route) => route.fulfill({ status: 204 }));
+    await signIn(page, "Manager", { brand: { ...midal, defaultLook: look }, appearance: "light" });
+    await page.goto("/overview");
+    const html = page.locator("html");
+    await expect(html).toHaveAttribute("data-pack", "company-1");
+    await expect(html).toHaveAttribute("data-look", look);
+    await expect(page.getByRole("link", { name: "Midal Cables home" }).getByRole("img")).toHaveAttribute("src", logo);
+    const chrome = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--t-chrome").trim());
+    expect(chrome).not.toBe("");
+  });
+}
+
+test("the account's saved appearance wins over this device", async ({ page }) => {
+  await signIn(page, "Manager", { appearance: "dark" });
+  await page.addInitScript(() => localStorage.setItem("appearance", "light"));
+  await page.goto("/overview");
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.locator("html")).toHaveAttribute("data-look", "night");
+});
+
+test("an account on the default takes this device's choice", async ({ page }) => {
+  const saved: unknown[] = [];
+  await signIn(page, "Manager", { saved });
+  await page.addInitScript(() => localStorage.setItem("appearance", "dark"));
+  await page.goto("/overview");
+  await expect.poll(() => saved).toContainEqual({ appearance: "dark" });
 });
 
 test("superadmin switches client and jumps with Ctrl+K", async ({ page }) => {
