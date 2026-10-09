@@ -27,7 +27,7 @@ function makeRows(): Row[] {
   return [1, 2, 3].map((n) => ({
     pk_id: n,
     status: "pending",
-    activity_data: { fuel_type: "1", quantity: String(100 * n) },
+    activity_data: { fuel_type: "1", quantity: String(100 * n), emission_category: "Diesel (average biofuel blend)" },
     total_emission: 0.268 * n,
     category: diesel,
   }));
@@ -70,10 +70,12 @@ async function signIn(page: Page) {
       if (path.includes("/user/documents/emission/")) return json([]);
       if (path.endsWith("/user/audit-logs")) return json([]);
       if (path.includes("/user/units/")) return json([{ unit_id: 1, unit_name: "litre" }, { unit_id: 2, unit_name: "m3" }]);
-      if (path.endsWith("/user/emissions/batches"))
-        return json([
-          { upload_batch_id: "b-1", count: 40, pending_count: 30, approved_count: 10, rejected_count: 0, uploaded_at: "2025-10-03T09:00:00Z", site_id: 1, site_name: "Hidd", category_id: 10, category_name: "Diesel", uploaded_by: "Omar Contributor" },
-        ]);
+      if (path.endsWith("/user/emissions/batches")) {
+        const own = { upload_batch_id: "b-1", count: 40, pending_count: 30, approved_count: 10, rejected_count: 0, uploaded_at: "2025-10-03T09:00:00Z", site_id: 1, site_name: "Hidd", category_id: 10, category_name: "Diesel", uploaded_by: "Omar Contributor" };
+        // Like the real endpoint, no site filter means every company's batches.
+        const foreign = { ...own, upload_batch_id: "b-9", site_id: 99, site_name: "Other company site" };
+        return json(url.searchParams.get("siteIds") === "1" ? [own] : [own, foreign]);
+      }
       if (/\/user\/emissions\/batch\/[^/]+\/(approve|reject)$/.test(path)) return json({ message: "ok" });
 
       const edit = /\/user\/emissions\/manager-edit\/(\d+)$/.exec(path);
@@ -215,6 +217,7 @@ test("rejecting a batch with approved rows needs an explicit tick", async ({ pag
   await expect(page).toHaveURL(/view=batches/);
   const table = page.getByRole("table", { name: "Upload batches" });
   await expect(table).toContainText("30 pending · 10 approved");
+  await expect(table).not.toContainText("Other company site");
   await table.getByRole("button", { name: "Reject…" }).click();
   const dialog = page.getByRole("alertdialog", { name: "Reject 30 rows?" });
   await dialog.getByLabel("Reason").fill("Wrong month in the sheet");

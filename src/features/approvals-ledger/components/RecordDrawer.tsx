@@ -57,8 +57,8 @@ export function RecordDrawer({
   onClose: () => void;
   onApprove: (row: LedgerRow) => void;
   onReject: (row: LedgerRow) => void;
-  /** After a saved edit. */
-  onEdited?: () => void;
+  /** After a saved edit, with the saved entry when the server sends it back. */
+  onEdited?: (saved?: Partial<LedgerRow>) => void;
 }) {
   const open = row !== null;
   const shown = status ?? row?.status;
@@ -68,7 +68,8 @@ export function RecordDrawer({
   return (
     <Drawer
       open={open}
-      onClose={onClose}
+      // Esc or the backdrop while editing leaves the form, not the entry, so edits aren't dropped silently.
+      onClose={editing ? () => setEditing(false) : onClose}
       size="lg"
       title={`${editing ? "Edit · " : ""}${row?.category?.category_name ?? "Entry"}`}
       subtitle={row ? `${row.site?.name ?? "—"} · ${rowPeriodLabel(row)}` : undefined}
@@ -96,9 +97,9 @@ export function RecordDrawer({
           <EditForm
             row={row}
             onCancel={() => setEditing(false)}
-            onDone={() => {
+            onDone={(saved) => {
               setEditing(false);
-              onEdited?.();
+              onEdited?.(saved);
             }}
           />
         ) : (

@@ -135,6 +135,8 @@ describe("form helpers", () => {
     });
     expect(editErrors("no").reason).toMatch(/at least 5/);
     expect(editErrors("Typo in litres")).toEqual({});
+    expect(editErrors("Typo in litres", "").category).toMatch(/emission factor/);
+    expect(editErrors("Typo in litres", "Diesel")).toEqual({});
   });
 
   it("prompts for the parent", () => {

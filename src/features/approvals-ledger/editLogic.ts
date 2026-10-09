@@ -188,8 +188,15 @@ export function editPayload(activity: Activity, date: string, unit: string, reas
 
 export const EDIT_REASON_MIN = 5;
 
-export function editErrors(reason: string): { reason?: string } {
-  return reason.trim().length >= EDIT_REASON_MIN ? {} : { reason: `Say why this changes (at least ${EDIT_REASON_MIN} characters)` };
+/**
+ * `category` is the resolved emission factor. Saving without one keeps the old
+ * total while the entered values change, so it is required.
+ */
+export function editErrors(reason: string, category = "x"): { reason?: string; category?: string } {
+  const errors: { reason?: string; category?: string } = {};
+  if (reason.trim().length < EDIT_REASON_MIN) errors.reason = `Say why this changes (at least ${EDIT_REASON_MIN} characters)`;
+  if (!category.trim()) errors.category = "Choose every option until the emission factor is set";
+  return errors;
 }
 
 export const parentPrompt = (config: ColumnConfig | undefined, column: string) => {

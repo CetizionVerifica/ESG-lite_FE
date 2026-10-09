@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { type EmissionDocument, getDocumentsByEmission } from "../../services/documentService";
@@ -56,6 +56,17 @@ export function useStatusCounts(siteIds: number[]) {
     queryKey: keys.counts(siteIds),
     queryFn: async () => (await getEmissionsPaginated({ siteIds, page: 1, limit: 1 })).summary,
   });
+}
+
+/** Column configs for every site × category among `rows` (cached ones are reused), as a lookup. */
+export async function loadConfigs(qc: QueryClient, rows: LedgerRow[]) {
+  const pairs = new Map<string, [number, number]>();
+  for (const r of rows) if (r.site && r.category) pairs.set(`${r.site.site_id}:${r.category.category_id}`, [r.site.site_id, r.category.category_id]);
+  const loaded = await Promise.all(
+    [...pairs].map(async ([key, [s, c]]) => [key, (await qc.fetchQuery({ queryKey: keys.config(s, c), queryFn: () => fetchConfig(s, c), staleTime: CONFIG_STALE })) ?? undefined] as const),
+  );
+  const byPair = new Map(loaded);
+  return (siteId: number, categoryId: number) => byPair.get(`${siteId}:${categoryId}`);
 }
 
 async function fetchConfig(siteId: number, categoryId: number): Promise<ColumnConfig | null> {
@@ -174,10 +185,15 @@ export function useManagerEdit() {
   });
 }
 
+/**
+ * Upload batches for these sites. Always pass the manager's sites when no site
+ * is picked: `/user/emissions/batches` doesn't limit itself to the user's sites.
+ */
 export function useBatches(siteIds: number[], categoryId: number | null) {
   return useQuery({
     queryKey: keys.batches(siteIds, categoryId),
-    queryFn: (): Promise<EmissionUploadBatch[]> => getEmissionBatches(siteIds.length ? siteIds : null, categoryId),
+    queryFn: (): Promise<EmissionUploadBatch[]> => getEmissionBatches(siteIds, categoryId),
+    enabled: siteIds.length > 0,
   });
 }
 

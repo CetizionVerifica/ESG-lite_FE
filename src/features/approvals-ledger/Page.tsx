@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, SearchX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -33,6 +34,7 @@ import {
   commitApprove,
   errorMessage,
   fetchAllForExport,
+  loadConfigs,
   useBatches,
   useColumnConfigs,
   useEmissionList,
@@ -94,7 +96,9 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
     return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sites, ctx.siteIds]);
   const counts = useStatusCounts(ctx.siteIds);
-  const batches = useBatches(ctx.siteIds, ctx.categoryId);
+  // No site chip = all of the manager's sites; batches must always be scoped (the endpoint isn't).
+  const scopeSites = useMemo(() => (ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)), [ctx.siteIds, sites]);
+  const batches = useBatches(scopeSites, ctx.categoryId);
 
   // Tabs keep the context (sites, category, period) and drop the list filters.
   const goView = (next: View) => {
@@ -135,7 +139,7 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
         <ReportMenu siteIds={ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)} categoryId={ctx.categoryId} period={ctx.period} />
       </div>
       {view === "batches" ? (
-        <BatchesView siteIds={ctx.siteIds} categoryId={ctx.categoryId} />
+        <BatchesView siteIds={scopeSites} categoryId={ctx.categoryId} />
       ) : (
         <ListView key={view} tab={view} categoryName={categories.find((c) => c.value === ctx.categoryId)?.label ?? ""} />
       )}
@@ -144,6 +148,7 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
 }
 
 function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
+  const qc = useQueryClient();
   const { toast } = useToast();
   const [, setParams] = useSearchParams();
   const [ctx] = useContextParams();
@@ -329,8 +334,10 @@ function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
   const exportView = async (format: ExportFormat) => {
     try {
       const all = await fetchAllForExport(query, list.data?.total ?? 0);
-      const shown = mergeFera(all.rows, categoryName.toLowerCase() === "fera").rows;
-      await exportMatrix(toMatrix(shown, columns.filter((c) => c.id !== "actions")), `emissions-${tab}`, format);
+      const exported = mergeFera(all.rows, categoryName.toLowerCase() === "fera");
+      // Rows beyond this page need their own configs (option labels) and FERA links.
+      const exportColumns = ledgerColumns({ configOf: await loadConfigs(qc, all.rows), feraOf: exported.feraOf, statusOf, actions });
+      await exportMatrix(toMatrix(exported.rows, exportColumns.filter((c) => c.id !== "actions")), `emissions-${tab}`, format);
       if (all.capped) toast({ title: `Exported the first ${formatNumber(EXPORT_CAP)} rows`, description: "Narrow the filters to export the rest." });
     } catch (e) {
       toast({ title: "Couldn't export", description: errorMessage(e, "Try again in a moment."), tone: "bad" });
@@ -412,7 +419,11 @@ function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
         onClose={() => setDrawer(null)}
         onApprove={(r) => approve(r)}
         onReject={(r) => reject([r])}
-        onEdited={() => toast({ title: "Changes saved", description: "The change and your reason are in the entry's history.", tone: "good" })}
+        onEdited={(saved) => {
+          // Keep showing the entry even if the edit moved it out of the current filter.
+          if (saved && drawer) setDrawer({ ...drawer, ...saved });
+          toast({ title: "Changes saved", description: "The change and your reason are in the entry's history.", tone: "good" });
+        }}
       />
       <RejectModal
         open={rejecting !== null}

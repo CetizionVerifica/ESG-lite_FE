@@ -15,13 +15,24 @@ import {
 import { type ColumnConfig, type LedgerRow, humanize } from "../logic";
 
 /** Edit mode inside the record drawer (replaces the old wide edit modal). */
-export function EditForm({ row, onDone, onCancel }: { row: LedgerRow; onDone: () => void; onCancel: () => void }) {
+/** `onDone` gets the saved entry from the server when it sends one back. */
+export function EditForm({ row, onDone, onCancel }: { row: LedgerRow; onDone: (saved?: Partial<LedgerRow>) => void; onCancel: () => void }) {
   const config = useColumnConfig(row.site?.site_id, row.category?.category_id);
   if (config.isPending && row.site && row.category) return <SkeletonText lines={6} />;
   return <Loaded row={row} config={config.data ?? undefined} onDone={onDone} onCancel={onCancel} />;
 }
 
-function Loaded({ row, config, onDone, onCancel }: { row: LedgerRow; config: ColumnConfig | undefined; onDone: () => void; onCancel: () => void }) {
+function Loaded({
+  row,
+  config,
+  onDone,
+  onCancel,
+}: {
+  row: LedgerRow;
+  config: ColumnConfig | undefined;
+  onDone: (saved?: Partial<LedgerRow>) => void;
+  onCancel: () => void;
+}) {
   const siteId = row.site?.site_id;
   const categoryId = row.category?.category_id;
   const [activity, setActivity] = useState<Activity>(() => prefillFromCategory(config, { ...row.activity_data }));
@@ -35,15 +46,14 @@ function Loaded({ row, config, onDone, onCancel }: { row: LedgerRow; config: Col
   const factorYear = new Date(row.date_of_reporting).getFullYear() - 1;
   const names = useFactorNames(siteId, categoryId, factorYear, !hasMapping);
   const save = useManagerEdit();
-  const errors = editErrors(reason);
+  const category = String(activity.emission_category ?? "");
+  const errors = editErrors(reason, category);
 
   const submit = () => {
     setTried(true);
-    if (errors.reason) return;
-    save.mutate({ id: row.pk_id, body: editPayload(activity, date, unit, reason) }, { onSuccess: onDone });
+    if (errors.reason || errors.category) return;
+    save.mutate({ id: row.pk_id, body: editPayload(activity, date, unit, reason) }, { onSuccess: (data) => onDone(data?.emission) });
   };
-
-  const category = String(activity.emission_category ?? "");
   return (
     <form
       className="space-y-4"
@@ -58,6 +68,11 @@ function Loaded({ row, config, onDone, onCancel }: { row: LedgerRow; config: Col
         <div className="text-sm">
           <span className="text-muted">Emission factor: </span>
           {category || <span className="text-muted">choose the options below to set it</span>}
+          {tried && errors.category && (
+            <p role="alert" className="mt-1 text-bad">
+              {errors.category}
+            </p>
+          )}
         </div>
       ) : (
         <Select<string>
@@ -68,6 +83,7 @@ function Loaded({ row, config, onDone, onCancel }: { row: LedgerRow; config: Col
           options={[...new Set([...(names.data ?? []), ...(category ? [category] : [])])].map((n) => ({ value: n, label: n }))}
           emptyText="No factors for this site and category"
           onChange={(v) => setActivity((a) => ({ ...a, emission_category: v ?? "" }))}
+          error={tried ? errors.category : undefined}
         />
       )}
 
