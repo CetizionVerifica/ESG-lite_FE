@@ -1,0 +1,9 @@
+{
+  "name": "plan-progress",
+  "version": "0.1.0",
+  "description": "Live progress of the ESGLite redesign and PCF plan, read from the PRs merged into redesign/integration",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "CetizionVerifica"
+  }
+}
