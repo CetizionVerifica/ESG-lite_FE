@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { FileBarChart } from "lucide-react";
+import { Download, FileBarChart, FileSpreadsheet } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
 import {
@@ -18,8 +18,9 @@ import {
   previousReportPeriod,
   reportPeriodLabel,
   useFilterParams,
+  useToast,
 } from "../../ui";
-import { useAdminSites, useDebounced, useFyStartMonth, useReportDetails, useReportTables } from "./api";
+import { downloadWorkbook, useAdminSites, useBrandedPdf, useDebounced, useFyStartMonth, useReportDetails, useReportTables } from "./api";
 import { AboutPanel } from "./components/AboutPanel";
 import { FindingsTab } from "./components/FindingsTab";
 import { CategoryTable } from "./components/CategoryTable";
@@ -34,6 +35,8 @@ import {
   type SiteOption,
   categoryOptions,
   clientSites,
+  exportSheets,
+  fileStem,
   findings,
   locationRows,
   readPeriod,
@@ -132,9 +135,42 @@ export default function GhgReportPage() {
     );
   const setPeriod = (p: typeof period) => setParams((cur) => writePeriod(cur, p), { replace: true });
 
+  const { toast } = useToast();
+  const pdf = useBrandedPdf();
+  const stem = fileStem(reportPeriodLabel(period, fy));
+  const downloadPdf = () => {
+    toast({ title: "Generating the branded PDF", description: "This can take up to a minute; it downloads when ready." });
+    pdf.mutate(
+      { query, fileStem: stem },
+      {
+        onSuccess: () => toast({ title: "Branded PDF downloaded", tone: "good" }),
+        onError: (e) => toast({ title: "Couldn't create the PDF", description: serverMessage(e, "Please try again."), tone: "bad" }),
+      },
+    );
+  };
+  const exportTables = () => {
+    if (!data || !figures) return;
+    const sheets = exportSheets({
+      figures,
+      categories: topCategories(data, Number.POSITIVE_INFINITY),
+      locations,
+      details: details.data?.rows ?? null,
+      prevLabel,
+      selLabel,
+    });
+    downloadWorkbook(sheets, stem).catch(() => toast({ title: "Couldn't export the tables", description: "Please try again.", tone: "bad" }));
+  };
+  const ready = !!figures && !figures.empty && !tables.isFetching;
+
   const company = sites[0]?.company?.name;
-  const header = (context?: ReactNode) => (
-    <PageHeader title="GHG report" crumb={company ? [{ label: company }] : undefined} context={context} />
+  const header = (context?: ReactNode, actions = false) => (
+    <PageHeader
+      title="GHG report"
+      crumb={company ? [{ label: company }] : undefined}
+      context={context}
+      primaryAction={actions ? { label: "Download branded PDF", onClick: downloadPdf, loading: pdf.isPending, disabled: !ready, icon: <Download aria-hidden className="size-4" /> } : undefined}
+      secondaryActions={actions ? [{ label: "Export tables", onClick: exportTables, disabled: !ready, icon: <FileSpreadsheet aria-hidden className="size-4" /> }] : []}
+    />
   );
 
   if (isStaff && clientId === null)
@@ -212,6 +248,7 @@ export default function GhgReportPage() {
           now={now}
           loading={isStaff && adminSites.isPending}
         />,
+        true,
       )}
 
       <AboutPanel />

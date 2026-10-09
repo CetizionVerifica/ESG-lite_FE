@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { GhgDetailsRow, GhgReportTablesResponse, OverviewRow } from "../../services/ghgreportService";
 import {
   categoryOptions,
+  exportSheets,
+  fileStem,
+  pdfParams,
   findings,
   recommendedActions,
   scopeDetails,
@@ -254,5 +257,27 @@ describe("findings", () => {
       "Set a validated, science-based reduction target aligned to a 1.5 °C pathway.",
       "Begin capturing renewable-energy consumption to quantify avoided emissions.",
     ]);
+  });
+});
+
+describe("downloads", () => {
+  it("asks for the PDF with the same filters and no token", () => {
+    const params = pdfParams({ siteIds: [1, 2], categoryIds: [10], period: { yearType: "FY", year: 2025, frequency: "quarterly", quarter: 2 } });
+    expect(params).toEqual({ siteIds: "1,2", categoryIds: "10", yearType: "FY", year: "2025", frequency: "quarterly", quarter: "2", download: "1" });
+    expect(Object.keys(params)).not.toContain("token");
+  });
+
+  it("names files after the period", () => {
+    expect(fileStem("Q2 FY 2024-25 (Jul–Sep 2024)")).toBe("ghg-report-q2-fy-2024-25-jul-sep-2024");
+  });
+
+  it("exports each table as a sheet, details only once loaded", () => {
+    const f = reportFigures(data, sites);
+    const args = { figures: f, categories: topCategories(data), locations: locationRows(data, sites), prevLabel: "CY 2024", selLabel: "CY 2025" };
+    const sheets = exportSheets({ ...args, details: null });
+    expect(sheets.map((x) => x.name)).toEqual(["Table 1 by scope", "Top categories", "By location"]);
+    expect(sheets[0].rows[2]).toEqual(["Scope 2", 60, 60, 70, 70]);
+    expect(sheets[2].rows[1]).toEqual(["Hidd", 40, 30, 60, 50, 0, 0, 100, 80]);
+    expect(exportSheets({ ...args, details: [] }).map((x) => x.name)).toContain("Scope details");
   });
 });

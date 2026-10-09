@@ -267,3 +267,76 @@ export function recommendedActions(f: ReportFigures): string[] {
     f.renewable > 0 ? "" : "Begin capturing renewable-energy consumption to quantify avoided emissions.",
   ].filter(Boolean);
 }
+
+// ─── Downloads ──────────────────────────────────────────────────────────────
+
+/**
+ * Query for GET /reports/ghg. The token goes in the Authorization header
+ * (the api client adds it), never in the URL.
+ */
+export function pdfParams(q: ReportQuery): Record<string, string> {
+  const b = requestPayload(q);
+  return {
+    siteIds: b.siteIds.join(","),
+    ...(b.categoryIds ? { categoryIds: b.categoryIds.join(",") } : {}),
+    yearType: b.yearType,
+    year: String(b.year),
+    frequency: b.frequency ?? "yearly",
+    ...(b.month ? { month: String(b.month) } : {}),
+    ...(b.quarter ? { quarter: String(b.quarter) } : {}),
+    download: "1",
+  };
+}
+
+/** "ghg-report-q2-fy-2024-25" from a period label. */
+export function fileStem(label: string): string {
+  return `ghg-report-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+}
+
+type Cell = string | number;
+
+/** The on-screen tables as XLSX sheets, both periods side by side. */
+export function exportSheets(args: {
+  figures: ReportFigures;
+  categories: CategoryRow[];
+  locations: LocationRow[];
+  details: GhgDetailsRow[] | null;
+  prevLabel: string;
+  selLabel: string;
+}): { name: string; rows: Cell[][] }[] {
+  const { figures: f, categories, locations, details, prevLabel: p, selLabel: s } = args;
+  const sheets: { name: string; rows: Cell[][] }[] = [
+    {
+      name: "Table 1 by scope",
+      rows: [
+        ["Scope", `${p} tCO2e`, `${p} %`, `${s} tCO2e`, `${s} %`],
+        ...scopeTable(f).map((r) => [r.scope, r.previous, round(r.previousPct), r.selected, round(r.selectedPct)]),
+        ["Total", f.previous.total, f.previous.total > 0 ? 100 : 0, f.selected.total, f.selected.total > 0 ? 100 : 0],
+      ],
+    },
+    {
+      name: "Top categories",
+      rows: [["Category", "Scope", `${p} tCO2e`, `${s} tCO2e`], ...categories.map((r) => [r.category, r.scope, r.previous, r.selected])],
+    },
+    {
+      name: "By location",
+      rows: [
+        ["Site", ...SCOPES.flatMap((sc) => [`${sc} ${p}`, `${sc} ${s}`]), `Total ${p}`, `Total ${s}`],
+        ...locations.map((r) => [r.site, ...SCOPES.flatMap((sc) => [r.previous[sc], r.selected[sc]]), r.previous.total, r.selected.total]),
+      ],
+    },
+  ];
+  if (details)
+    sheets.push({
+      name: "Scope details",
+      rows: [
+        ["Scope", "Category", "Location", "Emission category", `${p} consumption`, `${p} unit`, `${p} tCO2e`, `${s} consumption`, `${s} unit`, `${s} tCO2e`],
+        ...SCOPES.flatMap((sc) =>
+          scopeDetails(details, sc).map((r) => [sc, r.categoryName, r.siteName, r.fuelType, r.compare.consumption, r.compare.unit, r.compare.emissions, r.selected.consumption, r.selected.unit, r.selected.emissions]),
+        ),
+      ],
+    });
+  return sheets;
+}
+
+const round = (n: number) => Math.round(n * 10) / 10;

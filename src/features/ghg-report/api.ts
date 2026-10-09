@@ -1,9 +1,10 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import api from "../../api/axios";
 import { getReportingCalendar } from "../../services/companyService";
 import { type GhgReportDetailsResponse, type GhgReportTablesResponse, getGhgReportDetails, getGhgReportTables } from "../../services/ghgreportService";
 import { getSites } from "../../services/siteService";
 import { DEFAULT_FY_START_MONTH } from "../../ui";
-import { type ReportQuery, type SiteOption, requestPayload } from "./logic";
+import { type ReportQuery, type SiteOption, pdfParams, requestPayload } from "./logic";
 
 export const keys = {
   all: ["ghg-report"] as const,
@@ -57,4 +58,48 @@ export function useReportDetails(q: ReportQuery | null, enabled: boolean) {
     enabled: enabled && !!q && q.siteIds.length > 0,
     placeholderData: keepPreviousData,
   });
+}
+
+function save(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** The branded PDF (client theme, logo, narrative), fetched with the auth header and saved. */
+export function useBrandedPdf() {
+  return useMutation({
+    mutationFn: async ({ query, fileStem }: { query: ReportQuery; fileStem: string }) => {
+      try {
+        const res = await api.get<Blob>("/reports/ghg", { params: pdfParams(query), responseType: "blob" });
+        save(res.data, `${fileStem}.pdf`);
+      } catch (e) {
+        throw await readBlobError(e);
+      }
+    },
+  });
+}
+
+/** Every on-screen table in one workbook, a sheet each. */
+export async function downloadWorkbook(sheets: { name: string; rows: (string | number)[][] }[], fileStem: string) {
+  const XLSX = await import("xlsx");
+  const book = XLSX.utils.book_new();
+  for (const s of sheets) XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(s.rows), s.name);
+  const out = XLSX.write(book, { bookType: "xlsx", type: "array" });
+  save(new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${fileStem}.xlsx`);
+}
+
+/** A blob request's error body is JSON in a Blob; read it so serverMessage can show it. */
+async function readBlobError(e: unknown): Promise<unknown> {
+  const res = (e as { response?: { data?: unknown } })?.response;
+  if (!res || !(res.data instanceof Blob)) return e;
+  try {
+    const body = JSON.parse(await res.data.text()) as { message?: string; error?: string };
+    return { response: { data: { message: body.message ?? body.error } } };
+  } catch {
+    return e;
+  }
 }
