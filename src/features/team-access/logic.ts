@@ -37,8 +37,7 @@ export function sharedCategories(user: ManagerUser): Map<number, string[]> {
   const where = new Map<number, string[]>();
   for (const site of user.sites)
     for (const c of site.categories) where.set(c.category_id, [...(where.get(c.category_id) ?? []), site.site_name]);
-  for (const [id, names] of where) if (names.length < 2) where.delete(id);
-  return where;
+  return new Map([...where].filter(([, names]) => names.length > 1));
 }
 
 /** Ids to send: enabled categories that are on one of the person's sites, ascending. */
