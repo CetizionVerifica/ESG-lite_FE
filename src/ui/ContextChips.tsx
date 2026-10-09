@@ -19,6 +19,11 @@ export type ContextChipsProps = {
   periodKinds?: PeriodKind[];
   /** Backend-owned FY start month (getReportingCalendar). */
   fyStartMonth?: number;
+  /**
+   * Lets the period be cleared to "Any period" (a queue spanning months).
+   * Without it an empty period shows the current one.
+   */
+  allowAnyPeriod?: boolean;
   /** Used when the URL has no value. Not written to the URL. */
   defaults?: ContextPatch;
   /** Disables the chips while their options load. */
@@ -59,11 +64,13 @@ function Chip({ icon, label, value, disabled, ...trigger }: {
   );
 }
 
-function PeriodEditor({ value, kinds, fyStartMonth, onApply }: {
+function PeriodEditor({ value, kinds, fyStartMonth, onApply, onAny }: {
   value: Period;
   kinds: PeriodKind[];
   fyStartMonth: number;
   onApply: (p: Period) => void;
+  /** Offered when the page allows "Any period". */
+  onAny?: () => void;
 }) {
   const [draft, setDraft] = useState<Period>(value);
   const switchKind = (kind: PeriodKind) => {
@@ -136,7 +143,12 @@ function PeriodEditor({ value, kinds, fyStartMonth, onApply }: {
           />
         </div>
       )}
-      <div className="flex justify-end">
+      <div className={cn("flex", onAny ? "justify-between" : "justify-end")}>
+        {onAny && (
+          <Button variant="ghost" size="sm" onClick={onAny}>
+            Any period
+          </Button>
+        )}
         <Button variant="primary" size="sm" disabled={invalid} onClick={() => onApply(draft)}>
           Apply
         </Button>
@@ -209,11 +221,13 @@ export function ContextChips({
   categories = [],
   periodKinds = ALL_KINDS,
   fyStartMonth = DEFAULT_FY_START_MONTH,
+  allowAnyPeriod,
   defaults,
   loading,
   className,
 }: ContextChipsProps) {
   const [ctx, update] = useContextParams(defaults);
+  const anyPeriod = !!allowAnyPeriod && ctx.period === null;
   const period = ctx.period ?? periodContaining(periodKinds[0] ?? "month", new Date(), fyStartMonth);
 
   const siteLabel =
@@ -230,7 +244,7 @@ export function ContextChips({
         if (kind === "period")
           return (
             <div key={kind} className="inline-flex items-center gap-0.5">
-              {period.kind !== "custom" && (
+              {period.kind !== "custom" && !anyPeriod && (
                 <button
                   type="button"
                   aria-label="Previous period"
@@ -244,7 +258,7 @@ export function ContextChips({
               <Popover
                 label="Choose period"
                 trigger={(t) => (
-                  <Chip {...t} disabled={loading} icon={<Calendar className="size-3.5" />} label="Period" value={periodLabel(period, fyStartMonth)} />
+                  <Chip {...t} disabled={loading} icon={<Calendar className="size-3.5" />} label="Period" value={anyPeriod ? "Any period" : periodLabel(period, fyStartMonth)} />
                 )}
               >
                 {(close) => (
@@ -256,10 +270,18 @@ export function ContextChips({
                       update({ period: p });
                       close();
                     }}
+                    onAny={
+                      allowAnyPeriod
+                        ? () => {
+                            update({ period: null });
+                            close();
+                          }
+                        : undefined
+                    }
                   />
                 )}
               </Popover>
-              {period.kind !== "custom" && (
+              {period.kind !== "custom" && !anyPeriod && (
                 <button
                   type="button"
                   aria-label="Next period"

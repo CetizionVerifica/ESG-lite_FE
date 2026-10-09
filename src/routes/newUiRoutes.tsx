@@ -30,7 +30,6 @@ const Legacy = {
   UserEmissions: lazy(() => import("../pages/UserEmissionsPage")),
   ProductionData: lazy(() => import("../pages/ProductionDataPage")),
   ManagerDashboard: lazy(() => import("../pages/ManagerDashboard/ManagerDashboard")),
-  Manager: lazy(() => import("../pages/ManagerPage")),
   ManagerProductionData: lazy(() => import("../pages/ManagerProductionDataPage")),
   ManagerUsers: lazy(() => import("../pages/ManagerUsers")),
   GhgReport: lazy(() => import("../pages/GhgReport/GhgReport")),
@@ -59,6 +58,7 @@ const Legacy = {
 // Redesigned pages, loaded on demand.
 const BrandThemesPage = lazy(() => import("../features/brand-themes/Page"));
 const BrandViewPage = lazy(() => import("../features/brand-themes/Page").then((m) => ({ default: m.BrandViewPage })));
+const EmissionsPage = lazy(() => import("../features/approvals-ledger/Page"));
 
 const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(id)} />;
 
@@ -68,8 +68,9 @@ const pages: Record<ShellRouteId, ReactNode> = {
   "my-entries": <Legacy.UserEmissions />,
   production: <Legacy.ProductionData />,
   overview: <Legacy.ManagerDashboard />,
-  approvals: <Legacy.Manager />,
-  ledger: <Legacy.Manager />,
+  // Keyed so switching tabs remounts: each tab starts from its own defaults.
+  approvals: <EmissionsPage key="approvals" tab="approvals" />,
+  ledger: <EmissionsPage key="ledger" tab="ledger" />,
   "production-review": <Legacy.ManagerProductionData />,
   team: <Legacy.ManagerUsers />,
   "ghg-report": <Legacy.GhgReport />,
