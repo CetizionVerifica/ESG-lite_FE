@@ -173,6 +173,24 @@ describe("primitives", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
+  it("Tooltip keeps the child's own key handlers (Menu trigger still opens on ArrowDown)", async () => {
+    const user = userEvent.setup();
+    render(
+      <Menu
+        label="Row actions"
+        items={[{ label: "Edit", onSelect: () => {} }]}
+        trigger={(t) => (
+          <Tooltip content="More actions">
+            <button {...t}>More</button>
+          </Tooltip>
+        )}
+      />,
+    );
+    await user.tab();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menu")).toBeTruthy();
+  });
+
   it("Avatar falls back to initials", () => {
     expect(initials("Fatima Al-Sayed")).toBe("FS");
     expect(initials("ops@midal.com")).toBe("OC");
