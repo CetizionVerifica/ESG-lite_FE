@@ -17,6 +17,19 @@ export const getBrand = async (companyId: number): Promise<Brand> => {
   return res.data;
 };
 
+// Brand kit of the signed-in user's own company (any role; ESG-lite B1).
+// Returns defaults when the company has no brand row; 404 for Superadmin.
+export interface MyBrand extends Omit<Brand, "logoPublicId"> {
+  logoOnDarkUrl: string | null;
+  defaultLook: "classic" | "light" | "night";
+  scope3Colour: string | null;
+}
+
+export const getMyBrand = async (): Promise<MyBrand> => {
+  const res = await api.get("/brands/mine");
+  return res.data;
+};
+
 // Upsert name + colors (hex validated server-side).
 export const saveBrand = async (
   companyId: number,

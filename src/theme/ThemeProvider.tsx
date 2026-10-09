@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "reac
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../context/AuthContext";
-import { getBrand } from "../services/brandService";
+import { getMyBrand } from "../services/brandService";
 import { buildTheme, resolveLook, statusClashes, toCssVars } from "./buildTheme";
 import type { Appearance } from "./packs";
 import {
@@ -42,18 +42,18 @@ function useSystemDark(): boolean {
 
 /**
  * Resolves pack × look × appearance and applies the --t-* tokens to <html>.
- * Client users get their company's brand (GET /brands/:companyId) after
- * login; Superadmin, signed-out screens and companies whose brand can't be
+ * Client users get their own company's brand (GET /brands/mine, ESG-lite B1)
+ * after login; Superadmin, signed-out screens and companies whose brand can't be
  * loaded get PlanetPulse. Must sit inside AuthProvider and QueryClientProvider.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const { role, user } = useAuth();
-  const companyId = companyIdFromUser(user);
-  const loadBrand = shouldLoadBrand(role, companyId);
+  const { role, user, isAuthenticated } = useAuth();
+  const loadBrand = shouldLoadBrand(role, isAuthenticated);
 
   const brandQuery = useQuery({
-    queryKey: ["brand", companyId],
-    queryFn: () => getBrand(companyId as number),
+    // Keyed by company so switching accounts never shows the previous brand.
+    queryKey: ["brand", "mine", companyIdFromUser(user), role],
+    queryFn: getMyBrand,
     enabled: loadBrand,
     staleTime: Infinity,
     retry: false,

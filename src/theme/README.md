@@ -32,8 +32,8 @@ The only place in new code where raw colour values may appear. Everything else r
 
 ## Provider
 
-- `ThemeProvider` (in `src/main.tsx`, inside `AuthProvider` and the Query provider) fetches `getBrand(companyId)` for
-  client users after login. Superadmin, signed-out screens, and any failure to load the brand use PlanetPulse.
+- `ThemeProvider` (in `src/main.tsx`, inside `AuthProvider` and the Query provider) fetches `getMyBrand()` (`GET /brands/mine`, ESG-lite B1)
+  for client users after login. Superadmin, signed-out screens, and any failure to load the brand use PlanetPulse.
 - Appearance (`light | dark | system`) is stored in `localStorage.appearance`; the legacy `theme` key is migrated once.
   A dark appearance always renders the Night look.
 - `<html>` carries every `--t-*` value inline plus `data-pack`, `data-look`, and the legacy `dark` class.

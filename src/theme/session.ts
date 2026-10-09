@@ -33,9 +33,9 @@ export function companyIdFromUser(user: SessionUser | null | undefined): number 
   return null;
 }
 
-/** Whether to fetch a brand at all: Superadmin (PlanetPulse staff) never does. */
-export function shouldLoadBrand(role: string | null, companyId: number | null): companyId is number {
-  return role !== SUPERADMIN && companyId !== null;
+/** Whether to fetch a brand at all: only signed-in client users; Superadmin (PlanetPulse staff) never does. */
+export function shouldLoadBrand(role: string | null, signedIn: boolean): boolean {
+  return signedIn && !!role && role !== SUPERADMIN;
 }
 
 /** PlanetPulse unless the user is a client user and their brand loaded. */
