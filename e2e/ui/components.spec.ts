@@ -1,12 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// Midal Classic joins once F1's buildTheme can apply a client pack to the demo.
-const THEMES = ["light", "dark"] as const;
-const SECTIONS = ["page-header", "data-table", "format", "button", "status-pill", "fields", "empty-state", "skeleton"];
+// PlanetPulse light, PlanetPulse dark and Midal Classic (F1 buildTheme).
+const THEMES = ["light", "dark", "classic"] as const;
+const SECTIONS = ["page-header", "filter-bar", "data-table", "kpi-strip", "chart-frame", "callout", "primitives", "format", "button", "status-pill", "fields", "empty-state", "skeleton"];
 
 async function openGallery(page: Page, theme: string) {
   await page.goto(`/__ui?theme=${theme}`);
-  await page.waitForSelector("[data-demo=fields]");
+  await page.waitForSelector("[data-demo=chart-frame] canvas");
   await page.evaluate(() => document.fonts.ready);
 }
 

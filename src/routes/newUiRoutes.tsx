@@ -15,15 +15,6 @@ import { LEGACY_REDIRECTS, SHELL_ROUTES, type ShellRouteId, getShellRoute } from
 import ProtectedRoute from "./ProtectedRoute";
 
 /**
- * Dev-only routes. Vite drops this branch from production builds.
- * /__ui is the src/ui component gallery (docs: src/ui/CLAUDE.md). It sits
- * outside AppShell and the route guard so the gallery renders on its own.
- */
-const devRoutes: RouteObject[] = import.meta.env.DEV
-  ? [{ path: "/__ui", lazy: async () => ({ Component: (await import("../ui/demo/UiDemoPage")).default }) }]
-  : [];
-
-/**
  * Routes for the redesigned app. Mounted in front of the legacy routes only
  * when VITE_NEW_UI is on (see withNewUiRoutes in src/lib/featureFlags.ts).
  *
@@ -118,7 +109,6 @@ const shellRoutes: RouteObject[] = SHELL_ROUTES.flatMap((route) => {
 });
 
 const newUiRoutes: RouteObject[] = [
-  ...devRoutes,
   { path: "/", element: <RootRedirect /> },
   {
     element: (

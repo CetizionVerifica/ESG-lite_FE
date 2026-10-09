@@ -18,7 +18,6 @@ export default defineConfig({
   webServer: {
     command: `npx vite --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}/__ui`,
-    env: { VITE_NEW_UI: "1" },
     reuseExistingServer: !process.env.CI,
   },
 });
