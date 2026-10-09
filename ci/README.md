@@ -14,6 +14,7 @@ API URL, and no step calls a backend.
 | Lint ratchet | any file has more ESLint problems than on the base branch, or a new file has any |
 | Unit tests | `npm test` (once that script exists) fails |
 | Build | `npm run build` fails |
+| Playwright smoke tests | `npm run test:e2e` fails (runs once `playwright.config.ts` exists) |
 
 A new delete in the UI is fine when the user confirms first and sees what
 will be deleted. Say so in the marker comment, for example
