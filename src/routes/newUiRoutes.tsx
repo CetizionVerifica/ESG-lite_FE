@@ -1,17 +1,139 @@
-import type { RouteObject } from "react-router-dom";
+import { type ReactNode, lazy } from "react";
+import { Outlet, type RouteObject } from "react-router-dom";
+import ClientContextProvider from "../lib/ClientContextProvider";
+import AppShell, { type ShellHandle } from "../features/shell/AppShell";
+import {
+  LegacyRedirectRoute,
+  NotFoundPage,
+  PageErrorPage,
+  PlaceholderPage,
+  QueryTabSwitch,
+  RoleGuard,
+  RootRedirect,
+} from "../features/shell/pages";
+import { LEGACY_REDIRECTS, SHELL_ROUTES, type ShellRouteId, getShellRoute } from "../features/shell/routeMap";
+import ProtectedRoute from "./ProtectedRoute";
 
 /**
  * Dev-only routes. Vite drops this branch from production builds.
- * /__ui is the src/ui component gallery (docs: src/ui/CLAUDE.md).
+ * /__ui is the src/ui component gallery (docs: src/ui/CLAUDE.md). It sits
+ * outside AppShell and the route guard so the gallery renders on its own.
  */
 const devRoutes: RouteObject[] = import.meta.env.DEV
   ? [{ path: "/__ui", lazy: async () => ({ Component: (await import("../ui/demo/UiDemoPage")).default }) }]
   : [];
 
 /**
- * Routes for redesigned pages (src/features/<module>/). Mounted only when
- * VITE_NEW_UI is on; see withNewUiRoutes in src/lib/featureFlags.ts.
+ * Routes for the redesigned app. Mounted in front of the legacy routes only
+ * when VITE_NEW_UI is on (see withNewUiRoutes in src/lib/featureFlags.ts).
+ *
+ * Until a page's redesign lands, its new path shows today's page inside the
+ * new shell, so the flagged app stays usable. A page PR swaps its entry in
+ * `pages` below for its src/features/<module>/Page.tsx.
  */
-const newUiRoutes: RouteObject[] = [...devRoutes];
+
+// Today's pages, loaded on demand so they stay out of the shell's bundle.
+const Legacy = {
+  UserDataEntry: lazy(() => import("../pages/UserDataEntryPage")),
+  UserEmissions: lazy(() => import("../pages/UserEmissionsPage")),
+  ProductionData: lazy(() => import("../pages/ProductionDataPage")),
+  ManagerDashboard: lazy(() => import("../pages/ManagerDashboard/ManagerDashboard")),
+  Manager: lazy(() => import("../pages/ManagerPage")),
+  ManagerProductionData: lazy(() => import("../pages/ManagerProductionDataPage")),
+  ManagerUsers: lazy(() => import("../pages/ManagerUsers")),
+  GhgReport: lazy(() => import("../pages/GhgReport/GhgReport")),
+  EdeReports: lazy(() => import("../pages/Reports/EdePreports")),
+  Sbti: lazy(() => import("../pages/sbti/SbtiMain")),
+  Notifications: lazy(() => import("../pages/NotificationsPage")),
+  Settings: lazy(() => import("../pages/SettingsPage")),
+  CompanyAdminUsers: lazy(() => import("../pages/CompanyAdmin/CompanyAdminUsersPage")),
+  SuperAdmin: lazy(() => import("../pages/SuperAdminPage")),
+  Companies: lazy(() => import("../pages/CompanyPage")),
+  CompanyOnboarding: lazy(() => import("../pages/CompanyOnboardingPage")),
+  BrandSettings: lazy(() => import("../pages/BrandSettings/BrandSettings")),
+  Sites: lazy(() => import("../pages/SitePage")),
+  Users: lazy(() => import("../pages/UserPage")),
+  Countries: lazy(() => import("../pages/CountryPage")),
+  Categories: lazy(() => import("../pages/CategoryPage")),
+  Units: lazy(() => import("../pages/UnitsPage")),
+  Products: lazy(() => import("../pages/ProductPage")),
+  EmissionFactors: lazy(() => import("../pages/EmissionFactorPage")),
+  CategoryMappings: lazy(() => import("../pages/CategoryMappingPage")),
+  Thresholds: lazy(() => import("../pages/ThresholdValuePage")),
+  Columns: lazy(() => import("../pages/ColumnPage")),
+  ColumnConfig: lazy(() => import("../pages/ColumnConfig")),
+  Upload: lazy(() => import("../pages/UploadPage")),
+};
+
+const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(id)} />;
+
+const pages: Record<ShellRouteId, ReactNode> = {
+  "my-month": placeholder("my-month"),
+  "add-data": <Legacy.UserDataEntry />,
+  "my-entries": <Legacy.UserEmissions />,
+  production: <Legacy.ProductionData />,
+  overview: <Legacy.ManagerDashboard />,
+  approvals: <Legacy.Manager />,
+  ledger: <Legacy.Manager />,
+  "production-review": <Legacy.ManagerProductionData />,
+  team: <Legacy.ManagerUsers />,
+  "ghg-report": <Legacy.GhgReport />,
+  "ede-report": <Legacy.EdeReports />,
+  targets: <Legacy.Sbti />,
+  pcf: placeholder("pcf"),
+  notifications: <Legacy.Notifications />,
+  settings: <Legacy.Settings />,
+  "company-users": <Legacy.CompanyAdminUsers />,
+  console: <Legacy.SuperAdmin />,
+  clients: <Legacy.Companies />,
+  "client-new": <Legacy.CompanyOnboarding />,
+  "client-detail": placeholder("client-detail"),
+  "brand-themes": <Legacy.BrandSettings />,
+  sites: <Legacy.Sites />,
+  "users-global": <Legacy.Users />,
+  "reference-data": (
+    <QueryTabSwitch
+      param="tab"
+      fallback="countries"
+      views={{ countries: <Legacy.Countries />, categories: <Legacy.Categories />, units: <Legacy.Units /> }}
+    />
+  ),
+  products: <Legacy.Products />,
+  "emission-factors": <Legacy.EmissionFactors />,
+  "category-mappings": <Legacy.CategoryMappings />,
+  thresholds: <Legacy.Thresholds />,
+  "capture-columns": <Legacy.Columns />,
+  "capture-forms": <Legacy.ColumnConfig />,
+  "capture-form": placeholder("capture-form"),
+  "bulk-upload": <Legacy.Upload />,
+};
+
+const shellRoutes: RouteObject[] = SHELL_ROUTES.flatMap((route) => {
+  const element = <RoleGuard route={route}>{pages[route.id]}</RoleGuard>;
+  const handle: ShellHandle = { shellRoute: route };
+  // "/products/*" must also claim "/products" itself: an exact legacy path
+  // outranks a splat in React Router.
+  const paths = route.path.endsWith("/*") ? [route.path.slice(0, -2), route.path] : [route.path];
+  return paths.map((path) => ({ path, element, handle, errorElement: <PageErrorPage /> }));
+});
+
+const newUiRoutes: RouteObject[] = [
+  ...devRoutes,
+  { path: "/", element: <RootRedirect /> },
+  {
+    element: (
+      <ClientContextProvider>
+        <Outlet />
+      </ClientContextProvider>
+    ),
+    children: [
+      ...LEGACY_REDIRECTS.map((redirect) => ({ path: redirect.from, element: <LegacyRedirectRoute redirect={redirect} /> })),
+      {
+        element: <ProtectedRoute />,
+        children: [{ element: <AppShell />, children: [...shellRoutes, { path: "*", element: <NotFoundPage /> }] }],
+      },
+    ],
+  },
+];
 
 export default newUiRoutes;

@@ -1,0 +1,63 @@
+/*
+ * STAND-IN for src/theme/tokens.css (F1, "Theme tokens foundation" thread).
+ * PlanetPulse defaults for the --t-* tokens the shell uses, so it renders
+ * before F1 lands. Lives in a cascade layer, so F1's unlayered :root rules
+ * and inline vars always win. Delete this file once F1 is merged.
+ */
+@layer shell-standin {
+  :root {
+    --t-page: #f5f7fa;
+    --t-panel: #ffffff;
+    --t-ink: #142235;
+    --t-muted: #5a6b80;
+    --t-line: #dbe2ea;
+    --t-tint: #edf3fa;
+    --t-brand: #2572c0;
+    --t-on-brand: #ffffff;
+    --t-brand-text: #1d5c9c;
+    --t-accent: #2572c0;
+    --t-on-accent: #ffffff;
+    --t-chrome: #133a63;
+    --t-chrome-fg: #ffffff;
+    --t-chrome-muted: #b9cbe0;
+    --t-chrome-line: #2a4f78;
+    --t-chrome-active: #1d4f84;
+    --t-bad: #b4321f;
+    --t-bad-soft: #fbe9e6;
+    --t-good: #16794c;
+    --t-good-soft: #e5f4ec;
+    --t-warn: #9a6300;
+    --t-warn-soft: #fbf0dc;
+    --t-info: #1d5c9c;
+    --t-info-soft: #e6eef8;
+    --r-sm: 4px;
+    --r-md: 8px;
+    --r-lg: 14px;
+  }
+  :root.dark {
+    --t-page: #0d131a;
+    --t-panel: #141c26;
+    --t-ink: #e5ecf4;
+    --t-muted: #95a5b8;
+    --t-line: #263343;
+    --t-tint: #1a2533;
+    --t-brand: #6ea6e3;
+    --t-on-brand: #0d131a;
+    --t-brand-text: #8ab8ea;
+    --t-accent: #6ea6e3;
+    --t-on-accent: #0d131a;
+    --t-chrome: #0a1017;
+    --t-chrome-fg: #e5ecf4;
+    --t-chrome-muted: #95a5b8;
+    --t-chrome-line: #223041;
+    --t-chrome-active: #1a2533;
+    --t-bad: #f38b7a;
+    --t-bad-soft: #3a1d19;
+    --t-good: #4ccf8f;
+    --t-good-soft: #15301f;
+    --t-warn: #f0b955;
+    --t-warn-soft: #33270f;
+    --t-info: #8ab8ea;
+    --t-info-soft: #172638;
+  }
+}
