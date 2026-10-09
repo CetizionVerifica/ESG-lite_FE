@@ -59,6 +59,16 @@ async function signIn(page: Page, requests: URLSearchParams[] = [], saved: { url
         saved.push({ url: url.pathname, body: route.request().postDataJSON() });
         return json({ message: "Emission updated" });
       }
+      if (url.pathname.endsWith("/user/emissions/breakdown")) {
+        return json({
+          category_id: 1,
+          entries: 3,
+          groups: [
+            { emission_category: "Diesel", entries: 2, total_emission: 5.36, consumption: 2000, unit: "litre" },
+            { emission_category: "Petrol", entries: 1, total_emission: 2.3, consumption: 1000, unit: "litre" },
+          ],
+        });
+      }
       if (url.pathname.endsWith("/user/emissions")) {
         requests.push(url.searchParams);
         const status = url.searchParams.get("status");
@@ -165,4 +175,21 @@ test("a My month link filters by site, category and month; a row opens its drawe
   await expect(drawer.getByText("No documents attached.")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(drawer).toHaveCount(0);
+});
+
+test("the breakdown panel shows consumption and emissions by type for the chosen category", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/mine");
+  await page.getByRole("button", { name: "Breakdown" }).click();
+  const panel = page.getByRole("complementary", { name: "Breakdown" });
+  await expect(panel.getByText("Choose a category to see its breakdown.")).toBeVisible();
+
+  await page.goto("/data/mine?category=1");
+  await page.getByRole("button", { name: "Breakdown" }).click();
+  await expect(panel.getByRole("row", { name: /Diesel/ })).toContainText("2,000");
+  await expect(panel.getByRole("row", { name: /Diesel/ })).toContainText("67%");
+  await panel.getByRole("radio", { name: "Emissions" }).click();
+  await expect(panel.getByRole("row", { name: /Petrol/ })).toContainText("2.3");
+  await panel.getByRole("button", { name: "Close breakdown" }).click();
+  await expect(panel).toHaveCount(0);
 });

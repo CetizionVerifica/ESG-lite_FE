@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Paperclip, Plus } from "lucide-react";
+import { ChartBar, Paperclip, Plus } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { getDocumentsByEmission } from "../../services/documentService";
 import {
@@ -33,7 +33,8 @@ import {
   writeContext,
   writeFilterParams,
 } from "../../ui";
-import { useEntries } from "./api";
+import { useBreakdown, useEntries } from "./api";
+import { BreakdownPanel } from "./components/BreakdownPanel";
 import { EntryDrawer } from "./components/EntryDrawer";
 import {
   type EntryRow,
@@ -99,6 +100,10 @@ export default function MyEntriesPage() {
   const overall = useEntries({ ...queryShape, status: null, sort: null, page: 1, pageSize: 1 }, status !== null);
   const kpiSource = status === null ? query : overall;
   const summary = kpiSource.data?.summary;
+
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const breakdown = useBreakdown({ siteIds, categoryId, status, ...serverPeriod(period), search: filters.q }, showBreakdown);
+  const categoryName = categories.find((c) => c.category_id === categoryId)?.category_name ?? null;
 
   const [open, setOpen] = useState<EntryRow | null>(null);
   const [viewer, setViewer] = useState<{ file: ViewerFile; files: ViewerFile[] } | null>(null);
@@ -228,6 +233,9 @@ export default function MyEntriesPage() {
           />
         }
         primaryAction={{ label: "Add data", onClick: addData, icon: <Plus aria-hidden className="size-4" /> }}
+        secondaryActions={[
+          { label: showBreakdown ? "Hide breakdown" : "Breakdown", onClick: () => setShowBreakdown((v) => !v), icon: <ChartBar aria-hidden className="size-4" /> },
+        ]}
       />
 
       <KpiStrip
@@ -244,29 +252,45 @@ export default function MyEntriesPage() {
         ]}
       />
 
-      <DataTable<EntryRow>
-        label="My entries"
-        rows={rows}
-        columns={columns}
-        getRowId={(r) => r.pk_id}
-        rowLabel={(r) => `${r.category?.category_name ?? "Entry"} ${periodText(r)}`}
-        loading={query.isPending}
-        error={query.isError ? serverMessage(query.error) : null}
-        onRetry={() => void query.refetch()}
-        sort={sort}
-        onSortChange={setSort}
-        pagination={{ mode: "server", page, pageSize: PAGE_SIZE, total: query.data?.total ?? 0, onPageChange: (p) => setPaging({ key: shapeKey, page: p }) }}
-        onRowClick={setOpen}
-        storageKey="my-entries"
-        toolbar={<FilterBar filters={filterDefs} value={filters} onChange={setFilters} searchPlaceholder="Search entries" />}
-        empty={
-          filtersActive ? (
-            <EmptyState title="No entries match these filters." action={<Button onClick={clearAll}>Clear filters</Button>} />
-          ) : (
-            <EmptyState title="Nothing submitted yet." description="Entries you add show up here with their status." action={<Button variant="primary" onClick={addData}>Add data</Button>} />
-          )
-        }
-      />
+      <div className={cn("grid items-start gap-5", showBreakdown && "lg:grid-cols-[minmax(0,1fr)_20rem]")}>
+        {showBreakdown && (
+          <div className="lg:col-start-2 lg:row-start-1">
+            <BreakdownPanel
+              categoryName={categoryName}
+              data={breakdown.data}
+              loading={breakdown.isPending && breakdown.fetchStatus !== "idle"}
+              error={breakdown.isError}
+              onRetry={() => void breakdown.refetch()}
+              onClose={() => setShowBreakdown(false)}
+            />
+          </div>
+        )}
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <DataTable<EntryRow>
+            label="My entries"
+            rows={rows}
+            columns={columns}
+            getRowId={(r) => r.pk_id}
+            rowLabel={(r) => `${r.category?.category_name ?? "Entry"} ${periodText(r)}`}
+            loading={query.isPending}
+            error={query.isError ? serverMessage(query.error) : null}
+            onRetry={() => void query.refetch()}
+            sort={sort}
+            onSortChange={setSort}
+            pagination={{ mode: "server", page, pageSize: PAGE_SIZE, total: query.data?.total ?? 0, onPageChange: (p) => setPaging({ key: shapeKey, page: p }) }}
+            onRowClick={setOpen}
+            storageKey="my-entries"
+            toolbar={<FilterBar filters={filterDefs} value={filters} onChange={setFilters} searchPlaceholder="Search entries" />}
+            empty={
+              filtersActive ? (
+                <EmptyState title="No entries match these filters." action={<Button onClick={clearAll}>Clear filters</Button>} />
+              ) : (
+                <EmptyState title="Nothing submitted yet." description="Entries you add show up here with their status." action={<Button variant="primary" onClick={addData}>Add data</Button>} />
+              )
+            }
+          />
+        </div>
+      </div>
 
       <EntryDrawer entry={open} onClose={() => setOpen(null)} />
       <DocumentViewer

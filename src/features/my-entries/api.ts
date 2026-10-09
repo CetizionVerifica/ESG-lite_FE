@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { type EmissionStatus, type PaginatedEmissions, getEmissionsPaginated, updateEmission } from "../../services/emissionService";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { getDocumentsByEmission } from "../../services/documentService";
+import { getEmissionBreakdown } from "../../services/emissionBreakdownService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
 import type { ColumnConfig, EmissionFactor } from "../../lib/emissions";
@@ -90,5 +91,15 @@ export function useUpdateEntry() {
       void client.invalidateQueries({ queryKey: ["my-entries"] });
       void client.invalidateQueries({ queryKey: ["audit-logs", "emission", id] });
     },
+  });
+}
+
+/** Consumption and tCO₂e per emission category for one category, from the server. */
+export function useBreakdown(q: Omit<EntriesQuery, "sort" | "page" | "pageSize" | "categoryId"> & { categoryId: number | null }, enabled: boolean) {
+  return useQuery({
+    queryKey: ["my-entries", "breakdown", q],
+    queryFn: () => getEmissionBreakdown({ ...q, categoryId: q.categoryId as number }),
+    enabled: enabled && q.categoryId !== null,
+    placeholderData: keepPreviousData,
   });
 }
