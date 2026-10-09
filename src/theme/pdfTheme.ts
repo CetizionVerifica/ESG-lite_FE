@@ -1,4 +1,4 @@
-import { buildTheme } from "./buildTheme";
+import { buildTheme, textOnGradient } from "./buildTheme";
 import { PLANETPULSE, packFromBrand } from "./packs";
 import type { BrandLike, ThemePack } from "./packs";
 
@@ -36,7 +36,12 @@ export function pdfTheme(brand: BrandLike | ThemePack | null | undefined) {
       info: t.info,
       infoSoft: t["info-soft"],
     },
-    cover: { from: t["cover-from"], to: t["cover-to"], text: "#ffffff" },
+    cover: {
+      from: t["cover-from"],
+      to: t["cover-to"],
+      /** White on dark covers, ink on light ones (e.g. a pale amber brand). */
+      text: textOnGradient(t["cover-from"], t["cover-to"], t.ink),
+    },
     /** Built-in PDF fonts; register IBM Plex with Font.register() to change them. */
     fonts: { ui: "Helvetica", num: "Courier" },
   };

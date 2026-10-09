@@ -19,6 +19,11 @@ describe("chartTheme", () => {
     expect(theme.scopes).toEqual({ s1: t.s1, s2: t.s2, s3: t.s3 });
   });
 
+  it("rounds bars with ECharts 5+'s borderRadius", () => {
+    const { bar } = chartTheme(buildTheme(PLANETPULSE, "light", "light"));
+    expect(bar.itemStyle).toEqual({ borderRadius: 2 });
+  });
+
   it("differs between looks so charts re-theme on a switch", () => {
     const light = chartTheme(buildTheme(STORED_BRANDS[1], "light", "light"));
     const night = chartTheme(buildTheme(STORED_BRANDS[1], "night", "dark"));
@@ -40,6 +45,26 @@ describe("pdfTheme", () => {
     expect(pdfTheme({ companyId: 3, name: "Glochem Industries", primary: "#7a1f2b", accent: "#b03a4a" }).name)
       .toBe("Glochem Industries");
     expect(pdfTheme(null).colors.brand).toBe(PLANETPULSE.primary);
+  });
+
+  it("prints ink, not white, on a light amber cover", () => {
+    const pdf = pdfTheme({
+      companyId: 9, name: "Amber Co", primary: "#f5b301", accent: "#fcd34d",
+      coverFrom: "#fde68a", coverTo: "#fbbf24",
+    });
+    expect(pdf.cover.text).toBe(pdf.colors.ink);
+    for (const bg of [pdf.cover.from, pdf.cover.to]) {
+      expect(contrast(pdf.cover.text, bg)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("keeps white cover text on every stored brand's dark gradient", () => {
+    for (const pack of Object.values(STORED_BRANDS)) {
+      const { cover, colors } = pdfTheme(pack);
+      expect(cover.text).toBe("#ffffff");
+      // Teal (company 6) is under 4.5:1 at its light end, but white still reads better than ink.
+      expect(contrast(cover.text, cover.to)).toBeGreaterThan(contrast(colors.ink, cover.to));
+    }
   });
 
   it("keeps printed text readable on paper for every stored brand", () => {

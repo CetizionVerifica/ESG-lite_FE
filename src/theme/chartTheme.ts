@@ -56,7 +56,7 @@ export function chartTheme(t: ThemeTokens) {
     timeAxis: { ...axis, splitLine: { show: false } },
     logAxis: { ...axis, axisLine: { show: false } },
     line: { symbol: "circle", symbolSize: 5, lineStyle: { width: 2 } },
-    bar: { itemStyle: { barBorderRadius: 2 } },
+    bar: { itemStyle: { borderRadius: 2 } },
     pie: { itemStyle: { borderColor: t.panel, borderWidth: 1 } },
     markLine: { lineStyle: { color: t.muted } },
     dataZoom: {
