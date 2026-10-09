@@ -27,3 +27,8 @@ dist-ssr
 # Playwright
 test-results/
 playwright-report/
+
+# CI
+.ci-base/
+eslint-base.json
+eslint-head.json
