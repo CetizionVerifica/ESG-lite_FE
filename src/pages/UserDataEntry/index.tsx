@@ -38,6 +38,7 @@ import {
   type CategoryMapping,
 } from "../../services/categoryMappingService";
 import { useEmissionCalculation, resolveSpecMethod, specNumericColumns } from "./useEmissionCalculation";
+import { factorYearForDate, yearlyPeriodEndDate } from "../../features/add-data/hooks/reportingPeriod";
 import {
   UnitSelector,
   ValidationError,
@@ -268,9 +269,7 @@ const UserDataEntryPage = () => {
   // Derived Data
   // ---------------------------------------------------------------------------
   // Calculate target year for emission factors (reporting year - 1)
-  const targetYear = selectedDate
-    ? parseInt(selectedDate.substring(0, 4)) - 1
-    : undefined;
+  const targetYear = factorYearForDate(selectedDate);
 
   // Compute select column names (columns that are dropdowns, not numeric activity data)
   const selectColumnNames = useMemo(() => {
@@ -440,7 +439,7 @@ const UserDataEntryPage = () => {
       return;
     }
     setSelectedDate(
-      yearType === "CY" ? `${yearlyYear}-12-31` : `${yearlyYear + 1}-03-31`,
+      yearlyPeriodEndDate(yearType, yearlyYear),
     );
   }, [periodMode, yearType, yearlyYear]);
 

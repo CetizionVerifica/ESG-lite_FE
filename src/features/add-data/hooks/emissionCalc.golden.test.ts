@@ -1,37 +1,27 @@
-// @vitest-environment jsdom
 /**
  * Golden snapshots of the Add data emission calculation.
  *
  * These pin what the legacy page (pages/UserDataEntry) computes TODAY for a
  * set of site × category contexts, so moving the logic can be proven to
  * change nothing: the snapshot file was written against the old hook and must
- * stay byte-identical. A deliberate calculation change updates it with
+ * stay byte-identical (it was written against the old hook before the move). A deliberate calculation change updates it with
  * `npx vitest run -u` and lists the moved figures in the PR.
  */
 import { describe, expect, it } from "vitest";
-import { renderHook } from "@testing-library/react";
-import { useEmissionCalculation } from "../../../pages/UserDataEntry/useEmissionCalculation";
-import type {
-  CalculationSpec,
-  ColumnEntity,
-  EmissionCategoryMapping,
-  EmissionFactor,
-  ModalRow,
-} from "../../../pages/UserDataEntry/types";
+import { createEmissionCalculator } from "./emissionCalc";
+import { factorYearForDate, yearlyPeriodEndDate } from "./reportingPeriod";
+import type { CalculationSpec, ColumnEntity, EmissionCategoryMapping, EmissionFactor, ModalRow } from "../types";
 
 // ---------------------------------------------------------------------------
-// Period → factor year, exactly as pages/UserDataEntry/index.tsx does it:
-// yearly mode stores the period-end date (Dec 31 for CY, Mar 31 of the next
-// year for FY, the year being the FY start year) and the factor year is the
-// reporting date's year minus one.
+// Period → factor year (reportingPeriod.ts): yearly mode stores the
+// period-end date and the factor year is the reporting year minus one.
 // ---------------------------------------------------------------------------
 type Period =
   | { mode: "monthly"; date: string }
   | { mode: "yearly"; yearType: "CY" | "FY"; year: number };
 
-const periodDate = (p: Period): string =>
-  p.mode === "monthly" ? p.date : p.yearType === "CY" ? `${p.year}-12-31` : `${p.year + 1}-03-31`;
-const factorYear = (date: string): number => parseInt(date.substring(0, 4)) - 1;
+const periodDate = (p: Period): string => (p.mode === "monthly" ? p.date : yearlyPeriodEndDate(p.yearType, p.year));
+const factorYear = (date: string): number => factorYearForDate(date) as number;
 
 interface Options {
   factors: EmissionFactor[];
@@ -44,9 +34,15 @@ interface Options {
 }
 
 const makeCalc = (o: Options) =>
-  renderHook(() =>
-    useEmissionCalculation(o.factors, o.targetYear, o.columns, o.selectColumnNames, o.mapping, o.fallbackToRaw, o.spec),
-  ).result.current;
+  createEmissionCalculator({
+    emissionFactors: o.factors,
+    targetYear: o.targetYear,
+    columns: o.columns,
+    selectColumnNames: o.selectColumnNames,
+    emissionCategoryMapping: o.mapping,
+    fallbackToRaw: o.fallbackToRaw,
+    calculationSpec: o.spec,
+  });
 
 const run = (o: Options, rows: ModalRow[]) => {
   const calc = makeCalc(o);
