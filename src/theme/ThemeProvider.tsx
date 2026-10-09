@@ -12,6 +12,7 @@ import {
   resolveAppearance,
   selectPack,
   shouldLoadBrand,
+  subscribeMediaQuery,
 } from "./session";
 import { ThemeContext } from "./themeContext";
 import type { ThemeContextValue } from "./themeContext";
@@ -32,10 +33,10 @@ function useSystemDark(): boolean {
     const mq = window.matchMedia?.(DARK_QUERY);
     if (!mq) return;
     const onChange = () => setDark(mq.matches);
-    mq.addEventListener("change", onChange);
+    const unsubscribe = subscribeMediaQuery(mq, onChange);
     // Catch a change between the first render and subscribing.
     onChange();
-    return () => mq.removeEventListener("change", onChange);
+    return unsubscribe;
   }, []);
   return dark;
 }

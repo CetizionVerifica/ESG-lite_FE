@@ -66,3 +66,27 @@ export function resolveAppearance(appearance: Appearance, systemDark: boolean): 
   if (appearance === "system") return systemDark ? "dark" : "light";
   return appearance;
 }
+
+/** The parts of a MediaQueryList used to follow the system appearance. */
+export interface MediaQueryLike {
+  addEventListener?: (type: "change", listener: () => void) => void;
+  removeEventListener?: (type: "change", listener: () => void) => void;
+  addListener?: (listener: () => void) => void;
+  removeListener?: (listener: () => void) => void;
+}
+
+/**
+ * Subscribes to a media query's changes and returns the unsubscribe function.
+ * Safari < 14 only has the deprecated addListener/removeListener pair.
+ */
+export function subscribeMediaQuery(mq: MediaQueryLike, onChange: () => void): () => void {
+  if (typeof mq.addEventListener === "function") {
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }
+  if (typeof mq.addListener === "function") {
+    mq.addListener(onChange);
+    return () => mq.removeListener?.(onChange);
+  }
+  return () => {};
+}
