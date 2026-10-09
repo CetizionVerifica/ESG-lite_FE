@@ -80,6 +80,8 @@ export interface ExtractionResponse {
     suggested_categories: (CategorySuggestion | null)[];
     emission: EmissionReady[];
     cloudinary_url?: string;
+    /** Set by POST /v1/invoices/upload: the stored invoice row. */
+    invoice_id?: number | null;
 }
 
 export interface Invoice {

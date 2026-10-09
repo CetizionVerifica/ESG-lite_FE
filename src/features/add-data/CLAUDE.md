@@ -71,3 +71,10 @@ Below the stepper (or as a tab "Already entered for Sep (4)") a compact `DataTab
 - A bill-extracted row and a manual row produce identical payloads.
 - Keyboard: Tab through a row, Enter adds a row, Ctrl+Enter goes to Review.
 - Works on a 390px phone for a single row.
+
+## P03-B plan (bill flow, 2026-10-09)
+- `steps/FromBill.tsx`: the "Start from a bill" tab of step 2. Drop PDFs/images (`FileDrop`), upload to the AI service, show stages, then a split view: `DocumentViewer` on the left, extracted entries on the right grouped by invoice.
+- Extracted entries become ordinary rows in `useEntryRows`, rendered with the same `EntryRow`, so validation, period mode, FERA and `buildPayload` are shared with manual entry. AI-filled fields carry an AI chip; the category suggestion shows its confidence, with a warn tint below 60%.
+- Nothing AI-filled is saved until the user confirms each bill's rows ("Use these rows"); then the normal Review step saves them. The bill is linked as evidence (B8) on save.
+- "My bills" drawer: list earlier uploads, reuse or re-extract one.
+- "My bills" deletes one bill at a time with a confirmation; the legacy library's multi-select bulk delete is not carried over yet.

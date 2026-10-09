@@ -6,6 +6,8 @@ import { formColumns, isColumnVisible, visibleExtraFields, type FormModel } from
 import type { RowIssue } from "../logic/entry";
 import type { CategoryMapping } from "../api";
 import type { EmissionFactor, ModalRow } from "../types";
+import { billOf, isAiField, LOW_CONFIDENCE } from "../logic/bill";
+import { AiChip, AiLabel, ConfidenceBadge } from "./AiMarks";
 import { DynamicField } from "./DynamicField";
 import { ExtraFields } from "./ExtraFields";
 
@@ -49,6 +51,10 @@ export function EntryRow(p: Props) {
     p.mappings.length > 0
       ? p.mappings.map((m) => ({ value: m.global_category_name, label: m.company_category_name }))
       : p.factors.map((f) => ({ value: f.emission_category_name, label: f.emission_category_name }));
+  const bill = billOf(row);
+  const aiCategory = isAiField(row, "emission_category");
+  const confidence = aiCategory ? (bill?.confidence ?? null) : null;
+  const unsure = confidence !== null && confidence < LOW_CONFIDENCE;
   const unitOptions = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
 
   return (
@@ -65,9 +71,12 @@ export function EntryRow(p: Props) {
         </div>
       </header>
 
+      <div className={cn(unsure && "rounded-control bg-warn-soft p-2")}>
       {mapped ? (
         <div className="text-sm">
-          <span className="block text-xs font-medium text-muted">Emission category</span>
+          <span className="block text-xs font-medium text-muted">
+            <AiLabel text="Emission category" ai={aiCategory} />
+          </span>
           {row.emission_category ? (
             <span className="mt-1 inline-flex flex-wrap items-center gap-1 rounded-chip bg-tint px-2 py-1 text-ink">
               {row._ecmKey || row.emission_category}
@@ -81,7 +90,7 @@ export function EntryRow(p: Props) {
         </div>
       ) : (
         <Select<string>
-          label="Emission category"
+          label={<AiLabel text="Emission category" ai={aiCategory} />}
           value={row.emission_category || null}
           onChange={(v) => p.onChange("emission_category", v ?? "")}
           options={categoryOptions}
@@ -89,15 +98,29 @@ export function EntryRow(p: Props) {
           error={fieldError("emission_category")}
         />
       )}
+      {confidence !== null && (
+        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+          <ConfidenceBadge confidence={confidence} />
+          {unsure && <span>The AI isn't sure about this category.</span>}
+        </p>
+      )}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {formColumns(model)
           .filter((c) => isColumnVisible(model, c, row))
           .map((c) => (
-            <DynamicField key={c.pk_id} model={model} column={c} row={row} onChange={p.onChange} />
+            <DynamicField
+              key={c.pk_id}
+              model={model}
+              column={c}
+              row={row}
+              onChange={p.onChange}
+              labelExtra={isAiField(row, c.column_name) ? <AiChip /> : undefined}
+            />
           ))}
         <Select<string>
-          label="Unit"
+          label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
           value={row.activity_data_unit || null}
           onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
           options={unitOptions.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
