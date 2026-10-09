@@ -3,9 +3,9 @@
  *
  * These pin what the legacy page (pages/UserDataEntry) computes TODAY for a
  * set of site × category contexts, so moving the logic can be proven to
- * change nothing: the snapshot file was written against the old hook and must
- * stay byte-identical (it was written against the old hook before the move). A deliberate calculation change updates it with
- * `npx vitest run -u` and lists the moved figures in the PR.
+ * change nothing: the snapshot file was written against the old hook before
+ * the move and must stay byte-identical. A deliberate calculation change
+ * updates it with `npx vitest run -u` and lists the moved figures in the PR.
  */
 import { describe, expect, it } from "vitest";
 import { createEmissionCalculator } from "./emissionCalc";

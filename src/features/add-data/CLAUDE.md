@@ -17,6 +17,9 @@
 - AI (python_AI_service): `POST /v1/invoices/upload` → `InvoiceData`, `CategorySuggestion` (confidence), `EmissionReady`, validation; `GET /v1/invoices`, reuse/re-extract; distance: `distanceService`, `routingService`, `POST /v1/sea-route`.
 
 ## New structure (code)
+
+> Working copy note (P03-A, 2026-10-09): the module lives in `src/features/add-data/`, not `data-entry/`. The calculation is in `hooks/emissionCalc.ts` (+ `hooks/reportingPeriod.ts`), form rules in `logic/form.ts`, period/validation/payload in `logic/entry.ts`, rows in `hooks/useEntryRows.ts` (one reducer), steps in `steps/`, row UI in `components/`. The sketch below is the original plan.
+
 ```
 src/features/data-entry/
   AddDataPage.tsx            ≤ 250 lines, composes steps

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { factorYearForDate, yearlyPeriodEndDate } from "./reportingPeriod";
+import { factorYearForDate, isYearlyAllowed, yearlyPeriodEndDate } from "./reportingPeriod";
 import { normalizeUnitKey } from "./emissionCalc";
 
 describe("reporting period", () => {
@@ -28,5 +28,14 @@ describe("normalizeUnitKey", () => {
     [undefined, ""],
   ])("%s → %s", (input, expected) => {
     expect(normalizeUnitKey(input)).toBe(expected);
+  });
+});
+
+describe("yearly entry", () => {
+  it("is open once a category is chosen", () => {
+    expect(isYearlyAllowed(null)).toBe(false);
+    expect(isYearlyAllowed(undefined)).toBe(false);
+    expect(isYearlyAllowed(0)).toBe(true);
+    expect(isYearlyAllowed(12)).toBe(true);
   });
 });

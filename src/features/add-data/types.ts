@@ -71,3 +71,41 @@ export interface EmissionCalculationResult {
   value: number | null;
   status: "ok" | "converted" | string;
 }
+
+export interface ColumnOptionsMap {
+  [columnId: string]: DropdownOptionValue[];
+}
+
+// Child column name → parent column name, e.g. { disposal_method: "material" }.
+export interface ColumnDependencies {
+  [childColumnName: string]: string;
+}
+
+// Options of a dependent column per parent value (label), or per
+// "grandparent|parent" composite key for 3-level configs.
+export interface DependentOptionsMap {
+  [childColumnName: string]: { [parentValue: string]: DropdownOptionValue[] };
+}
+
+// Supplementary fields per category, stored in emission.extra_data; they
+// don't affect the calculation.
+export interface ExtraFieldDefinition {
+  key: string;
+  label: string;
+  type: "text" | "number" | "date" | "select" | "textarea";
+  required: boolean;
+  options?: string[];
+  show_for?: string[]; // only when emission_category contains one of these
+}
+
+export interface ColumnConfig {
+  pk_id: number;
+  config_name: string;
+  columns: ColumnEntity[];
+  column_options?: ColumnOptionsMap;
+  column_dependencies?: ColumnDependencies;
+  dependent_options?: DependentOptionsMap;
+  emission_category_mapping?: EmissionCategoryMapping;
+  extra_fields?: ExtraFieldDefinition[];
+  calculation?: CalculationSpec | null;
+}

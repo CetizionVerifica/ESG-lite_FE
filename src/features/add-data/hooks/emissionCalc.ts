@@ -3,7 +3,7 @@
 // Moved unchanged from pages/UserDataEntry/useEmissionCalculation.ts; the
 // golden snapshots in emissionCalc.golden.test.ts pin the outputs. Mirrors the
 // backend (services/calculationSpec.ts) so the preview matches the saved total.
-import { getConversionFactor, unitsMatchExact } from "../../../utils/unitConversions";
+import { getConversionFactor, unitsMatchExact } from "../../../ui/unitMatch";
 import type {
   CalculationSpec,
   ColumnEntity,

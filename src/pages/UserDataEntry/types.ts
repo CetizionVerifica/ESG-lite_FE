@@ -2,21 +2,25 @@ import { UnitData } from "../../services/unitService";
 import type {
     CalculationSpec,
     ColumnEntity,
-    DropdownOptionValue,
     EmissionCalculationResult,
-    EmissionCategoryMapping,
     EmissionFactor,
+    ExtraFieldDefinition,
     ModalRow,
 } from "../../features/add-data/types";
 
 // Calculation types moved to src/features/add-data/types.ts.
 export type {
     CalculationSpec,
+    ColumnConfig,
+    ColumnDependencies,
     ColumnEntity,
+    ColumnOptionsMap,
+    DependentOptionsMap,
     DropdownOptionValue,
     EmissionCalculationResult,
     EmissionCategoryMapping,
     EmissionFactor,
+    ExtraFieldDefinition,
     MethodCalculation,
     ModalRow,
 } from "../../features/add-data/types";
@@ -25,47 +29,6 @@ export interface Category {
     category_id: number;
     category_name: string;
     scope: string;
-}
-
-export interface ColumnOptionsMap {
-    [columnId: string]: DropdownOptionValue[];
-}
-
-// Maps child column name to parent column name
-// Example: { "disposal_method": "material" } - disposal_method depends on material
-export interface ColumnDependencies {
-    [childColumnName: string]: string;
-}
-
-// Options for dependent columns based on parent value
-// Example: { "disposal_method": { "paper": [{id: "recycled", label: "Recycled"}] } }
-export interface DependentOptionsMap {
-    [childColumnName: string]: {
-        [parentValue: string]: DropdownOptionValue[];
-    };
-}
-
-// Definition for supplementary (extra) fields per category
-// These fields don't affect emission calculation — stored separately in emission.extra_data
-export interface ExtraFieldDefinition {
-    key: string;          // e.g., "equipment", "po_number"
-    label: string;        // e.g., "Equipment", "PO Number"
-    type: "text" | "number" | "date" | "select" | "textarea";
-    required: boolean;
-    options?: string[];   // For type="select" only
-    show_for?: string[];  // If set, only show when emission_category contains one of these strings
-}
-
-export interface ColumnConfig {
-    pk_id: number;
-    config_name: string;
-    columns: ColumnEntity[];
-    column_options?: ColumnOptionsMap;
-    column_dependencies?: ColumnDependencies;
-    dependent_options?: DependentOptionsMap;
-    emission_category_mapping?: EmissionCategoryMapping;
-    extra_fields?: ExtraFieldDefinition[];
-    calculation?: CalculationSpec | null;
 }
 
 export type EmissionStatus = "pending" | "approved" | "rejected";
