@@ -2,7 +2,7 @@ import { type Page, expect, test } from "@playwright/test";
 
 /**
  * P01 sign-in smoke tests (VITE_NEW_UI=1 server). Every API call is answered
- * locally, including GET /brands/public/:slug (ESG-lite #61).
+ * locally, including GET /brands/public/:slug (proposed; the mock stands in for it).
  */
 
 const company = { company_id: 1, name: "Midal Cables" };

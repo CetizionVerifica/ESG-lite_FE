@@ -12,7 +12,9 @@ export type PublicBrand = Pick<
 
 /**
  * Client theme for `/{clientSlug}/login`, before anyone is signed in
- * (GET /brands/public/:slug, ESG-lite #61). 404 for an unknown slug.
+ * (GET /brands/public/:slug, proposed in the P01 spec). Not built in ESG-lite
+ * yet ("not now"; the closed ESG-lite #61 has it), so this fails and the page
+ * stays PlanetPulse until it ships.
  */
 export async function getPublicBrand(slug: string): Promise<PublicBrand> {
   const res = await axios.get(`${API_URL}/brands/public/${encodeURIComponent(slug)}`);
