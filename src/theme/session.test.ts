@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { PLANETPULSE } from "./packs";
 import {
+  BRAND_CACHE_KEY,
   companyIdFromUser,
+  readCachedBrand,
   readStoredAppearance,
   reconcileAppearance,
   resolveAppearance,
   selectPack,
   shouldLoadBrand,
   subscribeMediaQuery,
+  writeCachedBrand,
 } from "./session";
 
 const store = (values: Record<string, string>) => ({ getItem: (k: string) => values[k] ?? null });
@@ -112,5 +115,37 @@ describe("reconcileAppearance", () => {
   it("ignores a missing or unknown server value", () => {
     expect(reconcileAppearance(undefined, "dark")).toBeNull();
     expect(reconcileAppearance("neon", "dark")).toBeNull();
+  });
+});
+
+describe("brand cache", () => {
+  const memory = () => {
+    const m = new Map<string, string>();
+    return {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k),
+    };
+  };
+  const brand = { companyId: 1, name: "Midal Cables", primary: "#0b2e5c" };
+
+  it("returns the cached brand only for the same company", () => {
+    const s = memory();
+    writeCachedBrand(s, brand);
+    expect(readCachedBrand(s, 1)).toEqual(brand);
+    expect(readCachedBrand(s, 2)).toBeNull();
+    expect(readCachedBrand(s, null)).toBeNull();
+  });
+
+  it("forgets the brand and survives bad or blocked storage", () => {
+    const s = memory();
+    writeCachedBrand(s, brand);
+    writeCachedBrand(s, null);
+    expect(readCachedBrand(s, 1)).toBeNull();
+    s.setItem(BRAND_CACHE_KEY, "{not json");
+    expect(readCachedBrand(s, 1)).toBeNull();
+    const throwing = { getItem: () => { throw new Error("blocked"); } };
+    expect(readCachedBrand(throwing, 1)).toBeNull();
+    expect(readCachedBrand(null, 1)).toBeNull();
   });
 });

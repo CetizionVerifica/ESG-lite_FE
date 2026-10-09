@@ -9,6 +9,14 @@ export interface Brand {
   coverTo: string;
   logoUrl: string | null;
   logoPublicId: string | null;
+  /** B1: logo for dark surfaces (Classic top bar, Night). */
+  logoOnDarkUrl?: string | null;
+  /** B1: the client's default look. */
+  defaultLook?: "classic" | "light" | "night";
+  /** B1: optional Scope 3 chart colour; null = derived. */
+  scope3Colour?: string | null;
+  /** ISO time of the last save (absent for a company without a brand row). */
+  updatedAt?: string;
 }
 
 // Current brand kit for a company (falls back to company name + defaults if unset).
@@ -30,11 +38,13 @@ export const getMyBrand = async (): Promise<MyBrand> => {
   return res.data;
 };
 
+/** Fields PUT /brands/:companyId accepts; logoOnDarkUrl may only be null (removes the dark logo). */
+export type BrandUpdate = Partial<
+  Pick<Brand, "name" | "primary" | "accent" | "coverFrom" | "coverTo" | "defaultLook" | "scope3Colour">
+> & { logoOnDarkUrl?: null };
+
 // Upsert name + colors (hex validated server-side).
-export const saveBrand = async (
-  companyId: number,
-  data: Partial<Pick<Brand, "name" | "primary" | "accent" | "coverFrom" | "coverTo">>
-) => {
+export const saveBrand = async (companyId: number, data: BrandUpdate) => {
   const res = await api.put(`/brands/${companyId}`, data);
   return res.data;
 };
@@ -44,6 +54,16 @@ export const uploadBrandLogo = async (companyId: number, file: File) => {
   const form = new FormData();
   form.append("logo", file);
   const res = await api.post(`/brands/${companyId}/logo`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+};
+
+// Upload the logo for dark surfaces → stored on R2 as logoOnDarkUrl (B1).
+export const uploadBrandDarkLogo = async (companyId: number, file: File) => {
+  const form = new FormData();
+  form.append("logo", file);
+  const res = await api.post(`/brands/${companyId}/logo-dark`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return res.data;

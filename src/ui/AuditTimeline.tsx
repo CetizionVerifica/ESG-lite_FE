@@ -54,7 +54,7 @@ export function AuditTimeline({ entries, loading, error, onRetry, className }: A
                         {c.old}
                       </span>
                       <span aria-hidden className="text-muted">→</span>
-                      <span className="whitespace-pre-wrap break-words rounded-chip bg-brand-50 px-1.5 py-0.5 text-ink">
+                      <span className="whitespace-pre-wrap break-words rounded-chip bg-tint px-1.5 py-0.5 text-ink">
                         <span className="sr-only">After: </span>
                         {c.new}
                       </span>

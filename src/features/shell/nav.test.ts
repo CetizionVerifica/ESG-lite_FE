@@ -15,7 +15,7 @@ describe("nav labels (final copy from the F2 spec)", () => {
       "Products (PCF)",
       "Team",
     ]));
-  it("Admin", () => expect(labels("Admin")).toEqual(["Users"]));
+  it("Admin", () => expect(labels("Admin")).toEqual(["Users", "Brand theme"]));
   it("Superadmin", () =>
     expect(labels("Superadmin")).toEqual([
       "Console",

@@ -5,16 +5,18 @@ import { useAuth } from "../context/AuthContext";
 import { getMyAppearance, saveMyAppearance } from "../services/appearanceService";
 import { getMyBrand } from "../services/brandService";
 import { buildTheme, resolveLook, statusClashes, toCssVars } from "./buildTheme";
-import type { Appearance } from "./packs";
+import type { Appearance, BrandLike } from "./packs";
 import {
   APPEARANCE_KEY,
   companyIdFromUser,
+  readCachedBrand,
   readStoredAppearance,
   reconcileAppearance,
   resolveAppearance,
   selectPack,
   shouldLoadBrand,
   subscribeMediaQuery,
+  writeCachedBrand,
 } from "./session";
 import { ThemeContext } from "./themeContext";
 import type { ThemeContextValue } from "./themeContext";
@@ -53,14 +55,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const { role, user, isAuthenticated } = useAuth();
   const loadBrand = shouldLoadBrand(role, isAuthenticated);
 
+  const companyId = companyIdFromUser(user);
   const brandQuery = useQuery({
     // Keyed by company so switching accounts never shows the previous brand.
-    queryKey: ["brand", "mine", companyIdFromUser(user), role],
-    queryFn: getMyBrand,
+    queryKey: ["brand", "mine", companyId, role],
+    queryFn: async (): Promise<BrandLike> => getMyBrand(),
     enabled: loadBrand,
     staleTime: Infinity,
     retry: false,
+    // The last brand this browser saw for this company paints first on a
+    // reload (no PlanetPulse flash); the API answer replaces it.
+    placeholderData: () => readCachedBrand(safeStorage(), companyId) ?? undefined,
   });
+  useEffect(() => {
+    if (!loadBrand || brandQuery.isPlaceholderData) return;
+    if (brandQuery.isSuccess) writeCachedBrand(safeStorage(), brandQuery.data);
+    else if (brandQuery.isError) writeCachedBrand(safeStorage(), null);
+  }, [loadBrand, brandQuery.isPlaceholderData, brandQuery.isSuccess, brandQuery.isError, brandQuery.data]);
   const pack = useMemo(
     () => selectPack(role, loadBrand && brandQuery.isSuccess ? brandQuery.data : null),
     [role, loadBrand, brandQuery.isSuccess, brandQuery.data],

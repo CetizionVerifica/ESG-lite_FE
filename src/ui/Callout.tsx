@@ -8,7 +8,7 @@ export type CalloutTone = "info" | "warn" | "brand";
 const TONES: Record<CalloutTone, { icon: LucideIcon; box: string; icon_: string }> = {
   info: { icon: Info, box: "border-info/30 bg-info-soft", icon_: "text-info" },
   warn: { icon: AlertTriangle, box: "border-warn/30 bg-warn-soft", icon_: "text-warn" },
-  brand: { icon: Lightbulb, box: "border-brand-200 bg-brand-50", icon_: "text-brand-text" },
+  brand: { icon: Lightbulb, box: "border-brand-200 bg-tint", icon_: "text-brand-text" },
 };
 
 export type CalloutProps = {

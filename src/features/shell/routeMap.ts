@@ -58,6 +58,7 @@ export const SHELL_ROUTES = [
 
   // Company admin
   { id: "company-users", path: "/users", title: "Users", crumb: ["Users"], roles: ["Admin"], spec: "P15", roleRedirect: { Superadmin: "/setup/users" } },
+  { id: "brand-view", path: "/brand", title: "Brand theme", crumb: ["Brand theme"], roles: ["Admin"], spec: "P18" },
 
   // Superadmin
   { id: "console", path: "/console", title: "Console", crumb: ["Console"], roles: ["Superadmin"], spec: "P16" },
