@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Inbox } from "lucide-react";
 import type { EmissionUploadBatch } from "../../../services/emissionService";
-import { Button, type Column, DataTable, EmptyState, Modal, Textarea, formatDateTime, formatNumber, useToast } from "../../../ui";
+import { Button, type Column, DataTable, EmptyState, Modal, Textarea, formatDateTime, formatNumber, rejectReasonError, useToast } from "../../../ui";
 import { errorMessage, useBatchMutations, useBatches } from "../api";
-import { rejectReasonError } from "../logic";
 
 /** Pending / approved / rejected split of one batch, with the numbers in text. */
 function SplitBar({ batch }: { batch: EmissionUploadBatch }) {
