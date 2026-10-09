@@ -36,7 +36,7 @@ export function PreviewPane({ pack, look, onLook, screen, onScreen, reportYear }
       </div>
       {screen === "report" && <p className="text-xs text-muted">Reports always print in the light look.</p>}
       <ThemeScope tokens={tokens} dark={shownLook === "night"} className="overflow-hidden rounded-card border border-line">
-        <div aria-label={`Preview: ${SCREENS.find((s) => s.value === screen)?.label}, ${LOOK_LABELS[shownLook]}`} role="region">
+        <div aria-label={`Preview: ${SCREENS.find((s) => s.value === screen)?.label}, ${LOOK_LABELS[shownLook]}`} role="region" inert>
           {screen === "overview" && <OverviewScreen pack={pack} look={shownLook} />}
           {screen === "sign-in" && <SignInScreen pack={pack} tokens={tokens} />}
           {screen === "report" && <ReportCoverScreen pack={pack} tokens={tokens} year={reportYear} />}

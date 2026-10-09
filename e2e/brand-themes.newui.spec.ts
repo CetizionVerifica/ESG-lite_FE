@@ -49,6 +49,8 @@ async function signIn(page: Page, role: "Superadmin" | "Admin", saved: unknown[]
         brand = { ...brand, ...body, updatedAt: "2026-10-09T09:00:00.000Z" };
         return json({ message: "Brand saved", brand });
       }
+      if (path.endsWith("/brands/1/logo")) return json({ message: "Logo uploaded", brand: { ...brand, logoUrl: "data:image/png;base64,iVBORw0KGgo=" } });
+      if (path.endsWith("/brands/1/logo-dark")) return route.fulfill({ status: 503, json: { message: "Asset storage (R2) is not configured on the server" } });
       if (path.endsWith("/brands/1")) return json(brand);
       if (path.endsWith("/admin/companies")) return json({ companies: [{ company_id: 1, name: "Midal Cables" }] });
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
@@ -98,6 +100,21 @@ test("superadmin edits a client theme, sees it live and saves it", async ({ page
     },
   ]);
   await expect(page.getByTestId("save-status")).toContainText("Last saved");
+});
+
+test("a failed dark-logo upload keeps that file staged and says what was saved", async ({ page }) => {
+  const saved: unknown[] = [];
+  await signIn(page, "Superadmin", saved);
+  await page.goto("/clients/1/brand");
+  const png = { mimeType: "image/png", buffer: Buffer.from("89504e470d0a1a0a", "hex") };
+  const inputs = page.locator('input[type="file"]');
+  await inputs.nth(0).setInputFiles({ name: "light.png", ...png });
+  await inputs.nth(1).setInputFiles({ name: "dark.png", ...png });
+  await page.getByRole("button", { name: "Save theme" }).click();
+  await expect(page.getByText(/R2\) is not configured.*light-background logo was saved; the colours were not/)).toBeVisible();
+  await expect(page.getByText("New logo, saved with the theme: dark.png")).toBeVisible();
+  await expect(page.getByText("New logo, saved with the theme: light.png")).toHaveCount(0);
+  expect(saved).toEqual([]);
 });
 
 test("company admin sees their theme read only", async ({ page }) => {

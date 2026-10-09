@@ -61,6 +61,14 @@ function Loaded({ query, companyId, mode }: { query: Query; companyId: number; m
       </div>
     );
   }
+  if (isNotFound(query.error)) {
+    return (
+      <EmptyState
+        title="No brand theme for your company yet"
+        description="Your account isn't linked to a company, so there is no theme to show."
+      />
+    );
+  }
   if (query.isError || !query.data) {
     return (
       <EmptyState
@@ -72,6 +80,10 @@ function Loaded({ query, companyId, mode }: { query: Query; companyId: number; m
   }
   // Remount per client so a draft never carries over to another client.
   return <BrandThemeEditor key={companyId} companyId={companyId} saved={query.data} readOnly={mode === "view"} />;
+}
+
+function isNotFound(e: unknown): boolean {
+  return (e as { response?: { status?: number } } | null)?.response?.status === 404;
 }
 
 /** Cache-buster for the fixed R2 logo URL, so a replaced logo shows at once. */
@@ -143,7 +155,12 @@ function BrandThemeEditor({ companyId, saved, readOnly }: { companyId: number; s
       toast({ title: "Theme saved", description: "Client users see it the next time they open ESGLite.", tone: "good" });
     } catch (e) {
       const err = e instanceof SaveError ? e : null;
-      if (err?.logosSaved) setDraft((d) => ({ ...d, logoFile: null, darkLogoFile: null }));
+      if (err)
+        setDraft((d) => ({
+          ...d,
+          logoFile: err.saved.logo ? null : d.logoFile,
+          darkLogoFile: err.saved.darkLogo ? null : d.darkLogoFile,
+        }));
       setSaveError(err?.message ?? "The theme couldn't be saved.");
     }
   };
@@ -159,6 +176,8 @@ function BrandThemeEditor({ companyId, saved, readOnly }: { companyId: number; s
       const url = URL.createObjectURL(pdf);
       if (tab) tab.location.href = url;
       else window.location.assign(url);
+      // Long enough for the tab to load the PDF; then free the blob.
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch {
       tab?.close();
       toast({ title: "The report couldn't be generated", description: `There may be no data for ${reportYear}.`, tone: "bad" });

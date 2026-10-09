@@ -39,3 +39,9 @@ PageHeader "Brand theme · {Client}"  crumb Clients › {Client}   status: "Unsa
 - Saving Midal's theme changes Midal users' app on next load and their branded PDF.
 - All 4 stored clients pass the contrast gate.
 - Status colours never change in preview.
+
+## Gaps in this build (2026-10-09, PR #75)
+- "Last saved … by {user}": Brand has no `updatedBy`; the date only is shown.
+- "Latest year with data": no endpoint returns it for a client; the report year picker offers the last five years, defaulting to the current one.
+- The light logo can't be removed (`PUT /brands/:id` only clears the dark logo).
+- "Suggest from logo" on a saved R2 logo needs CORS on the bucket; staged files always work.

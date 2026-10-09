@@ -70,7 +70,7 @@ export function FileDrop({ label, help, items, onAdd, onRemove, onPreview, disab
         }}
         className={cn(
           "flex flex-col items-center gap-2 rounded-card border-2 border-dashed px-4 py-6 text-center",
-          over ? "border-accent bg-tint" : "border-line bg-panel",
+          over ? "border-accent bg-accent/10" : "border-line bg-panel",
           disabled && "opacity-60",
         )}
       >

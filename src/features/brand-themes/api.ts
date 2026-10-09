@@ -33,7 +33,8 @@ export function useOwnBrand(enabled: boolean) {
 export class SaveError extends Error {
   constructor(
     message: string,
-    readonly logosSaved: boolean,
+    /** Which staged logos did reach the server, so only those are cleared. */
+    readonly saved: { logo: boolean; darkLogo: boolean },
   ) {
     super(message);
   }
@@ -53,24 +54,27 @@ export function useSaveBrand(companyId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (draft: BrandDraft) => {
-      let uploaded = false;
+      const saved = { logo: false, darkLogo: false };
       try {
         if (draft.logoFile) {
           await uploadBrandLogo(companyId, draft.logoFile);
-          uploaded = true;
+          saved.logo = true;
         }
         if (draft.darkLogoFile) {
           await uploadBrandDarkLogo(companyId, draft.darkLogoFile);
-          uploaded = true;
+          saved.darkLogo = true;
         }
       } catch (e) {
-        throw new SaveError(serverMessage(e, "The logo couldn't be uploaded. Nothing else was saved."), uploaded);
+        const what = draft.logoFile && !saved.logo ? "The logo" : "The dark-background logo";
+        const rest = saved.logo ? " The light-background logo was saved; the colours were not." : " Nothing was saved.";
+        throw new SaveError(`${serverMessage(e, `${what} couldn't be uploaded.`)}${rest}`, saved);
       }
       try {
         await saveBrand(companyId, toUpdate(draft));
       } catch (e) {
         const msg = serverMessage(e, "The theme couldn't be saved.");
-        throw new SaveError(uploaded ? `${msg} The new logo was saved; the colours were not.` : msg, uploaded);
+        const anyLogo = saved.logo || saved.darkLogo;
+        throw new SaveError(anyLogo ? `${msg} The new logo was saved; the colours were not.` : msg, saved);
       }
     },
     onSettled: async () => {
