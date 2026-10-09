@@ -22,6 +22,7 @@ import {
 import { useIntensity, useOverview, usePendingEntries, usePendingProduction, useSubmission, useThreshold } from "./api";
 import { AttentionList } from "./components/AttentionList";
 import { CategoryBars } from "./components/CategoryBars";
+import { LowerTabs } from "./components/LowerTabs";
 import { SitesTable } from "./components/SitesTable";
 import { SubmissionPanel } from "./components/SubmissionPanel";
 import { TrendChart } from "./components/TrendChart";
@@ -261,6 +262,8 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
           )}
         </div>
       </div>
+
+      <LowerTabs overview={data} siteIds={scopeSites} categoryId={ctx.categoryId} now={now} />
     </div>
   );
 }

@@ -85,11 +85,22 @@ async function signIn(page: Page) {
         return json(overview(url.searchParams.get("period") ?? ""));
       }
       if (path.endsWith("/manager/submission-status")) return json({ users: overview("").submission.users });
+      if (path.endsWith("/user/emissions") && url.searchParams.get("scope") === "Scope 2")
+        return json({
+          data: [
+            { pk_id: 1, date_of_reporting: "2025-09-30", total_emission: 1.5, activity_data: { quantity: "1200" }, activity_data_unit: "kWh" },
+            { pk_id: 2, date_of_reporting: "2025-08-31", total_emission: 1.2, activity_data: { quantity: "1000" }, activity_data_unit: "kWh" },
+          ],
+          total: 2,
+          summary: {},
+        });
       if (path.endsWith("/user/emissions")) return json({ data: [], total: 0, summary: { total_emission: 0, pending_count: 7, approved_count: 0, rejected_count: 0 } });
       if (path.endsWith("/user/production-data/manager")) return json([{ production_id: 1, status: "pending", site: { site_id: 2, name: "Sitra" } }]);
       if (path.includes("/user/thresholds/company/")) return json({ threshold_percentage: 5 });
       if (path.includes("/user/emission-intensity/comparison"))
         return json({ comparison: [{ siteId: 1, totalEmissions: 80, totalProduction: 400, emissionIntensity: 0.2 }], dateRange: {} });
+      if (/\/user\/emission-intensity\/site\/\d+$/.test(path))
+        return json({ totalEmissions: 80, productionByUnit: [{ unit: "t", totalProduction: 400, emissionIntensity: 0.2 }], monthlyData: [{ month: "2025-09", emissions: 8, production: 40, intensity: 0.2 }], dateRange: {} });
       return json({});
     },
   );
@@ -143,4 +154,31 @@ test("period chips map to B4's period form and stay in the URL", async ({ page }
   await expect(page).toHaveURL(/period=FY2024/);
   await expect(page.getByRole("heading", { level: 1, name: "FY 2024-25" })).toBeVisible();
   await expect.poll(() => b4.at(-1)?.get("period")).toBe("FY2024-25");
+});
+
+test("the lower tabs load on demand and follow the header context", async ({ page }) => {
+  const { b4 } = await signIn(page);
+  await page.goto("/overview?period=2025-09&view=scope2");
+  const panel = page.getByRole("tabpanel");
+  await expect(panel.getByRole("heading", { name: "Scope 2 electricity" })).toBeVisible();
+  await panel.getByRole("radio", { name: "Table" }).click();
+  await expect(panel.getByRole("row", { name: /Sep 2025/ })).toContainText("1,200");
+
+  await page.getByRole("tab", { name: "Intensity" }).click();
+  await expect(page).toHaveURL(/view=intensity/);
+  await page.getByRole("tabpanel").getByRole("radio", { name: "Table" }).click();
+  // Two sites, 8 t over 40 units each: combined 16 / 80.
+  await expect(page.getByRole("tabpanel").getByRole("row", { name: /Sep 2025/ })).toContainText("0.2000");
+
+  await page.getByRole("tab", { name: "Year over year" }).click();
+  const years = page.getByRole("group", { name: "Years" });
+  const third = years.getByRole("button").nth(2);
+  const year = (await third.textContent())!.trim();
+  await third.click();
+  await expect(third).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => b4.some((p) => p.get("period") === year)).toBe(true);
+
+  await page.getByRole("tab", { name: "Site comparison" }).click();
+  await page.getByRole("tabpanel").getByRole("radio", { name: "Table" }).click();
+  await expect(page.getByRole("tabpanel").getByRole("row", { name: /Hidd/ })).toContainText("80");
 });

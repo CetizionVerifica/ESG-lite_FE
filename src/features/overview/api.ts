@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { getEmissionsPaginated } from "../../services/emissionService";
 import { type OverviewResponse, type SubmissionUser, getManagerOverview, getSubmissionStatus } from "../../services/overviewService";
 import { getEmissionIntensity, getEmissionIntensityComparison, getProductionDataForManager } from "../../services/productionDataService";
@@ -13,6 +13,8 @@ export const keys = {
   pending: (siteIds: number[]) => [...keys.all, "pending", siteIds] as const,
   production: (siteIds: number[]) => [...keys.all, "production-pending", siteIds] as const,
   threshold: (companyId: number) => ["threshold", companyId] as const,
+  siteIntensity: (siteId: number, from: string, to: string) => [...keys.all, "site-intensity", siteId, from, to] as const,
+  scope2: (siteIds: number[], categoryId: number | null, year: number) => [...keys.all, "scope2", siteIds, categoryId, year] as const,
 };
 
 /** B4 for one period (backend form) and site/category context. */
@@ -91,5 +93,51 @@ export function useThreshold(companyId: number | null) {
       }
     },
     staleTime: 10 * 60 * 1000,
+  });
+}
+
+/** Combines a list of queries into one loading/error/data view. */
+function combine<T>(results: { data?: T; isPending: boolean; isError: boolean; refetch: () => unknown }[]) {
+  return {
+    data: results.every((r) => r.data !== undefined) ? (results.map((r) => r.data) as T[]) : undefined,
+    isPending: results.some((r) => r.isPending),
+    isError: results.some((r) => r.isError),
+    refetch: () => results.forEach((r) => r.isError && r.refetch()),
+  };
+}
+
+/** Monthly gross emissions and production per site (one request per site, in parallel). */
+export function useSiteIntensityMonthly(siteIds: number[], from: string, to: string) {
+  return useQueries({
+    queries: siteIds.map((siteId) => ({
+      queryKey: keys.siteIntensity(siteId, from, to),
+      queryFn: async () => (await getEmissionIntensity(siteId, { startDate: from, endDate: to })).monthlyData,
+    })),
+    combine,
+  });
+}
+
+/** Approved Scope 2 entries for the given calendar years (activity amounts aren't in B4). */
+export function useScope2Entries(siteIds: number[], categoryId: number | null, years: number[]) {
+  return useQueries({
+    queries: years.map((year) => ({
+      queryKey: keys.scope2(siteIds, categoryId, year),
+      queryFn: async () =>
+        (await getEmissionsPaginated({ siteIds, categoryId, scope: "Scope 2", status: "approved", year, page: 1, limit: SCOPE2_CAP })).data,
+    })),
+    combine,
+  });
+}
+
+const SCOPE2_CAP = 5000;
+
+/** B4 for whole calendar years: their 12-month trend feeds the year-over-year lines. */
+export function useYearTrends(years: number[], siteIds: number[], categoryId: number | null) {
+  return useQueries({
+    queries: years.map((year) => ({
+      queryKey: keys.overview(String(year), siteIds, categoryId),
+      queryFn: () => getManagerOverview({ period: String(year), siteIds, categoryId }),
+    })),
+    combine,
   });
 }

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { OverviewCategory, OverviewSite, SubmissionUser } from "../../services/overviewService";
 import {
+  activityValue,
   attentionItems,
+  intensityMonthly,
+  recentYears,
+  scope2Monthly,
+  yearsOf,
   categoryBars,
   combineIntensity,
   defaultPeriod,
@@ -173,5 +178,53 @@ describe("links and text", () => {
     expect(headerText("Midal", 0, 3, { kind: "cy", year: 2025 })).toEqual({ title: "CY 2025", crumb: "Midal · All sites" });
     expect(headerText(null, 1, 3, { kind: "month", year: 2025, month: 9 })).toEqual({ title: "Sep 2025", crumb: "1 site" });
     expect(headerText("Midal", 2, 3, { kind: "fy", startYear: 2025 }).crumb).toBe("Midal · 2 sites");
+  });
+});
+
+describe("lower tabs", () => {
+  it("reads the activity amount by today's keys", () => {
+    expect(activityValue({ quantity: "120", value: 0 })).toBe(120);
+    expect(activityValue({ activity_value: 5, quantity: 9 })).toBe(5);
+    expect(activityValue({ quantity: "x" })).toBeNull();
+    expect(activityValue(null)).toBeNull();
+  });
+
+  it("sums Scope 2 per month, leaving yearly filings out", () => {
+    const rows = [
+      { date_of_reporting: "2025-09-30", total_emission: "1.5", activity_data: { quantity: 1000 }, activity_data_unit: "kWh" },
+      { date_of_reporting: "2025-09-01", total_emission: 0.5, activity_data: { quantity: 500 }, activity_data_unit: "kWh" },
+      { date_of_reporting: "2025-08-31", total_emission: 2, activity_data: {}, activity_data_unit: "MWh" },
+      { date_of_reporting: "2025-08-31", total_emission: 9, reporting_period: "yearly" },
+      { date_of_reporting: "2024-01-31", total_emission: 9 },
+    ];
+    expect(scope2Monthly(rows, ["2025-08", "2025-09"])).toEqual({
+      unit: "kWh",
+      rows: [
+        { month: "2025-08", emissions: 2, activity: 0 },
+        { month: "2025-09", emissions: 2, activity: 1500 },
+      ],
+    });
+  });
+
+  it("combines intensity over sites by month", () => {
+    const out = intensityMonthly(
+      [
+        [{ month: "2025-09", emissions: 4, production: 10 }],
+        [
+          { month: "2025-09", emissions: 6, production: 10 },
+          { month: "2025-08", emissions: 3, production: 0 },
+        ],
+      ],
+      ["2025-08", "2025-09"],
+    );
+    expect(out).toEqual([
+      { month: "2025-08", emissions: 3, production: 0, intensity: null },
+      { month: "2025-09", emissions: 10, production: 20, intensity: 0.5 },
+    ]);
+  });
+
+  it("lists years", () => {
+    expect(yearsOf(["2025-04", "2025-12", "2026-01"])).toEqual([2025, 2026]);
+    expect(recentYears(new Date(2026, 0, 10), 3)).toEqual([2025, 2024, 2023]);
   });
 });

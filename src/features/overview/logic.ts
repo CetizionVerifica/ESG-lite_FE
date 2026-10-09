@@ -212,3 +212,73 @@ export function headerText(company: string | null, siteCount: number, totalSites
   const sites = siteCount === 0 || siteCount === totalSites ? (totalSites === 1 ? "1 site" : "All sites") : siteCount === 1 ? "1 site" : `${siteCount} sites`;
   return { title: periodLabel(period, FY_START_MONTH), crumb: [company, sites].filter(Boolean).join(" · ") };
 }
+
+// ── Lower tabs ──────────────────────────────────────────────────────────────
+
+const ACTIVITY_KEYS = ["activity_value", "activity", "Activity Data", "value", "quantity"];
+
+/** The activity amount in an entry's activity data, by the keys today's dashboard reads. */
+export function activityValue(data: Record<string, unknown> | null | undefined): number | null {
+  if (!data) return null;
+  for (const key of ACTIVITY_KEYS) {
+    const v = Number(data[key]);
+    if (data[key] !== undefined && data[key] !== null && Number.isFinite(v) && v > 0) return v;
+  }
+  return null;
+}
+
+type Scope2Entry = {
+  date_of_reporting: string;
+  total_emission: number | string;
+  activity_data?: Record<string, unknown> | null;
+  activity_data_unit?: string | null;
+  reporting_period?: string | null;
+};
+
+/**
+ * Scope 2 emissions and activity (e.g. kWh) per month. Yearly filings are
+ * left out, as in the trend. The unit is the most common activity unit.
+ */
+export function scope2Monthly(rows: Scope2Entry[], months: string[]) {
+  const by = new Map(months.map((m) => [m, { month: m, emissions: 0, activity: 0 }]));
+  const units = new Map<string, number>();
+  for (const r of rows) {
+    if (r.reporting_period === "yearly") continue;
+    const b = by.get(r.date_of_reporting.slice(0, 7));
+    if (!b) continue;
+    b.emissions += Number(r.total_emission) || 0;
+    b.activity += activityValue(r.activity_data) ?? 0;
+    if (r.activity_data_unit) units.set(r.activity_data_unit, (units.get(r.activity_data_unit) ?? 0) + 1);
+  }
+  const unit = [...units].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "kWh";
+  return { unit, rows: [...by.values()].map((b) => ({ ...b, emissions: round3(b.emissions), activity: round3(b.activity) })) };
+}
+
+/** Calendar years a set of YYYY-MM months touches. */
+export function yearsOf(months: string[]): number[] {
+  return [...new Set(months.map((m) => Number(m.slice(0, 4))))].sort((a, b) => a - b);
+}
+
+/** Monthly gross emissions, production and intensity summed over sites. */
+export function intensityMonthly(sites: { month: string; emissions: number; production: number }[][], months: string[]) {
+  const by = new Map(months.map((m) => [m, { month: m, emissions: 0, production: 0 }]));
+  for (const site of sites)
+    for (const r of site) {
+      const b = by.get(r.month);
+      if (!b) continue;
+      b.emissions += r.emissions;
+      b.production += r.production;
+    }
+  return [...by.values()].map((b) => ({
+    month: b.month,
+    emissions: round3(b.emissions),
+    production: round3(b.production),
+    intensity: b.production > 0 ? b.emissions / b.production : null,
+  }));
+}
+
+/** Years offered for the year-over-year chart: the last `n`, newest first. */
+export function recentYears(now: Date, n = 5): number[] {
+  const last = lastDueMonth(now).getFullYear();
+  return Array.from({ length: n }, (_, i) => last - i);
+}
