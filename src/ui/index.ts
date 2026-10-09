@@ -53,3 +53,4 @@ export { useRowKeys } from "./hooks/useRowKeys";
 export { NotificationIcon } from "./NotificationIcon";
 export { notificationKind, type NotificationKind } from "./notificationKind";
 export { timeAgo } from "./timeAgo";
+export * from "./reportPeriod";
