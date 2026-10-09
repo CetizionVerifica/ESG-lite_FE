@@ -18,6 +18,11 @@ export type UnitInputProps = FieldBaseProps & {
   placeholder?: string;
 };
 
+/** Drops float noise from a conversion (123.4 kWh × 0.001 = 0.12340000000000001). */
+function convert(value: number, factor: number): number {
+  return Number((value * factor).toPrecision(12));
+}
+
 function parse(text: string): number | null {
   const cleaned = text.replace(/,/g, "").trim();
   if (!cleaned || cleaned === "-" || cleaned === ".") return null;
@@ -45,14 +50,14 @@ export function UnitInput({ value, onChange, units, expectedUnit, placeholder, e
         {value.value !== null && (
           <>
             {" "}
-            · {formatNumber(value.value * match.factor, 2)} {expectedUnit}
+            · {formatNumber(convert(value.value, match.factor), 2)} {expectedUnit}
           </>
         )}
         {" · "}
         <button
           type="button"
           onClick={() =>
-            onChange({ value: value.value === null ? null : value.value * match.factor, unit: expectedUnit ?? value.unit })
+            onChange({ value: value.value === null ? null : convert(value.value, match.factor), unit: expectedUnit ?? value.unit })
           }
           className={cn("rounded-chip font-medium text-brand-text underline", focusRing)}
         >

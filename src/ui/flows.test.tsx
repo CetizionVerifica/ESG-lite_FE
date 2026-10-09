@@ -34,8 +34,8 @@ describe("Stepper", () => {
 });
 
 describe("UnitInput", () => {
-  function Harness({ expected }: { expected: string }) {
-    const [v, setV] = useState<UnitInputValue>({ value: 2, unit: "mwh" });
+  function Harness({ expected, initial = { value: 2, unit: "mwh" } }: { expected: string; initial?: UnitInputValue }) {
+    const [v, setV] = useState<UnitInputValue>(initial);
     return (
       <>
         <UnitInput label="Electricity" value={v} onChange={setV} units={["kwh", "mwh", "litre"]} expectedUnit={expected} />
@@ -49,6 +49,11 @@ describe("UnitInput", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Convert to kwh" }));
     expect(screen.getByTestId("v").textContent).toBe('{"value":2000,"unit":"kwh"}');
     expect((screen.getByLabelText("Electricity") as HTMLInputElement).value).toBe("2000");
+  });
+  it("converts without float noise", async () => {
+    render(<Harness expected="mwh" initial={{ value: 123.4, unit: "kwh" }} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Convert to mwh" }));
+    expect(screen.getByTestId("v").textContent).toBe('{"value":0.1234,"unit":"mwh"}');
   });
   it("flags a unit that can't convert", async () => {
     render(<Harness expected="kwh" />);
