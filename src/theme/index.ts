@@ -19,3 +19,7 @@ export type { Appearance, BrandLike, Look, ResolvedAppearance, ThemePack } from 
 export { ThemeProvider } from "./ThemeProvider";
 export { useTheme } from "./useTheme";
 export type { ThemeContextValue } from "./themeContext";
+export { chartTheme, useChartTheme } from "./chartTheme";
+export type { ChartTheme, ScopeColors } from "./chartTheme";
+export { pdfTheme } from "./pdfTheme";
+export type { PdfTheme } from "./pdfTheme";
