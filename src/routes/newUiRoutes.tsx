@@ -34,7 +34,6 @@ const Legacy = {
   EdeReports: lazy(() => import("../pages/Reports/EdePreports")),
   Sbti: lazy(() => import("../pages/sbti/SbtiMain")),
   Notifications: lazy(() => import("../pages/NotificationsPage")),
-  Settings: lazy(() => import("../pages/SettingsPage")),
   CompanyAdminUsers: lazy(() => import("../pages/CompanyAdmin/CompanyAdminUsersPage")),
   SuperAdmin: lazy(() => import("../pages/SuperAdminPage")),
   Companies: lazy(() => import("../pages/CompanyPage")),
@@ -62,6 +61,7 @@ const BrandViewPage = lazy(() => import("../features/brand-themes/Page").then((m
 const EmissionsPage = lazy(() => import("../features/approvals-ledger/Page"));
 const OverviewPage = lazy(() => import("../features/overview/Page"));
 const ProductionReviewPage = lazy(() => import("../features/production-review/Page"));
+const SettingsPage = lazy(() => import("../features/settings/Page"));
 
 const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(id)} />;
 
@@ -82,7 +82,7 @@ const pages: Record<ShellRouteId, ReactNode> = {
   targets: <Legacy.Sbti />,
   pcf: placeholder("pcf"),
   notifications: <Legacy.Notifications />,
-  settings: <Legacy.Settings />,
+  settings: <SettingsPage />,
   "company-users": <Legacy.CompanyAdminUsers />,
   console: <Legacy.SuperAdmin />,
   clients: <Legacy.Companies />,
