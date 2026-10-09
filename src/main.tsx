@@ -10,6 +10,7 @@ import { ThemeProvider } from "./theme/ThemeProvider";
 import { NotificationProvider } from "./context/NotificationContext";
 import { withNewUiRoutes } from "./lib/featureFlags";
 import { createQueryClient } from "./lib/queryClient";
+import { ToastProvider } from "./ui/Toast";
 
 const router = createBrowserRouter([
   ...devRoutes,
@@ -21,9 +22,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <ThemeProvider>
-        <NotificationProvider>
-          <RouterProvider router={router} />
-        </NotificationProvider>
+        <ToastProvider>
+          <NotificationProvider>
+            <RouterProvider router={router} />
+          </NotificationProvider>
+        </ToastProvider>
       </ThemeProvider>
     </AuthProvider>
   </QueryClientProvider>
