@@ -1,0 +1,859 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > a company category name resolves through the mapping when the factor still carries it 1`] = `
+[
+  {
+    "activity": 10,
+    "expectedUnit": "litre",
+    "factorId": 15,
+    "result": {
+      "status": "ok",
+      "value": 15,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "LPG",
+      "id": 1,
+      "quantity": "10",
+    },
+  },
+]
+`;
+
+exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matches the golden outputs 1`] = `
+[
+  {
+    "activity": null,
+    "expectedUnit": null,
+    "factorId": null,
+    "result": {
+      "status": "Select emission category",
+      "value": null,
+    },
+    "row": {
+      "id": 1,
+    },
+  },
+  {
+    "activity": 1600,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "ok",
+      "value": 4288,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel (avg biofuel blend)",
+      "fuel_type": "7",
+      "id": 2,
+      "quantity": "1600",
+    },
+  },
+  {
+    "activity": 1600,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "ok",
+      "value": 4288,
+    },
+    "row": {
+      "activity_data_unit": "Litre ",
+      "emission_category": "Diesel (avg biofuel blend)",
+      "id": 3,
+      "quantity": "1600",
+    },
+  },
+  {
+    "activity": 420,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "converted",
+      "value": 4260.86,
+    },
+    "row": {
+      "activity_data_unit": "gallon",
+      "emission_category": "Diesel (avg biofuel blend)",
+      "id": 4,
+      "quantity": "420",
+    },
+  },
+  {
+    "activity": 2.5,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "converted",
+      "value": 6700,
+    },
+    "row": {
+      "activity_data_unit": "kl",
+      "emission_category": "Diesel (avg biofuel blend)",
+      "id": 5,
+      "quantity": "2.5",
+    },
+  },
+  {
+    "activity": 100,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "Unit mismatch - no conversion available",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "kg",
+      "emission_category": "Diesel (avg biofuel blend)",
+      "id": 6,
+      "quantity": "100",
+    },
+  },
+  {
+    "activity": 50,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "ok",
+      "value": 134,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel",
+      "id": 7,
+      "quantity": "50",
+    },
+  },
+  {
+    "activity": 12000,
+    "expectedUnit": "kwh",
+    "factorId": 3,
+    "result": {
+      "status": "converted",
+      "value": 2197.92,
+    },
+    "row": {
+      "activity_data_unit": "mwh",
+      "emission_category": "Natural gas",
+      "id": 8,
+      "quantity": "12000",
+    },
+  },
+  {
+    "activity": 3,
+    "expectedUnit": "kwh",
+    "factorId": 3,
+    "result": {
+      "status": "converted",
+      "value": 0.55,
+    },
+    "row": {
+      "activity_data_unit": "MWh",
+      "emission_category": "Natural gas",
+      "id": 9,
+      "quantity": "3",
+    },
+  },
+  {
+    "activity": 12,
+    "expectedUnit": "kwh",
+    "factorId": 3,
+    "result": {
+      "status": "converted",
+      "value": 0.61,
+    },
+    "row": {
+      "activity_data_unit": "gj",
+      "emission_category": "Natural gas",
+      "id": 10,
+      "quantity": "12",
+    },
+  },
+  {
+    "activity": 1.234,
+    "expectedUnit": "tonne",
+    "factorId": 5,
+    "result": {
+      "status": "ok",
+      "value": 3.91,
+    },
+    "row": {
+      "activity_data_unit": "tonne",
+      "emission_category": "fuel oil",
+      "id": 11,
+      "quantity": "1.234",
+    },
+  },
+  {
+    "activity": 800,
+    "expectedUnit": "tonne",
+    "factorId": 5,
+    "result": {
+      "status": "converted",
+      "value": 2.54,
+    },
+    "row": {
+      "activity_data_unit": "kg",
+      "emission_category": "Fuel oil",
+      "id": 12,
+      "quantity": "800",
+    },
+  },
+  {
+    "activity": 10,
+    "expectedUnit": null,
+    "factorId": null,
+    "result": {
+      "status": "No emission factor found for year 2024",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Petrol",
+      "id": 13,
+      "quantity": "10",
+    },
+  },
+  {
+    "activity": null,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "Enter activity data",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel (avg biofuel blend)",
+      "id": 14,
+      "quantity": "",
+    },
+  },
+  {
+    "activity": null,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "Enter activity data",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel (avg biofuel blend)",
+      "id": 15,
+      "quantity": "0",
+    },
+  },
+  {
+    "activity": null,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "Enter activity data",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel (avg biofuel blend)",
+      "id": 16,
+      "quantity": "-5",
+    },
+  },
+  {
+    "activity": 1600,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "Select unit",
+      "value": null,
+    },
+    "row": {
+      "emission_category": "Diesel (avg biofuel blend)",
+      "id": 17,
+      "quantity": "1600",
+    },
+  },
+  {
+    "activity": 3,
+    "expectedUnit": "tonne",
+    "factorId": 6,
+    "result": {
+      "status": "Unit mismatch - this option is per tonne; choose the [km] option or switch the unit to tonne",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "km",
+      "emission_category": "Coal [tonne]",
+      "id": 18,
+      "quantity": "3",
+    },
+  },
+  {
+    "activity": 3,
+    "expectedUnit": null,
+    "factorId": null,
+    "result": {
+      "status": "No emission factor found for year 2024",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "   ",
+      "id": 19,
+      "quantity": "3",
+    },
+  },
+  {
+    "activity": 75.5,
+    "expectedUnit": "litre",
+    "factorId": 4,
+    "result": {
+      "status": "ok",
+      "value": 117.4,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "date_of_reporting": "2025-09-30",
+      "emission_category": "LPG",
+      "id": 20,
+      "pk_id": 991,
+      "quantity": "75.5",
+      "site_id": 4,
+      "total_emission": 9.9,
+    },
+  },
+  {
+    "activity": 6,
+    "expectedUnit": "litre",
+    "factorId": 4,
+    "result": {
+      "status": "ok",
+      "value": 9.33,
+    },
+    "row": {
+      "_ocrUnit": "5",
+      "activity_data_unit": "litre",
+      "emission_category": "LPG",
+      "id": 21,
+      "quantity": "6",
+      "quantity__distance": "4",
+      "quantity__multiplier": "3",
+    },
+  },
+  {
+    "activity": 1,
+    "expectedUnit": "litre",
+    "factorId": 4,
+    "result": {
+      "status": "ok",
+      "value": 1.56,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "LPG",
+      "id": 22,
+      "quantity": "1,500",
+    },
+  },
+  {
+    "activity": 0.004,
+    "expectedUnit": "litre",
+    "factorId": 4,
+    "result": {
+      "status": "ok",
+      "value": 0.01,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "LPG",
+      "id": 23,
+      "quantity": "0.004",
+    },
+  },
+  {
+    "activity": 0.002,
+    "expectedUnit": "litre",
+    "factorId": 4,
+    "result": {
+      "status": "ok",
+      "value": 0,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "LPG",
+      "id": 24,
+      "quantity": "0.002",
+    },
+  },
+]
+`;
+
+exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > without a target year every year's factor is a candidate (first one wins) 1`] = `
+[
+  {
+    "activity": 1000,
+    "expectedUnit": "litre",
+    "factorId": 1,
+    "result": {
+      "status": "ok",
+      "value": 2680,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel (avg biofuel blend)",
+      "id": 1,
+      "quantity": "1000",
+    },
+  },
+]
+`;
+
+exports[`Context 2 · Bahrain × Use of sold products · yearly CY 2025 (per_method) > matches the golden outputs 1`] = `
+[
+  {
+    "activity": null,
+    "expectedUnit": "litre",
+    "factorId": 7,
+    "result": {
+      "status": "Select method",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel use",
+      "id": 1,
+    },
+  },
+  {
+    "activity": 1000,
+    "expectedUnit": "litre",
+    "factorId": 7,
+    "result": {
+      "status": "ok",
+      "value": 268000,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel use",
+      "fuel_per_use": "0.5",
+      "id": 2,
+      "lifetime_uses": "200",
+      "method": "Fuel consumed",
+      "units_sold": "1000",
+    },
+  },
+  {
+    "activity": 1,
+    "expectedUnit": "litre",
+    "factorId": 7,
+    "result": {
+      "status": "ok",
+      "value": 268000,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel use",
+      "fuel_per_use": "0.5",
+      "id": 3,
+      "lifetime_uses": "200",
+      "method": "  Fuel consumed ",
+      "units_sold": "1,000",
+    },
+  },
+  {
+    "activity": 1000,
+    "expectedUnit": "litre",
+    "factorId": 7,
+    "result": {
+      "status": "Enter fuel_per_use (a number greater than 0)",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel use",
+      "fuel_per_use": "",
+      "id": 4,
+      "lifetime_uses": "200",
+      "method": "Fuel consumed",
+      "units_sold": "1000",
+    },
+  },
+  {
+    "activity": 500,
+    "expectedUnit": "kwh",
+    "factorId": 8,
+    "result": {
+      "status": "ok",
+      "value": 120,
+    },
+    "row": {
+      "activity_data_unit": "kwh",
+      "emission_category": "Grid electricity",
+      "id": 5,
+      "kwh_per_use": "1.2",
+      "lifetime_uses": "1000",
+      "method": "Electricity consumed",
+      "share_used": "40",
+      "units_sold": "500",
+    },
+  },
+  {
+    "activity": 500,
+    "expectedUnit": "kwh",
+    "factorId": 8,
+    "result": {
+      "status": "share_used cannot be more than 100",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "kwh",
+      "emission_category": "Grid electricity",
+      "id": 6,
+      "kwh_per_use": "1.2",
+      "lifetime_uses": "1000",
+      "method": "Electricity consumed",
+      "share_used": "140",
+      "units_sold": "500",
+    },
+  },
+  {
+    "activity": 500,
+    "expectedUnit": "kwh",
+    "factorId": 8,
+    "result": {
+      "status": "converted",
+      "value": 120000,
+    },
+    "row": {
+      "activity_data_unit": "mwh",
+      "emission_category": "Grid electricity",
+      "id": 7,
+      "kwh_per_use": "1.2",
+      "lifetime_uses": "1000",
+      "method": "Electricity consumed",
+      "share_used": "40",
+      "units_sold": "500",
+    },
+  },
+  {
+    "activity": 1,
+    "expectedUnit": "kwh",
+    "factorId": 8,
+    "result": {
+      "status": "Select method",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "kwh",
+      "emission_category": "Grid electricity",
+      "id": 8,
+      "method": "Empty",
+      "units_sold": "1",
+    },
+  },
+  {
+    "activity": 1,
+    "expectedUnit": "kwh",
+    "factorId": 8,
+    "result": {
+      "status": "Select method",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "kwh",
+      "emission_category": "Grid electricity",
+      "id": 9,
+      "method": "Unknown",
+      "units_sold": "1",
+    },
+  },
+  {
+    "activity": 1000,
+    "expectedUnit": "litre",
+    "factorId": 7,
+    "result": {
+      "status": "Select unit",
+      "value": null,
+    },
+    "row": {
+      "emission_category": "Diesel use",
+      "fuel_per_use": "0.5",
+      "id": 10,
+      "lifetime_uses": "200",
+      "method": "Fuel consumed",
+      "units_sold": "1000",
+    },
+  },
+]
+`;
+
+exports[`Context 3 · Dubai × Upstream transport · yearly FY 2025-26 (per_unit) > matches the golden outputs 1`] = `
+[
+  {
+    "activity": null,
+    "expectedUnit": "tonne.km",
+    "factorId": 10,
+    "result": {
+      "status": "Select unit",
+      "value": null,
+    },
+    "row": {
+      "emission_category": "HGV diesel [tonne.km]",
+      "id": 1,
+    },
+  },
+  {
+    "activity": 20,
+    "expectedUnit": "tonne.km",
+    "factorId": 10,
+    "result": {
+      "status": "ok",
+      "value": 749,
+    },
+    "row": {
+      "activity_data_unit": "tonne.km",
+      "distance": "350",
+      "emission_category": "HGV diesel [tonne.km]",
+      "id": 2,
+      "weight": "20",
+    },
+  },
+  {
+    "activity": 20,
+    "expectedUnit": "tonne.km",
+    "factorId": 10,
+    "result": {
+      "status": "Unit mismatch - this option is per tonne.km; choose the [Tonne KM] option or switch the unit to tonne.km",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "Tonne KM",
+      "distance": "350",
+      "emission_category": "HGV diesel [tonne.km]",
+      "id": 3,
+      "weight": "20",
+    },
+  },
+  {
+    "activity": 20,
+    "expectedUnit": "tonne.km",
+    "factorId": 10,
+    "result": {
+      "status": "Unit mismatch - this option is per tonne.km; choose the [tkm] option or switch the unit to tonne.km",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "tkm",
+      "distance": "350",
+      "emission_category": "HGV diesel [tonne.km]",
+      "id": 4,
+      "weight": "20",
+    },
+  },
+  {
+    "activity": 20000,
+    "expectedUnit": "tonne.km",
+    "factorId": 10,
+    "result": {
+      "status": "This unit is not configured for this category",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "kg.km",
+      "distance": "350",
+      "emission_category": "HGV diesel [tonne.km]",
+      "id": 5,
+      "weight": "20000",
+    },
+  },
+  {
+    "activity": 350,
+    "expectedUnit": "km",
+    "factorId": 11,
+    "result": {
+      "status": "Unit mismatch - this option is per km; choose the [kms] option or switch the unit to km",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "kms",
+      "distance": "350",
+      "emission_category": "HGV diesel [km]",
+      "id": 6,
+    },
+  },
+  {
+    "activity": 350,
+    "expectedUnit": "km",
+    "factorId": 11,
+    "result": {
+      "status": "ok",
+      "value": 315,
+    },
+    "row": {
+      "activity_data_unit": "km",
+      "distance": "350",
+      "emission_category": "HGV diesel [km]",
+      "id": 7,
+      "weight": "20",
+    },
+  },
+  {
+    "activity": 350,
+    "expectedUnit": "tonne.km",
+    "factorId": 10,
+    "result": {
+      "status": "Unit mismatch - this option is per tonne.km; choose the [km] option or switch the unit to tonne.km",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "km",
+      "distance": "350",
+      "emission_category": "HGV diesel [tonne.km]",
+      "id": 8,
+    },
+  },
+  {
+    "activity": 20,
+    "expectedUnit": "tonne.km",
+    "factorId": 10,
+    "result": {
+      "status": "This unit is not configured for this category",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "distance": "350",
+      "emission_category": "HGV diesel [tonne.km]",
+      "id": 9,
+      "weight": "20",
+    },
+  },
+  {
+    "activity": 7000,
+    "expectedUnit": "tonne.km",
+    "factorId": 10,
+    "result": {
+      "status": "Enter weight (a number greater than 0)",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "tonne.km",
+      "emission_category": "HGV diesel [tonne.km]",
+      "id": 10,
+      "quantity": "7000",
+    },
+  },
+  {
+    "activity": null,
+    "expectedUnit": "tonne.km",
+    "factorId": 10,
+    "result": {
+      "status": "Enter weight (a number greater than 0)",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "tonne.km",
+      "emission_category": "HGV diesel [tonne.km]",
+      "id": 11,
+      "quantity": "0",
+    },
+  },
+  {
+    "activity": 7000,
+    "expectedUnit": "tonne.km",
+    "factorId": 10,
+    "result": {
+      "status": "Enter distance (a number greater than 0)",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "tonne.km",
+      "emission_category": "HGV diesel [tonne.km]",
+      "id": 12,
+      "quantity": "7000",
+      "weight": "2",
+    },
+  },
+  {
+    "activity": 500,
+    "expectedUnit": "km",
+    "factorId": 11,
+    "result": {
+      "status": "Enter distance (a number greater than 0)",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "km",
+      "emission_category": "HGV diesel [km]",
+      "id": 13,
+      "quantity": "500",
+    },
+  },
+]
+`;
+
+exports[`Context 4 · Bahrain × FERA (fallbackToRaw) · monthly 2025-09 > matches the golden outputs 1`] = `
+[
+  {
+    "activity": 1600,
+    "expectedUnit": "kwh",
+    "factorId": 13,
+    "result": {
+      "status": "ok",
+      "value": 976,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "Diesel (avg biofuel blend)",
+      "id": 1,
+      "quantity": "1600",
+    },
+  },
+  {
+    "activity": 12,
+    "expectedUnit": "kwh",
+    "factorId": 14,
+    "result": {
+      "status": "converted",
+      "value": 0.36,
+    },
+    "row": {
+      "activity_data_unit": "mwh",
+      "emission_category": "Natural gas",
+      "id": 2,
+      "quantity": "12",
+    },
+  },
+  {
+    "activity": 12000,
+    "expectedUnit": "kwh",
+    "factorId": 14,
+    "result": {
+      "status": "ok",
+      "value": 0.36,
+    },
+    "row": {
+      "activity_data_unit": "kwh",
+      "emission_category": "Natural gas",
+      "id": 3,
+      "quantity": "12000",
+    },
+  },
+  {
+    "activity": 5,
+    "expectedUnit": null,
+    "factorId": null,
+    "result": {
+      "status": "No emission factor found for year 2024",
+      "value": null,
+    },
+    "row": {
+      "activity_data_unit": "litre",
+      "emission_category": "LPG",
+      "id": 4,
+      "quantity": "5",
+    },
+  },
+]
+`;
