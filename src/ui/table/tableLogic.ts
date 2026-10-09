@@ -62,3 +62,28 @@ function csvCell(v: string | number): string {
 export function toCsv(matrix: Array<Array<string | number>>): string {
   return matrix.map((row) => row.map(csvCell).join(",")).join("\r\n");
 }
+
+/**
+ * The row objects behind a selection, keyed by id in selection order. Rows in
+ * the current data win (they are the freshest); rows selected on another page
+ * or since filtered out come from `kept`. Ids never seen are left out. Returns
+ * `kept` itself when nothing changed, so it can feed a state setter.
+ */
+export function retainSelectedRows<T, Id>(
+  ids: Id[],
+  rows: T[],
+  getId: (row: T) => Id,
+  kept: Map<Id, T>,
+): Map<Id, T> {
+  const loaded = new Map(rows.map((r) => [getId(r), r] as const));
+  const next = new Map<Id, T>();
+  for (const id of ids) {
+    const row = loaded.has(id) ? loaded.get(id) : kept.get(id);
+    if (row !== undefined) next.set(id, row as T);
+  }
+  if (next.size === kept.size && [...next].every(([id, row]) => kept.get(id) === row)) {
+    const order = [...kept.keys()];
+    if ([...next.keys()].every((id, i) => order[i] === id)) return kept;
+  }
+  return next;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextSort, pageCount, paginate, sortRows, toCsv, toMatrix } from "./tableLogic";
+import { nextSort, pageCount, paginate, retainSelectedRows, sortRows, toCsv, toMatrix } from "./tableLogic";
 import type { Column } from "./types";
 
 type Row = { site: string; t: number | null };
@@ -60,5 +60,26 @@ describe("CSV export", () => {
       ["Sitra", 12],
       ["askar", ""],
     ]);
+  });
+});
+
+describe("retainSelectedRows", () => {
+  type R = { id: number; v: string };
+  const id = (r: R) => r.id;
+  it("keeps rows from other pages, prefers loaded rows and drops unselected ones", () => {
+    const page1 = [{ id: 1, v: "a" }, { id: 2, v: "b" }];
+    const kept = retainSelectedRows([1, 2], page1, id, new Map());
+    const page2 = [{ id: 3, v: "c" }, { id: 1, v: "a2" }];
+    const next = retainSelectedRows([2, 3, 1], page2, id, kept);
+    expect([...next.values()]).toEqual([{ id: 2, v: "b" }, { id: 3, v: "c" }, { id: 1, v: "a2" }]);
+    expect([...retainSelectedRows([3], [], id, next).keys()]).toEqual([3]);
+    expect(retainSelectedRows([], page2, id, next).size).toBe(0);
+  });
+
+  it("returns the same map when nothing changed and skips ids never seen", () => {
+    const rowsA = [{ id: 1, v: "a" }];
+    const kept = retainSelectedRows([1, 9], rowsA, id, new Map());
+    expect([...kept.keys()]).toEqual([1]);
+    expect(retainSelectedRows([1, 9], rowsA, id, kept)).toBe(kept);
   });
 });

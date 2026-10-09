@@ -122,4 +122,53 @@ describe("DataTable", () => {
     await user.click(screen.getByRole("button", { name: /Site/ }));
     expect(onSortChange).toHaveBeenCalledWith({ id: "site", dir: "asc" });
   });
+  it("gives bulk actions every selected row across server pages", async () => {
+    const user = userEvent.setup();
+    const approve = vi.fn();
+    const props = {
+      label: "Entries",
+      columns,
+      getRowId: (r: Row) => r.id,
+      selectable: true,
+      bulkActions: (sel: Row[]) => <button onClick={() => approve(sel.map((r) => r.id))}>Approve</button>,
+    };
+    const page = (p: number) => ({ mode: "server" as const, page: p, pageSize: 10, total: 30, onPageChange: () => {} });
+    const { rerender } = render(<DataTable {...props} rows={rows.slice(0, 10)} pagination={page(0)} />);
+    await user.click(screen.getByRole("checkbox", { name: "Select Site 01" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Site 02" }));
+    rerender(<DataTable {...props} rows={rows.slice(10, 20)} pagination={page(1)} />);
+    await user.click(screen.getByRole("checkbox", { name: "Select Site 11" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Site 12" }));
+    expect(screen.getByText("4 selected")).toBeTruthy();
+    expect(screen.queryByText(/Selection spans pages/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    expect(approve).toHaveBeenLastCalledWith([11, 12, 1, 2]);
+
+    // Unselecting drops the row; clearing empties the selection.
+    await user.click(screen.getByRole("checkbox", { name: "Select Site 11" }));
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    expect(approve).toHaveBeenLastCalledWith([12, 1, 2]);
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.queryByRole("region", { name: "Bulk actions" })).toBeNull();
+  });
+
+  it("notes a controlled selection that includes rows not loaded here", () => {
+    const bulk = vi.fn(() => null);
+    render(
+      <DataTable
+        label="Entries"
+        rows={rows.slice(0, 10)}
+        columns={columns}
+        getRowId={(r) => r.id}
+        selectable
+        selectedIds={[3, 25, 26]}
+        onSelectionChange={() => {}}
+        bulkActions={bulk}
+        pagination={{ mode: "server", page: 0, pageSize: 10, total: 30, onPageChange: () => {} }}
+      />,
+    );
+    expect(screen.getByText("3 selected")).toBeTruthy();
+    expect(screen.getByText("Selection spans pages: 2 not loaded here")).toBeTruthy();
+    expect(bulk).toHaveBeenLastCalledWith([rows[2]], expect.any(Function), [3, 25, 26]);
+  });
 });

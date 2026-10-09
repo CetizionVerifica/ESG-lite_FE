@@ -8,7 +8,7 @@ import { cn } from "../cn";
 import { formatNumber } from "../format";
 import { focusRing } from "../styles";
 import { exportMatrix, type ExportFormat } from "./exportTable";
-import { nextSort, pageCount, paginate, sortRows, toMatrix } from "./tableLogic";
+import { nextSort, pageCount, paginate, retainSelectedRows, sortRows, toMatrix } from "./tableLogic";
 import type { Column, SortState } from "./types";
 
 type RowId = string | number;
@@ -40,8 +40,12 @@ export type DataTableProps<T> = {
   selectable?: boolean;
   selectedIds?: RowId[];
   onSelectionChange?: (ids: RowId[]) => void;
-  /** Buttons in the bulk bar while rows are selected. */
-  bulkActions?: (selected: T[], clear: () => void) => ReactNode;
+  /**
+   * Buttons in the bulk bar while rows are selected. `selected` holds every
+   * selected row seen so far, across pages; `ids` is the full selection, which
+   * can include rows never loaded here (e.g. a controlled selection).
+   */
+  bulkActions?: (selected: T[], clear: () => void, ids: RowId[]) => ReactNode;
 
   pagination?: Pagination;
   /** Opens the row, usually in a Drawer. Rows become focusable; Enter opens. */
@@ -151,7 +155,21 @@ export function DataTable<T>({
   const togglePage = () =>
     setSelected(allOnPage ? selected.filter((id) => !pageIds.includes(id)) : [...new Set([...selected, ...pageIds])]);
   const clear = () => setSelected([]);
-  const selectedRows = rows.filter((r) => selectedSet.has(getRowId(r)));
+
+  // Keep the row objects of selected rows so bulk actions still get them after
+  // a page change (server pagination) or a filter hides them.
+  const [keptRows, setKeptRows] = useState<Map<RowId, T>>(() => new Map());
+  useEffect(() => {
+    setKeptRows((kept) => retainSelectedRows(selected, rows, getRowId, kept));
+  }, [selected, rows, getRowId]);
+  const selectedRows = useMemo(() => {
+    const byId = retainSelectedRows(selected, rows, getRowId, keptRows);
+    // Loaded rows in table order, then rows from elsewhere in selection order.
+    const loaded = rows.filter((r) => byId.has(getRowId(r)));
+    const loadedIds = new Set(loaded.map(getRowId));
+    return [...loaded, ...[...byId].filter(([id]) => !loadedIds.has(id)).map(([, row]) => row)];
+  }, [selected, rows, getRowId, keptRows]);
+  const notLoaded = selected.length - selectedRows.length;
 
   const doExport = (format: ExportFormat) => {
     if (onExport) return onExport(format);
@@ -240,10 +258,13 @@ export function DataTable<T>({
       {selectable && selected.length > 0 && (
         <div role="region" aria-label="Bulk actions" className="flex flex-wrap items-center gap-2 border-b border-line bg-brand-50 px-3 py-2 text-sm text-ink">
           <span className="font-medium">{selected.length} selected</span>
+          {notLoaded > 0 && (
+            <span className="text-muted">Selection spans pages: {formatNumber(notLoaded)} not loaded here</span>
+          )}
           <Button size="sm" variant="ghost" onClick={clear}>
             Clear
           </Button>
-          <div className="ml-auto flex flex-wrap gap-2">{bulkActions?.(selectedRows, clear)}</div>
+          <div className="ml-auto flex flex-wrap gap-2">{bulkActions?.(selectedRows, clear, selected)}</div>
         </div>
       )}
 
