@@ -100,7 +100,7 @@ async function signIn(page: Page) {
           baseYear: body.baseYear,
           targetYear: 2050,
           years: n,
-          annualRate: 1 - 0.1 ** (1 / n),
+          annualRate: Number(((1 - 0.1 ** (1 / n)) * 100).toFixed(4)),
           baseEmissions: 380,
           targetEmissions: 38,
           totalReductionPct: 90,
@@ -158,6 +158,7 @@ test("a manager sets a near-term target and sees it evaluated on one page", asyn
   await page.getByRole("radio", { name: "Net-zero 2050" }).click();
   await expect.poll(() => targets[targets.length - 1]?.path).toContain("long-term-chart");
   await expect(kpi).toContainText("Target 2050");
+  await expect(kpi).toContainText("8.5%");
   await expect(rules).toContainText("Scope 3 is 20%, below 40%");
 });
 

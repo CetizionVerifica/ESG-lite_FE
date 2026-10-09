@@ -80,7 +80,7 @@ export default function TargetsPage() {
   const loading = target.isPending || target.isPlaceholderData;
   const model = !loading && target.isSuccess ? target.data : undefined;
   const error = target.isError && !noData ? LOAD_ERROR : null;
-  const rules = model ? rulesCheck({ model, pathway: setup.pathway, chosenSites: chosen.length, totalSites: sites.length }) : null;
+  const rules = model ? rulesCheck({ model, pathway: setup.pathway, chosenSites: chosen.length, totalSites: sites.length, currentYear: now.getFullYear() }) : null;
 
   if (sites.length === 0)
     return (

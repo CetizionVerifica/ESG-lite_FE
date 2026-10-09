@@ -177,7 +177,8 @@ export function fromNetZero(r: LongTermChartResponse): TargetModel {
     kind: "netzero",
     baseYear: r.baseYear,
     targetYear: r.targetYear,
-    annualRatePct: round(r.annualRate * 100, 2),
+    // The net-zero endpoint already sends a percent (near-term sends a fraction).
+    annualRatePct: round(r.annualRate, 2),
     baseTotals: t,
     boundaryBase: round(base),
     targetEmissions: r.targetEmissions,
@@ -248,8 +249,8 @@ export type Rule = { id: string; state: RuleState; title: string; detail: string
  * figures. Coverage: the pathway always takes all Scope 1+2 of the chosen
  * sites, so it is met when every managed site is in the target.
  */
-export function rulesCheck(input: { model: TargetModel; pathway: Pathway; chosenSites: number; totalSites: number }): Rule[] {
-  const { model: m, pathway, chosenSites, totalSites } = input;
+export function rulesCheck(input: { model: TargetModel; pathway: Pathway; chosenSites: number; totalSites: number; currentYear?: number }): Rule[] {
+  const { model: m, pathway, chosenSites, totalSites, currentYear } = input;
   const allSites = chosenSites >= totalSites;
   const rules: Rule[] = [
     {
@@ -282,11 +283,14 @@ export function rulesCheck(input: { model: TargetModel; pathway: Pathway; chosen
   ];
   if (m.kind === "near") {
     const years = m.targetYear - m.baseYear;
+    const past = currentYear !== undefined && m.targetYear < currentYear;
     rules.push({
       id: "horizon",
-      state: years >= 5 && years <= 10 ? "ok" : "warn",
-      title: `Near-term horizon is ${years} years (${m.baseYear}–${m.targetYear})`,
-      detail: "Near-term targets run 5 to 10 years from the base year.",
+      state: years >= 5 && years <= 10 && !past ? "ok" : "warn",
+      title: past ? `Target year ${m.targetYear} has already passed` : `Near-term horizon is ${years} years (${m.baseYear}–${m.targetYear})`,
+      detail: past
+        ? "Pick a later base year or the 10-year horizon to set a target still ahead."
+        : "Near-term targets run 5 to 10 years from the base year.",
     });
     rules.push(
       pathway === "15c"

@@ -127,7 +127,7 @@ describe("net-zero model", () => {
     baseYear: 2025,
     targetYear: 2050,
     years: 25,
-    annualRate: 0.0880682,
+    annualRate: 8.8068,
     baseEmissions: 1000,
     targetEmissions: 100,
     totalReductionPct: 90,
@@ -197,6 +197,12 @@ describe("export and errors", () => {
     expect(isNoBaseData({ response: { status: 400, data: { message: "No approved emissions found for baseYear=2019." } } })).toBe(true);
     expect(isNoBaseData({ response: { status: 500, data: { message: "Internal server error" } } })).toBe(false);
     expect(isNoBaseData(null)).toBe(false);
+  });
+
+  it("warns when the near-term target year has passed", () => {
+    const m = fromNearTerm(near({ baseYear: 2015, targetYear: 2020 }));
+    const horizon = rulesCheck({ model: m, pathway: "15c", chosenSites: 1, totalSites: 1, currentYear: 2026 }).find((r) => r.id === "horizon")!;
+    expect(horizon).toMatchObject({ state: "warn", title: "Target year 2020 has already passed" });
   });
 
   it("years left never goes below zero", () => {
