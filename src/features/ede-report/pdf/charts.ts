@@ -3,7 +3,7 @@ import type { EChartsOption } from "echarts";
 import type { PdfTheme } from "../../../theme";
 import type { EdeReportResponse } from "../../../services/reportService";
 import type { ReportPeriod } from "../../../ui";
-import { type SiteRef, intensitySeries, monthLabel, monthlyGrid } from "../logic";
+import { type SiteRef, intensitySeries, intensitySites, isSiteRow, monthLabel, monthlyGrid } from "../logic";
 
 export type EdePdfCharts = { share?: string; monthly?: string; renewables?: string; saved?: string; intensity?: string };
 
@@ -118,9 +118,9 @@ export function renderCharts(data: EdeReportResponse, period: ReportPeriod, site
   );
 
   // The PDF shows intensity for every site with production, one line each.
-  const withRows = sites.filter((s) => data.intensityMonthly.some((r) => r.siteName === s.siteName && r.production > 0));
+  const withRows = intensitySites(data, sites).filter((s) => data.intensityMonthly.some((r) => isSiteRow(r, s) && r.production > 0));
   if (withRows.length) {
-    const first = intensitySeries(data, period, withRows[0].siteName);
+    const first = intensitySeries(data, period, withRows[0]);
     out.intensity = png(
       {
         legend,
@@ -135,7 +135,7 @@ export function renderCharts(data: EdeReportResponse, period: ReportPeriod, site
           connectNulls: false,
           symbolSize: 6,
           itemStyle: { color: colorOf(s.siteId) },
-          data: intensitySeries(data, period, s.siteName).intensity,
+          data: intensitySeries(data, period, s).intensity,
         })),
       },
       t,

@@ -2,7 +2,7 @@ import { Defs, Document, Image, LinearGradient, Page, Rect, Stop, StyleSheet, Sv
 import type { PdfTheme } from "../../../theme";
 import type { EdeReportResponse } from "../../../services/reportService";
 import { POWERED_BY_TEXT, type ReportPeriod } from "../../../ui";
-import { type EdeFigures, type SiteRef, edePeriodLabel, intensitySeries, monthLabel, monthlyGrid, overallTotals } from "../logic";
+import { type EdeFigures, type SiteRef, edePeriodLabel, intensitySeries, intensitySites, monthLabel, monthlyGrid, overallTotals } from "../logic";
 import type { EdePdfCharts } from "./charts";
 
 export type EdePdfProps = {
@@ -120,8 +120,7 @@ export function EdePdf(p: EdePdfProps) {
   const periodText = edePeriodLabel(p.period);
   const footer = `EDE report · ${p.company} · ${periodText}`;
   const grid = monthlyGrid(data, p.period, p.sites);
-  const intensitySites = p.sites.filter((x) => data.intensityMonthly.some((r) => r.siteName === x.siteName));
-  const intensity = intensitySites.map((x) => ({ site: x, series: intensitySeries(data, p.period, x.siteName) }));
+  const intensity = intensitySites(data, p.sites).map((x) => ({ site: x, series: intensitySeries(data, p.period, x) }));
   const kpis: [string, string][] = [
     ["Total emissions", `${n(f.total)} tCO2e`],
     ["Scope 1", `${n(f.scope1)} tCO2e`],
