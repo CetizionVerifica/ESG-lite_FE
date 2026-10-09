@@ -65,14 +65,19 @@ export function usePendingEntries(siteIds: number[]) {
   });
 }
 
-/** Pending production records on the chosen sites. */
+/**
+ * Pending production records on the chosen sites. Asked per site: without a
+ * `siteId` the endpoint isn't limited to the manager's company.
+ */
 export function usePendingProduction(siteIds: number[]) {
   return useQuery({
     queryKey: keys.production(siteIds),
     enabled: siteIds.length > 0,
     queryFn: async () => {
-      const rows = await getProductionDataForManager({ status: "pending" });
-      return rows.filter((r) => siteIds.includes(r.site?.site_id)).length;
+      const counts = await Promise.all(
+        siteIds.map(async (siteId) => (await getProductionDataForManager({ siteId, status: "pending" })).filter((r) => r.site?.site_id === siteId).length),
+      );
+      return counts.reduce((a, b) => a + b, 0);
     },
   });
 }
