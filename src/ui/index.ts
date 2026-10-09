@@ -28,3 +28,6 @@ export { useToast, type ToastInput, type ToastTone } from "./toastStore";
 export { KpiStrip, type Kpi, type KpiStripProps, type KpiFormat } from "./KpiStrip";
 export { ScopeBar, type ScopeBarProps, type ScopeTotals } from "./ScopeBar";
 export { ChartFrame, type ChartFrameProps, type ChartTableColumn } from "./ChartFrame";
+export { FilterBar, type FilterBarProps, type FilterDef } from "./FilterBar";
+export { useFilterParams } from "./hooks/useFilterParams";
+export { EMPTY_FILTERS, activeCount, readFilterParams, writeFilterParams, type FilterValues, type SavedView } from "./filterLogic";

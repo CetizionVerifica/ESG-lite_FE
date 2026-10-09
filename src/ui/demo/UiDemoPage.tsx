@@ -11,7 +11,7 @@ import {
   StatusPillDemo,
 } from "./CoreDemos";
 import { DataTableDemo, PageHeaderDemo } from "./TableDemos";
-import { ChartDemo, FeedbackDemo, KpiDemo, PrimitivesDemo } from "./DisplayDemos";
+import { ChartDemo, FeedbackDemo, FilterBarDemo, KpiDemo, PrimitivesDemo } from "./DisplayDemos";
 import { DemoThemeScope } from "./demoTheme";
 import { DEMO_THEMES, DEMO_THEME_LABEL, type DemoTheme } from "./demoThemes";
 
@@ -62,6 +62,7 @@ export default function UiDemoPage() {
         </header>
         <main className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
           <PageHeaderDemo />
+          <FilterBarDemo />
           <DataTableDemo />
           <KpiDemo />
           <ChartDemo />

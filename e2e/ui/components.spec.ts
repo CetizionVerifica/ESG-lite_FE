@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // PlanetPulse light, PlanetPulse dark and Midal Classic (F1 buildTheme).
 const THEMES = ["light", "dark", "classic"] as const;
-const SECTIONS = ["page-header", "data-table", "kpi-strip", "chart-frame", "callout", "primitives", "format", "button", "status-pill", "fields", "empty-state", "skeleton"];
+const SECTIONS = ["page-header", "filter-bar", "data-table", "kpi-strip", "chart-frame", "callout", "primitives", "format", "button", "status-pill", "fields", "empty-state", "skeleton"];
 
 async function openGallery(page: Page, theme: string) {
   await page.goto(`/__ui?theme=${theme}`);

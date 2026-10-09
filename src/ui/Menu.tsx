@@ -60,6 +60,7 @@ export function Menu({ trigger, items, align = "end", label }: MenuProps) {
   }, [open]);
 
   const move = (delta: number) => {
+    if (!enabled.length) return;
     const pos = enabled.indexOf(active);
     setActive(enabled[(pos + delta + enabled.length) % enabled.length]);
   };
@@ -73,7 +74,7 @@ export function Menu({ trigger, items, align = "end", label }: MenuProps) {
         "aria-controls": `${id}-menu`,
         onClick: () => (open ? close(false) : openAt(enabled[0] ?? 0)),
         onKeyDown: (e) => {
-          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          if ((e.key === "ArrowDown" || e.key === "ArrowUp") && enabled.length) {
             e.preventDefault();
             openAt(e.key === "ArrowDown" ? enabled[0] : enabled[enabled.length - 1]);
           }

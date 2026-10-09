@@ -6,6 +6,7 @@ import {
   Button,
   Callout,
   ChartFrame,
+  FilterBar,
   KpiStrip,
   Menu,
   ScopeBar,
@@ -13,6 +14,7 @@ import {
   TabPanel,
   Tabs,
   Tooltip,
+  useFilterParams,
   useToast,
 } from "..";
 import { DemoSection, Variant } from "./DemoSection";
@@ -193,6 +195,44 @@ export function PrimitivesDemo() {
         <Badge tone="warn">3 overdue</Badge>
         <Badge tone="bad">2 rejected</Badge>
       </div>
+    </DemoSection>
+  );
+}
+
+const STATUS_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+];
+const SUBMITTER_OPTIONS = [
+  { value: "12", label: "Aisha Rahman" },
+  { value: "15", label: "Omar Haddad" },
+  { value: "21", label: "Priya Nair" },
+];
+const SOURCE_OPTIONS = [
+  { value: "manual", label: "Manual" },
+  { value: "bill", label: "From a bill" },
+  { value: "upload", label: "Bulk upload" },
+];
+
+export function FilterBarDemo() {
+  const [value, setValue] = useFilterParams(["status", "submitter", "source"]);
+  return (
+    <DemoSection id="filter-bar" title="FilterBar">
+      <FilterBar
+        storageKey="ui-demo"
+        searchPlaceholder="Search entries"
+        value={value}
+        onChange={setValue}
+        filters={[
+          { key: "status", label: "Status", options: STATUS_OPTIONS },
+          { key: "submitter", label: "Submitted by", options: SUBMITTER_OPTIONS },
+          { key: "source", label: "Source", options: SOURCE_OPTIONS, multiple: false },
+        ]}
+      />
+      <Variant label="Loading options">
+        <FilterBar value={value} onChange={() => {}} loading search={false} filters={[{ key: "submitter", label: "Submitted by", options: [] }]} />
+      </Variant>
     </DemoSection>
   );
 }
