@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { createEmissionCalculator } from "./emissionCalc";
 import { factorYearForDate, yearlyPeriodEndDate } from "./reportingPeriod";
-import type { CalculationSpec, ColumnEntity, EmissionCategoryMapping, EmissionFactor, ModalRow } from "../types";
+import type { CalculationSpec, ColumnEntity, EmissionCategoryMapping, EmissionFactor, ModalRow } from "./types";
 
 // ---------------------------------------------------------------------------
 // Period → factor year (reportingPeriod.ts): yearly mode stores the
