@@ -31,7 +31,6 @@ const Legacy = {
   ProductionData: lazy(() => import("../pages/ProductionDataPage")),
   GhgReport: lazy(() => import("../pages/GhgReport/GhgReport")),
   EdeReports: lazy(() => import("../pages/Reports/EdePreports")),
-  Sbti: lazy(() => import("../pages/sbti/SbtiMain")),
   Notifications: lazy(() => import("../pages/NotificationsPage")),
   CompanyAdminUsers: lazy(() => import("../pages/CompanyAdmin/CompanyAdminUsersPage")),
   SuperAdmin: lazy(() => import("../pages/SuperAdminPage")),
@@ -62,6 +61,7 @@ const OverviewPage = lazy(() => import("../features/overview/Page"));
 const ProductionReviewPage = lazy(() => import("../features/production-review/Page"));
 const TeamAccessPage = lazy(() => import("../features/team-access/Page"));
 const SettingsPage = lazy(() => import("../features/settings/Page"));
+const TargetsPage = lazy(() => import("../features/targets-sbti/Page"));
 
 const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(id)} />;
 
@@ -79,7 +79,7 @@ const pages: Record<ShellRouteId, ReactNode> = {
   team: <TeamAccessPage />,
   "ghg-report": <Legacy.GhgReport />,
   "ede-report": <Legacy.EdeReports />,
-  targets: <Legacy.Sbti />,
+  targets: <TargetsPage />,
   pcf: placeholder("pcf"),
   notifications: <Legacy.Notifications />,
   settings: <SettingsPage />,
