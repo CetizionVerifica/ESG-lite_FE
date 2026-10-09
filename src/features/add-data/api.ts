@@ -8,6 +8,8 @@ export type { CategoryMapping };
 import { createEmission, getPeriodTotal } from "../../services/emissionService";
 import { getThresholdByCompany } from "../../services/thresholdService";
 import { linkInvoiceDocuments } from "../../services/documentService";
+import { calculateRoadDistance, calculateSeaDistance } from "../../services/distanceService";
+import { resolveLocationFromBackend, type ResolvedLocation } from "../../services/locationService";
 import {
   deleteInvoice,
   getInvoices,
@@ -211,4 +213,34 @@ export async function linkBillEvidence(invoiceId: number, emissionIds: number[])
   } catch {
     return false;
   }
+}
+
+export type { ResolvedLocation } from "../../services/locationService";
+
+/** Look a typed or pasted address up on the backend (Google geocoding). */
+export const resolveLocation = (query: string) => resolveLocationFromBackend(query);
+
+export type RouteResult = { meters: number; durationText: string | null; polyline: string | null; seaPath: [number, number][] | null };
+
+const pointOf = (p: ResolvedLocation) => ({ address: p.display_name, lat: p.lat, lng: p.lon, placeId: p.place_id || undefined });
+
+/** Road or sea route between two places (backend routing; sea uses the AI service's sea-route). */
+export function useRoute(mode: "road" | "sea" | null, from: ResolvedLocation | null, to: ResolvedLocation | null) {
+  return useQuery({
+    queryKey: ["add-data", "route", mode, from?.lat, from?.lon, to?.lat, to?.lon],
+    enabled: mode !== null && !!from && !!to,
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async (): Promise<RouteResult> => {
+      const body = { origin: pointOf(from as ResolvedLocation), destination: pointOf(to as ResolvedLocation) };
+      if (mode === "sea") {
+        const r = await calculateSeaDistance({ ...body, mode: "sea" });
+        const coords = (r.seaGeometry as { coordinates?: unknown[] } | null)?.coordinates ?? [];
+        const seaPath = coords.filter((c): c is [number, number] => Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number");
+        return { meters: r.distanceMeters, durationText: r.durationText, polyline: null, seaPath: seaPath.length ? seaPath : null };
+      }
+      const r = await calculateRoadDistance({ ...body, mode: "road" });
+      return { meters: r.distanceMeters, durationText: r.durationText, polyline: r.encodedPolyline, seaPath: null };
+    },
+  });
 }

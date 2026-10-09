@@ -13,6 +13,8 @@ import { billOf } from "../logic/bill";
 import type { EntryPeriod } from "../logic/entry";
 import { rowHasInput } from "../hooks/useEntryRows";
 import { FromBill } from "./FromBill";
+import { DistanceDrawer } from "../components/distance/DistanceDrawer";
+import { distanceTarget, type DistanceField } from "../logic/distance";
 
 type Props = {
   rows: ModalRow[];
@@ -47,6 +49,9 @@ export function EnterRows(p: Props) {
   const [showIssues, setShowIssues] = useState(false);
   // Bills still being read; Review waits so their rows can't skip the check.
   const [reading, setReading] = useState(0);
+  // The distance column the drawer fills, if open.
+  const [distanceFor, setDistanceFor] = useState<{ rowId: ModalRow["id"]; column: string; field: DistanceField } | null>(null);
+  const distanceRow = distanceFor ? p.rows.find((r) => r.id === distanceFor.rowId) : undefined;
   const total = p.rows.reduce((sum, r) => sum + (p.calc.calculateEmission(r).value ?? 0), 0);
   const invalid = p.issues.filter(Boolean).length;
   const position = new Map(p.rows.map((r, i) => [r.id, i]));
@@ -74,6 +79,7 @@ export function EnterRows(p: Props) {
         onExtraChange={(key, value) => p.dispatch({ type: "extra", id: row.id, key, value })}
         onDuplicate={() => p.dispatch({ type: "duplicate", id: row.id })}
         onRemove={() => p.dispatch({ type: "remove", id: row.id })}
+        onCalculateDistance={(column, field) => setDistanceFor({ rowId: row.id, column, field })}
       />
     );
   };
@@ -161,6 +167,18 @@ export function EnterRows(p: Props) {
           Under "Start from a bill", check what the AI read and choose Use these rows, or remove a bill dated outside this period. Nothing from a bill is sent before that.
         </Callout>
       )}
+
+      <DistanceDrawer
+        open={!!distanceFor && !!distanceRow}
+        onClose={() => setDistanceFor(null)}
+        unit={String(distanceRow?.activity_data_unit ?? "km")}
+        onUse={(distance) => {
+          if (distanceFor) {
+            p.dispatch({ type: "change", model: p.model, id: distanceFor.rowId, column: distanceTarget(distanceFor.field, distanceFor.column), value: String(distance) });
+          }
+          setDistanceFor(null);
+        }}
+      />
 
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-page py-3">
         <p className="text-sm text-muted">

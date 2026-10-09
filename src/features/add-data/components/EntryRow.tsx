@@ -9,6 +9,8 @@ import type { EmissionFactor, ModalRow } from "../types";
 import { billOf, isAiField, LOW_CONFIDENCE } from "../logic/bill";
 import { AiChip, AiLabel, ConfidenceBadge } from "./AiMarks";
 import { DynamicField } from "./DynamicField";
+import { DistanceInput } from "./DistanceInput";
+import { distanceFieldFor, type DistanceField } from "../logic/distance";
 import { ExtraFields } from "./ExtraFields";
 
 export type RowComparison = { text: string; overThreshold: boolean; threshold: number; previousLabel: string } | null;
@@ -32,6 +34,8 @@ type Props = {
   onExtraChange: (key: string, value: string) => void;
   onDuplicate: () => void;
   onRemove: () => void;
+  /** Opens the distance drawer for a distance column. */
+  onCalculateDistance: (column: string, field: DistanceField) => void;
 };
 
 /** One entry as a card: what it is, its values, more details, and the live result. */
@@ -109,16 +113,24 @@ export function EntryRow(p: Props) {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {formColumns(model)
           .filter((c) => isColumnVisible(model, c, row))
-          .map((c) => (
-            <DynamicField
-              key={c.pk_id}
-              model={model}
-              column={c}
-              row={row}
-              onChange={p.onChange}
-              labelExtra={isAiField(row, c.column_name) ? <AiChip /> : undefined}
-            />
-          ))}
+          .map((c) => {
+            const labelExtra = isAiField(row, c.column_name) ? <AiChip /> : undefined;
+            const distance = distanceFieldFor(model, row, c);
+            return distance ? (
+              <DistanceInput
+                key={c.pk_id}
+                model={model}
+                column={c}
+                row={row}
+                field={distance}
+                onChange={p.onChange}
+                onCalculate={() => p.onCalculateDistance(c.column_name, distance)}
+                labelExtra={labelExtra}
+              />
+            ) : (
+              <DynamicField key={c.pk_id} model={model} column={c} row={row} onChange={p.onChange} labelExtra={labelExtra} />
+            );
+          })}
         <Select<string>
           label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
           value={row.activity_data_unit || null}

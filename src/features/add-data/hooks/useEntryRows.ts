@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { billOf, markEdited } from "../logic/bill";
+import { withCompositeProduct } from "../logic/distance";
 import { applyChange, newRow, setExtraField, type FormModel } from "../logic/form";
 import type { ModalRow } from "../types";
 
@@ -24,7 +25,8 @@ const nextIdOf = (rows: ModalRow[]) => rows.reduce((max, r) => Math.max(max, r.i
 
 /** A person's edit: the field, and any value it changes in turn, stops being AI-filled. */
 export function editRow(model: FormModel, row: ModalRow, column: string, value: string): ModalRow {
-  let next = applyChange(model, markEdited(row, column), column, value);
+  // A count or distance of a composite unit (passenger × km) also sets the column to their product.
+  let next = withCompositeProduct(applyChange(model, markEdited(row, column), column, value), column);
   // Values the edit changed too (cleared children, a re-derived category) aren't the AI's any more.
   for (const field of billOf(next)?.ai ?? []) if (next[field] !== row[field]) next = markEdited(next, field);
   return next;
