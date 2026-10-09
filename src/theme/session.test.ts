@@ -6,6 +6,7 @@ import {
   resolveAppearance,
   selectPack,
   shouldLoadBrand,
+  subscribeMediaQuery,
 } from "./session";
 
 const store = (values: Record<string, string>) => ({ getItem: (k: string) => values[k] ?? null });
@@ -59,5 +60,38 @@ describe("appearance", () => {
     expect(resolveAppearance("system", true)).toBe("dark");
     expect(resolveAppearance("system", false)).toBe("light");
     expect(resolveAppearance("light", true)).toBe("light");
+  });
+});
+
+describe("subscribeMediaQuery", () => {
+  it("uses addEventListener when the browser has it", () => {
+    const calls: string[] = [];
+    const mq = {
+      addEventListener: (type: string) => calls.push(`add:${type}`),
+      removeEventListener: (type: string) => calls.push(`remove:${type}`),
+      addListener: () => calls.push("legacy-add"),
+      removeListener: () => calls.push("legacy-remove"),
+    };
+    const unsubscribe = subscribeMediaQuery(mq, () => {});
+    unsubscribe();
+    expect(calls).toEqual(["add:change", "remove:change"]);
+  });
+
+  it("falls back to addListener/removeListener on Safari < 14", () => {
+    const listeners = new Set<() => void>();
+    const mq = {
+      addListener: (l: () => void) => listeners.add(l),
+      removeListener: (l: () => void) => listeners.delete(l),
+    };
+    let changes = 0;
+    const unsubscribe = subscribeMediaQuery(mq, () => changes++);
+    listeners.forEach((l) => l());
+    expect(changes).toBe(1);
+    unsubscribe();
+    expect(listeners.size).toBe(0);
+  });
+
+  it("does nothing when neither API exists", () => {
+    expect(() => subscribeMediaQuery({}, () => {})()).not.toThrow();
   });
 });
