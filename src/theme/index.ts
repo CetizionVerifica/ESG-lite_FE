@@ -11,6 +11,7 @@ export {
   ramp,
   resolveLook,
   statusClashes,
+  textOnGradient,
   toCssVars,
 } from "./buildTheme";
 export type { ContrastPair, StatusName } from "./buildTheme";

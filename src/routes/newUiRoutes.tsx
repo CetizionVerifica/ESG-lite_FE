@@ -1,5 +1,5 @@
 import { type ReactNode, lazy } from "react";
-import { Outlet, type RouteObject } from "react-router-dom";
+import { Navigate, Outlet, type RouteObject } from "react-router-dom";
 import ClientContextProvider from "../lib/ClientContextProvider";
 import AppShell, { type ShellHandle } from "../features/shell/AppShell";
 import {
@@ -12,6 +12,7 @@ import {
   RootRedirect,
 } from "../features/shell/pages";
 import { LEGACY_REDIRECTS, SHELL_ROUTES, type ShellRouteId, getShellRoute } from "../features/shell/routeMap";
+import { ResetPasswordPage, SignInPage, StaffSignInPage } from "../features/sign-in/Page";
 import ProtectedRoute from "./ProtectedRoute";
 
 /**
@@ -110,6 +111,12 @@ const shellRoutes: RouteObject[] = SHELL_ROUTES.flatMap((route) => {
 
 const newUiRoutes: RouteObject[] = [
   { path: "/", element: <RootRedirect /> },
+  // P01: signed-out screens, outside the shell.
+  { path: "/login", element: <SignInPage /> },
+  { path: "/:clientSlug/login", element: <SignInPage /> },
+  { path: "/superadmin/login", element: <StaffSignInPage /> },
+  { path: "/admin/login", element: <Navigate to="/superadmin/login" replace /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
   {
     element: (
       <ClientContextProvider>

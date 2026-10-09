@@ -37,3 +37,11 @@ Mobile: cover becomes a 120px header band.
 
 ## Acceptance
 Midal user sees Midal cover and logo; contrast passes; works at 390px; no `alert()`.
+
+## Build notes (P01, ESG-lite_FE #74)
+- Option **a**: `/{clientSlug}/login` reads `GET /brands/public/:slug` through `usePublicBrand`. That endpoint (and a brand slug) doesn't exist in ESG-lite yet, so every slug falls back to PlanetPulse until it ships. `/login` is PlanetPulse.
+- The client theme is applied to the sign-in subtree only (`AuthLayout` sets the pack's `--t-*` vars), so the app-wide ThemeProvider is untouched.
+- Wrong door signs the person out straight away (`useSignIn`), on both doors. `/admin/login` redirects to `/superadmin/login`.
+- Forgot password never says whether the address exists; only a 5xx or network error is shown.
+- Min password length lives in `logic.ts` (`MIN_PASSWORD_LENGTH`). Onboarding's 6 is fixed when P17 (client onboarding) is rebuilt.
+- Legacy Login/AdminLogin/ResetPassword stay until the route switch for good (flag off = unchanged).
