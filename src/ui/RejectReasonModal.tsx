@@ -1,23 +1,36 @@
 import { useEffect, useState } from "react";
-import { Modal, Textarea, cn, focusRing } from "../../../ui";
-import { SUGGESTED_REASONS, rejectReasonError } from "../logic";
+import { cn } from "./cn";
+import { Textarea } from "./fields";
+import { Modal } from "./Modal";
+import { SUGGESTED_REASONS, rejectReasonError } from "./review";
+import { focusRing } from "./styles";
 
-/** Reason is required (min 5 characters); suggested reasons fill it in one click. */
-export function RejectModal({
-  open,
-  count,
-  busy,
-  error,
-  onClose,
-  onConfirm,
-}: {
+export type RejectReasonModalProps = {
   open: boolean;
   count: number;
   busy: boolean;
   error: string | null;
   onClose: () => void;
   onConfirm: (reason: string) => void;
-}) {
+  /** What is being rejected, singular and plural. Default entry / entries. */
+  noun?: [string, string];
+  reasons?: string[];
+};
+
+/**
+ * Reject dialog shared by the approval lists. Reason is required (min 5
+ * characters); suggested reasons fill it in one click.
+ */
+export function RejectReasonModal({
+  open,
+  count,
+  busy,
+  error,
+  onClose,
+  onConfirm,
+  noun = ["entry", "entries"],
+  reasons = SUGGESTED_REASONS,
+}: RejectReasonModalProps) {
   const [reason, setReason] = useState("");
   const [touched, setTouched] = useState(false);
   useEffect(() => {
@@ -33,8 +46,8 @@ export function RejectModal({
       open={open}
       onClose={onClose}
       tone="destructive"
-      title={count === 1 ? "Reject this entry?" : `Reject ${count} entries?`}
-      description="The submitter sees your reason and can correct the entry."
+      title={count === 1 ? `Reject this ${noun[0]}?` : `Reject ${count} ${noun[1]}?`}
+      description={`The submitter sees your reason and can correct the ${noun[0]}.`}
       error={error}
       primaryAction={{
         label: "Reject",
@@ -47,7 +60,7 @@ export function RejectModal({
     >
       <div className="space-y-3">
         <div role="group" aria-label="Suggested reasons" className="flex flex-wrap gap-1.5">
-          {SUGGESTED_REASONS.map((r) => (
+          {reasons.map((r) => (
             <button
               key={r}
               type="button"

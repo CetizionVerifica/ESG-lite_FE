@@ -166,10 +166,13 @@ export const getProductionDataForManager = async (params?: {
   return response.data;
 };
 
+/** `keepalive` lets the request finish after the tab closes (sent with fetch instead of XHR). */
 export const approveProductionData = async (
-  id: number | string
+  id: number | string,
+  opts?: { keepalive?: boolean }
 ): Promise<{ message: string; productionData: ProductionData }> => {
-  const response = await api.put(`/user/production-data/${id}/approve`);
+  const config = opts?.keepalive ? { adapter: "fetch" as const, fetchOptions: { keepalive: true } } : undefined;
+  const response = await api.put(`/user/production-data/${id}/approve`, undefined, config);
   return response.data;
 };
 
@@ -181,6 +184,8 @@ export const managerUpdateProductionData = async (
     start_date?: string;
     end_date?: string;
     notes?: string;
+    /** Stored on the audit log entry for the change. */
+    reason?: string;
   }
 ): Promise<{ message: string; productionData: ProductionData }> => {
   const response = await api.put(`/user/production-data/manager-edit/${id}`, data);

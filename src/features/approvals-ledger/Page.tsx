@@ -15,6 +15,7 @@ import {
   type FilterDef,
   Modal,
   PageHeader,
+  RejectReasonModal,
   Select,
   type SortState,
   Tabs,
@@ -22,10 +23,13 @@ import {
   exportMatrix,
   focusRing,
   formatNumber,
+  UNDO_MS,
   toMatrix,
   useContextParams,
   useFilterParams,
+  useRowKeys,
   useToast,
+  useUndoableApprove,
   writeContext,
   writeFilterParams,
 } from "../../ui";
@@ -44,10 +48,7 @@ import {
 import { BatchesView } from "./components/BatchesView";
 import { ReportMenu } from "./components/ReportMenu";
 import { RecordDrawer } from "./components/RecordDrawer";
-import { RejectModal } from "./components/RejectModal";
 import { ledgerColumns } from "./components/columns";
-import { UNDO_MS, useUndoableApprove } from "./hooks/useUndoableApprove";
-import { useRowKeys } from "./hooks/useRowKeys";
 import { DEFAULT_SORT, type LedgerRow, PAGE_SIZES, type Tab, asStatus, effectiveStatus, listParams, mergeFera, rowPeriodLabel } from "./logic";
 
 type SiteOption = { site_id: number; name: string; categories?: { category_id: number; category_name: string }[] };
@@ -175,7 +176,7 @@ function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
     setSelected([]);
   }, [filterKey]);
 
-  const undoable = useUndoableApprove({
+  const undoable = useUndoableApprove<EmissionStatus>({
     commit: commitApprove,
     onCommitted: () => void review.refresh(),
     onFailed: (_id, e) => toast({ title: "Couldn't approve an entry", description: errorMessage(e, "It is back in the queue."), tone: "bad" }),
@@ -425,7 +426,7 @@ function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
           toast({ title: "Changes saved", description: "The change and your reason are in the entry's history.", tone: "good" });
         }}
       />
-      <RejectModal
+      <RejectReasonModal
         open={rejecting !== null}
         count={rejecting?.length ?? 0}
         busy={review.reject.isPending}

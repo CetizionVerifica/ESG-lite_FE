@@ -248,23 +248,9 @@ export function scopeNumber(scope: string | null | undefined): 1 | 2 | 3 | null 
 
 // ── Review ──────────────────────────────────────────────────────────────────
 
-export const REJECT_MIN = 5;
-export const SUGGESTED_REASONS = ["Wrong unit", "Missing invoice", "Duplicate", "Wrong period"];
-
-export function rejectReasonError(reason: string): string | null {
-  return reason.trim().length >= REJECT_MIN ? null : `Give a reason of at least ${REJECT_MIN} characters`;
-}
-
 /** Status shown for a row, after approvals still waiting out their undo window. */
 export function effectiveStatus(row: EmissionData, optimistic: ReadonlyMap<number, EmissionStatus>): EmissionStatus {
   return optimistic.get(row.pk_id) ?? row.status;
-}
-
-/** Index of the row to focus after J/K, clamped to the list. */
-export function stepIndex(current: number, delta: number, count: number): number {
-  if (count === 0) return -1;
-  if (current < 0) return delta > 0 ? 0 : count - 1;
-  return Math.min(count - 1, Math.max(0, current + delta));
 }
 
 // ── Excel reports (server files) ────────────────────────────────────────────

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { EmissionStatus } from "../../../services/emissionService";
 
 export const UNDO_MS = 8000;
 
@@ -11,7 +10,7 @@ export const UNDO_MS = 8000;
  *
  * `optimistic` maps a row id to the status to show until the list refetches.
  */
-export function useUndoableApprove({
+export function useUndoableApprove<S extends string = "pending" | "approved" | "rejected">({
   commit,
   onCommitted,
   onFailed,
@@ -22,19 +21,22 @@ export function useUndoableApprove({
   onFailed: (id: number, error: unknown) => void;
   delay?: number;
 }) {
-  const [optimistic, setOptimistic] = useState<ReadonlyMap<number, EmissionStatus>>(() => new Map());
+  const [optimistic, setOptimistic] = useState<ReadonlyMap<number, S>>(() => new Map());
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   // Latest callbacks, so timers fired after a re-render use current ones.
   const cb = useRef({ commit, onCommitted, onFailed });
   cb.current = { commit, onCommitted, onFailed };
 
-  const setStatus = (id: number, status: EmissionStatus | null) =>
-    setOptimistic((prev) => {
-      const next = new Map(prev);
-      if (status) next.set(id, status);
-      else next.delete(id); // data-loss-reviewed: Map entry (UI state), not a record
-      return next;
-    });
+  const setStatus = useCallback(
+    (id: number, status: S | null) =>
+      setOptimistic((prev) => {
+        const next = new Map(prev);
+        if (status) next.set(id, status);
+        else next.delete(id); // data-loss-reviewed: Map entry (UI state), not a record
+        return next;
+      }),
+    [],
+  );
 
   const send = useCallback((id: number, keepalive = false) => {
     timers.current.delete(id); // data-loss-reviewed: Map entry (timer handle), not a record
@@ -45,15 +47,15 @@ export function useUndoableApprove({
         setStatus(id, null);
         cb.current.onFailed(id, e);
       });
-  }, []);
+  }, [setStatus]);
 
   const approve = useCallback(
     (id: number) => {
       if (timers.current.has(id)) return;
-      setStatus(id, "approved");
+      setStatus(id, "approved" as S);
       timers.current.set(id, setTimeout(() => send(id), delay));
     },
-    [delay, send],
+    [delay, send, setStatus],
   );
 
   const undo = useCallback((id: number) => {
@@ -63,7 +65,7 @@ export function useUndoableApprove({
     timers.current.delete(id); // data-loss-reviewed: Map entry (timer handle), not a record
     setStatus(id, null);
     return true;
-  }, []);
+  }, [setStatus]);
 
   /** Sends every approval still in its undo window. */
   const flush = useCallback(
@@ -86,7 +88,7 @@ export function useUndoableApprove({
   }, [flush]);
 
   /** Drops optimistic entries the server data now agrees with (or no longer lists). */
-  const settle = useCallback((serverStatus: (id: number) => EmissionStatus | undefined) => {
+  const settle = useCallback((serverStatus: (id: number) => S | undefined) => {
     setOptimistic((prev) => {
       let changed = false;
       const next = new Map(prev);

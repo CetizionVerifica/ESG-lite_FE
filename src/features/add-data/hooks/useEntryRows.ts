@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { billOf, markEdited } from "../logic/bill";
+import { withCompositeProduct } from "../logic/distance";
 import { applyChange, newRow, setExtraField, type FormModel } from "../logic/form";
 import type { ModalRow } from "../types";
 
@@ -18,19 +19,22 @@ type Action =
   /** Rows read from a bill; dropped when `draftKey` is no longer the open context. */
   | { type: "append"; rows: ModalRow[]; draftKey: string | null }
   | { type: "confirmBill"; key: string }
-  | { type: "removeBill"; key: string };
+  | { type: "removeBill"; key: string }
+  /** A saved entry loaded back to fix or change; replaces an empty typed row and any earlier copy of it. */
+  | { type: "load"; row: ModalRow };
 
 const nextIdOf = (rows: ModalRow[]) => rows.reduce((max, r) => Math.max(max, r.id), 0) + 1;
 
 /** A person's edit: the field, and any value it changes in turn, stops being AI-filled. */
 export function editRow(model: FormModel, row: ModalRow, column: string, value: string): ModalRow {
-  let next = applyChange(model, markEdited(row, column), column, value);
+  // A count or distance of a composite unit (passenger × km) also sets the column to their product.
+  let next = withCompositeProduct(applyChange(model, markEdited(row, column), column, value), column);
   // Values the edit changed too (cleared children, a re-derived category) aren't the AI's any more.
   for (const field of billOf(next)?.ai ?? []) if (next[field] !== row[field]) next = markEdited(next, field);
   return next;
 }
 
-function reducer(state: State, action: Action): State {
+export function rowsReducer(state: State, action: Action): State {
   switch (action.type) {
     case "reset":
       return { rows: action.rows, nextId: nextIdOf(action.rows) };
@@ -39,7 +43,11 @@ function reducer(state: State, action: Action): State {
     case "duplicate": {
       const i = state.rows.findIndex((r) => r.id === action.id);
       if (i < 0) return state;
-      const copy = { ...state.rows[i], id: state.nextId, _extra_data: { ...(state.rows[i]._extra_data ?? {}) } };
+      // A copy is a new entry: it doesn't edit the saved entry the original was loaded from.
+      const source = { ...state.rows[i] };
+      delete source._editOf;
+      delete source._editSaved;
+      const copy = { ...source, id: state.nextId, _extra_data: { ...(source._extra_data ?? {}) } };
       return { rows: [...state.rows.slice(0, i + 1), copy, ...state.rows.slice(i + 1)], nextId: state.nextId + 1 };
     }
     case "remove":
@@ -66,6 +74,10 @@ function reducer(state: State, action: Action): State {
       };
     case "removeBill":
       return { ...state, rows: state.rows.filter((r) => billOf(r)?.key !== action.key) };
+    case "load": {
+      const kept = state.rows.filter((r) => (billOf(r) || rowHasInput(r)) && (r._editOf == null || r._editOf !== action.row._editOf));
+      return { rows: [...kept, { ...action.row, id: state.nextId }], nextId: state.nextId + 1 };
+    }
   }
 }
 
@@ -84,7 +96,7 @@ export const rowHasInput = (row: ModalRow) =>
   Object.entries(row).some(([k, v]) => (k === "_extra_data" ? Object.values(v ?? {}).some(Boolean) : k !== "id" && !k.startsWith("_") && !!v));
 
 export function useEntryRows(model: FormModel | null, draftKey: string | null) {
-  const [state, dispatch] = useReducer(reducer, { rows: [], nextId: 1 });
+  const [state, dispatch] = useReducer(rowsReducer, { rows: [], nextId: 1 });
 
   // Start (or restore) the rows whenever the form for a new context arrives.
   useEffect(() => {
