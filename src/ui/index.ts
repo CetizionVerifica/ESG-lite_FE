@@ -34,7 +34,7 @@ export { useFilterParams } from "./hooks/useFilterParams";
 export { EMPTY_FILTERS, activeCount, readFilterParams, writeFilterParams, type FilterValues, type SavedView } from "./filterLogic";
 export { Stepper, type Step, type StepperProps } from "./Stepper";
 export { UnitInput, type UnitInputProps, type UnitInputValue } from "./UnitInput";
-export { matchUnit, type UnitMatch } from "./unitMatch";
+export { matchUnit, canConvert, getConversionFactor, unitsMatchExact, type UnitMatch } from "./unitMatch";
 export { FileDrop, type FileDropItem, type FileDropProps } from "./FileDrop";
 export { checkFiles, formatBytes, isPreviewable, type FileRules, type Rejected } from "./fileRules";
 export { DocumentViewer, type DocumentViewerProps } from "./DocumentViewer";

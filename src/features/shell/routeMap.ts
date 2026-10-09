@@ -37,6 +37,8 @@ export const SHELL_ROUTES = [
   // Contributor (User)
   { id: "my-month", path: "/my-month", title: "My month", crumb: ["My month"], roles: ["User"], spec: "P02" },
   { id: "add-data", path: "/data/new", title: "Add data", crumb: ["Add data"], roles: ["User"], spec: "P03" },
+  // Today's Add data page, kept for bills and bulk upload until P03-B/C move them; removed with it in P03-C.
+  { id: "add-data-classic", path: "/data/new/classic", title: "Add data (current page)", crumb: ["Add data", "Current page"], roles: ["User"], spec: "P03" },
   { id: "my-entries", path: "/data/mine", title: "My entries", crumb: ["My entries"], roles: ["User"], spec: "P04" },
   { id: "production", path: "/production", title: "Production", crumb: ["Production"], roles: ["User"], spec: "P05" },
 

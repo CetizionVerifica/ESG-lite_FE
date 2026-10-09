@@ -1,5 +1,8 @@
 import { canConvert, getConversionFactor, unitsMatchExact } from "../utils/unitConversions";
 
+// Unit rules for features (they import from src/ui, never from src/utils).
+export { canConvert, getConversionFactor, unitsMatchExact };
+
 export type UnitMatch =
   | { state: "ok" }
   | { state: "convertible"; factor: number }

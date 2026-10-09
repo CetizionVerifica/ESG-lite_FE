@@ -58,6 +58,7 @@ const Legacy = {
 
 // Redesigned pages, loaded on demand.
 const BrandThemesPage = lazy(() => import("../features/brand-themes/Page"));
+const AddDataPage = lazy(() => import("../features/add-data/Page"));
 const MyMonthPage = lazy(() => import("../features/my-month/Page"));
 const BrandViewPage = lazy(() => import("../features/brand-themes/Page").then((m) => ({ default: m.BrandViewPage })));
 
@@ -65,7 +66,8 @@ const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(
 
 const pages: Record<ShellRouteId, ReactNode> = {
   "my-month": <MyMonthPage />,
-  "add-data": <Legacy.UserDataEntry />,
+  "add-data": <AddDataPage />,
+  "add-data-classic": <Legacy.UserDataEntry />,
   "my-entries": <Legacy.UserEmissions />,
   production: <Legacy.ProductionData />,
   overview: <Legacy.ManagerDashboard />,
