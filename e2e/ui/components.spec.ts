@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // PlanetPulse light, PlanetPulse dark and Midal Classic (F1 buildTheme).
 const THEMES = ["light", "dark", "classic"] as const;
-const SECTIONS = ["page-header", "filter-bar", "data-table", "kpi-strip", "chart-frame", "callout", "primitives", "format", "button", "status-pill", "fields", "empty-state", "skeleton"];
+const SECTIONS = ["page-header", "filter-bar", "data-table", "kpi-strip", "chart-frame", "callout", "primitives", "flows", "format", "button", "status-pill", "fields", "empty-state", "skeleton"];
 
 async function openGallery(page: Page, theme: string) {
   await page.goto(`/__ui?theme=${theme}`);
@@ -29,6 +29,16 @@ for (const theme of THEMES) {
       await page.keyboard.press("Escape");
       await page.getByRole("button", { name: "Drawer", exact: true }).click();
       await expect(page.getByRole("dialog")).toHaveScreenshot(`drawer-${theme}.png`);
+    });
+
+    test("document viewer and command palette", async ({ page }) => {
+      await openGallery(page, theme);
+      await page.getByRole("button", { name: "Open document viewer" }).click();
+      await expect(page.getByRole("dialog", { name: "bewa-sep-2025.svg" })).toHaveScreenshot(`document-viewer-${theme}.png`);
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: "Open command palette" }).click();
+      await page.keyboard.type("hi");
+      await expect(page.getByRole("dialog", { name: "Command palette" })).toHaveScreenshot(`command-palette-${theme}.png`);
     });
 
     test("period editor", async ({ page }) => {

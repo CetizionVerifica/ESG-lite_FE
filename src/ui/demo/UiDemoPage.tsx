@@ -11,6 +11,7 @@ import {
   StatusPillDemo,
 } from "./CoreDemos";
 import { DataTableDemo, PageHeaderDemo } from "./TableDemos";
+import { FlowsDemo } from "./FlowDemos";
 import { ChartDemo, FeedbackDemo, FilterBarDemo, KpiDemo, PrimitivesDemo } from "./DisplayDemos";
 import { DemoThemeScope } from "./demoTheme";
 import { DEMO_THEMES, DEMO_THEME_LABEL, type DemoTheme } from "./demoThemes";
@@ -68,6 +69,7 @@ export default function UiDemoPage() {
           <ChartDemo />
           <FeedbackDemo />
           <PrimitivesDemo />
+          <FlowsDemo />
           <FormatDemo />
           <ButtonsDemo />
           <StatusPillDemo />
