@@ -39,3 +39,12 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | `Tooltip` | `Tooltip.tsx` | hover + focus, Esc hides; short hints only |
 | `Menu` | `Menu.tsx` | action menu: arrows, Enter, Esc returns focus; `danger` items |
 | `Avatar`, `Badge` | `Avatar.tsx`, `Badge.tsx` | initials fallback; neutral/brand/info/good/warn/bad badges |
+| `Stepper` | `Stepper.tsx` | steps, `current`, `completed`, `canJump` rule (default: done steps + the next open one); "Step 2 of 3" on phones |
+| `UnitInput` | `UnitInput.tsx`, `unitMatch.ts` | number + unit; same rules as UserDataEntry's `UnitSelector` (`utils/unitConversions`): mismatch error, or "Convert to kWh" when a factor exists |
+| `FileDrop` | `FileDrop.tsx`, `fileRules.ts` | drag-drop or "Choose files"; `accept`, `maxSize`, `multiple`, `maxFiles`; per-file progress/error; image thumbnails; `onPreview` for PDF/image |
+| `DocumentViewer` | `DocumentViewer.tsx`, `documentKind.ts` | full-screen preview (image, PDF, video, audio, Office via Office Online), ‹ › and arrow keys, download; `fromEmissionDocument(doc)` adapts documentService records |
+| `AuditTimeline` | `AuditTimeline.tsx`, `auditFormat.ts` | who / when / action / old → new / reason; `EntityAuditTimeline` fetches `/user/audit-logs` with TanStack Query |
+| `CommandPalette` | `CommandPalette.tsx`, `paletteFilter.ts` | ⌘K dialog; same props as the shell's stand-in (`commands`, `recent`, `onRun`) plus `results` / `onQueryChange` for entity search |
+| `PoweredBy` | `PoweredBy.tsx` | "Powered by PlanetPulse ESGLite"; `onDark` on cover/brand fills; `POWERED_BY_TEXT` for emails and PDFs |
+
+The legacy `components/DocumentViewerModal.tsx`, `AuditTrailTimeline.tsx` and `pages/UserDataEntry/components/UnitSelector.tsx` stay until their last page migrates; the new versions reuse their services and conversion rules but not their markup (it is hard-coded to `isDark` and slate/gray colours).
