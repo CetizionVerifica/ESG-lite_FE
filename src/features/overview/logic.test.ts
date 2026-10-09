@@ -139,8 +139,9 @@ describe("intensity", () => {
     expect(siteIntensity(10, [])).toBeNull();
   });
 
-  it("combines several sites over their summed production", () => {
-    expect(combinedIntensity([{ emissions: 4, production: 10 }, { emissions: 6, production: 10 }, { emissions: 9, production: 0 }])).toEqual({ value: 0.5, unit: "Combined", combined: true, otherUnits: 0 });
+  it("combines every site's emissions over the summed production, like today's dashboard", () => {
+    // (4 + 6 + 9) / (10 + 10) = 0.95: the site without production still counts its emissions.
+    expect(combinedIntensity([{ emissions: 4, production: 10 }, { emissions: 6, production: 10 }, { emissions: 9, production: 0 }])).toEqual({ value: 0.95, unit: "Combined", combined: true, otherUnits: 0 });
     expect(combinedIntensity([{ emissions: 4, production: 0 }])).toBeNull();
   });
 });

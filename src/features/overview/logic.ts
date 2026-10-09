@@ -154,15 +154,15 @@ export function siteIntensity(emissions: number, parts: { production: number; un
 }
 
 /**
- * Several sites' intensity: emissions over production summed across sites.
- * The comparison endpoint gives no units, so this is the "Combined" figure
- * today's dashboard shows for several sites.
+ * Several sites' intensity: every chosen site's emissions over the production
+ * summed across sites, as today's dashboard computes its "Combined" figure
+ * (the comparison endpoint gives no units). Sites without production still
+ * count their emissions; null when no site has production.
  */
 export function combinedIntensity(sites: { emissions: number; production: number }[]): Intensity {
-  const withOutput = sites.filter((s) => s.production > 0);
-  if (!withOutput.length) return null;
-  const emissions = withOutput.reduce((s, x) => s + x.emissions, 0);
-  const production = withOutput.reduce((s, x) => s + x.production, 0);
+  const production = sites.reduce((s, x) => s + (x.production > 0 ? x.production : 0), 0);
+  if (!(production > 0)) return null;
+  const emissions = sites.reduce((s, x) => s + x.emissions, 0);
   return { value: emissions / production, unit: "Combined", combined: true, otherUnits: 0 };
 }
 

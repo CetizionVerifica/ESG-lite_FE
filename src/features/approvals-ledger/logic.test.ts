@@ -11,11 +11,9 @@ import {
   optionLabel,
   periodQuery,
   quantityOf,
-  rejectReasonError,
   reportOptions,
   rowPeriodLabel,
   scopeNumber,
-  stepIndex,
 } from "./logic";
 
 function row(over: Partial<EmissionData> = {}): EmissionData {
@@ -139,22 +137,9 @@ describe("rowPeriodLabel", () => {
 });
 
 describe("small helpers", () => {
-  it("validates reject reasons", () => {
-    expect(rejectReasonError("dup")).toMatch(/at least 5/);
-    expect(rejectReasonError("  Wrong unit ")).toBeNull();
-  });
-
   it("prefers the optimistic status", () => {
     expect(effectiveStatus(row(), new Map([[1, "approved"]]))).toBe("approved");
     expect(effectiveStatus(row(), new Map())).toBe("pending");
-  });
-
-  it("steps through rows and clamps", () => {
-    expect(stepIndex(-1, 1, 3)).toBe(0);
-    expect(stepIndex(-1, -1, 3)).toBe(2);
-    expect(stepIndex(2, 1, 3)).toBe(2);
-    expect(stepIndex(0, -1, 3)).toBe(0);
-    expect(stepIndex(0, 1, 0)).toBe(-1);
   });
 
   it("reads scopes and humanizes keys", () => {

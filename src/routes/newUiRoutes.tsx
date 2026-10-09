@@ -29,7 +29,6 @@ const Legacy = {
   UserDataEntry: lazy(() => import("../pages/UserDataEntryPage")),
   UserEmissions: lazy(() => import("../pages/UserEmissionsPage")),
   ProductionData: lazy(() => import("../pages/ProductionDataPage")),
-  ManagerProductionData: lazy(() => import("../pages/ManagerProductionDataPage")),
   ManagerUsers: lazy(() => import("../pages/ManagerUsers")),
   GhgReport: lazy(() => import("../pages/GhgReport/GhgReport")),
   EdeReports: lazy(() => import("../pages/Reports/EdePreports")),
@@ -62,6 +61,7 @@ const MyEntriesPage = lazy(() => import("../features/my-entries/Page"));
 const BrandViewPage = lazy(() => import("../features/brand-themes/Page").then((m) => ({ default: m.BrandViewPage })));
 const EmissionsPage = lazy(() => import("../features/approvals-ledger/Page"));
 const OverviewPage = lazy(() => import("../features/overview/Page"));
+const ProductionReviewPage = lazy(() => import("../features/production-review/Page"));
 
 const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(id)} />;
 
@@ -75,7 +75,7 @@ const pages: Record<ShellRouteId, ReactNode> = {
   // Keyed so switching tabs remounts: each tab starts from its own defaults.
   approvals: <EmissionsPage key="approvals" tab="approvals" />,
   ledger: <EmissionsPage key="ledger" tab="ledger" />,
-  "production-review": <Legacy.ManagerProductionData />,
+  "production-review": <ProductionReviewPage />,
   team: <Legacy.ManagerUsers />,
   "ghg-report": <Legacy.GhgReport />,
   "ede-report": <Legacy.EdeReports />,
