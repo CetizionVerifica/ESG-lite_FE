@@ -6,7 +6,12 @@ import type { ThemeTokens } from "./tokens";
 export interface ThemeContextValue {
   /** The user's choice: light, dark or follow the OS. */
   appearance: Appearance;
-  setAppearance: (appearance: Appearance) => void;
+  /**
+   * Applies the choice now and saves it to the account (B2). Resolves true once
+   * saved (or when signed out, where only this browser keeps it), false if the
+   * save failed; it never rejects.
+   */
+  setAppearance: (appearance: Appearance) => Promise<boolean>;
   /** The look on screen: the pack's default look, or "night" when the appearance is dark. */
   look: Look;
   /** PlanetPulse, or the signed-in company's brand. */
