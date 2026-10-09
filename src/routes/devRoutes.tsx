@@ -8,12 +8,22 @@ import type { RouteObject } from "react-router-dom";
  */
 function devOnlyRoutes(): RouteObject[] {
   const ThemePreviewPage = lazy(() => import("../theme/preview/ThemePreviewPage"));
+  const UiDemoPage = lazy(() => import("../ui/demo/UiDemoPage"));
   return [
     {
       path: "/dev/theme",
       element: (
         <Suspense fallback={null}>
           <ThemePreviewPage />
+        </Suspense>
+      ),
+    },
+    {
+      // src/ui component gallery (docs: src/ui/README.md).
+      path: "/__ui",
+      element: (
+        <Suspense fallback={null}>
+          <UiDemoPage />
         </Suspense>
       ),
     },

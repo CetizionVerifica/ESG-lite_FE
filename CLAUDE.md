@@ -58,5 +58,5 @@ Run after `npm ci`:
 
 - `lint:new` covers `src/lib`, `src/ui`, `src/theme`, `src/features`, `src/routes/newUiRoutes.tsx`, `src/routes/devRoutes.tsx`, `src/main.tsx`, `e2e/` and the test configs. Add any new top-level location you create for redesign code to that script.
 - Unit tests live next to the code as `*.test.ts(x)` under `src/`. Playwright specs live in `e2e/`; the config starts the Vite dev server on port 4173 itself (or reuses one already running there). Try a flagged route with `VITE_NEW_UI=1 npm run test:e2e`.
-- Shared components: see `src/ui/README.md`; the dev-only gallery is `/__ui` (`VITE_NEW_UI=1 npm run dev`).
+- Shared components: see `src/ui/README.md`; the dev-only gallery is `/__ui` (`npm run dev`).
 - Run lint:new, typecheck and unit tests before every push.
