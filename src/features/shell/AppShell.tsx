@@ -12,7 +12,8 @@ import TopBar from "./components/TopBar";
 import { useCommandPalette } from "./hooks/useCommandPalette";
 import { usePreviewStyle } from "./hooks/usePreviewStyle";
 import { navFor } from "./nav";
-import { type ShellRoute, asRole, homeFor } from "./routeMap";
+import { type ShellRoute, asRole, clientIdFromRoute, homeFor, pathForClient } from "./routeMap";
+import { signOutSession } from "./signOut";
 import { useAppearance } from "./standins/appearance";
 import CommandPalette from "./standins/CommandPalette";
 import "./standins/tokens.css";
@@ -56,13 +57,14 @@ export default function AppShell() {
 
   const route = matches.map((m) => m.handle).filter(isShellHandle).pop()?.shellRoute ?? null;
   const clientScoped = role === "Superadmin" && Boolean(route?.clientContext);
-  const urlClientId = route?.path.includes(":id") ? Number(params.id) : NaN;
+  const urlClientId = clientIdFromRoute(route, params);
 
   useEffect(() => setDrawerOpen(false), [pathname]);
 
-  // A deep link to /clients/7/brand makes client 7 the context.
+  // A deep link to /clients/7/brand makes client 7 the context; only routes
+  // with a :clientId param do this (/capture/forms/5 is not client 5).
   useEffect(() => {
-    if (role === "Superadmin" && Number.isInteger(urlClientId) && urlClientId > 0 && urlClientId !== clientId) {
+    if (role === "Superadmin" && urlClientId !== null && urlClientId !== clientId) {
       setClientId(urlClientId);
     }
   }, [role, urlClientId, clientId, setClientId]);
@@ -73,7 +75,8 @@ export default function AppShell() {
   const account = shellUser(user, rawRole);
 
   const onClientPicked = (id: number) => {
-    if (route?.path.includes(":id")) navigate(route.path.replace(":id", String(id)));
+    const to = pathForClient(route, id);
+    if (to) navigate(to);
   };
 
   const runCommand = (command: Command) => {
@@ -82,11 +85,13 @@ export default function AppShell() {
     navigate(command.to);
   };
 
-  const signOut = () => {
-    logout();
-    queryClient.clear();
-    navigate("/login", { replace: true });
-  };
+  const signOut = () =>
+    signOutSession({
+      logout,
+      setClientId,
+      clearQueries: () => queryClient.clear(),
+      navigate: (to) => navigate(to, { replace: true }),
+    });
 
   return (
     <div className="min-h-screen bg-(--t-page) text-(--t-ink)">

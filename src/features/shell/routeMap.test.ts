@@ -8,7 +8,9 @@ import {
   SHELL_ROUTES,
   asRole,
   canAccess,
+  clientIdFromRoute,
   homeFor,
+  pathForClient,
   resolveLegacyRedirect,
   withClientId,
 } from "./routeMap";
@@ -31,7 +33,7 @@ describe("route map", () => {
     for (const p of [
       "/my-month", "/data/new", "/data/mine", "/production", "/overview", "/data/approvals", "/data/ledger",
       "/data/production", "/team", "/reports/ghg", "/reports/ede", "/targets", "/products/*", "/notifications",
-      "/settings", "/users", "/console", "/clients", "/clients/new", "/clients/:id/brand",
+      "/settings", "/users", "/console", "/clients", "/clients/new", "/clients/:clientId/brand",
     ]) {
       expect(paths).toContain(p);
     }
@@ -125,5 +127,29 @@ describe("legacy redirects", () => {
     expect(resolveLegacyRedirect(brand, "", "", 6)).toBe("/clients/6/brand");
     expect(resolveLegacyRedirect(brand, "", "", null)).toBe("/clients");
     expect(withClientId("/console", null)).toBe("/console");
+  });
+});
+
+describe("client context from the URL", () => {
+  const byPath = (path: string) => SHELL_ROUTES.find((r) => r.path === path) ?? null;
+
+  it("reads :clientId only on routes that declare client context", () => {
+    expect(clientIdFromRoute(byPath("/clients/:clientId/brand"), { clientId: "7" })).toBe(7);
+    expect(clientIdFromRoute(byPath("/clients/:clientId"), { clientId: "3" })).toBe(3);
+    expect(clientIdFromRoute(byPath("/capture/forms/:id"), { id: "5" })).toBeNull();
+    expect(clientIdFromRoute(byPath("/reports/ghg"), {})).toBeNull();
+    expect(clientIdFromRoute(byPath("/clients/:clientId"), { clientId: "new" })).toBeNull();
+    expect(clientIdFromRoute(null, { clientId: "7" })).toBeNull();
+  });
+
+  it("matches /clients/7/brand to the brand route with a clientId param", () => {
+    const route = byPath("/clients/:clientId/brand");
+    expect(matchPath(route?.path ?? "", "/clients/7/brand")?.params).toEqual({ clientId: "7" });
+  });
+
+  it("switches client only on :clientId routes", () => {
+    expect(pathForClient(byPath("/clients/:clientId/brand"), 9)).toBe("/clients/9/brand");
+    expect(pathForClient(byPath("/capture/forms/:id"), 9)).toBeNull();
+    expect(pathForClient(byPath("/reports/ghg"), 9)).toBeNull();
   });
 });

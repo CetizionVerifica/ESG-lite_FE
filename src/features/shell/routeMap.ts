@@ -22,7 +22,10 @@ export interface ShellRoute {
   roles: readonly Role[];
   /** Page spec that will replace the placeholder (docs/redesign/pages, docs/pcf). */
   spec: string;
-  /** Superadmin client switcher shows in the page header on these routes. */
+  /**
+   * Superadmin client switcher shows in the page header on these routes. A
+   * `:clientId` param in such a route's path sets the client context.
+   */
   clientContext?: boolean;
   /** Roles that land somewhere else instead of seeing the 403 page. */
   roleRedirect?: Partial<Record<Role, string>>;
@@ -60,8 +63,8 @@ export const SHELL_ROUTES = [
   { id: "console", path: "/console", title: "Console", crumb: ["Console"], roles: ["Superadmin"], spec: "P16" },
   { id: "clients", path: "/clients", title: "Companies", crumb: ["Clients", "Companies"], roles: ["Superadmin"], spec: "P17" },
   { id: "client-new", path: "/clients/new", title: "Onboard client", crumb: ["Clients", "Onboard client"], roles: ["Superadmin"], spec: "P17" },
-  { id: "client-detail", path: "/clients/:id", title: "Client", crumb: ["Clients", "Client"], roles: ["Superadmin"], spec: "P17", clientContext: true },
-  { id: "brand-themes", path: "/clients/:id/brand", title: "Brand themes", crumb: ["Clients", "Brand themes"], roles: ["Superadmin"], spec: "P18", clientContext: true },
+  { id: "client-detail", path: "/clients/:clientId", title: "Client", crumb: ["Clients", "Client"], roles: ["Superadmin"], spec: "P17", clientContext: true },
+  { id: "brand-themes", path: "/clients/:clientId/brand", title: "Brand themes", crumb: ["Clients", "Brand themes"], roles: ["Superadmin"], spec: "P18", clientContext: true },
   { id: "sites", path: "/setup/sites", title: "Sites", crumb: ["Setup", "Sites"], roles: ["Superadmin"], spec: "P19" },
   { id: "users-global", path: "/setup/users", title: "Users", crumb: ["Setup", "Users"], roles: ["Superadmin"], spec: "P20" },
   { id: "reference-data", path: "/setup/reference", title: "Reference data", crumb: ["Setup", "Reference data"], roles: ["Superadmin"], spec: "P21" },
@@ -145,6 +148,25 @@ export const LEGACY_REDIRECTS: readonly LegacyRedirect[] = [
 export function withClientId(path: string, clientId: number | null, fallback: string | null = null): string | null {
   if (!path.includes(CLIENT_ID)) return path;
   return clientId ? path.split(CLIENT_ID).join(String(clientId)) : fallback;
+}
+
+/**
+ * The client a URL points at: only routes that declare `clientContext` and a
+ * `:clientId` param count, so `/capture/forms/5` never changes the client.
+ */
+export function clientIdFromRoute(
+  route: Pick<ShellRoute, "path" | "clientContext"> | null,
+  params: Readonly<Record<string, string | undefined>>,
+): number | null {
+  if (!route?.clientContext || !route.path.includes(CLIENT_ID)) return null;
+  const id = Number(params.clientId);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/** The current route's path for another client, or null if it has no `:clientId`. */
+export function pathForClient(route: Pick<ShellRoute, "path" | "clientContext"> | null, clientId: number): string | null {
+  if (!route?.clientContext || !route.path.includes(CLIENT_ID)) return null;
+  return withClientId(route.path, clientId);
 }
 
 /**
