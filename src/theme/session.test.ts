@@ -24,16 +24,17 @@ describe("selectPack", () => {
 
   it("uses PlanetPulse for Superadmin, even with a brand", () => {
     expect(selectPack("Superadmin", brand)).toBe(PLANETPULSE);
-    expect(shouldLoadBrand("Superadmin", 1)).toBe(false);
+    expect(shouldLoadBrand("Superadmin", true)).toBe(false);
   });
 
-  it("uses PlanetPulse when there is no brand or no company", () => {
+  it("uses PlanetPulse when signed out or the brand didn't load", () => {
     expect(selectPack("Manager", null)).toBe(PLANETPULSE);
-    expect(shouldLoadBrand("Manager", null)).toBe(false);
+    expect(shouldLoadBrand(null, false)).toBe(false);
+    expect(shouldLoadBrand("Manager", false)).toBe(false);
   });
 
   it("uses the company's brand for client users", () => {
-    expect(shouldLoadBrand("Manager", 1)).toBe(true);
+    expect(shouldLoadBrand("Manager", true)).toBe(true);
     const pack = selectPack("Manager", brand);
     expect(pack.id).toBe("company-1");
     expect(pack.primary).toBe("#0b2e5c");
