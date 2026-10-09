@@ -1,5 +1,5 @@
 import { type RefObject, useCallback, useEffect, useRef } from "react";
-import { stepIndex } from "../logic";
+import { stepIndex } from "../review";
 
 type Handlers = {
   onApprove: (id: number, index: number) => void;
@@ -14,7 +14,7 @@ function rowsIn(container: HTMLElement | null): HTMLElement[] {
 }
 
 /**
- * Approvals keyboard: J/K move between rows, A approve, R reject, Space
+ * Approval-list keyboard (P07, P08): J/K move between rows, A approve, R reject, Space
  * select; Enter (open) comes from DataTable. Works while focus is on a row
  * or on nothing in particular (the page body), never while typing or in a
  * dialog.
