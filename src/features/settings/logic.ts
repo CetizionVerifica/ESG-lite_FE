@@ -173,7 +173,9 @@ export function utcOffset(tz: string, date = new Date()): string {
     const part = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" })
       .formatToParts(date)
       .find((p) => p.type === "timeZoneName");
-    return part?.value.replace("GMT", "UTC") ?? "";
+    // ICU versions differ on zero offset ("GMT", "GMT+0"); both read as "UTC".
+    const offset = part?.value.replace("GMT", "UTC") ?? "";
+    return /^UTC[+-]0?0?(:00)?$/.test(offset) ? "UTC" : offset;
   } catch {
     return "";
   }

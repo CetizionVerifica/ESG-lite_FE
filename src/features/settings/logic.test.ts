@@ -70,6 +70,7 @@ describe("timezones", () => {
     expect(timezoneLabel("America/Argentina/Buenos_Aires", jan)).toBe("Buenos Aires, America / Argentina (UTC-3)");
     expect(timezoneLabel("Asia/Kolkata", jan)).toBe("Kolkata, Asia (UTC+5:30)");
     expect(timezoneLabel("UTC", jan)).toBe("UTC");
+    expect(timezoneLabel("Europe/London", jan)).toBe("London, Europe (UTC)");
   });
 
   it("returns no offset for an unknown zone", () => {
