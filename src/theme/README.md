@@ -25,7 +25,20 @@ The only place in new code where raw colour values may appear. Everything else r
 | `color.ts` | Hex parsing, mixing, WCAG contrast, hue helpers |
 | `packs.ts` | `ThemePack` type, PlanetPulse pack, `packFromBrand()`, the four stored brands (companies 1, 2, 3, 6) |
 | `buildTheme.ts` | `buildTheme(pack, look, appearance)` → every colour token; contrast gate, status-hue rule |
+| `ThemeProvider.tsx` | Picks the pack after login, resolves look × appearance, writes the tokens on `<html>` |
+| `useTheme.ts` | `useTheme()` → `{ appearance, setAppearance, look, pack, tokens }` (`isDark` deprecated) |
+| `session.ts` | Pure helpers: company id from the session user, pack choice, stored appearance |
 | `preview/ThemePreviewPage.tsx` | Dev-only `/dev/theme`: every token in PlanetPulse, Midal Classic, Midal Light, Midal Night |
+
+## Provider
+
+- `ThemeProvider` (in `src/main.tsx`, inside `AuthProvider` and the Query provider) fetches `getBrand(companyId)` for
+  client users after login. Superadmin, signed-out screens, and any failure to load the brand use PlanetPulse.
+- Appearance (`light | dark | system`) is stored in `localStorage.appearance`; the legacy `theme` key is migrated once.
+  A dark appearance always renders the Night look.
+- `<html>` carries every `--t-*` value inline plus `data-pack`, `data-look`, and the legacy `dark` class.
+- `src/context/ThemeContext.tsx` is a deprecated re-export so legacy pages keep working; `isDark` stays until the
+  last page migrates.
 
 ## Engine rules in short
 

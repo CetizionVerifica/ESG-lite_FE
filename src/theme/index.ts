@@ -16,3 +16,6 @@ export {
 export type { ContrastPair, StatusName } from "./buildTheme";
 export { PLANETPULSE, STORED_BRANDS, packFromBrand } from "./packs";
 export type { Appearance, BrandLike, Look, ResolvedAppearance, ThemePack } from "./packs";
+export { ThemeProvider } from "./ThemeProvider";
+export { useTheme } from "./useTheme";
+export type { ThemeContextValue } from "./themeContext";
