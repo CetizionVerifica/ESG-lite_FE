@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# CI
+.ci-base/
+eslint-base.json
+eslint-head.json
