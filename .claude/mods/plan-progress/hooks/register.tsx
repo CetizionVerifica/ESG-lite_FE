@@ -24,11 +24,14 @@ const ROWS: { status: ModuleStatus; mark: string; name: string; color?: string }
 /** PRs into redesign/integration: through `gh` if it is signed in, else the REST API. */
 async function fetchPulls($: EngineInterface, repo: string): Promise<Pull[]> {
   const path = `repos/${OWNER}/${repo}/pulls?base=${encodeURIComponent(BASE)}&state=all&per_page=100`
-  try {
-    const ran = await $.process.run(['gh', 'api', path], { timeoutMs: 30000 })
-    if (ran.exitCode === 0) return JSON.parse(ran.stdout) as Pull[]
-  } catch {
-    // no gh on this host; fall through to HTTP
+  // The desktop app starts sessions with a short PATH, so also try Homebrew's gh by its full path.
+  for (const gh of ['gh', '/opt/homebrew/bin/gh', '/usr/local/bin/gh']) {
+    try {
+      const ran = await $.process.run([gh, 'api', path], { timeoutMs: 30000 })
+      if (ran.exitCode === 0) return JSON.parse(ran.stdout) as Pull[]
+    } catch {
+      // not here; try the next one, then HTTP
+    }
   }
   const token = (await $.env.get('GITHUB_TOKEN')) ?? (await $.env.get('GH_TOKEN'))
   const headers: Record<string, string> = { accept: 'application/vnd.github+json' }

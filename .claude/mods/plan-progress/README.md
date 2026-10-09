@@ -7,13 +7,16 @@ A Claude Code mod that shows how far the ESGLite redesign and PCF plan has got, 
 
 ## Install
 
-In a Claude Code terminal session:
+Claude Code desktop app (Mac): `/plugin install` is not available inside the app, so install once from the Terminal app at the user scope; every new session in the desktop app's Code tab then loads it.
 
 ```
-/plugin install plan-progress --marketplace CetizionVerifica/ESG-lite_FE
+claude plugin marketplace add CetizionVerifica/ESG-lite_FE
+claude plugin install plan-progress@esglite-tools --scope user
 ```
 
-Answer `y` to add the marketplace, then pick the user scope.
+Then start a new session in the Code tab and type `/plan-progress`.
+
+Claude Code in a terminal: `/plugin install plan-progress --marketplace CetizionVerifica/ESG-lite_FE`, answer `y`, pick the user scope.
 
 It reads GitHub through `gh` when `gh auth status` is signed in; otherwise it uses `GITHUB_TOKEN` (or `GH_TOKEN`) from the environment.
 
