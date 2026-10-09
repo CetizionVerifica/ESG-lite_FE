@@ -99,7 +99,7 @@ function invoiceHeader(data: InvoiceData | undefined) {
 
 /**
  * Rows for every activity the AI found in one file. Rows start unconfirmed.
- * Rows are filed in the page's period, not on the bill's date (see billDateNote).
+ * Rows are filed in the page's period, not on the bill's date; a bill dated outside it can't be used (billOutsidePeriod).
  */
 export function billRowsFrom(
   model: FormModel,
@@ -142,7 +142,10 @@ export function billRowsFrom(
       fileType: ctx.source.fileType,
       url: ctx.source.url,
       ...invoiceHeader(response.data?.[invoiceIndex]),
-      warnings: billWarnings(response.validations?.[invoiceIndex]),
+      warnings: [
+        ...(response.error ? [`The AI couldn't read all of this bill (${response.error}). Check every value.`] : []),
+        ...billWarnings(response.validations?.[invoiceIndex]),
+      ],
       ai,
       confidence:
         !auto && suggestion && row.emission_category && lower(suggestion.emission_category_name) === lower(String(row.emission_category))
@@ -180,13 +183,18 @@ export function billGroups(rows: ModalRow[]): { bill: BillMeta; rows: ModalRow[]
   return [...groups.values()];
 }
 
-/** When the bill's date falls outside the period its rows are filed in, a line saying so. */
-export function billDateNote(date: string | null, period: EntryPeriod): string | null {
+/**
+ * When the bill's date falls outside the period its rows would be filed in,
+ * a line saying so; such a bill can't be used on this page. Rows are filed on
+ * the page's period, so a July bill dropped on the September page would
+ * otherwise land in September and collide with that month's own bill.
+ */
+export function billOutsidePeriod(date: string | null, period: EntryPeriod): string | null {
   if (!date || !/^\d{4}-\d{2}-\d{2}/.test(date)) return null;
   const end = entryDate(period);
   const start =
     period.mode === "monthly" ? `${end.slice(0, 7)}-01` : period.yearType === "CY" ? `${period.year}-01-01` : `${period.year}-04-01`;
   const day = date.slice(0, 10);
   if (day >= start && day <= end) return null;
-  return `This bill is dated ${formatDate(day)}. Its rows are filed in ${entryPeriodLabel(period)}; change the period if that's wrong.`;
+  return `This bill is dated ${formatDate(day)}, outside ${entryPeriodLabel(period)}. Remove it here and add it with its own period selected.`;
 }

@@ -3,7 +3,7 @@ import { FolderOpen, Sparkles } from "lucide-react";
 import { Button, Callout, FileDrop, type FileDropItem } from "../../../ui";
 import { readBill, rereadBill, type EntrySetup, type ExtractionResponse, type Invoice } from "../api";
 import type { RowsDispatch } from "../hooks/useEntryRows";
-import { billDateNote, billGroups, billRowsFrom, type BillMeta, type BillSource } from "../logic/bill";
+import { billOutsidePeriod, billGroups, billRowsFrom, type BillMeta, type BillSource } from "../logic/bill";
 import type { EntryPeriod } from "../logic/entry";
 import { newRow, type FormModel } from "../logic/form";
 import type { ModalRow } from "../types";
@@ -131,7 +131,7 @@ export function FromBill(p: Props) {
           key={bill.key}
           bill={bill}
           rows={rows}
-          dateNote={billDateNote(bill.date, p.period)}
+          outsidePeriod={billOutsidePeriod(bill.date, p.period)}
           renderRow={p.renderRow}
           onAddItem={() => addItem(bill)}
           onConfirm={() => p.dispatch({ type: "confirmBill", key: bill.key })}

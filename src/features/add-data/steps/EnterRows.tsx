@@ -83,16 +83,22 @@ export function EnterRows(p: Props) {
     p.onNext();
   };
 
-  // Ctrl/⌘+Enter goes to review; Enter in a field adds a row.
+  // Ctrl/⌘+Enter goes to review from either tab; Enter in a typed row's field adds a row.
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Enter" || (e.target as HTMLElement).tagName !== "INPUT") return;
-    e.preventDefault();
-    if (e.ctrlKey || e.metaKey) next();
-    else p.dispatch({ type: "add", model: p.model });
+    if (e.key !== "Enter" || (e.target as HTMLElement).tagName !== "INPUT" || (e.target as HTMLInputElement).type === "file") return;
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      next();
+    } else if (tab === "manual") {
+      e.preventDefault();
+      p.dispatch({ type: "add", model: p.model });
+    }
   };
+  // Where the rows needing attention are, so the message points at the right tab.
+  const invalidIn = (fromBill: boolean) => p.rows.some((r, i) => p.issues[i] && !!billOf(r) === fromBill);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onKeyDown={onKeyDown}>
       <Tabs
         label="How to enter values"
         idBase="add-data-source"
@@ -126,7 +132,7 @@ export function EnterRows(p: Props) {
       </TabPanel>
 
       <TabPanel idBase="add-data-source" value="manual" current={tab}>
-        <div className="space-y-3" onKeyDown={onKeyDown}>
+        <div className="space-y-3">
           {manualRows.map((row, i) => renderRow(row, i, manualRows.length > 1))}
           <Button variant="secondary" icon={<Plus className="size-4" />} onClick={() => p.dispatch({ type: "add", model: p.model })}>
             Add row
@@ -136,12 +142,13 @@ export function EnterRows(p: Props) {
 
       {showIssues && invalid > 0 && (
         <Callout tone="warn" title={`${invalid} row${invalid === 1 ? " needs" : "s need"} attention`}>
-          Fix the rows marked in red, then continue.
+          Fix the rows marked in red
+          {invalidIn(false) && invalidIn(true) ? " in both tabs" : invalidIn(true) ? ' under "Start from a bill"' : ' under "Type it in"'}, then continue.
         </Callout>
       )}
       {showIssues && p.unconfirmedBills > 0 && (
         <Callout tone="warn" title={`${p.unconfirmedBills} bill${p.unconfirmedBills === 1 ? " is" : "s are"} not checked yet`}>
-          Under "Start from a bill", check what the AI read and choose Use these rows. Nothing from a bill is sent before that.
+          Under "Start from a bill", check what the AI read and choose Use these rows, or remove a bill dated outside this period. Nothing from a bill is sent before that.
         </Callout>
       )}
 

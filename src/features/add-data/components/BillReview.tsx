@@ -8,8 +8,8 @@ import { BillPreview } from "./BillPreview";
 type Props = {
   bill: BillMeta;
   rows: ModalRow[];
-  /** The bill's date outside the page's period, in words. */
-  dateNote: string | null;
+  /** Why the bill can't be used here: its date is outside the page's period. */
+  outsidePeriod: string | null;
   renderRow: (row: ModalRow, index: number) => ReactNode;
   onAddItem: () => void;
   onConfirm: () => void;
@@ -17,7 +17,7 @@ type Props = {
 };
 
 /** One bill: the file on the left, what the AI read from it on the right, checked by the user before use. */
-export function BillReview({ bill, rows, dateNote, renderRow, onAddItem, onConfirm, onRemove }: Props) {
+export function BillReview({ bill, rows, outsidePeriod, renderRow, onAddItem, onConfirm, onRemove }: Props) {
   const facts = [
     bill.number && `No. ${bill.number}`,
     bill.date && formatDate(bill.date),
@@ -58,7 +58,11 @@ export function BillReview({ bill, rows, dateNote, renderRow, onAddItem, onConfi
             </ul>
           </Callout>
         )}
-        {dateNote && <Callout tone="info">{dateNote}</Callout>}
+        {outsidePeriod && (
+          <Callout tone="warn" title="Wrong period for this bill">
+            {outsidePeriod}
+          </Callout>
+        )}
 
         {rows.map((row, i) => renderRow(row, i))}
 
@@ -66,7 +70,7 @@ export function BillReview({ bill, rows, dateNote, renderRow, onAddItem, onConfi
           <Button size="sm" variant="secondary" icon={<Plus className="size-4" />} onClick={onAddItem}>
             Add item from this bill
           </Button>
-          {!bill.confirmed && (
+          {!bill.confirmed && !outsidePeriod && (
             <Button variant="primary" onClick={onConfirm}>
               Use {rows.length === 1 ? "this row" : `these ${rows.length} rows`}
             </Button>

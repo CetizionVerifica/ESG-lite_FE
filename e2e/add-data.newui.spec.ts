@@ -94,7 +94,11 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
         created.push({ body: request.postDataJSON(), replace: url.searchParams.get("replace") === "true" });
         return json({ emission: { pk_id: created.length + 100 } }, 201);
       }
-      if (path.endsWith("/v1/invoices/upload")) return json(extraction);
+      if (path.endsWith("/v1/invoices/upload")) {
+        // An August bill dropped on the September page.
+        const august = (request.postData() ?? "").includes("bapco-aug.pdf");
+        return json(august ? { ...extraction, invoice_id: 42, data: [{ ...extraction.data[0], invoice_number: "INV-6", billing_month_end: "2025-08-31" }] } : extraction);
+      }
       if (path.endsWith("/user/documents/from-invoice")) {
         linked.push(request.postDataJSON());
         return json({ message: "Invoice linked", documents: [] }, 201);
@@ -209,4 +213,19 @@ test("a bill is read into a row that is checked before it is sent, then attached
   });
   expect(JSON.stringify(created[0].body)).not.toContain("_bill");
   expect(linked).toEqual([{ invoice_id: 41, emission_ids: [101] }]);
+});
+
+test("a bill dated outside the period can't be used on this page", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await page.getByRole("tab", { name: /Start from a bill/ }).click();
+  await page.locator('input[type="file"]').setInputFiles({ name: "bapco-aug.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test") });
+
+  const bill = page.getByRole("region", { name: "Bill Bapco" });
+  await expect(bill.getByText("This bill is dated 31 Aug 2025, outside Sep 2025.", { exact: false })).toBeVisible();
+  await expect(bill.getByRole("button", { name: "Use this row" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Review", exact: true }).click();
+  await expect(page.getByText("1 bill is not checked yet")).toBeVisible();
+  await bill.getByRole("button", { name: "Remove bill" }).click();
+  await expect(page.getByRole("region", { name: "Bill Bapco" })).toHaveCount(0);
 });

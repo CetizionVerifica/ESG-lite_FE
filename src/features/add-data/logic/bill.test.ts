@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ExtractionResponse } from "../../../services/invoiceService";
 import { applyChange, newRow, toFormModel } from "./form";
-import { billDateNote, billGroups, billOf, billRowsFrom, billWarnings, markEdited } from "./bill";
+import { billOutsidePeriod, billGroups, billOf, billRowsFrom, billWarnings, markEdited } from "./bill";
 import { buildPayload, type EntryPeriod } from "./entry";
 import type { ColumnConfig, ColumnEntity, EmissionFactor } from "../types";
 
@@ -175,11 +175,11 @@ describe("bill marks", () => {
     ).toEqual(["The total doesn't match subtotal plus tax (off by 357,621).", "Vendor missing"]);
   });
 
-  it("notes a bill dated outside the period", () => {
-    expect(billDateNote("2025-09-30", sep)).toBeNull();
-    expect(billDateNote("2025-08-31", sep)).toBe("This bill is dated 31 Aug 2025. Its rows are filed in Sep 2025; change the period if that's wrong.");
-    expect(billDateNote("2026-02-10", { mode: "yearly", yearType: "FY", year: 2025 })).toBeNull();
-    expect(billDateNote("2025-03-31", { mode: "yearly", yearType: "FY", year: 2025 })).not.toBeNull();
-    expect(billDateNote(null, sep)).toBeNull();
+  it("refuses a bill dated outside the period", () => {
+    expect(billOutsidePeriod("2025-09-30", sep)).toBeNull();
+    expect(billOutsidePeriod("2025-08-31", sep)).toBe("This bill is dated 31 Aug 2025, outside Sep 2025. Remove it here and add it with its own period selected.");
+    expect(billOutsidePeriod("2026-02-10", { mode: "yearly", yearType: "FY", year: 2025 })).toBeNull();
+    expect(billOutsidePeriod("2025-03-31", { mode: "yearly", yearType: "FY", year: 2025 })).not.toBeNull();
+    expect(billOutsidePeriod(null, sep)).toBeNull();
   });
 });

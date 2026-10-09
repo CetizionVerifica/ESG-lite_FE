@@ -21,10 +21,12 @@ type Action =
 
 const nextIdOf = (rows: ModalRow[]) => rows.reduce((max, r) => Math.max(max, r.id), 0) + 1;
 
-/** A person's edit: the field (and a category it re-derives) stops being AI-filled. */
-function editRow(model: FormModel, row: ModalRow, column: string, value: string): ModalRow {
-  const next = applyChange(model, markEdited(row, column), column, value);
-  return next.emission_category !== row.emission_category ? markEdited(next, "emission_category") : next;
+/** A person's edit: the field, and any value it changes in turn, stops being AI-filled. */
+export function editRow(model: FormModel, row: ModalRow, column: string, value: string): ModalRow {
+  let next = applyChange(model, markEdited(row, column), column, value);
+  // Values the edit changed too (cleared children, a re-derived category) aren't the AI's any more.
+  for (const field of billOf(next)?.ai ?? []) if (next[field] !== row[field]) next = markEdited(next, field);
+  return next;
 }
 
 function reducer(state: State, action: Action): State {
