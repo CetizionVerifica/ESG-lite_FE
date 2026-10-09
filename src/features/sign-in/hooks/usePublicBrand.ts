@@ -16,6 +16,7 @@ export function usePublicBrand(slug: string | undefined): { pack: ThemePack; loa
     staleTime: Infinity,
     retry: false,
   });
-  const pack = valid && query.data ? packFromBrand(query.data) : PLANETPULSE;
+  // The public kit has no company id, so the pack is keyed by its slug.
+  const pack = valid && query.data ? { ...packFromBrand({ ...query.data, companyId: 0 }), id: `client-${query.data.slug}` } : PLANETPULSE;
   return { pack, loading: valid && query.isPending };
 }

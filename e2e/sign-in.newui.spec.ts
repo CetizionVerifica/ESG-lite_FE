@@ -2,12 +2,12 @@ import { type Page, expect, test } from "@playwright/test";
 
 /**
  * P01 sign-in smoke tests (VITE_NEW_UI=1 server). Every API call is answered
- * locally; GET /brands/public/:slug is the proposed public brand endpoint.
+ * locally, including GET /brands/public/:slug (ESG-lite #61).
  */
 
 const company = { company_id: 1, name: "Midal Cables" };
 const midal = {
-  companyId: 1,
+  slug: "midal",
   name: "Midal Cables",
   primary: "#0b2e5c",
   accent: "#2f6fb0",
@@ -69,7 +69,7 @@ test("a client link shows the client's cover and signs in to the role's home", a
   await mockApi(page);
   await page.goto("/midal/login");
   await expect(page.getByRole("heading", { name: "Carbon reporting for Midal Cables" })).toBeVisible();
-  await expect(page.locator("#root [data-pack]")).toHaveAttribute("data-pack", "company-1");
+  await expect(page.locator("#root [data-pack]")).toHaveAttribute("data-pack", "client-midal");
   await expect(page.getByText("Powered by")).toBeVisible();
   await fillAndSubmit(page);
   await expect(page).toHaveURL(/\/overview$/);
