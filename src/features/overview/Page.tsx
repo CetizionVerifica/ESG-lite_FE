@@ -119,7 +119,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
     approved: listLink("/data/ledger", { siteIds: ctx.siteIds, categoryId: ctx.categoryId, period, status: "approved" }),
     site: (id: number) => listLink("/data/ledger", { siteIds: [id], categoryId: ctx.categoryId, period, status: "approved" }),
     category: (id: number) => listLink("/data/ledger", { siteIds: ctx.siteIds, categoryId: id, period, status: "approved" }),
-    production: `/data/production?status=pending${ctx.siteIds.length ? `&site=${[...ctx.siteIds].sort((a, b) => a - b).join(",")}` : ""}`,
+    production: listLink("/data/production", { siteIds: ctx.siteIds, status: "pending" }),
   };
 
   const k = data?.kpis;
