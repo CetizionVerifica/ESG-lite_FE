@@ -60,7 +60,24 @@ export function rowFromEntry(e: SavedEntry, model: FormModel, id: number, period
     }
   }
   row._editOf = e.pk_id;
+  // A pending entry counts in the period's saved ("entered") total; remember it so the comparison doesn't count it twice.
+  if (e.status === "pending") {
+    row._editSaved = { category: String(e.activity_data?.emission_category ?? ""), tco2e: Number(e.total_emission) || 0 };
+  }
   return row;
+}
+
+/**
+ * The saved total for a category without the saved values of entries being
+ * edited in the form, which the form total already counts (legacy
+ * effectiveSavedTotals). Rejected entries aren't in the saved total.
+ */
+export function savedExcludingEdits(rows: ModalRow[], category: string, saved: number): number {
+  const editing = rows.reduce((sum, r) => {
+    const e = r._editSaved as { category: string; tco2e: number } | undefined;
+    return e && e.category === category ? sum + e.tco2e : sum;
+  }, 0);
+  return saved - editing;
 }
 
 export const editOf = (row: ModalRow): number | null => (typeof row._editOf === "number" ? row._editOf : null);

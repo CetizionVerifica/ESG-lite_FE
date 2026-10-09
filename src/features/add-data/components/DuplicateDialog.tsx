@@ -10,6 +10,8 @@ export type DuplicateItem = {
   tco2e: number | null;
   /** The server's 409 message. */
   message: string;
+  /** The saved entry it collides with, when the server sent it. */
+  existing: { tco2e: number | null; status: string | null } | null;
 };
 
 type Props = {
@@ -67,9 +69,16 @@ export function DuplicateDialog({ open, periodLabel, items, busy, onApply, onClo
             <div className="min-w-0 text-sm">
               <p className="truncate font-medium text-ink">{d.label}</p>
               <p className="text-xs text-muted">
-                {d.tco2e !== null && <span className="font-num">{formatNumber(d.tco2e, 2)} tCO₂e · </span>}
-                {d.message}
+                New: {d.tco2e !== null ? <span className="font-num">{formatNumber(d.tco2e, 2)} tCO₂e</span> : "—"}
+                {d.existing && (
+                  <>
+                    {" · Saved: "}
+                    {d.existing.tco2e !== null ? <span className="font-num">{formatNumber(d.existing.tco2e, 2)} tCO₂e</span> : "—"}
+                    {d.existing.status && ` (${d.existing.status.charAt(0).toUpperCase()}${d.existing.status.slice(1)})`}
+                  </>
+                )}
               </p>
+              {!d.existing && <p className="text-xs text-muted">{d.message}</p>}
             </div>
             <SegmentedControl
               size="sm"

@@ -15,7 +15,7 @@ import { EnterRows } from "./steps/EnterRows";
 import { Review } from "./steps/Review";
 import type { RowComparison } from "./components/EntryRow";
 import { ExistingEntries } from "./components/ExistingEntries";
-import { rowFromEntry } from "./logic/existing";
+import { rowFromEntry, savedExcludingEdits } from "./logic/existing";
 
 const STEPS = [
   { id: "context", label: "What are you reporting?" },
@@ -104,7 +104,7 @@ export default function AddDataPage() {
     if (!name || rows.findIndex((r) => r.emission_category === name) !== i || !period) return null;
     const inForm = rows.filter((r) => r.emission_category === name).reduce((s, r) => s + (calc.calculateEmission(r).value ?? 0), 0);
     const t = totals[name];
-    const c = inForm > 0 ? comparison(t?.saved == null ? null : inForm + t.saved, t?.previous ?? null, threshold.data ?? 5) : null;
+    const c = inForm > 0 ? comparison(t?.saved == null ? null : inForm + savedExcludingEdits(rows, name, t.saved), t?.previous ?? null, threshold.data ?? 5) : null;
     if (!c) return null;
     const arrow = c.pct > 0 ? "▲" : c.pct < 0 ? "▼" : "";
     return { text: `${arrow} ${Math.abs(c.pct).toFixed(1)}%`.trim(), overThreshold: c.overThreshold, threshold: threshold.data ?? 5, previousLabel: entryPeriodLabel(previousPeriod(period)) };

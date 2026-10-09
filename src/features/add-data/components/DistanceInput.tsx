@@ -39,7 +39,7 @@ export function DistanceInput({ model, column, row, field, onChange, onCalculate
   return (
     <fieldset className="space-y-1.5 sm:col-span-2">
       <legend className="mb-1 text-sm font-medium text-ink">
-        {columnTitle(name)} <span className="font-normal text-muted">({row.activity_data_unit})</span>
+        {columnTitle(name)} <span className="font-normal text-muted">({row.activity_data_unit})</span> {labelExtra}
       </legend>
       <div className="grid grid-cols-2 gap-2">
         <NumberField

@@ -120,11 +120,14 @@ export function usePeriodTotals(args: { siteId: number | null; categoryId: numbe
 
 export type SaveOutcome =
   | { kind: "saved"; emissionId: number | null }
-  | { kind: "duplicate"; message: string }
+  | { kind: "duplicate"; message: string; existing: { tco2e: number | null; status: string | null } | null }
   | { kind: "error"; message: string; modeLock: boolean };
 
 interface ApiError {
-  response?: { status?: number; data?: { message?: string; duplicate?: boolean; mode_lock?: boolean } };
+  response?: {
+    status?: number;
+    data?: { message?: string; duplicate?: boolean; mode_lock?: boolean; existing_emission?: { total_emission?: number | string; status?: string } };
+  };
   message?: string;
 }
 
@@ -137,7 +140,12 @@ export async function saveRow(payload: EmissionPayload, replace = false): Promis
     const e = err as ApiError;
     const data = e.response?.data;
     if (e.response?.status === 409 && data?.duplicate) {
-      return { kind: "duplicate", message: data.message ?? "An entry for this already exists in the period." };
+      const existing = data.existing_emission;
+      return {
+        kind: "duplicate",
+        message: data.message ?? "An entry for this already exists in the period.",
+        existing: existing ? { tco2e: existing.total_emission == null ? null : Number(existing.total_emission), status: existing.status ?? null } : null,
+      };
     }
     return {
       kind: "error",
@@ -181,7 +189,9 @@ export function useExistingEntries(siteId: number | null, categoryId: number | n
     queryFn: async () => {
       const q = entriesQuery(period as EntryPeriod);
       const result = await getEmissionsPaginated({ siteIds: [siteId as number], categoryId, year: q.year, month: q.month, page: 1, limit: 100 });
-      return (result.data as unknown as SavedEntry[]).filter((e) => entryInPeriod(e, period as EntryPeriod));
+      const entries = (result.data as unknown as SavedEntry[]).filter((e) => entryInPeriod(e, period as EntryPeriod));
+      // More than one page: the list says so instead of showing a short count.
+      return { entries, more: result.total > result.data.length };
     },
   });
 }

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Button, Callout, Skeleton, StatusPill, cn, formatEmissions, panel } from "../../../ui";
 import { useExistingEntries } from "../api";
 import { canChange, type SavedEntry } from "../logic/existing";
@@ -32,12 +33,17 @@ export function ExistingEntries({ siteId, categoryId, period, periodLabel, onLoa
       </Callout>
     );
   }
-  const list = entries.data;
+  const { entries: list, more } = entries.data;
   return (
     <section aria-labelledby="already-entered" className={cn(panel, "p-4")}>
       <h2 id="already-entered" className="text-sm font-semibold text-ink">
-        Already entered for {periodLabel} ({list.length})
+        Already entered for {periodLabel} ({list.length}{more ? "+" : ""})
       </h2>
+      {more && (
+        <p className="mt-1 text-xs text-muted">
+          Showing the first 100 entries. See them all in <Link className="font-medium text-brand-text underline" to="/data/mine">My entries</Link>.
+        </p>
+      )}
       {list.length === 0 ? (
         <p className="mt-1 text-sm text-muted">Nothing yet for this category and period.</p>
       ) : (

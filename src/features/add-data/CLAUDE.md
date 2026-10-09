@@ -93,3 +93,6 @@ Below the stepper (or as a tab "Already entered for Sep (4)") a compact `DataTab
 - Evidence: per typed row, kept in memory (`hooks/useRowEvidence.ts`), uploaded with `uploadMultipleDocuments` after the row saves.
 - Leaving the page with typed rows not sent asks first (`useUnsavedGuard`, moved to `src/ui`). The draft is cleared once every row is sent or skipped.
 - Old page: kept until the new UI goes live (flag off still renders it at `/data-entry`; bulk upload opens only from it until P27). It is deleted in the PR that turns the new UI on.
+- Comparison while editing: a pending entry loaded with Edit keeps its saved tCO₂e in `_editSaved`, and `savedExcludingEdits` takes it off the saved total so the "vs last period" chip doesn't count it twice (legacy `effectiveSavedTotals`).
+- Not built yet in "Already entered": view factor, documents, and delete (single or batch). My entries (P04) has the drawer with documents; these can move here later.
+- A partial send (some rows saved, others failed) keeps the draft; sending the saved rows again later hits the duplicate dialog rather than creating copies.

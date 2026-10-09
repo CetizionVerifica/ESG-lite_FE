@@ -117,7 +117,7 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       if (path.endsWith("/user/emissions") && request.method() === "POST") {
         if (duplicate && url.searchParams.get("replace") !== "true") {
           duplicate = false;
-          return json({ message: "Duplicate", duplicate: true, existing_emission: { pk_id: 1 } }, 409);
+          return json({ message: "Duplicate", duplicate: true, existing_emission: { pk_id: 1, total_emission: 1.5, status: "pending" } }, 409);
         }
         created.push({ body: request.postDataJSON(), replace: url.searchParams.get("replace") === "true" });
         return json({ emission: { pk_id: created.length + 100 } }, 201);
@@ -214,6 +214,7 @@ test("an incomplete row blocks review and a duplicate can be replaced", async ({
   await page.getByRole("button", { name: "Submit for approval" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("1 row is already entered for");
+  await expect(dialog).toContainText("Saved: 1.50 tCO₂e (Pending)");
   await dialog.getByRole("radio", { name: "Replace" }).click();
   await dialog.getByRole("button", { name: "Apply (replace 1)" }).click();
   await expect(page.getByText("1 row sent for approval")).toBeVisible();

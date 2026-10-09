@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { toFormModel } from "../../../lib/emissions/form";
 import type { ColumnConfig, ColumnEntity } from "../../../lib/emissions/types";
 import { buildPayload } from "./entry";
-import { canChange, editOf, entriesQuery, entryInPeriod, rowFromEntry, type SavedEntry } from "./existing";
+import { canChange, editOf, entriesQuery, entryInPeriod, rowFromEntry, savedExcludingEdits, type SavedEntry } from "./existing";
 
 const col = (pk_id: number, column_name: string, column_type = "number"): ColumnEntity => ({ pk_id, column_name, column_type });
 const config: ColumnConfig = { pk_id: 1, config_name: "Travel", columns: [col(1, "Mode", "text"), col(2, "Activity Data")] };
@@ -56,5 +56,18 @@ describe("existing entries", () => {
   it("loads a composite unit as 1 × the saved product", () => {
     const row = rowFromEntry(entry({ activity_data_unit: "passenger.km" }), toFormModel(config), 1, sep);
     expect(row).toMatchObject({ "Activity Data": "120", "Activity Data__multiplier": "1", "Activity Data__distance": "120" });
+  });
+
+  it("doesn't count a pending entry being edited twice in the vs-last-period total", () => {
+    // Aug 4.0; Sep has a pending 4.2 being edited to 4.3: the comparison must use 4.3, not 4.2 + 4.3.
+    const model = toFormModel(config);
+    const pending = rowFromEntry(entry({ status: "pending", total_emission: 4.2 }), model, 1, sep);
+    const saved = 4.2 + 1; // the pending entry plus another saved row of the category
+    expect(savedExcludingEdits([pending], "Car (petrol)", saved)).toBeCloseTo(1);
+    expect(savedExcludingEdits([pending], "Other", saved)).toBe(saved);
+    // Rejected entries aren't in the saved total, so nothing is taken off.
+    const rejected = rowFromEntry(entry(), model, 2, sep);
+    expect(savedExcludingEdits([rejected], "Car (petrol)", 1)).toBe(1);
+    expect(buildPayload(pending, { siteId: 4, categoryId: 9, period: sep }).activity_data).not.toHaveProperty("_editSaved");
   });
 });

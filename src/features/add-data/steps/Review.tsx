@@ -93,6 +93,7 @@ export function Review(p: Props) {
           label: `Row ${i + 1} · ${label(p.rows[i])}`,
           tco2e: p.calc.calculateEmission(p.rows[i]).value,
           message: o?.kind === "duplicate" ? o.message : "",
+          existing: o?.kind === "duplicate" ? o.existing : null,
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputed when the conflicts change
