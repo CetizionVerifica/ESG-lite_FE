@@ -95,6 +95,18 @@ export function editedDate(entry: Pick<EmissionData, "date_of_reporting" | "repo
   return monthEndDate(month);
 }
 
+/**
+ * Months a monthly entry can move to: its own calendar year, up to this month.
+ * The backend picks the factor from the entry's stored date before applying a
+ * new one, so a move across years would be recalculated with the old year's factor.
+ */
+export function monthBounds(entry: Pick<EmissionData, "date_of_reporting">, today = new Date()): { min: string; max: string } {
+  const year = entry.date_of_reporting.slice(0, 4);
+  const now = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const end = `${year}-12`;
+  return { min: `${year}-01`, max: end < now ? end : now };
+}
+
 export const factorYearFor = (date: string) => factorYearForDate(date) as number;
 
 /* ------------------------------------------------------------- validation */

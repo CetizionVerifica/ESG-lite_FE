@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { applyChange, formColumns, isColumnVisible, toFormModel, useEmissionCalc, type ModalRow } from "../../../lib/emissions";
 import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEmissions, formatNumber } from "../../../ui";
 import { useEditSetup } from "../api";
-import { type EditIssue, type EntryUpdate, buildUpdate, editIssue, editedDate, entryMonth, factorYearFor, rowFromEntry } from "../edit";
+import { type EditIssue, type EntryUpdate, buildUpdate, editIssue, editedDate, entryMonth, factorYearFor, monthBounds, rowFromEntry } from "../edit";
 import { type EntryRow, periodText } from "../logic";
 
 export const EDIT_FORM_ID = "edit-entry-form";
@@ -151,7 +151,13 @@ function Fields(p: FieldsProps) {
             <span className="mt-2 block text-ink">Yearly · {periodText(entry)}</span>
           </div>
         ) : (
-          <MonthPicker label="Month" value={p.month} onChange={(v) => v && p.onMonthChange(v)} />
+          <MonthPicker
+            label="Month"
+            help="Within the same year. To file it under another year, add it again there."
+            value={p.month}
+            onChange={(v) => v && p.onMonthChange(v)}
+            {...monthBounds(entry)}
+          />
         )}
       </div>
 

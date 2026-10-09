@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type ColumnConfig, type ColumnEntity, createEmissionCalculator, toFormModel } from "../../lib/emissions";
 import type { EmissionData } from "../../services/emissionService";
-import { buildUpdate, canEdit, editIssue, editedDate, monthEndDate, prefillSelects, rowFromEntry, saveErrorMessage } from "./edit";
+import { buildUpdate, canEdit, monthBounds, editIssue, editedDate, monthEndDate, prefillSelects, rowFromEntry, saveErrorMessage } from "./edit";
 
 const col = (pk_id: number, column_name: string, column_type = "select"): ColumnEntity => ({ pk_id, column_name, column_type });
 
@@ -87,6 +87,11 @@ describe("period", () => {
   it("moves to the new month's end", () => {
     expect(editedDate(entry(), "2024-02")).toBe("2024-02-29");
     expect(monthEndDate("2025-11")).toBe("2025-11-30");
+  });
+
+  it("keeps a monthly entry in its own year, up to this month", () => {
+    expect(monthBounds(entry(), new Date(2026, 9, 9))).toEqual({ min: "2025-01", max: "2025-12" });
+    expect(monthBounds(entry({ date_of_reporting: "2026-02-28" }), new Date(2026, 9, 9))).toEqual({ min: "2026-01", max: "2026-10" });
   });
 
   it("never moves a yearly entry", () => {
