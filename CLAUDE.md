@@ -2,6 +2,12 @@
 
 React 19 + Vite + TypeScript + Tailwind. Backend is ESG-lite (Node), AI/OCR endpoints come from python_AI_service.
 
+## Branches
+
+- All redesign and PCF work targets the long-lived integration branch `redesign/integration`, not `main`. Branch from it and open PRs against it.
+- `main` stays the current production UI until the team merges `redesign/integration` into it.
+- The same branch exists in ESG-lite and python_AI_service for the backend and AI parts.
+
 ## Where the specs live
 
 - `docs/redesign/` UI redesign: `README.md`, `01-plan.md` (phases, workstreams, definition of done), `00-entity-map.md` (entities, endpoints, backend items B1–B8, old → new pages), `foundation/` (F1 theme tokens, F2 app shell, F3 components), `pages/P01…P27/CLAUDE.md`.
