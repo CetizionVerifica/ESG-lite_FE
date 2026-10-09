@@ -124,7 +124,8 @@ export function ChartFrame({
   return (
     <figure className={cn("rounded-card border border-line bg-panel p-4", className)} aria-busy={loading || undefined}>
       <figcaption className="mb-3 flex flex-wrap items-start gap-2">
-        <div className="min-w-0 flex-1">
+        {/* Keeps the title readable on phones: the controls wrap below it. */}
+        <div className="min-w-[12rem] flex-1">
           <h3 className="text-sm font-semibold text-ink">
             {title}
             {unit && <span className="ml-1.5 text-xs font-normal text-muted">{unit}</span>}
