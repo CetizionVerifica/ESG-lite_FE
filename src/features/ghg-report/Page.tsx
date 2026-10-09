@@ -19,20 +19,28 @@ import {
   reportPeriodLabel,
   useFilterParams,
 } from "../../ui";
-import { useAdminSites, useDebounced, useFyStartMonth, useReportTables } from "./api";
+import { useAdminSites, useDebounced, useFyStartMonth, useReportDetails, useReportTables } from "./api";
+import { AboutPanel } from "./components/AboutPanel";
+import { FindingsTab } from "./components/FindingsTab";
 import { CategoryTable } from "./components/CategoryTable";
 import { LocationTab } from "./components/LocationTab";
 import { ReportFilters } from "./components/ReportFilters";
 import { ScopeChart } from "./components/ScopeChart";
+import { ScopeTab } from "./components/ScopeTab";
 import { ScopeTable } from "./components/ScopeTable";
 import {
   type ReportQuery,
+  type ScopeName,
   type SiteOption,
   categoryOptions,
   clientSites,
+  findings,
   locationRows,
   readPeriod,
+  recommendedActions,
   reportFigures,
+  scopeDetails,
+  scopeDistribution,
   serverMessage,
   shortPeriodLabel,
   topCategories,
@@ -40,11 +48,21 @@ import {
   writePeriod,
 } from "./logic";
 
-type Tab = "summary" | "location";
+type Tab = "summary" | "location" | "scope1" | "scope2" | "scope3" | "findings";
 const TABS: { value: Tab; label: string }[] = [
   { value: "summary", label: "Summary" },
   { value: "location", label: "By location" },
+  { value: "scope1", label: "Scope 1" },
+  { value: "scope2", label: "Scope 2" },
+  { value: "scope3", label: "Scope 3" },
+  { value: "findings", label: "Findings" },
 ];
+const SCOPE_TABS: { tab: Tab; scope: ScopeName }[] = [
+  { tab: "scope1", scope: "Scope 1" },
+  { tab: "scope2", scope: "Scope 2" },
+  { tab: "scope3", scope: "Scope 3" },
+];
+const isTab = (v: string | null): v is Tab => TABS.some((t) => t.value === v);
 
 function useManagerSites(): SiteOption[] {
   const { user } = useAuth();
@@ -98,7 +116,11 @@ export default function GhgReportPage() {
   const askedSites = useMemo(() => sites.filter((s) => shown.siteIds.includes(s.site_id)), [sites, shown.siteIds]);
   const figures = useMemo(() => (data ? reportFigures(data, askedSites) : null), [data, askedSites]);
 
-  const tab: Tab = params.get("tab") === "location" ? "location" : "summary";
+  const tabParam = params.get("tab");
+  const tab: Tab = isTab(tabParam) ? tabParam : "summary";
+  // Detail rows are only needed on the Scope tabs; fetched the first time one opens.
+  const details = useReportDetails(sites.length ? query : null, tab.startsWith("scope"));
+  const locations = useMemo(() => (data ? locationRows(data, askedSites) : []), [data, askedSites]);
   const setTab = (t: Tab) =>
     setParams(
       (p) => {
@@ -192,6 +214,8 @@ export default function GhgReportPage() {
         />,
       )}
 
+      <AboutPanel />
+
       <p className="text-sm text-muted" aria-live="polite">
         Comparing <span className="font-medium text-ink">{reportPeriodLabel(period, fy)}</span> with{" "}
         <span className="font-medium text-ink">{reportPeriodLabel(prev, fy)}</span>
@@ -226,7 +250,24 @@ export default function GhgReportPage() {
                 <CategoryTable rows={topCategories(data)} prevLabel={prevLabel} selLabel={selLabel} />
               </TabPanel>
               <TabPanel<Tab> idBase="ghg" value="location" current={tab}>
-                <LocationTab rows={locationRows(data, askedSites)} prevLabel={prevLabel} selLabel={selLabel} />
+                <LocationTab rows={locations} prevLabel={prevLabel} selLabel={selLabel} />
+              </TabPanel>
+              {SCOPE_TABS.map(({ tab: value, scope }) => (
+                <TabPanel<Tab> key={value} idBase="ghg" value={value} current={tab}>
+                  <ScopeTab
+                    scope={scope}
+                    rows={scopeDetails(details.data?.rows ?? [], scope)}
+                    distribution={scopeDistribution(details.data?.rows ?? [], scope)}
+                    prevLabel={prevLabel}
+                    selLabel={selLabel}
+                    loading={details.isPending}
+                    error={details.isError ? serverMessage(details.error, "Couldn't load the detail rows.") : null}
+                    onRetry={() => details.refetch()}
+                  />
+                </TabPanel>
+              ))}
+              <TabPanel<Tab> idBase="ghg" value="findings" current={tab}>
+                <FindingsTab findings={findings(k, locations, reportPeriodLabel(period, fy), reportPeriodLabel(prev, fy))} actions={recommendedActions(k)} />
               </TabPanel>
             </div>
           )}

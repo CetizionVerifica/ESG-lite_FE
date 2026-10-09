@@ -50,6 +50,7 @@ function tables(body: Body, empty = false) {
 
 async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
   const bodies: Body[] = [];
+  const details: Body[] = [];
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Manager");
@@ -67,6 +68,20 @@ async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       if (path.endsWith("/user/reporting-calendar")) return json({ fiscalYearStartMonth: 4, fiscalYearRule: "" });
+      if (path.endsWith("/user/ghg/details")) {
+        details.push(route.request().postDataJSON() as Body);
+        const r = (scope: string, categoryName: string, siteId: number, siteName: string, prev: number, sel: number) => ({
+          scope,
+          categoryId: siteId * 10,
+          categoryName,
+          fuelType: categoryName,
+          siteId,
+          siteName,
+          compare: { consumption: prev * 100, unit: "L", emissions: prev },
+          selected: { consumption: sel * 100, unit: "L", emissions: sel },
+        });
+        return json({ filters: {}, ranges: {}, rows: [r("Scope 1", "Diesel", 1, "Hidd", 40, 30), r("Scope 2", "Electricity", 1, "Hidd", 85, 50), r("Scope 2", "Electricity", 2, "Sitra", 0, 20)] });
+      }
       if (path.endsWith("/user/ghg/tables")) {
         const body = route.request().postDataJSON() as Body;
         bodies.push(body);
@@ -75,7 +90,7 @@ async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
       return json({});
     },
   );
-  return { bodies, last: () => bodies[bodies.length - 1] };
+  return { bodies, details, last: () => bodies[bodies.length - 1] };
 }
 
 test("a manager compares a year with the last one and narrows it live", async ({ page }) => {
@@ -134,4 +149,28 @@ test("an empty period offers the year before", async ({ page }) => {
   await page.getByRole("button", { name: "Try CY 2024" }).click();
   await expect.poll(() => last()?.year).toBe(2024);
   await expect(page.getByText("Comparing CY 2024 with CY 2023")).toBeVisible();
+});
+
+test("scope tabs load detail rows on demand, and findings follow the PDF", async ({ page }) => {
+  const { details } = await signIn(page);
+  await page.goto("/reports/ghg?year=2025");
+  await expect(page.getByText("Comparing CY 2025 with CY 2024")).toBeVisible();
+
+  // The intro is a dismissible note that stays dismissed.
+  await page.getByRole("button", { name: /Dismiss/i }).click();
+  await expect(page.getByText("About GHG reporting")).toHaveCount(0);
+  expect(details).toHaveLength(0);
+
+  await page.getByRole("tab", { name: "Scope 2" }).click();
+  const table = page.getByRole("table", { name: "Scope 2 emissions by category and site" });
+  await expect(table.getByRole("row", { name: /Sitra/ })).toContainText("20 tCO₂e");
+  expect(details[0]).toEqual({ siteIds: [1, 2], yearType: "CY", year: 2025, frequency: "yearly" });
+
+  await page.getByRole("tab", { name: "Findings" }).click();
+  await expect(page.getByText("Total CY 2025 emissions were 100 tCO₂e (down 20.0% vs CY 2024).")).toBeVisible();
+  await expect(page.getByText("Hidd is the largest contributing site at 80 tCO₂e (80.0% of total).")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("tab", { name: "Findings", selected: true })).toBeVisible();
+  await expect(page.getByText("About GHG reporting")).toHaveCount(0);
 });
