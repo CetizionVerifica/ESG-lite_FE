@@ -5,6 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { Modal } from "./Modal";
 import { Drawer } from "./Drawer";
+import { Popover } from "./Popover";
+import { Combobox } from "./fields";
 
 afterEach(cleanup);
 
@@ -53,6 +55,19 @@ describe("Modal", () => {
     expect(onConfirm).toHaveBeenCalledOnce();
   });
 
+  it("reads the live busy state on Esc, not the one from when it opened", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const props = { open: true, onClose, title: "Save?" };
+    const { rerender } = render(<Modal {...props} primaryAction={{ label: "Save", onClick: () => {} }} />);
+    rerender(<Modal {...props} primaryAction={{ label: "Save", onClick: () => {}, loading: true }} />);
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+    rerender(<Modal {...props} primaryAction={{ label: "Save", onClick: () => {} }} />);
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("can't be dismissed while the action is busy", async () => {
     const user = userEvent.setup();
     render(<ModalHarness loading />);
@@ -76,6 +91,43 @@ describe("Drawer", () => {
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets an open Combobox inside take Esc without closing the drawer", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const options = [{ value: 1, label: "Sitra" }, { value: 2, label: "Hidd" }];
+    render(
+      <Drawer open onClose={onClose} title="Entry">
+        <Combobox label="Site" value={null} onChange={() => {}} options={options} />
+      </Drawer>,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Site" }));
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("lets an open Popover inside take Esc without closing the drawer", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(
+      <Drawer open onClose={onClose} title="Entry">
+        <Popover label="Period" trigger={(t) => <button {...t}>Period</button>}>
+          {() => <button>Sep 2025</button>}
+        </Popover>
+      </Drawer>,
+    );
+    await user.click(screen.getByRole("button", { name: "Period" }));
+    expect(screen.getByRole("dialog", { name: "Period" })).toBeTruthy();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Period" })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("shows loading, then error with retry, without the footer", async () => {

@@ -46,7 +46,7 @@ export function Drawer({
 }: DrawerProps) {
   const ref = useRef<HTMLElement>(null);
   const titleId = useId();
-  useFocusTrap(ref, open, onClose);
+  const trap = useFocusTrap(ref, open, onClose);
   useLockBodyScroll(open);
   if (!open) return null;
 
@@ -71,6 +71,7 @@ export function Drawer({
         aria-labelledby={titleId}
         aria-busy={loading || undefined}
         tabIndex={-1}
+        onKeyDown={trap.onKeyDown}
         className={cn(
           "relative flex h-full w-full max-w-full flex-col border-l border-line bg-panel text-ink shadow-xl focus:outline-none",
           widths[size],

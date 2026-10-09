@@ -88,6 +88,8 @@ export function Combobox<V extends string | number>({
                 e.preventDefault();
                 if (matches[active]) pick(matches[active]);
               } else if (e.key === "Escape" && open) {
+                // Only the list closes, not a Drawer or Modal around it.
+                e.preventDefault();
                 e.stopPropagation();
                 setOpen(false);
                 setQuery("");

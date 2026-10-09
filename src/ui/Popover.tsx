@@ -59,6 +59,8 @@ export function Popover({ trigger, children, label, align = "start", className }
           tabIndex={-1}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
+              // Only this popover closes, not a Drawer or Modal around it.
+              e.preventDefault();
               e.stopPropagation();
               close();
             }

@@ -54,7 +54,7 @@ export function Modal({
   const close = () => {
     if (!busy) onClose();
   };
-  useFocusTrap(ref, open, close);
+  const trap = useFocusTrap(ref, open, close);
   useLockBodyScroll(open);
   if (!open) return null;
 
@@ -68,6 +68,7 @@ export function Modal({
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
+        onKeyDown={trap.onKeyDown}
         className={cn(
           "relative w-full rounded-card border border-line bg-panel text-ink shadow-xl focus:outline-none",
           size === "sm" ? "max-w-md" : "max-w-xl",
