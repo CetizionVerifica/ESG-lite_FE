@@ -12,6 +12,7 @@ import {
   periodQuery,
   quantityOf,
   rejectReasonError,
+  reportOptions,
   rowPeriodLabel,
   scopeNumber,
   stepIndex,
@@ -160,5 +161,21 @@ describe("small helpers", () => {
     expect(scopeNumber("Scope 2")).toBe(2);
     expect(scopeNumber(null)).toBeNull();
     expect(humanize("fuelType")).toBe("Fuel type");
+  });
+});
+
+describe("reportOptions", () => {
+  it("offers the month, its calendar year and its financial year", () => {
+    expect(reportOptions({ kind: "month", year: 2025, month: 2 })).toEqual([
+      { kind: "month", label: "Feb 2025 (month)", year: 2025, month: 2 },
+      { kind: "year", label: "Calendar year 2025", year: 2025, yearType: "CY" },
+      { kind: "year", label: "FY 2024-25", year: 2025, yearType: "FY" },
+    ]);
+    expect(reportOptions({ kind: "month", year: 2025, month: 9 })[2]).toMatchObject({ label: "FY 2025-26", year: 2026 });
+  });
+
+  it("offers the year for a calendar year and nothing for any period", () => {
+    expect(reportOptions({ kind: "cy", year: 2024 })).toEqual([{ kind: "year", label: "Calendar year 2024", year: 2024, yearType: "CY" }]);
+    expect(reportOptions(null)).toEqual([]);
   });
 });

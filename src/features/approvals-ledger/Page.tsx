@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, SearchX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -9,6 +10,7 @@ import {
   DataTable,
   EMPTY_FILTERS,
   EmptyState,
+  type ExportFormat,
   FilterBar,
   type FilterDef,
   Modal,
@@ -17,14 +19,30 @@ import {
   type SortState,
   Tabs,
   cn,
+  exportMatrix,
   focusRing,
+  formatNumber,
+  toMatrix,
   useContextParams,
   useFilterParams,
   useToast,
   writeContext,
   writeFilterParams,
 } from "../../ui";
-import { commitApprove, errorMessage, useColumnConfigs, useEmissionList, useReviewMutations, useStatusCounts } from "./api";
+import {
+  EXPORT_CAP,
+  commitApprove,
+  errorMessage,
+  fetchAllForExport,
+  loadConfigs,
+  useBatches,
+  useColumnConfigs,
+  useEmissionList,
+  useReviewMutations,
+  useStatusCounts,
+} from "./api";
+import { BatchesView } from "./components/BatchesView";
+import { ReportMenu } from "./components/ReportMenu";
 import { RecordDrawer } from "./components/RecordDrawer";
 import { RejectModal } from "./components/RejectModal";
 import { ledgerColumns } from "./components/columns";
@@ -61,12 +79,78 @@ const FILTER_KEYS: Record<Tab, string[]> = { approvals: [], ledger: ["status"] }
 
 const describe = (r: LedgerRow) => `${r.category?.category_name ?? "Entry"} · ${r.site?.name ?? "—"} · ${rowPeriodLabel(r)}`;
 
-/** P07: `/data/approvals` and `/data/ledger`, one page with two tabs. */
+type View = Tab | "batches";
+
+/** P07: `/data/approvals` (Approvals; `?view=batches` Upload batches) and `/data/ledger`. */
 export default function EmissionsPage({ tab }: { tab: Tab }) {
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
-  const { toast } = useToast();
+  const [params] = useSearchParams();
   const sites = useManagerSites();
+  const [ctx] = useContextParams();
+  const view: View = tab === "approvals" && params.get("view") === "batches" ? "batches" : tab;
+
+  const categories = useMemo(() => {
+    const inScope = ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)) : sites;
+    const byId = new Map<number, string>();
+    for (const s of inScope) for (const c of s.categories ?? []) byId.set(c.category_id, c.category_name);
+    return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [sites, ctx.siteIds]);
+  const counts = useStatusCounts(ctx.siteIds);
+  // No site chip = all of the manager's sites; batches must always be scoped (the endpoint isn't).
+  const scopeSites = useMemo(() => (ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)), [ctx.siteIds, sites]);
+  const batches = useBatches(scopeSites, ctx.categoryId);
+
+  // Tabs keep the context (sites, category, period) and drop the list filters.
+  const goView = (next: View) => {
+    const keep = new URLSearchParams();
+    for (const k of CONTEXT_KEYS) {
+      const v = params.get(k);
+      if (v) keep.set(k, v);
+    }
+    if (next === "batches") keep.set("view", "batches");
+    navigate({ pathname: TAB_PATH[next === "batches" ? "approvals" : next], search: keep.toString() });
+  };
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Emissions"
+        context={
+          <ContextChips
+            chips={["site", "category", "period"]}
+            sites={sites.map((s) => ({ value: s.site_id, label: s.name }))}
+            categories={categories}
+            periodKinds={["month", "cy"]}
+            allowAnyPeriod
+          />
+        }
+      />
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <Tabs<View>
+          label="Emissions views"
+          value={view}
+          onChange={goView}
+          items={[
+            { value: "approvals", label: "Approvals", count: counts.data?.pending_count },
+            { value: "ledger", label: "Ledger" },
+            { value: "batches", label: "Upload batches", count: batches.data?.filter((b) => b.pending_count > 0).length },
+          ]}
+        />
+        <ReportMenu siteIds={ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)} categoryId={ctx.categoryId} period={ctx.period} />
+      </div>
+      {view === "batches" ? (
+        <BatchesView siteIds={scopeSites} categoryId={ctx.categoryId} />
+      ) : (
+        <ListView key={view} tab={view} categoryName={categories.find((c) => c.value === ctx.categoryId)?.label ?? ""} />
+      )}
+    </div>
+  );
+}
+
+function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [, setParams] = useSearchParams();
   const [ctx] = useContextParams();
   const [filters, setFilters] = useFilterParams(FILTER_KEYS[tab]);
   const status = tab === "ledger" ? asStatus(filters.filters.status?.[0]) : null;
@@ -80,17 +164,8 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
   const [deleting, setDeleting] = useState<LedgerRow[] | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const categories = useMemo(() => {
-    const inScope = ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)) : sites;
-    const byId = new Map<number, string>();
-    for (const s of inScope) for (const c of s.categories ?? []) byId.set(c.category_id, c.category_name);
-    return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [sites, ctx.siteIds]);
-  const categoryName = categories.find((c) => c.value === ctx.categoryId)?.label ?? "";
-
   const query = listParams({ tab, siteIds: ctx.siteIds, categoryId: ctx.categoryId, period: ctx.period, search: filters.q, status, sort, page, pageSize });
   const list = useEmissionList(query);
-  const counts = useStatusCounts(ctx.siteIds);
   const review = useReviewMutations();
 
   // New filters start again on page 1 with nothing selected.
@@ -230,17 +305,6 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
   const actions = { open: setDrawer, approve: (r: LedgerRow) => approve(r), reject: (r: LedgerRow) => reject([r]), remove: (r: LedgerRow) => askDelete([r]) };
   const columns = ledgerColumns({ configOf, feraOf: merged.feraOf, statusOf, actions });
 
-  // ── Header ──
-  const goTab = (next: Tab) => {
-    const keep = new URLSearchParams();
-    for (const k of CONTEXT_KEYS) {
-      const v = params.get(k);
-      if (v) keep.set(k, v);
-    }
-    navigate({ pathname: TAB_PATH[next], search: keep.toString() });
-  };
-  const pendingCount = counts.data?.pending_count;
-
   const filtered = !!filters.q.trim() || !!status || ctx.categoryId !== null || ctx.period !== null;
   // One URL write: two functional setSearchParams calls in one tick both start from the
   // same params, so the second would undo the first.
@@ -267,29 +331,21 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
 
   const liveDrawerRow = drawer ? (list.data?.data.find((r) => r.pk_id === drawer.pk_id) ?? drawer) : null;
 
+  const exportView = async (format: ExportFormat) => {
+    try {
+      const all = await fetchAllForExport(query, list.data?.total ?? 0);
+      const exported = mergeFera(all.rows, categoryName.toLowerCase() === "fera");
+      // Rows beyond this page need their own configs (option labels) and FERA links.
+      const exportColumns = ledgerColumns({ configOf: await loadConfigs(qc, all.rows), feraOf: exported.feraOf, statusOf, actions });
+      await exportMatrix(toMatrix(exported.rows, exportColumns.filter((c) => c.id !== "actions")), `emissions-${tab}`, format);
+      if (all.capped) toast({ title: `Exported the first ${formatNumber(EXPORT_CAP)} rows`, description: "Narrow the filters to export the rest." });
+    } catch (e) {
+      toast({ title: "Couldn't export", description: errorMessage(e, "Try again in a moment."), tone: "bad" });
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Emissions"
-        context={
-          <ContextChips
-            chips={["site", "category", "period"]}
-            sites={sites.map((s) => ({ value: s.site_id, label: s.name }))}
-            categories={categories}
-            periodKinds={["month", "cy"]}
-            allowAnyPeriod
-          />
-        }
-      />
-      <Tabs<Tab>
-        label="Emissions views"
-        value={tab}
-        onChange={goTab}
-        items={[
-          { value: "approvals", label: "Approvals", count: pendingCount },
-          { value: "ledger", label: "Ledger" },
-        ]}
-      />
+    <>
       {tab === "approvals" && (
         <p className="hidden text-xs text-muted sm:block" data-testid="shortcuts">
           Keys: <Kbd>J</Kbd>/<Kbd>K</Kbd> move · <Kbd>A</Kbd> approve · <Kbd>R</Kbd> reject · <Kbd>Space</Kbd> select · <Kbd>Enter</Kbd> open
@@ -330,6 +386,7 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
           }}
           pagination={{ mode: "server", page, pageSize, total: list.data?.total ?? 0, onPageChange: setPage }}
           onRowClick={setDrawer}
+          onExport={(f) => void exportView(f)}
           storageKey={`p07-${tab}`}
           toolbar={
             <>
@@ -362,6 +419,11 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
         onClose={() => setDrawer(null)}
         onApprove={(r) => approve(r)}
         onReject={(r) => reject([r])}
+        onEdited={(saved) => {
+          // Keep showing the entry even if the edit moved it out of the current filter.
+          if (saved && drawer) setDrawer({ ...drawer, ...saved });
+          toast({ title: "Changes saved", description: "The change and your reason are in the entry's history.", tone: "good" });
+        }}
       />
       <RejectModal
         open={rejecting !== null}
@@ -372,7 +434,7 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
         onConfirm={confirmReject}
       />
       <DeleteModal rows={deleting} statusOf={statusOf} busy={review.remove.isPending} error={review.remove.error} onClose={() => setDeleting(null)} onConfirm={confirmDelete} />
-    </div>
+    </>
   );
 }
 
