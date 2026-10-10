@@ -186,6 +186,12 @@ export function ImportDrawer(props: Props) {
               </p>
               <p className="text-sm text-ink" data-testid="import-summary">
                 <span className="font-num">{summary.matched}</span> of <span className="font-num">{summary.included}</span> match existing factors
+                {summary.partial > 0 && (
+                  <>
+                    {" "}
+                    · <span className="font-num">{summary.partial}</span> only at some sites
+                  </>
+                )}
                 {summary.blocked > 0 && (
                   <>
                     {" "}
