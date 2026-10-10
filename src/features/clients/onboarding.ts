@@ -33,6 +33,8 @@ export type OnboardDraft = {
   email: string;
   phoneNumber: string;
   password: string;
+  /** Email the admin a link to choose their own password instead of setting one here. */
+  sendInvite: boolean;
   esgMitraAccess: boolean;
   /** false = "Skip for now" (PlanetPulse theme). */
   brandOn: boolean;
@@ -56,6 +58,7 @@ export const EMPTY_ONBOARD: OnboardDraft = {
   email: "",
   phoneNumber: "",
   password: "",
+  sendInvite: false,
   esgMitraAccess: false,
   brandOn: true,
   primary: "",
@@ -90,7 +93,9 @@ export function validateStep(step: StepId, d: OnboardDraft): Partial<Record<Onbo
     if (!d.contactPerson.trim()) e.contactPerson = "Enter the admin's name.";
     if (!d.email.trim()) e.email = "Enter the admin's email.";
     else if (!EMAIL.test(d.email.trim())) e.email = "Enter a valid email address.";
-    if (!d.password) e.password = "Set a password.";
+    if (d.sendInvite) {
+      // The admin chooses their own password from the invite email.
+    } else if (!d.password) e.password = "Set a password, or send an invite instead.";
     else if (d.password.length < PASSWORD_MIN) e.password = `Use at least ${PASSWORD_MIN} characters.`;
   }
   if (step === "brand" && d.brandOn) {
@@ -128,8 +133,9 @@ export function toOnboardForm(d: OnboardDraft): FormData {
     ["phoneNumber", d.phoneNumber],
   ];
   for (const [k, v] of text) f.append(k, v.trim());
+  if (d.sendInvite) f.append("sendInvite", "true");
   // Sent as is: a password's spaces are part of it.
-  f.append("password", d.password);
+  else f.append("password", d.password);
   // The backend treats presence as true.
   if (d.esgMitraAccess) f.append("esgMitraAccess", "true");
   if (d.brandOn && d.logo) f.append("logo", d.logo);

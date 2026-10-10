@@ -58,6 +58,15 @@ describe("toOnboardForm", () => {
     expect(f.get("esgMitraAccess")).toBeNull();
     expect((f.get("logo") as File).name).toBe("logo.png");
   });
+  it("an invite replaces the password: no password needed or sent", () => {
+    const invited = { ...filled, password: "", sendInvite: true };
+    expect(validateStep("admin", invited)).toEqual({});
+    expect(validateStep("admin", { ...filled, password: "" }).password).toBe("Set a password, or send an invite instead.");
+    const f = toOnboardForm({ ...invited, password: "typed before switching" });
+    expect(f.get("sendInvite")).toBe("true");
+    expect(f.get("password")).toBeNull();
+    expect(toOnboardForm(filled).get("sendInvite")).toBeNull();
+  });
   it("sends the access flag only when on, and no logo when the brand is skipped", () => {
     const f = toOnboardForm({ ...filled, esgMitraAccess: true, brandOn: false, logo });
     expect(f.get("esgMitraAccess")).toBe("true");

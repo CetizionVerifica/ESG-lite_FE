@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type AdminUser, type Company, type Site, buildRows, cascadeItems, deleteBlocker, distinctValues, draftFrom, isDirty, matchesFilters, parseThreshold, toPayload, validate } from "./logic";
+import { type AdminUser, type Company, type Site, buildRows, cascadeItems, distinctValues, draftFrom, isDirty, matchesFilters, parseThreshold, toPayload, validate } from "./logic";
 
 const midal: Company = { company_id: 1, name: "Midal Cables", contact_person: "Omar", address: "Hidd", industry: "Metals", region: "GCC", status: true };
 const gulf: Company = { company_id: 2, name: "Gulf Foods", contact_person: "Asha", address: "Pune", industry: "Food", region: "India", status: false };
@@ -71,13 +71,14 @@ describe("edit draft", () => {
 });
 
 describe("delete", () => {
-  it("is blocked while the client still has sites", () => {
-    expect(deleteBlocker({ sites: [sites[0]] })).toMatch(/1 site first/);
-    expect(deleteBlocker({ sites: [] })).toBeNull();
-  });
-  it("lists the threshold as a cascade only when one is set", () => {
-    expect(cascadeItems(true)).toHaveLength(1);
-    expect(cascadeItems(false)).toEqual([]);
+  it("lists sites and people with counts, and the threshold only when one is set", () => {
+    const items = cascadeItems({ sites: [sites[0]], users: [] }, true);
+    expect(items[0]).toMatch(/^1 site, with/);
+    expect(items).toContain("Its approval threshold value");
+    expect(items.some((i) => i.includes("people"))).toBe(false);
+    // No head count: people who also work for another client are kept.
+    expect(cascadeItems({ sites: [], users: [{} as AdminUser] }, false)[0]).toMatch(/^The accounts of people who work only for this client/);
+    expect(cascadeItems({ sites: [], users: [] }, false)).toEqual(["Its brand theme, logos and colour guideline", "Its category mappings"]);
   });
 });
 
