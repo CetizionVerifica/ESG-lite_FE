@@ -85,8 +85,23 @@ describe("mergeFera", () => {
     expect(mergeFera([parent, fera], true).rows).toHaveLength(2);
   });
 
-  it("keeps a FERA row whose parent isn't in the list", () => {
-    expect(mergeFera([fera, other], false).rows.map((r) => r.pk_id)).toEqual([2, 3]);
+  it("keeps a FERA row whose parent isn't in the list when the parent isn't pending", () => {
+    const lone = { ...fera, fera_partner_status: "approved" as const };
+    expect(mergeFera([lone, other], false).rows.map((r) => r.pk_id)).toEqual([2, 3]);
+    const orphan = { ...fera, fera_partner_status: null };
+    expect(mergeFera([orphan, other], false).rows.map((r) => r.pk_id)).toEqual([2, 3]);
+  });
+
+  it("hides a pending FERA row whose pending parent is on another page", () => {
+    const elsewhere = { ...fera, fera_partner_status: "pending" as const };
+    expect(mergeFera([elsewhere, other], false).rows.map((r) => r.pk_id)).toEqual([3]);
+    // An API that doesn't report the partner: hide it as before.
+    expect(mergeFera([fera, other], false).rows.map((r) => r.pk_id)).toEqual([3]);
+  });
+
+  it("keeps a decided FERA row whose parent isn't in the list", () => {
+    const approvedFera = { ...fera, status: "approved" as const };
+    expect(mergeFera([approvedFera, other], false).rows.map((r) => r.pk_id)).toEqual([2, 3]);
   });
 
   it("keeps a pending FERA row of an approved parent as its own row", () => {

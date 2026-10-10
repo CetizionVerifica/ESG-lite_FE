@@ -38,6 +38,8 @@ export interface EmissionData {
   };
   fera_linked_id?: number | null;
   parent_category_name?: string | null;
+  /** FERA rows: status of the linked non-FERA entry; null when there is none. */
+  fera_partner_status?: EmissionStatus | null;
 }
 
 export type ReportFrequency = "yearly" | "monthly";
