@@ -133,7 +133,6 @@ export default function ProductFootprintsPage() {
     }
   };
 
-  const company = sites[0]?.company?.name ?? null;
   const siteName = (id: number) => sites.find((s) => s.site_id === id)?.name;
   const productionLink = (() => {
     const q = new URLSearchParams({ period: serializePeriod(period), status: "approved" });
@@ -144,7 +143,6 @@ export default function ProductFootprintsPage() {
   const header = (
     <PageHeader
       title="Product footprints"
-      crumb={company ? [{ label: company }, { label: "Products" }] : undefined}
       description={`Cradle-to-gate footprints per product for ${year}.`}
       context={
         <ContextChips
