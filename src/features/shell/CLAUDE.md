@@ -29,7 +29,7 @@
 | **User** (contributor) | My month · Add data · My entries · Production |
 | **Manager** | Overview · Data ▾ (Approvals, Emissions ledger, Production data) · Reports ▾ (GHG report, EDE report) · Targets (SBTi) · **Products (PCF)** · Team |
 | **Admin** (company admin) | Users · (Settings in avatar menu) |
-| **Superadmin** | Console · Clients ▾ (Companies, Onboard client, Brand themes) · Setup ▾ (Sites, Users, Countries, Categories, Units, Products) · Factors ▾ (Emission factors, Category mappings, Thresholds) · Capture ▾ (Columns, Column configs, Bulk upload) · Reports ▾ (GHG, EDE) |
+| **Superadmin** | Console · Clients ▾ (Companies, Onboard client, Brand themes) · Setup ▾ (Sites, Users, Countries, Categories, Units, Products) · Factors ▾ (Emission factors, Category mappings, Thresholds, Material factors) · Capture ▾ (Columns, Column configs, Bulk upload) · Reports ▾ (GHG, EDE) |
 
 Notifications and Settings move to the bell and avatar menu for every role.
 Superadmin gets a **client switcher** in the page header that sets the company context (and theme preview) for Reports and Brand themes.
