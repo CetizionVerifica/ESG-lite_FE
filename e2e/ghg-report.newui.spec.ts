@@ -51,6 +51,7 @@ function tables(body: Body, empty = false) {
 async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
   const bodies: Body[] = [];
   const details: Body[] = [];
+  const pdf: { query: URLSearchParams; auth: string }[] = [];
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Manager");
@@ -68,6 +69,10 @@ async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       if (path.endsWith("/user/reporting-calendar")) return json({ fiscalYearStartMonth: 4, fiscalYearRule: "" });
+      if (path.endsWith("/reports/ghg")) {
+        pdf.push({ query: url.searchParams, auth: route.request().headers()["authorization"] ?? "" });
+        return route.fulfill({ status: 200, contentType: "application/pdf", body: "%PDF-1.4 test" });
+      }
       if (path.endsWith("/user/ghg/details")) {
         details.push(route.request().postDataJSON() as Body);
         const r = (scope: string, categoryName: string, siteId: number, siteName: string, prev: number, sel: number) => ({
@@ -90,7 +95,7 @@ async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
       return json({});
     },
   );
-  return { bodies, details, last: () => bodies[bodies.length - 1] };
+  return { bodies, details, pdf, last: () => bodies[bodies.length - 1] };
 }
 
 test("a manager compares a year with the last one and narrows it live", async ({ page }) => {
@@ -173,4 +178,66 @@ test("scope tabs load detail rows on demand, and findings follow the PDF", async
   await page.reload();
   await expect(page.getByRole("tab", { name: "Findings", selected: true })).toBeVisible();
   await expect(page.getByText("About GHG reporting")).toHaveCount(0);
+});
+
+test("the branded PDF downloads with the auth header, not a token in the URL", async ({ page }) => {
+  const { pdf, details } = await signIn(page);
+  await page.goto("/reports/ghg?cal=FY&freq=month&year=2025&month=6");
+  await expect(page.getByText("Comparing June 2024 with June 2023")).toBeVisible();
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download branded PDF" }).click();
+  expect((await download).suggestedFilename()).toBe("ghg-report-june-2024.pdf");
+  expect(pdf).toHaveLength(1);
+  expect(pdf[0].auth).toBe("Bearer test-token");
+  expect(pdf[0].query.has("token")).toBe(false);
+  expect(Object.fromEntries(pdf[0].query)).toEqual({ siteIds: "1,2", yearType: "FY", year: "2025", frequency: "monthly", month: "6", download: "1" });
+  await expect(page.getByText("Branded PDF downloaded")).toBeVisible();
+
+  const xlsx = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export tables" }).click();
+  expect((await xlsx).suggestedFilename()).toBe("ghg-report-june-2024.xlsx");
+  // The export loads the detail rows for the period on screen, even from the Summary tab.
+  expect(details.at(-1)).toEqual({ siteIds: [1, 2], yearType: "FY", year: 2025, frequency: "monthly", month: 6 });
+});
+
+test("a superadmin reports on the picked client's sites only", async ({ page }) => {
+  const bodies: Body[] = [];
+  await page.addInitScript(() => {
+    localStorage.setItem("token", "test-token");
+    localStorage.setItem("role", "Superadmin");
+    localStorage.setItem("user", JSON.stringify({ name: "Sam Staff", email: "sam@example.com" }));
+  });
+  await page.route(
+    (url) => url.port !== "4174",
+    (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const json = (body: unknown) => route.fulfill({ json: body });
+      if (path.endsWith("/auth/me")) return json({ role: "Superadmin", user: { name: "Sam Staff" } });
+      if (path.endsWith("/auth/me/appearance")) return json({ appearance: "light" });
+      if (path.endsWith("/admin/companies")) return json({ companies: [company, { company_id: 2, name: "Other Co" }] });
+      if (path.endsWith("/admin/sites"))
+        return json([
+          { site_id: 1, name: "Hidd", company, categories: [] },
+          { site_id: 9, name: "Elsewhere", company: { company_id: 2, name: "Other Co" }, categories: [] },
+        ]);
+      if (path.endsWith("/notifications/unread")) return json({ count: 0 });
+      if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
+      if (path.endsWith("/user/ghg/tables")) {
+        const body = route.request().postDataJSON() as Body;
+        bodies.push(body);
+        return json(tables(body));
+      }
+      return json({});
+    },
+  );
+
+  await page.goto("/reports/ghg?year=2025");
+  await expect(page.getByText("Pick a client first")).toBeVisible();
+  expect(bodies).toHaveLength(0);
+
+  await page.evaluate(() => localStorage.setItem("esglite.clientId", "1"));
+  await page.reload();
+  await expect(page.getByText("Comparing CY 2025 with CY 2024")).toBeVisible();
+  await expect.poll(() => bodies[bodies.length - 1]?.siteIds).toEqual([1]);
 });
