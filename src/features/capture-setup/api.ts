@@ -39,6 +39,7 @@ export function useSaveColumn() {
 export function useDeleteColumn() {
   const qc = useQueryClient();
   return useMutation({
+    // data-loss-reviewed: deletes one unused library column after a confirm dialog naming it; columns in use are blocked with a list of their forms
     mutationFn: (id: number) => deleteColumn(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.columns() }),
   });
@@ -59,6 +60,7 @@ export function useCreateForm() {
 export function useDeleteForm() {
   const qc = useQueryClient();
   return useMutation({
+    // data-loss-reviewed: deletes one data-entry form after a destructive confirm naming the form, site and category; saved entries are kept
     mutationFn: (id: number) => deleteColumnConfig(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
   });

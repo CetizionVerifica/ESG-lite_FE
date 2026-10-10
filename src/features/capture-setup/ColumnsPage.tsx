@@ -40,8 +40,7 @@ export default function ColumnsPage() {
       save.reset();
       setParams(
         (p) => {
-          const next = new URLSearchParams(p);
-          next.delete(OPEN);
+          const next = new URLSearchParams([...p].filter(([k]) => k !== OPEN));
           if (value) next.set(OPEN, value);
           return next;
         },
