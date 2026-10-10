@@ -66,10 +66,45 @@ export type Study = {
   notes: string | null;
   review_comment: string | null;
   inputs: InputRow[];
+  /** Summary of the last calculation; null before the first one. */
+  result?: ResultSummary | null;
 };
 
+export type ResultSummary = {
+  total_kg_per_unit: number;
+  by_stage: Partial<Record<ResultStage, number>> | null;
+  hidden_stages: ResultStage[];
+  primary_data_share_pct: number | null;
+  dqr_overall: number | null;
+  warnings: string[];
+  is_draft: boolean;
+  calculated_at: string;
+};
+
+/** What POST /calculate returns: the result with its lines (licensed details withheld as null). */
+export type CalcResult = {
+  result: {
+    total_kg_per_unit: number;
+    by_stage: Partial<Record<ResultStage, number>> | null;
+    hidden_stages: ResultStage[];
+    lines: { id: string; stage: ResultStage; name: string; kgco2e_per_unit: number | null; data_type: "primary" | "secondary"; pcf_input_id: number | null }[];
+    cut_off: { below_threshold_ids: string[] | null; below_threshold_total_pct: number | null; within_limit: boolean };
+    primary_data_share_pct: number | null;
+    dqr: { technology: number; geography: number; time: number; overall: number } | null;
+  };
+  warnings: string[];
+};
+
+export const ALLOCATION_KEYS: { value: AllocationKey; label: string; help: string }[] = [
+  { value: "mass", label: "Mass", help: "Share of the site's approved production in tonnes." },
+  { value: "machine_hours", label: "Machine hours", help: "Hours on this product's line against the whole site's." },
+  { value: "energy", label: "Metered energy", help: "Energy metered to this product against the site total." },
+  { value: "economic", label: "Economic", help: "This product's revenue against the site's." },
+  { value: "manual", label: "Manual %", help: "A share you set, e.g. from an engineering study." },
+];
+
 /** The study fields the Scope step edits (PATCH /pcf/studies/:id). */
-export type ScopeFields = Pick<Study, "reference_start" | "reference_end" | "year_type" | "pcr_tag" | "notes">;
+export type ScopeFields = Pick<Study, "reference_start" | "reference_end" | "year_type" | "pcr_tag" | "notes" | "allocation_key">;
 
 /** A factor as the running total sees it; `value` is null when licensed and hidden. */
 export type PriceFactor = { unit: string; value: number | null };

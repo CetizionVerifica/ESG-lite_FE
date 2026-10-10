@@ -23,7 +23,7 @@ const cell = "px-2 py-2 align-top";
 export function LineTable({ caption, lines, factors, factorsLoading, book, unitLabel, recycled, onChange, onRemove, onDetails }: Props) {
   const options = factors.filter((f) => !f.recycled).map((f) => ({ value: f.id, label: factorLabel(f) }));
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <table className="w-full min-w-[760px] text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead className="border-b border-line text-left text-xs text-muted">
