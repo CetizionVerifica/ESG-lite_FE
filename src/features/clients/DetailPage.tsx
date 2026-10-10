@@ -208,7 +208,11 @@ export default function ClientDetailPage() {
         onClose={() => setConfirmStatus(false)}
         tone={row.active ? "destructive" : "default"}
         title={row.active ? `Deactivate ${row.name}?` : `Reactivate ${row.name}?`}
-        description={row.active ? "The client is marked inactive. Its sites, people and data stay as they are." : "The client is marked active again."}
+        description={
+          row.active
+            ? "Its people can't sign in until you reactivate it, and anyone signed in is stopped on their next action. Its sites, people and data stay as they are."
+            : "Its people can sign in again."
+        }
         error={statusErr}
         primaryAction={{ label: row.active ? "Deactivate" : "Reactivate", onClick: onToggleActive, loading: update.isPending }}
       />

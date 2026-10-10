@@ -122,11 +122,18 @@ function Success({ result }: { result: OnboardResult }) {
         <CheckCircle2 aria-hidden className="mt-1 size-6 shrink-0 text-good" />
         <div>
           <h1 className="text-xl font-semibold text-ink">{result.companyName} is onboarded</h1>
-          <p className="text-sm text-muted">Its company admin can sign in now. Next steps:</p>
+          <p className="text-sm text-muted">
+            {!result.invite
+              ? "Its company admin can sign in now."
+              : result.invite.sent
+                ? `An invite went to ${result.invite.email}. They choose a password from it, then sign in.`
+                : "Its company admin can't sign in until they get an invite. Send one from the client's People tab."}{" "}
+            Next steps:
+          </p>
         </div>
       </div>
       {result.warnings.length > 0 && (
-        <Callout tone="warn" title="Some brand details weren't saved">
+        <Callout tone="warn" title="Some things didn't go through">
           <ul className="list-disc pl-5">
             {result.warnings.map((w) => (
               <li key={w}>{w}</li>

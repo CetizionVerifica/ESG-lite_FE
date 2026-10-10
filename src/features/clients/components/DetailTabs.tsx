@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 import type { Brand } from "../../../services/brandService";
 import { Avatar, Badge, Button, Callout, EmptyState, FileDrop, Modal, TextField, cn, focusRing, useToast } from "../../../ui";
-import { errorMessage, useMappingCount, useSaveGuideline, useSaveThreshold, useThreshold } from "../api";
+import { errorMessage, useMappingCount, useSaveGuideline, useSaveThreshold, useSendInvite, useThreshold } from "../api";
 import { type ClientRow, deleteBlocker, parseThreshold, personName } from "../logic";
 import { GUIDELINE_MAX, GUIDELINE_TYPES } from "../onboarding";
 import { ClientLogo, StatusBadge, ThemeSwatch } from "./bits";
@@ -93,6 +93,13 @@ export function SitesTab({ row, load }: { row: ClientRow; load: ListLoad }) {
 }
 
 export function PeopleTab({ row, load }: { row: ClientRow; load: ListLoad }) {
+  const invite = useSendInvite();
+  const { toast } = useToast();
+  const sendInvite = (userId: number, email: string) =>
+    invite.mutate(userId, {
+      onSuccess: () => toast({ title: `Invite sent to ${email}`, tone: "good" }),
+      onError: (e) => toast({ title: "Invite not sent", description: errorMessage(e, "Try again."), tone: "bad" }),
+    });
   if (load.loading || load.failed) return <LoadGate load={load} what="the people at this client" />;
   return (
     <section className="space-y-3" aria-label="People">
@@ -110,10 +117,21 @@ export function PeopleTab({ row, load }: { row: ClientRow; load: ListLoad }) {
                   <span className="block truncate text-xs text-muted">{u.email}</span>
                 </span>
                 {u.role && u.role !== "User" && <Badge>{u.role === "Admin" ? "Company admin" : u.role}</Badge>}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Send ${personName(u)} an invite`}
+                  loading={invite.isPending && invite.variables === u.user_id}
+                  disabled={invite.isPending}
+                  onClick={() => sendInvite(u.user_id, u.email)}
+                >
+                  Send invite
+                </Button>
               </li>
             ))}
         </ul>
       )}
+      <p className="text-xs text-muted">An invite emails a link to choose a password. It works for 7 days, and their current password keeps working until they choose a new one.</p>
       <GoLink to={`/setup/users?client=${row.company_id}`}>Manage people in Users</GoLink>
     </section>
   );
@@ -295,7 +313,9 @@ export function DangerTab({ row, sites, onToggleActive, onDelete }: { row: Clien
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-ink">{row.active ? "Deactivate client" : "Reactivate client"}</h3>
           <p className="text-sm text-muted">
-            {row.active ? "Marks the client inactive. Its data stays; nothing is deleted." : "Marks the client active again."}
+            {row.active
+              ? "Its people can't sign in, and anyone signed in is stopped on their next action. Its data stays; nothing is deleted."
+              : "Its people can sign in again."}
           </p>
         </div>
         <Button onClick={onToggleActive}>{row.active ? "Deactivate" : "Reactivate"}</Button>

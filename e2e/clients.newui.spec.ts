@@ -71,7 +71,8 @@ async function signIn(page: Page) {
       if (path.endsWith("/admin/onboarding/company")) {
         const company = { company_id: 7, name: "Bahrain Steel", status: true };
         companies = [...companies, company];
-        return json({ message: "Company onboarded successfully", company, warnings: [] }, 201);
+        const invited = String(body).includes('name="sendInvite"');
+        return json({ message: "Company onboarded successfully", company, ...(invited ? { invite: { sent: true } } : {}), warnings: [] }, 201);
       }
       if (brand && method === "PUT") {
         if (brand[1] === "1") midal = { ...midal, ...body, ...(body?.guidelineUrl === null ? { guidelineName: null } : {}) };
@@ -83,6 +84,7 @@ async function signIn(page: Page) {
       }
       if (path.endsWith("/admin/sites")) return json(SITES);
       if (path.endsWith("/admin/users")) return json(USERS);
+      if (/\/admin\/users\/\d+\/invite$/.test(path) && method === "POST") return json({ message: "Invite sent", expiresAt: "2026-10-17T00:00:00Z" });
       if (path.endsWith("/admin/category-mappings")) return json([{ id: 1 }, { id: 2 }]);
       if (path.endsWith("/admin/thresholds") && method === "POST") {
         const t = { threshold_id: 9, threshold_percentage: body!.threshold_percentage as number, company: { company_id: body!.company_id as number, name: "" } };
@@ -241,6 +243,36 @@ test("a superadmin onboards a client in steps, with brand colours", async ({ pag
   expect(calls.at(-1)).toMatchObject({ method: "PUT", path: expect.stringMatching(/\/brands\/7$/), body: { name: "Bahrain Steel", primary: "#0b5c3b", coverTo: "#0b5c3b" } });
   await page.getByRole("link", { name: "Open client" }).click();
   await expect(page).toHaveURL(/\/clients\/7$/);
+});
+
+test("a superadmin onboards a client with an invite instead of a password, and resends one", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/clients/new");
+  await page.getByLabel("Company name").fill("Bahrain Steel");
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  await page.getByLabel("Contact name").fill("Huda");
+  await page.getByRole("textbox", { name: /^Email/ }).fill("huda@steel.example");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Set a password, or send an invite instead.")).toBeVisible();
+  await page.getByRole("switch", { name: /Sign-in/ }).click();
+  await expect(page.getByLabel("Password")).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  await expect(page.getByText("Invite by email")).toBeVisible();
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page.getByText("An invite went to huda@steel.example.")).toBeVisible();
+  const form = String(calls.find((c) => c.path.endsWith("/admin/onboarding/company"))!.body);
+  expect(form).toContain('name="sendInvite"');
+  expect(form).not.toContain('name="password"');
+
+  await page.goto("/clients/1?tab=people");
+  await page.getByRole("button", { name: "Send Mia Manager an invite" }).click();
+  await expect(page.getByText("Invite sent to mia@example.com")).toBeVisible();
+  expect(calls.at(-1)).toMatchObject({ method: "POST", path: expect.stringMatching(/\/admin\/users\/\d+\/invite$/) });
 });
 
 test("leaving a half-filled onboarding asks first", async ({ page }) => {
