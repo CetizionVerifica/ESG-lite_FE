@@ -6,6 +6,7 @@ import {
   DateField,
   Drawer,
   EntityAuditTimeline,
+  OverlapChip,
   SkeletonText,
   StatusPill,
   Textarea,
@@ -15,7 +16,6 @@ import {
 } from "../../../ui";
 import { errorMessage, useImpactBase, useReviewMutations } from "../api";
 import { type EditDraft, type ProductionRow, editErrors, intensityImpact, periodText, unitChoices } from "../logic";
-import { OverlapChip } from "./OverlapChip";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
