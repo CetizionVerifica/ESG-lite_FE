@@ -157,13 +157,18 @@ describe("summary", () => {
       { ...base, kind: "bulk_upload", at: "2026-10-08T00:00:00Z", rows: 12, pending: 3 },
       { ...base, kind: "bulk_upload", at: "2026-10-07T00:00:00Z", rows: 1, pending: 0, batch_id: "y" },
       { ...base, kind: "factor_upload", at: "2026-10-06T00:00:00Z", rows: 40, pending: null, by: null },
+      // The same batch as the first bulk upload, at another site and category.
+      { ...base, kind: "bulk_upload", at: "2026-10-08T00:00:00Z", rows: 2, pending: 0, site_id: 21, site_name: "Jubail", category_name: "Fuel" },
+      { ...base, kind: "factor_upload", at: "2026-10-06T00:00:00Z", rows: 5, pending: null, by: null, category_name: "Fuel" },
     ]);
     expect(items.map((i) => [i.kind, i.title, i.detail])).toEqual([
       ["onboarding", "Client onboarded · Glochem", "New client"],
       ["bulk_upload", "Bulk upload · 12 entries, 3 pending", "Glochem · Dammam · Electricity · Ana"],
       ["bulk_upload", "Bulk upload · 1 entry", "Glochem · Dammam · Electricity · Ana"],
       ["factor_upload", "Factor upload · 40 factors", "Glochem · Dammam · Electricity"],
+      ["bulk_upload", "Bulk upload · 2 entries", "Glochem · Jubail · Fuel · Ana"],
+      ["factor_upload", "Factor upload · 5 factors", "Glochem · Dammam · Fuel"],
     ]);
-    expect(new Set(items.map((i) => i.id)).size).toBe(4);
+    expect(new Set(items.map((i) => i.id)).size).toBe(6);
   });
 });

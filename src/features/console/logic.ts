@@ -247,6 +247,10 @@ export function withMonth(rows: ClientRow[], summary: ConsoleSummary | undefined
   });
 }
 
+/** One upload batch can cover several sites and categories, so the batch id alone repeats. */
+const batchKey = (prefix: string, a: ConsoleActivity, i: number) =>
+  a.batch_id ? `${prefix}-${a.batch_id}-${a.site_id ?? ""}-${a.category_name ?? ""}` : `${prefix}-${i}`;
+
 /** The summary's activity (bulk uploads, factor uploads, onboarding) as list items. */
 export function summaryActivity(items: ConsoleActivity[]): Activity[] {
   return items.map((a, i) => {
@@ -257,14 +261,14 @@ export function summaryActivity(items: ConsoleActivity[]): Activity[] {
     if (a.kind === "bulk_upload") {
       const pending = a.pending ? `, ${a.pending} pending` : "";
       return {
-        id: `bulk-${a.batch_id ?? i}`,
+        id: batchKey("bulk", a, i),
         kind: a.kind,
         when: a.at,
         title: `Bulk upload · ${plural(a.rows ?? 0, "entry", "entries")}${pending}`,
         detail: [where, a.by].filter(Boolean).join(" · "),
       };
     }
-    return { id: `factors-${a.batch_id ?? i}`, kind: a.kind, when: a.at, title: `Factor upload · ${plural(a.rows ?? 0, "factor")}`, detail: where };
+    return { id: batchKey("factors", a, i), kind: a.kind, when: a.at, title: `Factor upload · ${plural(a.rows ?? 0, "factor")}`, detail: where };
   });
 }
 
@@ -275,7 +279,7 @@ export function recentActivity(batches: FactorBatch[], sites: ConsoleSite[], lim
     .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())
     .slice(0, limit)
     .map((b) => ({
-      id: b.upload_batch_id,
+      id: `${b.upload_batch_id}-${b.site_id}-${b.category_id}`,
       kind: "factor_upload" as const,
       when: b.uploaded_at,
       title: `Factor upload · ${plural(b.count, "factor")}`,
