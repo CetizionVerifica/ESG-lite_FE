@@ -118,7 +118,7 @@ export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: n
     activity_data: activity,
     extra_data: _extra_data ?? {},
     total_emission: 0,
-    unit: "kg CO2e",
+    unit: "tCO2e",
     date_of_reporting: ctx.period.mode === "yearly" ? date : (rowDate as string | undefined) || date,
     activity_data_unit: activity_data_unit || undefined,
     reporting_period: ctx.period.mode,
