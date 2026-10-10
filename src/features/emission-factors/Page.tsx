@@ -41,6 +41,7 @@ import {
   type Factor,
   type FactorDraft,
   PAGE_SIZE,
+  batchScope,
   categoriesFor,
   factorSummary,
   filterUploads,
@@ -48,6 +49,7 @@ import {
   listParams,
   sitesOfClient,
   toPayload,
+  toUpdatePayload,
   yearOptions,
 } from "./logic";
 
@@ -103,9 +105,12 @@ export default function EmissionFactorsPage() {
   // Drawer: null = closed, "new" = add, a factor = edit.
   const [editing, setEditing] = useState<Factor | "new" | null>(null);
   const [saveErr, setSaveErr] = useState<string | null>(null);
-  const [selected, setSelected] = useState<(string | number)[]>([]);
+  // Selection, like the page index, belongs to one set of filters: changing them clears it.
+  const [selection, setSelection] = useState<{ key: string; ids: (string | number)[] }>({ key: filterKey, ids: [] });
+  const selected = selection.key === filterKey ? selection.ids : [];
+  const setSelected = (ids: (string | number)[]) => setSelection({ key: filterKey, ids });
   const [confirm, setConfirm] = useState<
-    { kind: "one"; row: Factor } | { kind: "many"; ids: number[] } | { kind: "batch"; batch: Batch } | null
+    { kind: "one"; row: Factor } | { kind: "many"; ids: number[] } | { kind: "batch"; batch: Batch; count: number; parts: string[] } | null
   >(null);
   const [confirmErr, setConfirmErr] = useState<string | null>(null);
   // Counts imports opened, so each one mounts a fresh drawer.
@@ -150,9 +155,10 @@ export default function EmissionFactorsPage() {
 
   const onSave = (draft: FactorDraft) => {
     setSaveErr(null);
-    const id = editing && editing !== "new" ? editing.emission_factor_id : null;
+    const row = editing && editing !== "new" ? editing : null;
+    const id = row ? row.emission_factor_id : null;
     save.mutate(
-      { id, body: toPayload(draft) },
+      { id, body: row ? toUpdatePayload(draft, row) : toPayload(draft) },
       {
         onSuccess: () => {
           openDrawer(null);
@@ -178,10 +184,16 @@ export default function EmissionFactorsPage() {
       setConfirm(null);
     };
     const failed = (e: unknown) => setConfirmErr(errorMessage(e, "Nothing was deleted. Try again."));
+    // Stay on a page that still has rows after a delete.
+    const clampPage = (removed: number) => {
+      const last = Math.max(0, Math.ceil((total - removed) / PAGE_SIZE) - 1);
+      if (page > last) setPaging({ key: filterKey, page: last });
+    };
     if (confirm.kind === "one") {
       removeOne.mutate(confirm.row.emission_factor_id, {
         onSuccess: () => {
           done("Factor deleted")();
+          clampPage(1);
           openDrawer(null);
         },
         onError: failed,
@@ -191,13 +203,20 @@ export default function EmissionFactorsPage() {
       removeMany.mutate(confirm.ids, {
         onSuccess: () => {
           done(`${n} ${n === 1 ? "factor" : "factors"} deleted`)();
+          clampPage(n);
           setSelected([]);
         },
         onError: failed,
       });
     } else {
-      const n = confirm.batch.count;
-      removeBatch.mutate(confirm.batch.upload_batch_id, { onSuccess: done(`${n} imported ${n === 1 ? "factor" : "factors"} deleted`), onError: failed });
+      const n = confirm.count;
+      removeBatch.mutate(confirm.batch.upload_batch_id, {
+        onSuccess: () => {
+          done(`${n} imported ${n === 1 ? "factor" : "factors"} deleted`)();
+          setPaging({ key: filterKey, page: 0 });
+        },
+        onError: failed,
+      });
     }
   };
 
@@ -226,8 +245,11 @@ export default function EmissionFactorsPage() {
         ? { title: `Delete ${confirm.ids.length} ${confirm.ids.length === 1 ? "factor" : "factors"}?`, body: "The selected factors are removed for good.", action: "Delete" }
         : confirm?.kind === "batch"
           ? {
-              title: `Delete ${confirm.batch.count} imported ${confirm.batch.count === 1 ? "factor" : "factors"}?`,
-              body: `Every factor this import created for ${confirm.batch.site_name} · ${confirm.batch.category_name} is removed for good.`,
+              title: `Delete ${confirm.count} imported ${confirm.count === 1 ? "factor" : "factors"}?`,
+              body:
+                confirm.parts.length > 1
+                  ? `This import covers ${confirm.parts.length} sites and categories, and every factor it created is removed for good: ${confirm.parts.join(", ")}.`
+                  : `Every factor this import created for ${confirm.batch.site_name} · ${confirm.batch.category_name} is removed for good.`,
               action: "Delete batch",
             }
           : null;
@@ -298,7 +320,10 @@ export default function EmissionFactorsPage() {
           uploads={{ data: uploadRows, loading: uploads.isPending, error: !!uploads.error, onRetry: () => void uploads.refetch() }}
           users={users.data}
           sites={allSites}
-          onDeleteBatch={(b: Batch) => askDelete({ kind: "batch", batch: b })}
+          onDeleteBatch={(b: Batch) => {
+            const scope = batchScope(b.upload_batch_id, batches.data);
+            askDelete({ kind: "batch", batch: b, count: scope.count || b.count, parts: scope.parts });
+          }}
         />
       </TabPanel>
       <FactorDrawer

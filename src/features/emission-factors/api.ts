@@ -81,7 +81,8 @@ export const useUserNames = (enabled: boolean) =>
 export function useSaveFactor() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: number | null; body: FactorPayload }) => (id === null ? createEmissionFactor(body) : updateEmissionFactor(id, body)),
+    mutationFn: ({ id, body }: { id: number | null; body: FactorPayload | Partial<FactorPayload> }) =>
+      id === null ? createEmissionFactor(body as FactorPayload) : updateEmissionFactor(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...keys.all, "list"] }),
   });
 }

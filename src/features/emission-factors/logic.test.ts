@@ -4,6 +4,7 @@ import {
   type Factor,
   type Site,
   batchLabel,
+  batchScope,
   categoriesFor,
   draftFrom,
   emptyDraft,
@@ -16,6 +17,7 @@ import {
   listParams,
   sitesOfClient,
   toPayload,
+  toUpdatePayload,
   uploadStatus,
   validate,
   yearHint,
@@ -97,6 +99,13 @@ describe("display", () => {
     expect(batchLabel("b1", batches)).toBe("Import · 3 Oct 2026");
     expect(batchLabel("gone", batches)).toBe("Import");
   });
+  it("adds up every site and category one import batch covers", () => {
+    const b = (site_name: string, category_name: string, count: number, id = "b9") =>
+      ({ upload_batch_id: id, count, uploaded_at: "2026-10-03T08:00:00Z", site_id: 1, site_name, category_id: 1, category_name });
+    const all = [b("Hidd", "Fuel", 3), b("Sitra", "Fuel", 2), b("Hidd", "Power", 1, "other")];
+    expect(batchScope("b9", all)).toEqual({ count: 5, parts: ["Hidd · Fuel", "Sitra · Fuel"] });
+    expect(batchScope("none", all)).toEqual({ count: 0, parts: [] });
+  });
   it("explains which entries use a year's factors", () => {
     expect(yearHint(2024)).toBe("Entries for 2025 use 2024 factors.");
   });
@@ -126,6 +135,12 @@ describe("form", () => {
       factor_value: 0.5,
       source: "IPCC",
     });
+  });
+  it("sends only changed fields on edit, and cleared text as empty", () => {
+    const d = draftFrom(factor);
+    expect(toUpdatePayload(d, factor)).toEqual({});
+    expect(toUpdatePayload({ ...d, value: 2.7, source: " ", unit: "kg " }, factor)).toEqual({ factor_value: 2.7, source: "", denominator_unit: "kg" });
+    expect(toUpdatePayload({ ...d, name: "", year: 2023 }, factor)).toEqual({ emission_category_name: "", year: 2023 });
   });
 });
 
