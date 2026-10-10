@@ -19,6 +19,8 @@ export interface OverviewKpis {
   entries: number;
   approved_count: number;
   pending_count: number;
+  /** Pending entries as the approvals list shows them (ESG-lite #82); absent on older APIs. */
+  pending_review_count?: number;
   rejected_count: number;
   pending_emission: number;
   net_vs_last_year_pct: number | null;
