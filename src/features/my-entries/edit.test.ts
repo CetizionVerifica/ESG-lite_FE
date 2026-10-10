@@ -48,7 +48,7 @@ const entry = (over: Partial<EmissionData> = {}): EmissionData => ({
 });
 
 const factors = [{ emission_factor_id: 1, emission_category_name: "Metal: open loop recycling", factor_value: 21.3, denominator_unit: "tonne", year: 2024 }];
-const calc = createEmissionCalculator({ emissionFactors: factors, targetYear: 2024, columns: model.columns, emissionCategoryMapping: model.mapping });
+const calc = createEmissionCalculator({ emissionFactors: factors, targetYear: 2024, columns: model.columns });
 
 describe("rowFromEntry", () => {
   it("refills the selects from the stored emission category, down the chain", () => {
