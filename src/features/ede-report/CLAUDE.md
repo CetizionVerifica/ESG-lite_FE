@@ -5,12 +5,15 @@
 > Depends on: same components as P10. Shares P10's header filter model.
 
 ## Job to be done
+
 "Operational view of approved data: which site emits what, month by month, renewables and intensity."
 
 ## Data
+
 `reportService.getEdeReport` (POST `/user/reports/ede` `{siteIds, frequency, year, month?, categoryIds?}`) → totals, bySite, siteDonut, monthlyBySite, savedBySite, renewableKwhBySite, intensityMonthly.
 
 ## Layout
+
 ```
 PageHeader "EDE report"  chips: Sites ▾ Categories ▾ Calendar [CY|FY] Frequency [Year|Quarter|Month] Year ▾   actions: Download PDF
 KpiStrip: Total tCO₂e | Scope 1 | Scope 2 | Scope 3 | Renewable produced kWh | Saved tCO₂e
@@ -21,6 +24,7 @@ Intensity trend (per site: bars emissions + line intensity, dual axis)
 ```
 
 ## Rules
+
 - Same auto-update model as P10 (today EDE auto-fetches but GHG doesn't; unify).
 - Add quarterly and FY support (today calendar-only) — needs backend param; until then disable with tooltip.
 - Two donuts → one donut with toggle. Remove hidden duplicate chart and leftover `console.log`.
@@ -28,7 +32,9 @@ Intensity trend (per site: bars emissions + line intensity, dual axis)
 - Site series colours from `--t-series-*` so each site keeps its colour across all charts.
 
 ## States
+
 Loading skeletons (today plain text). Errors visible (today swallowed). Filter bar dark-mode safe (today hardcoded `bg-white`).
 
 ## Acceptance
+
 KPI strip present; one filter model with P10; PDF branded per client.
