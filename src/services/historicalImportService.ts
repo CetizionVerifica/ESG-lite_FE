@@ -28,7 +28,7 @@ export interface HistoricalSummary {
 export interface HistoricalPreview {
   dryRun: true;
   summary: HistoricalSummary;
-  /** The first 200 rows. */
+  /** The first 100 rows. */
   rows: HistoricalPlanRow[];
   people: { email: string; name: string; exists: boolean }[];
   invalidEmails: string[];
@@ -54,20 +54,21 @@ export interface HistoricalArgs {
   categoryId: number;
 }
 
-const form = (a: HistoricalArgs, dryRun: boolean) => {
+const form = (a: HistoricalArgs, commit: boolean) => {
   const f = new FormData();
   f.append("file", a.file);
   f.append("companyId", String(a.companyId));
   f.append("siteId", String(a.siteId));
   f.append("categoryId", String(a.categoryId));
-  if (dryRun) f.append("dryRun", "true");
+  // The backend only previews unless commit=true.
+  if (commit) f.append("commit", "true");
   return f;
 };
 
 /** What the import would do, without saving anything. */
 export const previewHistoricalImport = async (a: HistoricalArgs): Promise<HistoricalPreview> =>
-  (await api.post("/admin/upload/emissions", form(a, true), { headers: { "Content-Type": "multipart/form-data" } })).data;
+  (await api.post("/admin/upload/emissions", form(a, false), { headers: { "Content-Type": "multipart/form-data" } })).data;
 
 /** Saves the rows as Pending and invites the new people. */
 export const runHistoricalImport = async (a: HistoricalArgs): Promise<HistoricalResult> =>
-  (await api.post("/admin/upload/emissions", form(a, false), { headers: { "Content-Type": "multipart/form-data" } })).data;
+  (await api.post("/admin/upload/emissions", form(a, true), { headers: { "Content-Type": "multipart/form-data" } })).data;

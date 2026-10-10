@@ -78,7 +78,7 @@ async function signIn(page: Page, role = "Superadmin", user: object = SUPERADMIN
       if (path.endsWith("/admin/upload/emissions")) {
         const body = request.postData() ?? "";
         historical.push(body);
-        if (body.includes('name="dryRun"')) return json({ dryRun: true, summary: HISTORICAL_SUMMARY, rows: HISTORICAL_ROWS, people: [{ email: "new@example.com", name: "New", exists: false }], invalidEmails: [] });
+        if (!body.includes('name="commit"')) return json({ dryRun: true, summary: HISTORICAL_SUMMARY, rows: HISTORICAL_ROWS, people: [{ email: "new@example.com", name: "New", exists: false }], invalidEmails: [] });
         return json({
           dryRun: false,
           summary: { ...HISTORICAL_SUMMARY, emissionsCreated: 1, emissionsSkipped: 1, usersCreated: 1, createdUsers: ["new@example.com"], invitesSent: 0, inviteWarning: "Email isn't configured on this server, so the invite wasn't sent." },
@@ -185,12 +185,13 @@ test("a superadmin previews a historical sheet, imports it and sees the invite w
   await expect(page.getByRole("table", { name: "Preview of the historical rows" })).toContainText("Same month as row 1");
   await expect(page.getByText("1 person will get an account at Hidd and an invite email: new@example.com.")).toBeVisible();
   expect(historical).toHaveLength(1);
-  for (const field of ["companyId", "siteId", "categoryId", "dryRun"]) expect(historical[0]).toContain(`name="${field}"`);
+  for (const field of ["companyId", "siteId", "categoryId"]) expect(historical[0]).toContain(`name="${field}"`);
+  expect(historical[0]).not.toContain('name="commit"');
 
   await page.getByRole("button", { name: "Import 1 row" }).click();
   await expect(page.getByText("Imported 1 row for Hidd, Fuel.")).toBeVisible();
   await expect(page.getByText("Some invites weren't sent")).toBeVisible();
-  expect(historical[1]).not.toContain('name="dryRun"');
+  expect(historical[1]).toContain('name="commit"');
   // No password is ever shown.
   await expect(page.getByText(/password/i)).toHaveCount(0);
 });
