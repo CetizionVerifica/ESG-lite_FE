@@ -5,7 +5,6 @@ import {
   useQuery,
 } from "@tanstack/react-query";
 import api from "../../api/axios";
-import { getReportingCalendar } from "../../services/companyService";
 import {
   type GhgReportDetailsResponse,
   type GhgReportTablesResponse,
@@ -13,7 +12,7 @@ import {
   getGhgReportTables,
 } from "../../services/ghgreportService";
 import { getSites } from "../../services/siteService";
-import { DEFAULT_FY_START_MONTH } from "../../ui";
+import { reportingCalendarKey } from "../../lib/fiscalYear";
 import {
   type ReportQuery,
   type SiteOption,
@@ -28,23 +27,13 @@ export const keys = {
     [...keys.all, "tables", requestPayload(q)] as const,
   details: (q: ReportQuery) =>
     [...keys.all, "details", requestPayload(q)] as const,
-  calendar: ["reporting-calendar"] as const,
+  calendar: reportingCalendarKey,
   adminSites: ["admin", "sites"] as const,
 };
 
 export { useDebounced } from "../../ui";
 
-/** The company's FY start month (backend-owned); April until it arrives or if it can't be read. */
-export function useFyStartMonth(): number {
-  const q = useQuery({
-    queryKey: keys.calendar,
-    queryFn: getReportingCalendar,
-    staleTime: 60 * 60 * 1000,
-    retry: false,
-  });
-  const m = Number(q.data?.fiscalYearStartMonth);
-  return Number.isInteger(m) && m >= 1 && m <= 12 ? m : DEFAULT_FY_START_MONTH;
-}
+export { useFyStartMonth } from "../../lib/fiscalYear";
 
 /** Every site (Superadmin): the page keeps the picked client's. */
 export function useAdminSites(enabled: boolean) {
