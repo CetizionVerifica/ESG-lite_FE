@@ -55,7 +55,8 @@ async function signIn(page: Page) {
       const path = new URL(request.url()).pathname;
       const method = request.method();
       const json = (body: unknown, status = 200) => route.fulfill({ status, json: body });
-      const body = request.postDataJSON() as Record<string, unknown> | null;
+      const isJson = (request.headers()["content-type"] ?? "").includes("json");
+      const body = (isJson ? request.postDataJSON() : request.postData()) as Record<string, unknown> | null;
       if (method !== "GET") calls.push({ method, path, body });
 
       if (path.endsWith("/auth/me")) return json({ role: "Superadmin", user });
@@ -64,7 +65,14 @@ async function signIn(page: Page) {
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       const brand = /\/brands\/(\d+)$/.exec(path);
-      if (brand) return json(brand[1] === "1" ? MIDAL_BRAND : { companyId: Number(brand[1]), name: "", primary: "#1f2a44", accent: "#3b82f6", logoUrl: null });
+      if (brand && method === "GET") return json(brand[1] === "1" ? MIDAL_BRAND : { companyId: Number(brand[1]), name: "", primary: "#1f2a44", accent: "#3b82f6", logoUrl: null });
+      if (path.endsWith("/user/reporting-calendar")) return json({ fiscalYearStartMonth: 4, fiscalYearRule: "Apr 1 → Mar 31" });
+      if (path.endsWith("/admin/onboarding/company")) {
+        const company = { company_id: 7, name: "Bahrain Steel", status: true };
+        companies = [...companies, company];
+        return json({ message: "Company onboarded successfully", company, warnings: [] }, 201);
+      }
+      if (brand && method === "PUT") return json({ ...body, companyId: Number(brand[1]) });
       if (path.endsWith("/admin/sites")) return json(SITES);
       if (path.endsWith("/admin/users")) return json(USERS);
       if (path.endsWith("/admin/category-mappings")) return json([{ id: 1 }, { id: 2 }]);
@@ -172,4 +180,66 @@ test("a superadmin edits details, sets the threshold, deactivates and deletes a 
   await expect(page.getByText("Empty Co deleted")).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ method: "DELETE", path: expect.stringMatching(/\/admin\/companies\/3$/) });
   await expect(clientsTable(page).getByRole("row")).toHaveCount(3);
+});
+
+test("a superadmin onboards a client in steps, with brand colours", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/companies/onboard");
+  await expect(page).toHaveURL(/\/clients\/new$/);
+
+  // Step 1: the name is required.
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Enter the company's name.")).toBeVisible();
+  await page.getByLabel("Company name").fill("Bahrain Steel");
+  await page.getByLabel("Industry").selectOption("Metals and mining");
+  await page.getByLabel("Employee range").selectOption("201-500");
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  // Step 2: admin user.
+  await expect(page.getByRole("heading", { name: "Admin user" })).toBeVisible();
+  await page.getByLabel("Contact name").fill("Huda");
+  await page.getByLabel("Email").fill("huda@steel.example");
+  await page.getByLabel("Password").fill("short");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Use at least 8 characters.")).toBeVisible();
+  await page.getByLabel("Password").fill("long enough");
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  // Step 3: access, with the backend's FY rule.
+  await expect(page.getByText("Apr 1 → Mar 31")).toBeVisible();
+  await page.getByRole("switch", { name: /ESG-Mitra/ }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  // Step 4: brand; the primary drives the cover preview.
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Pick a primary colour, or skip the brand for now.")).toBeVisible();
+  await page.getByRole("textbox", { name: "Primary" }).fill("#0b5c3b");
+  await expect(page.getByRole("img", { name: "Sign-in cover preview" })).toContainText("Sign in to Bahrain Steel");
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  // Review, then create.
+  await expect(page.getByRole("heading", { name: "Review and create" })).toBeVisible();
+  await expect(page.getByText("huda@steel.example")).toBeVisible();
+  expect(calls).toHaveLength(0);
+  await page.getByRole("button", { name: "Create client" }).click();
+
+  await expect(page.getByRole("heading", { name: "Bahrain Steel is onboarded" })).toBeVisible();
+  const form = calls.find((c) => c.path.endsWith("/admin/onboarding/company"))!;
+  for (const part of ["Bahrain Steel", "Metals and mining", "201-500", "huda@steel.example", "long enough", "esgMitraAccess"]) expect(String(form.body)).toContain(part);
+  expect(calls.at(-1)).toMatchObject({ method: "PUT", path: expect.stringMatching(/\/brands\/7$/), body: { name: "Bahrain Steel", primary: "#0b5c3b", coverTo: "#0b5c3b" } });
+  await page.getByRole("link", { name: "Open client" }).click();
+  await expect(page).toHaveURL(/\/clients\/7$/);
+});
+
+test("leaving a half-filled onboarding asks first", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/clients/new");
+  await page.getByLabel("Company name").fill("Draft Co");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  const ask = page.getByRole("alertdialog", { name: "Leave without creating the client?" });
+  await ask.getByRole("button", { name: "Stay" }).click();
+  await expect(page).toHaveURL(/\/clients\/new$/);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Leave" }).click();
+  await expect(page).toHaveURL(/\/clients$/);
 });

@@ -1,11 +1,12 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type Brand, getBrand } from "../../services/brandService";
+import { type Brand, getBrand, saveBrand, uploadBrandDarkLogo } from "../../services/brandService";
 import { getMappings } from "../../services/categoryMappingService";
-import { deleteCompany, getCompanies, updateCompany } from "../../services/companyService";
+import { deleteCompany, getCompanies, getReportingCalendar, onboardCompany, updateCompany } from "../../services/companyService";
 import { getSites } from "../../services/siteService";
 import { type EmissionThreshold, createThreshold, getThresholds, updateThreshold } from "../../services/thresholdService";
 import { getUsers } from "../../services/userService";
 import type { AdminUser, Company, Site } from "./logic";
+import { type OnboardDraft, toBrandUpdate, toOnboardForm } from "./onboarding";
 
 export const keys = {
   all: ["clients"] as const,
@@ -90,5 +91,43 @@ export function useSaveThreshold(companyId: number) {
     mutationFn: ({ existing, value }: { existing: EmissionThreshold | null; value: number }) =>
       existing ? updateThreshold(existing.threshold_id, { threshold_percentage: value }) : createThreshold({ company_id: companyId, threshold_percentage: value }),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.thresholds() }),
+  });
+}
+
+export const useReportingCalendar = () => useQuery({ queryKey: [...keys.all, "calendar"], queryFn: getReportingCalendar, staleTime: Infinity, retry: 1 });
+
+export type OnboardResult = { companyId: number; companyName: string; warnings: string[] };
+
+/**
+ * Creates the company, its main site and admin (one request, with the light
+ * logo), then saves the brand colours and the dark logo. The company exists
+ * once the first request succeeds, so later failures come back as warnings.
+ */
+export function useOnboard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (d: OnboardDraft): Promise<OnboardResult> => {
+      const res = (await onboardCompany(toOnboardForm(d))) as { company?: { company_id: number; name: string }; warnings?: string[] };
+      const company = res.company;
+      if (!company) throw new Error("The server didn't return the new company.");
+      const warnings = [...(res.warnings ?? [])];
+      const brand = toBrandUpdate(d);
+      if (brand) {
+        try {
+          await saveBrand(company.company_id, brand);
+        } catch (e) {
+          warnings.push(`Brand colours were not saved: ${errorMessage(e, "the request failed")}. Set them in Brand theme.`);
+        }
+        if (d.logoDark) {
+          try {
+            await uploadBrandDarkLogo(company.company_id, d.logoDark);
+          } catch (e) {
+            warnings.push(`Dark logo was not saved: ${errorMessage(e, "the upload failed")}. Upload it in Brand theme.`);
+          }
+        }
+      }
+      return { companyId: company.company_id, companyName: company.name, warnings };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
   });
 }
