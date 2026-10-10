@@ -71,6 +71,7 @@ export const legacyPages: Record<ShellRouteId, ReactNode> = {
   "emission-factors": <Legacy.EmissionFactors />,
   "category-mappings": <Legacy.CategoryMappings />,
   thresholds: <Legacy.Thresholds />,
+  "material-factors": placeholder("material-factors"),
   "capture-columns": <Legacy.Columns />,
   "capture-forms": <Legacy.ColumnConfig />,
   "capture-form": placeholder("capture-form"),
