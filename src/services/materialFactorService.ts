@@ -40,6 +40,7 @@ export const updateMaterialFactor = async (id: number, data: MaterialFactorBody)
 };
 
 export const deleteMaterialFactor = async (id: number) => {
+  // data-loss-reviewed: deletes one unused material factor after the Delete dialog naming it is confirmed; the server refuses (409) while any footprint line uses it.
   await api.delete(`/pcf/material-factors/${id}`);
 };
 
