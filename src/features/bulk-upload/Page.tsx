@@ -1,28 +1,43 @@
 import { useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { PageHeader, Stepper, exportMatrix, useToast } from "../../ui";
 import { type PreviewArgs, errorMessage, useFormConfig, useImportRows, usePreview, useSheetCategories, useSites, useUploadFile } from "./api";
+import { HistoricalImport } from "./components/HistoricalImport";
 import { ImportStep, type ImportState } from "./components/ImportStep";
 import { MapStep } from "./components/MapStep";
 import { PreviewStep } from "./components/PreviewStep";
 import { UploadStep } from "./components/UploadStep";
 import { useUploadContext } from "./hooks/useUploadContext";
-import { type ImportResult, type MapField, STEPS, autoMap, buildFields, fileProblem, mappingsFor, monthEndDate, setHeader, skippedMatrix, toggleSkip } from "./logic";
+import { type ImportResult, type MapField, STEPS, autoMap, buildFields, contributorSites, fileProblem, mappingsFor, monthEndDate, setHeader, skippedMatrix, toggleSkip } from "./logic";
 
 type Sheet = { documentId: number; headers: string[]; fileName: string };
 
 const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
 
-/** P27 `/capture/upload`: upload a sheet, map its columns, preview the calculation and import the rows as pending entries. */
+/**
+ * P27 `/capture/upload`: upload a sheet, map its columns, preview the
+ * calculation and import the rows as pending entries. A Superadmin picks any
+ * client's site and also has the historical import (`?mode=historical`); a
+ * contributor, coming from Add data, uploads for their own sites only.
+ */
 export default function BulkUploadPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const contributor = role !== "Superadmin";
+  const [params, setParams] = useSearchParams();
+  const historical = !contributor && params.get("mode") === "historical";
+  // Set while a historical import is saving: leaving the screen then would lose its result.
+  const [historicalBusy, setHistoricalBusy] = useState(false);
   const [ctx, setCtx] = useUploadContext();
 
-  const sites = useSites();
-  const form = useFormConfig(ctx.siteId, ctx.categoryId);
+  const allSites = useSites(!contributor);
+  const ownSites = useMemo(() => contributorSites(user), [user]);
+  const siteList = contributor
+    ? { data: ownSites, loading: false, error: null, retry: () => undefined }
+    : { data: allSites.data ?? [], loading: allSites.isLoading, error: allSites.error ? errorMessage(allSites.error, "Try again in a moment.") : null, retry: () => void allSites.refetch() };
+  const form = useFormConfig(ctx.siteId, ctx.categoryId, contributor);
   const upload = useUploadFile();
 
   const [step, setStep] = useState(0);
@@ -132,9 +147,31 @@ export default function BulkUploadPage() {
   const completed = STEPS.slice(0, step).map((s) => s.id);
   const locked = importState !== null;
 
+  const switchMode = (toHistorical: boolean) => {
+    const next = new URLSearchParams([...params].filter(([k]) => k !== "mode"));
+    if (toHistorical) next.set("mode", "historical");
+    setParams(next, { replace: true });
+  };
+
   return (
     <div className="space-y-5">
-      <PageHeader title="Bulk upload" description="Import a sheet of emission rows for one site and category. Rows are saved as Pending for the site's manager to approve." />
+      <PageHeader
+        title={historical ? "Historical import" : "Bulk upload"}
+        description={
+          historical
+            ? "Import a sheet in the old year and month format for one site and category. Rows are saved as Pending."
+            : "Import a sheet of emission rows for one site and category. Rows are saved as Pending for the site's manager to approve."
+        }
+        secondaryActions={
+          contributor || locked ? [] : [{ label: historical ? "Back to bulk upload" : "Historical import", disabled: historicalBusy, onClick: () => switchMode(!historical) }]
+        }
+      />
+      {historical ? (
+        <section aria-label="Historical import" className="rounded-card border border-line bg-panel p-4 sm:p-5">
+          <HistoricalImport ctx={ctx} onContext={setCtx} sites={siteList} onBusy={setHistoricalBusy} />
+        </section>
+      ) : (
+        <>
       <Stepper
         label="Bulk upload steps"
         steps={STEPS.map((s) => ({ id: s.id, label: s.label }))}
@@ -149,7 +186,8 @@ export default function BulkUploadPage() {
           <UploadStep
             ctx={ctx}
             onContext={changeContext}
-            sites={{ data: sites.data ?? [], loading: sites.isLoading, error: sites.error ? errorMessage(sites.error, "Try again in a moment.") : null, retry: () => void sites.refetch() }}
+            sites={siteList}
+            contributor={contributor}
             form={{ data: form.data, loading: form.isLoading, error: form.error ? errorMessage(form.error, "Try again in a moment.") : null }}
             file={file}
             onFile={chooseFile}
@@ -210,6 +248,8 @@ export default function BulkUploadPage() {
           />
         )}
       </section>
+        </>
+      )}
     </div>
   );
 }
