@@ -109,6 +109,5 @@ export type GhgReportDetailsResponse = {
 
 export const getGhgReportDetails = async (payload: GhgReportDetailsRequest) => {
   const { data } = await api.post<GhgReportDetailsResponse>("/user/ghg/details", payload);
-  console.log("data", data)
   return data;
 };

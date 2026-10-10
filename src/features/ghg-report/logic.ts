@@ -1,4 +1,4 @@
-import type { GhgReportTablesRequest, GhgReportTablesResponse, OverviewRow } from "../../services/ghgreportService";
+import type { GhgDetailsRow, GhgReportTablesRequest, GhgReportTablesResponse, OverviewRow } from "../../services/ghgreportService";
 import { DEFAULT_FY_START_MONTH, type ReportPeriod, reportPeriodLabel, reportYearLabel } from "../../ui";
 
 // Sites, categories and the period in the URL are shared with P11 (EDE report).
@@ -202,4 +202,68 @@ export function serverMessage(e: unknown, fallback: string): string {
 export function shortPeriodLabel(p: ReportPeriod, fyStartMonth = DEFAULT_FY_START_MONTH): string {
   if (p.frequency === "quarterly" && p.quarter) return `Q${p.quarter} ${reportYearLabel(p.yearType, p.year, fyStartMonth)}`;
   return reportPeriodLabel(p, fyStartMonth);
+}
+
+// ─── Scope tabs (details) ───────────────────────────────────────────────────
+
+export type DetailRow = GhgDetailsRow & { key: string };
+
+/** One scope's detail rows (category × site × fuel), largest this period first. */
+export function scopeDetails(rows: GhgDetailsRow[], scope: ScopeName): DetailRow[] {
+  return rows
+    .filter((r) => r.scope === scope)
+    .map((r) => ({ ...r, key: `${r.categoryId}|${r.siteId}|${r.fuelType}` }))
+    .sort((a, b) => b.selected.emissions - a.selected.emissions || b.compare.emissions - a.compare.emissions || a.categoryName.localeCompare(b.categoryName));
+}
+
+export type Distribution = { category: string; previous: number; selected: number; previousPct: number; selectedPct: number };
+
+/** Each category's share of the scope, both periods. */
+export function scopeDistribution(rows: GhgDetailsRow[], scope: ScopeName): Distribution[] {
+  const map = new Map<string, { previous: number; selected: number }>();
+  for (const r of rows) {
+    if (r.scope !== scope) continue;
+    const d = map.get(r.categoryName) ?? { previous: 0, selected: 0 };
+    d.previous += r.compare.emissions;
+    d.selected += r.selected.emissions;
+    map.set(r.categoryName, d);
+  }
+  const prevTotal = [...map.values()].reduce((a, d) => a + d.previous, 0);
+  const selTotal = [...map.values()].reduce((a, d) => a + d.selected, 0);
+  return [...map]
+    .map(([category, d]) => ({ category, ...d, previousPct: share(d.previous, prevTotal), selectedPct: share(d.selected, selTotal) }))
+    .sort((a, b) => b.selected - a.selected || b.previous - a.previous);
+}
+
+// ─── Findings (same rules as the branded PDF, backend src/reporting/ghg.ts) ─
+
+const fmt0 = (n: number) => Math.round(n).toLocaleString("en-US");
+const fmt1 = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 1 });
+const pctText = (a: number, b: number) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "—");
+
+export function findings(f: ReportFigures, locations: LocationRow[], selLabel: string, prevLabel: string): string[] {
+  const total = f.selected.total;
+  const s1 = f.selected["Scope 1"];
+  const s2 = f.selected["Scope 2"];
+  const topSite = locations.filter((l) => l.selected.total > 0).sort((a, b) => b.selected.total - a.selected.total)[0];
+  const top = f.largestSource;
+  return [
+    `Total ${selLabel} emissions were ${fmt1(total)} tCO₂e${f.yoy !== null ? ` (${f.yoy >= 0 ? "up" : "down"} ${Math.abs(f.yoy).toFixed(1)}% vs ${prevLabel})` : ""}.`,
+    topSite ? `${topSite.site} is the largest contributing site at ${fmt0(topSite.selected.total)} tCO₂e (${pctText(topSite.selected.total, total)} of total).` : "",
+    `${s2 >= s1 ? "Scope 2 (purchased energy)" : "Scope 1 (direct)"} dominates the footprint at ${pctText(Math.max(s1, s2), total)}, indicating the highest-leverage reduction pathway.`,
+    top ? `${top.name} is the single largest emission source (${pctText(top.value, total)}).` : "",
+  ].filter(Boolean);
+}
+
+/**
+ * The PDF's default recommended actions, minus the ones the data already
+ * meets (full coverage, renewables recorded).
+ */
+export function recommendedActions(f: ReportFigures): string[] {
+  return [
+    f.coverage.missing.length > 0 ? "Close data gaps at non-reporting sites to reach full coverage before the next cycle." : "",
+    "Prioritise Scope 2 reduction through renewable electricity procurement or on-site generation.",
+    "Set a validated, science-based reduction target aligned to a 1.5 °C pathway.",
+    f.renewable > 0 ? "" : "Begin capturing renewable-energy consumption to quantify avoided emissions.",
+  ].filter(Boolean);
 }
