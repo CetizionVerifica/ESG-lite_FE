@@ -52,6 +52,7 @@ export const SHELL_ROUTES = [
   { id: "ede-report", path: "/reports/ede", title: "EDE report", crumb: ["Reports", "EDE report"], roles: ["Manager", "Superadmin"], spec: "P11", clientContext: true },
   { id: "targets", path: "/targets", title: "Targets (SBTi)", crumb: ["Targets (SBTi)"], roles: ["Manager"], spec: "P12" },
   // PCF slot, owned by the Product carbon footprint plan (docs/pcf/).
+  { id: "product-footprints", path: "/products", title: "Product footprints", crumb: ["Products (PCF)"], roles: ["Manager"], spec: "C01", roleRedirect: { Superadmin: "/setup/products" } },
   { id: "pcf", path: "/products/*", title: "Products (PCF)", crumb: ["Products (PCF)"], roles: ["Manager"], spec: "C01–C06", roleRedirect: { Superadmin: "/setup/products" } },
 
   // Everyone
