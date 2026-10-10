@@ -1,4 +1,5 @@
 import { type Page, expect, test } from "@playwright/test";
+import * as XLSX from "xlsx";
 
 /**
  * P22 Emission factors smoke tests (VITE_NEW_UI=1 server). The admin and AI
@@ -54,6 +55,47 @@ function makeFactors(): FactorRec[] {
   return [f(1, 1, 1, 2024, "2.6800", "Diesel"), f(2, 1, 3, 2024, "0.5100", "Grid", "b-1"), f(3, 2, 2, 2023, "1430.0000", "R-134a")];
 }
 
+/** AI read of a DEFRA-style workbook: two groups; re-analyze reads names from the "Fuel" column. */
+function aiParse(reanalysed: boolean) {
+  const name = (group: string, leaf: string) => `${group} - ${reanalysed ? leaf.toUpperCase() : leaf}`;
+  return {
+    filename: "defra.xlsx",
+    factors: [
+      { year: 2024, factor_value: 2.68, denominator_unit: "litres", source: "DEFRA", emission_category_name: name("Fuels", "Diesel"), parent_category: "Fuels" },
+      { year: 2024, factor_value: 2.31, denominator_unit: "litres", source: "DEFRA", emission_category_name: name("Fuels", "Petrol"), parent_category: "Fuels" },
+      { year: 2024, factor_value: 0.2, denominator_unit: "kWh", source: "DEFRA", emission_category_name: name("Grid", "UK"), parent_category: "Grid" },
+    ],
+    schema_detected: {
+      layout_type: "sub_columns",
+      descriptor_columns: [{ column_index: reanalysed ? 1 : 0, header_name: reanalysed ? "Fuel" : "Activity" }],
+      parent_category_column: null,
+      include_parent_in_name: true,
+      unit_column: { column_index: 2, header_name: "Unit" },
+      source_column: null,
+      data_start_row: 2,
+      years: [{ year: 2024, value_column: null, sub_columns: [{ name: "Total", column_index: 3 }], primary_sub_column: "Total" }],
+      descriptor_join_separator: " - ",
+    },
+    warnings: ["Row 40 has no factor and was skipped."],
+    total_records: 3,
+    available_years: [2024],
+    parent_categories: ["Fuels", "Grid"],
+    category_suggestions: [
+      { parent_category: "Fuels", suggested_category_id: 1, suggested_category_name: "Fuel", confidence: "high" },
+      { parent_category: "Grid", suggested_category_id: 3, suggested_category_name: "Electricity", confidence: "medium" },
+    ],
+    upload_id: 9,
+    sheet_names: ["Factors 2024"],
+    selected_sheet: "Factors 2024",
+    available_columns: [
+      { column_index: 0, header_name: "Activity", sample_values: ["Fuels"] },
+      { column_index: 1, header_name: "Fuel", sample_values: ["Diesel"] },
+      { column_index: 2, header_name: "Unit", sample_values: ["litres"] },
+      { column_index: 3, header_name: "Total", sample_values: ["2.68"] },
+    ],
+  };
+}
+
 async function signIn(page: Page) {
   let factors = makeFactors();
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
@@ -72,7 +114,8 @@ async function signIn(page: Page) {
       const path = url.pathname;
       const method = request.method();
       const json = (body: unknown, status = 200) => route.fulfill({ status, json: body });
-      if (method !== "GET") calls.push({ method, path, body: request.postDataJSON() });
+      const isJson = (request.headers()["content-type"] ?? "").includes("json");
+      if (method !== "GET") calls.push({ method, path, body: isJson ? request.postDataJSON() : null });
 
       if (path.endsWith("/auth/me")) return json({ role: "Superadmin", user });
       if (path.endsWith("/auth/me/appearance")) return json({ appearance: "light" });
@@ -84,10 +127,17 @@ async function signIn(page: Page) {
       if (path.endsWith("/admin/sites")) return json(SITES);
       if (path.endsWith("/admin/users")) return json([{ user_id: 5, name: "Sam", last_name: "Staff", email: "sam@example.com" }]);
       if (path.endsWith("/v1/emission-factors/uploads")) return json(UPLOADS);
+      if (path.endsWith("/v1/emission-factors/parse-excel")) return json(aiParse(false));
+      if (path.endsWith("/v1/emission-factors/re-analyze")) return json(aiParse(true));
+      if (/\/v1\/emission-factors\/uploads\/\d+$/.test(path)) return json({ id: 9 });
       if (path.endsWith("/admin/emission-factors/batches")) return json(BATCHES);
 
+      if (path.endsWith("/admin/emission-factors/bulk") && method === "POST") {
+        const sent = (request.postDataJSON() as { factors: unknown[] }).factors;
+        return json({ created: sent.length - 1, skipped: 1, errors: ["Emission factor already exists for site 1, category 1, year 2024"] }, 201);
+      }
       const one = /\/admin\/emission-factors\/(\d+)$/.exec(path);
-      const body = request.postDataJSON() as Record<string, never> | null;
+      const body = (isJson ? request.postDataJSON() : null) as Record<string, never> | null;
       if (one && method === "DELETE") {
         factors = factors.filter((f) => f.emission_factor_id !== Number(one[1]));
         return json({ message: "Emission factor deleted successfully" });
@@ -229,4 +279,117 @@ test("a superadmin edits a factor, deletes it after confirming, and sees imports
   await batchConfirm.getByRole("button", { name: "Delete batch" }).click();
   await expect(page.getByText("1 imported factor deleted")).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ method: "DELETE", path: expect.stringMatching(/\/admin\/emission-factors\/batch\/b-1$/) });
+});
+
+function sheet(rows: Record<string, unknown>[]): Buffer {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Factors");
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+}
+
+test("a superadmin imports a simple sheet to all of a client's sites", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/factors?client=1");
+  await page.getByRole("button", { name: "Import factors" }).click();
+  const drawer = page.getByRole("dialog", { name: "Import factors" });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: "factors.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: sheet([
+      { year: 2024, factor_value: 2.68, unit: "litre", source: "DEFRA", emission_category_name: "Diesel" },
+      { year: 2024, factor_value: 2.31, unit: "litre", source: "DEFRA", emission_category_name: "Petrol" },
+      { year: 2023, factor_value: 9, unit: "kg", source: "Old", emission_category_name: "Coal" },
+      { year: 2024 },
+    ]),
+  });
+  // The target is required before reading.
+  await drawer.getByRole("button", { name: "Read sheet" }).click();
+  await expect(drawer.getByText("Choose a site, or all of a client's sites.")).toBeVisible();
+  await drawer.getByRole("combobox", { name: "Save to" }).selectOption({ label: "All sites of Midal Cables" });
+  await drawer.getByRole("button", { name: "Read sheet" }).click();
+
+  // Preview: the bad row is reported, the category is required.
+  await expect(drawer.getByText("1 row was left out")).toBeVisible();
+  await expect(drawer.getByRole("table", { name: "Rows to import" }).getByRole("row")).toHaveCount(4);
+  await drawer.getByRole("button", { name: "Save factors" }).click();
+  await expect(drawer.getByText("Choose the category these factors belong to.")).toBeVisible();
+  expect(calls).toHaveLength(0);
+  await drawer.getByRole("combobox", { name: "Category" }).selectOption({ label: "Fuel" });
+  await drawer.getByRole("checkbox", { name: "Include row 4" }).uncheck();
+  await drawer.getByRole("textbox", { name: "Source, row 3" }).fill("DEFRA 2024");
+  await expect(drawer.getByTestId("import-count")).toHaveText("2 factors to save");
+  // Rows the filters show can be included or excluded together.
+  await drawer.getByRole("combobox", { name: "Year" }).selectOption({ label: "2023" });
+  await expect(drawer.getByRole("button", { name: "Exclude all shown" })).toBeDisabled();
+  await drawer.getByRole("button", { name: "Include all shown" }).click();
+  await expect(drawer.getByTestId("import-count")).toHaveText("3 factors to save");
+  await drawer.getByRole("button", { name: "Exclude all shown" }).click();
+  await expect(drawer.getByTestId("import-count")).toHaveText("2 factors to save");
+  await drawer.getByRole("button", { name: "Save factors" }).click();
+
+  // Result: only Hidd reports Fuel; Pune belongs to another client and isn't listed.
+  await expect(drawer.getByText("1 factor added, 1 skipped")).toBeVisible();
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({
+    method: "POST",
+    path: expect.stringMatching(/\/admin\/emission-factors\/bulk$/),
+    body: {
+      factors: [
+        { site_id: 1, category_id: 1, year: 2024, factor_value: 2.68, denominator_unit: "litre", source: "DEFRA", emission_category_name: "Diesel", global_category_name: "Diesel" },
+        { site_id: 1, category_id: 1, year: 2024, factor_value: 2.31, denominator_unit: "litre", source: "DEFRA 2024", emission_category_name: "Petrol", global_category_name: "Petrol" },
+      ],
+    },
+  });
+  await expect(drawer.getByRole("list", { name: "Skipped at Hidd, Fuel" })).toContainText("Emission factor already exists for site 1, category 1, year 2024");
+  await drawer.getByRole("button", { name: "Done" }).click();
+  await expect(drawer).toHaveCount(0);
+});
+
+test("a superadmin imports a DEFRA-style workbook with AI read", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/factors");
+  await page.getByRole("button", { name: "Import factors" }).click();
+  const drawer = page.getByRole("dialog", { name: "Import factors" });
+  await drawer.getByRole("combobox", { name: "Save to" }).selectOption({ label: "Hidd · Midal Cables" });
+  await drawer.getByRole("radio", { name: /AI read/ }).check();
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: "defra.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: sheet([{ Activity: "Fuels", Fuel: "Diesel", Unit: "litres", Total: 2.68 }]),
+  });
+  await drawer.getByRole("button", { name: "Read with AI" }).click();
+
+  // Check layout: AI's columns are marked; a change must be re-analyzed before continuing.
+  await expect(drawer.getByTestId("ef-layout")).toContainText("Sub-columns");
+  await expect(drawer.getByText("Factor values: one column per year (found by AI).")).toBeVisible();
+  await expect(drawer.getByText("AI detected")).toHaveCount(2);
+  await drawer.getByRole("combobox", { name: "Category name" }).selectOption({ label: "Fuel (e.g. Diesel)" });
+  await expect(drawer.getByRole("button", { name: "Continue" })).toBeDisabled();
+  await drawer.getByRole("button", { name: "Re-analyze" }).click();
+  await expect(drawer.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await drawer.getByRole("button", { name: "Continue" }).click();
+
+  // Map: Fuels takes the AI's suggestion; Grid's (Electricity) is allowed for Hidd too; skip Grid.
+  await expect(drawer.getByRole("combobox", { name: "Category for Fuels" })).toHaveValue("1");
+  await drawer.getByRole("combobox", { name: "Category for Grid" }).selectOption({ label: "Skip this group" });
+  await expect(drawer.getByText("1 group is skipped")).toBeVisible();
+  await drawer.getByRole("button", { name: "Continue" }).click();
+
+  await expect(drawer.getByTestId("import-count")).toHaveText("2 factors to save");
+  await drawer.getByRole("button", { name: "Save factors" }).click();
+  await expect(drawer.getByText("1 factor added, 1 skipped")).toBeVisible();
+  await expect(drawer.getByText("No category was chosen for: Grid.")).toBeVisible();
+
+  const bulk = calls.find((c) => c.path.endsWith("/admin/emission-factors/bulk"));
+  expect(bulk?.body).toMatchObject({
+    factors: [
+      { site_id: 1, category_id: 1, factor_value: 2.68, emission_category_name: "Fuels - DIESEL", global_category_name: "Fuels - DIESEL" },
+      { site_id: 1, category_id: 1, factor_value: 2.31, emission_category_name: "Fuels - PETROL" },
+    ],
+  });
+  expect(calls.find((c) => c.path.endsWith("/v1/emission-factors/re-analyze"))?.body).toMatchObject({
+    upload_id: 9,
+    schema_override: { descriptor_columns: [{ column_index: 1, header_name: "Fuel" }] },
+  });
+  await expect.poll(() => calls.find((c) => c.method === "PATCH")?.body).toMatchObject({ records_created: 1, records_skipped: 1, status: "completed", site_id: 1, category_ids: [1] });
 });
