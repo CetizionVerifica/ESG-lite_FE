@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronRight, FileStack, MoreHorizontal, Plus, SearchX, Trash2 } from "lucide-react";
 import {
   Button,
+  Callout,
   type Column,
   DataTable,
   EMPTY_FILTERS,
@@ -161,7 +162,9 @@ export default function FormsPage() {
       <EmptyState icon={SearchX} title="No forms match these filters." action={filtered ? <Button onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button> : undefined} />
     );
 
-  const coverageHint = !sites.data
+  const coverageHint = sites.error
+    ? "Sites couldn't be loaded."
+    : !sites.data
     ? undefined
     : viewSites.length === 0
       ? "No sites match these filters."
@@ -174,6 +177,15 @@ export default function FormsPage() {
         description="The form contributors fill for each site and category."
         primaryAction={{ label: "New form", onClick: () => startCreate(), icon: <Plus aria-hidden className="size-4" />, disabled: !sites.data }}
       />
+      {sites.error && (
+        <Callout
+          tone="warn"
+          title="Couldn't load the sites."
+          action={<Button variant="ghost" onClick={() => void sites.refetch()}>Try again</Button>}
+        >
+          {errorMessage(sites.error, "The client and site filters, the coverage matrix and new forms need the site list.")}
+        </Callout>
+      )}
       <FilterBar
         filters={filterDefs}
         value={filters}

@@ -217,8 +217,13 @@ export function slugify(label: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-/** A choice in the editor. `auto` keeps the value following the label until someone edits the value. */
-export type ChoiceDraft = { key: string; label: string; value: string; auto: boolean };
+/**
+ * A choice in the editor. `auto` keeps the value following the label until
+ * someone edits the value; only new choices start that way, because saved
+ * entries store the value. `original` is the stored id (kept as a number when
+ * it was one).
+ */
+export type ChoiceDraft = { key: string; label: string; value: string; auto: boolean; original?: string | number };
 
 export type ColumnDraft = { name: string; type: ColumnType | null; choices: ChoiceDraft[] };
 
@@ -227,13 +232,30 @@ export const newChoice = (label = "", value?: string): ChoiceDraft => ({
   key: `c${++draftSeq}`,
   label,
   value: value ?? slugify(label),
-  auto: value === undefined || value === slugify(label),
+  auto: value === undefined,
 });
+
+/** A saved choice: its stored value never follows label edits. */
+export const savedChoice = (o: ChoiceOption): ChoiceDraft => ({ ...newChoice(o.label, String(o.id)), original: o.id });
+
+/** The stored id of a choice: the original (number or string) while the value is unchanged. */
+export const choiceId = (c: ChoiceDraft): string | number => (c.original !== undefined && String(c.original) === c.value.trim() ? c.original : c.value.trim());
+
+/**
+ * Apply a label or stored-value edit. A new choice's value follows its label;
+ * a saved choice keeps its stored value, since entries already reference it.
+ */
+export function editChoice(c: ChoiceDraft, p: Partial<Pick<ChoiceDraft, "label" | "value">>): ChoiceDraft {
+  const next = { ...c, ...p };
+  if (p.label !== undefined && c.auto) next.value = slugify(p.label);
+  if (p.value !== undefined) next.auto = c.original === undefined && p.value === slugify(next.label);
+  return next;
+}
 
 export function draftFrom(col: LibraryColumn | null): ColumnDraft {
   if (!col) return { name: "", type: null, choices: [] };
   const type = (COLUMN_TYPES.some((t) => t.value === col.column_type) ? col.column_type : "text") as ColumnType;
-  return { name: col.column_name, type, choices: (col.dropdown_options ?? []).map((o) => newChoice(o.label, String(o.id))) };
+  return { name: col.column_name, type, choices: (col.dropdown_options ?? []).map(savedChoice) };
 }
 
 export type DraftErrors = { name?: string; type?: string; choices?: string; rows: Record<string, string> };
@@ -262,7 +284,7 @@ export function toPayload(d: ColumnDraft): { column_name: string; column_type: s
   return {
     column_name: d.name.trim(),
     column_type: d.type ?? "text",
-    dropdown_options: d.type === "select" ? d.choices.map((c) => ({ id: c.value.trim(), label: c.label.trim() })) : null,
+    dropdown_options: d.type === "select" ? d.choices.map((c) => ({ id: choiceId(c), label: c.label.trim() })) : null,
   };
 }
 

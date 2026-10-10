@@ -10,6 +10,7 @@ import {
   calculationLabel,
   columnUsage,
   draftFrom,
+  editChoice,
   hasErrors,
   matchesColumn,
   matchesForm,
@@ -112,7 +113,20 @@ describe("columns library", () => {
     expect(slugify("Électricité")).toBe("electricite");
     expect(newChoice("Diesel").auto).toBe(true);
     expect(newChoice("Diesel", "DSL").auto).toBe(false);
-    expect(draftFrom(fuelType).choices[0]).toMatchObject({ label: "Diesel", value: "diesel", auto: true });
+    expect(draftFrom(fuelType).choices[0]).toMatchObject({ label: "Diesel", value: "diesel", auto: false });
+    expect(editChoice(newChoice("Dies"), { label: "Diesel" }).value).toBe("diesel");
+  });
+
+  it("keeps the stored id of a saved choice when its label changes", () => {
+    const saved = draftFrom({ ...fuelType, dropdown_options: [{ id: "diesel", label: "Diesel" }, { id: 7, label: "LPG" }] });
+    const renamed = saved.choices.map((c) => editChoice(c, { label: `${c.label} (road)` }));
+    expect(renamed.map((c) => c.value)).toEqual(["diesel", "7"]);
+    // Typing the slug back in does not make a saved value follow the label again.
+    expect(editChoice(renamed[0], { value: "diesel_road" }).auto).toBe(false);
+    expect(toPayload({ ...saved, choices: renamed }).dropdown_options).toEqual([
+      { id: "diesel", label: "Diesel (road)" },
+      { id: 7, label: "LPG (road)" },
+    ]);
   });
 
   it("validates name, type and choices", () => {

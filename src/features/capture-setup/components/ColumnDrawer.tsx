@@ -16,22 +16,28 @@ export type ColumnDrawerProps = {
   onClose: () => void;
   onSave: (draft: ColumnDraft) => void;
   onDelete: () => void;
+  /** False while the forms list (which says who uses the column) is loading or failed. */
+  usageReady: boolean;
 };
 
 /** Add or edit a library column: name, type and, for Select, its default choices. */
-export function ColumnDrawer({ row, open, loading, library, saving, error, onClose, onSave, onDelete }: ColumnDrawerProps) {
+export function ColumnDrawer({ row, open, loading, library, saving, error, onClose, onSave, onDelete, usageReady }: ColumnDrawerProps) {
   const [draft, setDraft] = useState<ColumnDraft>(() => draftFrom(row));
   const [tried, setTried] = useState(false);
-  const [confirmWipe, setConfirmWipe] = useState(false);
+  const [confirmType, setConfirmType] = useState(false);
   const others = library.filter((c) => c.pk_id !== row?.pk_id);
   const errors = validateDraft(draft, others);
   const shown = tried ? errors : { rows: {} as Record<string, string> };
   const wipe = wipesChoices(row, draft);
+  const typeChanged = !!row && !!draft.type && draft.type !== row.column_type;
+  // Changing the type of a column forms use changes their fields too: ask first.
+  const needsConfirm = typeChanged && (wipe > 0 || (row?.usedBy.length ?? 0) > 0 || !usageReady);
+  const newTypeLabel = COLUMN_TYPES.find((t) => t.value === draft.type)?.label ?? "";
 
   const submit = () => {
     setTried(true);
     if (hasErrors(errors)) return;
-    if (wipe > 0) setConfirmWipe(true);
+    if (needsConfirm) setConfirmType(true);
     else onSave(draft);
   };
 
@@ -40,12 +46,19 @@ export function ColumnDrawer({ row, open, loading, library, saving, error, onClo
       open={open}
       onClose={onClose}
       title={row ? row.column_name : "Add column"}
-      subtitle={row ? `${row.typeLabel} · used by ${row.usedBy.length} ${row.usedBy.length === 1 ? "form" : "forms"}` : "A field forms can use"}
+      subtitle={row ? (usageReady ? `${row.typeLabel} · used by ${row.usedBy.length} ${row.usedBy.length === 1 ? "form" : "forms"}` : row.typeLabel) : "A field forms can use"}
       loading={loading}
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
           {row ? (
-            <Button variant="ghost" icon={<Trash2 aria-hidden className="size-4" />} onClick={onDelete} className="text-bad">
+            <Button
+              variant="ghost"
+              icon={<Trash2 aria-hidden className="size-4" />}
+              onClick={onDelete}
+              className="text-bad"
+              disabled={!usageReady}
+              title={usageReady ? undefined : "Checking which forms use this column…"}
+            >
               Delete column
             </Button>
           ) : (
@@ -104,20 +117,30 @@ export function ColumnDrawer({ row, open, loading, library, saving, error, onClo
           </section>
         )}
       </form>
-      {confirmWipe && (
+      {confirmType && row && (
         <Modal
           open
           tone="destructive"
-          title={`Remove ${wipe} ${wipe === 1 ? "choice" : "choices"}?`}
-          description={`"${row?.column_name}" becomes a ${COLUMN_TYPES.find((t) => t.value === draft.type)?.label ?? ""} column and loses its default choices.`}
+          title={wipe > 0 ? `Remove ${wipe} ${wipe === 1 ? "choice" : "choices"}?` : `Make "${row.column_name}" a ${newTypeLabel} column?`}
+          description={[
+            wipe > 0 ? `"${row.column_name}" becomes a ${newTypeLabel} column and loses its default choices.` : null,
+            !usageReady
+              ? "Couldn't check which forms use it; any that do change too."
+              : row.usedBy.length
+                ? `${row.usedBy.length === 1 ? "This form changes" : `These ${row.usedBy.length} forms change`} too: ${row.usedBy.map((f) => f.name).join(", ")}.`
+                : null,
+            "Entries already saved keep their values.",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           primaryAction={{
             label: "Change type",
             onClick: () => {
-              setConfirmWipe(false);
+              setConfirmType(false);
               onSave(draft);
             },
           }}
-          onClose={() => setConfirmWipe(false)}
+          onClose={() => setConfirmType(false)}
         />
       )}
     </Drawer>

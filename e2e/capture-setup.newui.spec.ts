@@ -1,8 +1,8 @@
 import { type Page, expect, test } from "@playwright/test";
 
 /**
- * P24 Capture setup smoke tests (VITE_NEW_UI=1 server): the forms list with
- * its coverage matrix, and the columns library. Column and form endpoints are
+ * P24 Capture setup smoke tests (VITE_NEW_UI=1 server): the columns library.
+ * The forms list joins with the form builder in part 2. Column and form endpoints are
  * answered locally and writes are recorded.
  */
 
@@ -76,35 +76,6 @@ async function signIn(page: Page) {
   return { calls };
 }
 
-test("forms: coverage matrix starts a form for a missing site and category", async ({ page }) => {
-  const { calls } = await signIn(page);
-  await page.goto("/capture/forms");
-  await expect(page.getByRole("heading", { name: "Data-entry forms", level: 1 })).toBeVisible();
-  const table = page.getByRole("table", { name: "Data-entry forms" });
-  await expect(table.getByText("Hidd fuel")).toBeVisible();
-  await expect(table.getByText("Dallas power")).toBeVisible();
-  // Two clients in view: the matrix asks for one.
-  await expect(page.getByText("Pick a client to see which of its site and category pairs have a form.")).toBeVisible();
-
-  await page.goto("/capture/forms?client=1");
-  const matrix = page.getByTestId("coverage-matrix");
-  await expect(matrix).toBeVisible();
-  await expect(matrix.getByText("1 configured")).toBeVisible();
-  await expect(matrix.getByText("2 missing")).toBeVisible();
-  await expect(table.getByText("Dallas power")).toHaveCount(0);
-
-  await matrix.getByRole("button", { name: "Hidd, Purchased electricity: missing. Create form" }).click();
-  const dialog = page.getByRole("dialog", { name: "New form" });
-  await expect(dialog.getByLabel("Form name")).toHaveValue("Hidd · Purchased electricity");
-  await dialog.getByRole("button", { name: "Create form" }).click();
-  await expect(page.getByText('Form "Hidd · Purchased electricity" created')).toBeVisible();
-  expect(calls.find((c) => c.path.endsWith("/admin/column-configs"))?.body).toEqual({ config_name: "Hidd · Purchased electricity", site_id: 1, category_id: 20 });
-
-  // A configured cell opens its form.
-  await matrix.getByRole("button", { name: "Hidd, Stationary combustion: configured. Open form" }).click();
-  await expect(page).toHaveURL(/\/capture\/forms\/7$/);
-});
-
 test("columns: add a Select column, change a type, and blocked delete", async ({ page }) => {
   const { calls } = await signIn(page);
   await page.goto("/capture/columns");
@@ -139,11 +110,19 @@ test("columns: add a Select column, change a type, and blocked delete", async ({
   await expect(page.getByText('Column "Fuel type" saved')).toBeVisible();
   expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ column_name: "Fuel type", column_type: "text", dropdown_options: null });
 
-  // Used by forms: delete is blocked with the list.
+  // Used by forms: a type change names them first, and delete is blocked with the list.
   await table.getByText("Amount").click();
-  await page.getByRole("dialog", { name: "Amount" }).getByRole("button", { name: "Delete column" }).click();
+  const amountDrawer = page.getByRole("dialog", { name: "Amount" });
+  await amountDrawer.getByLabel("Type").selectOption("date");
+  await amountDrawer.getByRole("button", { name: "Save column" }).click();
+  const typeConfirm = page.getByRole("alertdialog", { name: 'Make "Amount" a Date column?' });
+  await expect(typeConfirm).toContainText("Hidd fuel, Dallas power");
+  await typeConfirm.getByRole("button", { name: "Cancel" }).click();
+  expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);
+  await amountDrawer.getByLabel("Type").selectOption("number");
+  await amountDrawer.getByRole("button", { name: "Delete column" }).click();
   const blocked = page.getByRole("dialog", { name: '"Amount" is still in use' });
-  await expect(blocked.getByRole("link", { name: "Hidd fuel" })).toHaveAttribute("href", "/capture/forms/7");
+  await expect(blocked.getByRole("link", { name: "Hidd fuel" })).toHaveAttribute("href", "/capture/forms");
   await expect(blocked.getByRole("link", { name: "Dallas power" })).toBeVisible();
   await blocked.getByRole("button", { name: "Close", exact: true }).last().click();
   await page.keyboard.press("Escape");

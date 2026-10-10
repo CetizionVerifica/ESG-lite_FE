@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { Button, cn, focusRing, inputBase } from "../../../ui";
-import { type ChoiceDraft, newChoice, slugify } from "../logic";
+import { type ChoiceDraft, editChoice, newChoice, slugify } from "../logic";
 
 export type ChoicesEditorProps = {
   choices: ChoiceDraft[];
@@ -15,17 +15,9 @@ export type ChoicesEditorProps = {
  * value follows the label until it is edited under "Show stored values".
  */
 export function ChoicesEditor({ choices, onChange, errors }: ChoicesEditorProps) {
-  const [showValues, setShowValues] = useState(() => choices.some((c) => !c.auto));
-  const update = (key: string, p: Partial<ChoiceDraft>) =>
-    onChange(
-      choices.map((c) => {
-        if (c.key !== key) return c;
-        const next = { ...c, ...p };
-        if (p.label !== undefined && c.auto) next.value = slugify(p.label);
-        if (p.value !== undefined) next.auto = p.value === slugify(next.label);
-        return next;
-      }),
-    );
+  const [showValues, setShowValues] = useState(() => choices.some((c) => c.value !== slugify(c.label)));
+  const update = (key: string, p: Partial<Pick<ChoiceDraft, "label" | "value">>) =>
+    onChange(choices.map((c) => (c.key === key ? editChoice(c, p) : c)));
   const move = (i: number, by: number) => {
     const next = [...choices];
     const [item] = next.splice(i, 1);
