@@ -14,7 +14,8 @@ export function useMarkRead() {
     mutationFn: (id: number | "all") => (id === "all" ? markAllAsRead() : markAsRead(id)),
     onSettled: () => {
       refresh();
-      return queryClient.invalidateQueries({ queryKey: shellKeys.latestNotifications });
+      // The whole "notifications" family: the bell list and the Notifications page.
+      return queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

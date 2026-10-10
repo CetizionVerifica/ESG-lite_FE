@@ -41,3 +41,9 @@ const isFera = (c: Category) => c.category_name.toLowerCase() === "fera";
 export const entryCategories = (site: EntrySite | undefined) => (site?.categories ?? []).filter((c) => !isFera(c));
 
 export const feraCategoryOf = (site: EntrySite | undefined) => site?.categories.find(isFera) ?? null;
+
+/** The signed-in user's id, sent with bill uploads so My bills can list them. */
+export const userIdOf = (user: unknown): number | null => {
+  const id = (user as { user_id?: unknown } | null)?.user_id;
+  return typeof id === "number" ? id : null;
+};

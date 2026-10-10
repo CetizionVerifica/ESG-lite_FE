@@ -71,3 +71,28 @@ Below the stepper (or as a tab "Already entered for Sep (4)") a compact `DataTab
 - A bill-extracted row and a manual row produce identical payloads.
 - Keyboard: Tab through a row, Enter adds a row, Ctrl+Enter goes to Review.
 - Works on a 390px phone for a single row.
+
+## P03-B plan (bill flow, 2026-10-09)
+- `steps/FromBill.tsx`: the "Start from a bill" tab of step 2. Drop PDFs/images (`FileDrop`), upload to the AI service, show stages, then a split view: `DocumentViewer` on the left, extracted entries on the right grouped by invoice.
+- Extracted entries become ordinary rows in `useEntryRows`, rendered with the same `EntryRow`, so validation, period mode, FERA and `buildPayload` are shared with manual entry. AI-filled fields carry an AI chip; the category suggestion shows its confidence, with a warn tint below 60%.
+- Nothing AI-filled is saved until the user confirms each bill's rows ("Use these rows"); then the normal Review step saves them. The bill is linked as evidence (B8) on save.
+- "My bills" drawer: list earlier uploads, reuse or re-extract one.
+- "My bills" deletes one bill at a time with a confirmation; the legacy library's multi-select bulk delete is not carried over yet.
+
+## P03-C plan (distance, duplicates, existing entries, route switch; 2026-10-09)
+- Distance: a "Calculate distance" button on distance fields and composite `mult × dist` units, opening `DistanceDrawer` (road, rail, air, sea) built on `distanceService`, `routingService` and the AI service's `POST /v1/sea-route`.
+- Duplicates: one `DuplicateDialog` at Review that lists each 409 conflict, with Skip / Replace per row and "apply to all".
+- Existing entries: a compact table of entries already saved for site × category × period, with status, tCO₂e and actions. Rejected rows show the reason and a "Fix" action that loads the row into step 2.
+- Per-row evidence: `FileDrop` on a typed row, uploaded through `documentService` after save. An unsaved-rows guard on navigation.
+- Route switch: `/data-entry` and the legacy entry routes redirect to `/data/new`; `pages/UserDataEntry/*`, `UserDataEntryPage.tsx` and `/data/new/classic` are deleted, once nothing that is still needed lives only there (bulk upload is checked first).
+
+### P03-C as built (2026-10-09)
+- Distance: `logic/distance.ts` (which column takes a distance, count × distance product, per-mode result), `components/DistanceInput.tsx`, `components/distance/*` (drawer, location field, route map). Road and sea use the backend's `/user/emissions/calculate-distance`; rail is the road corridor (else straight line × 1.2); sea falls back to straight-line nautical miles. Shared geo helpers moved to `src/lib/geo/` (old `src/utils` and `services/routingService` paths re-export them).
+- Duplicates: `components/DuplicateDialog.tsx` opens after a send with 409s; Replace/Skip per row, "Replace all"/"Skip all", default Skip.
+- Already entered: `components/ExistingEntries.tsx` + `logic/existing.ts`. Fix (rejected) and Edit (pending) load the entry as a row with `_editOf`; Review then calls `updateEmission` (the backend sets it back to pending). Composite units load as 1 × the saved product (only the product is stored).
+- Evidence: per typed row, kept in memory (`hooks/useRowEvidence.ts`), uploaded with `uploadMultipleDocuments` after the row saves.
+- Leaving the page with typed rows not sent asks first (`useUnsavedGuard`, moved to `src/ui`). The draft is cleared once every row is sent or skipped.
+- Old page: kept until the new UI goes live (flag off still renders it at `/data-entry`; bulk upload opens only from it until P27). It is deleted in the PR that turns the new UI on.
+- Comparison while editing: a pending entry loaded with Edit keeps its saved tCO₂e in `_editSaved`, and `savedExcludingEdits` takes it off the saved total so the "vs last period" chip doesn't count it twice (legacy `effectiveSavedTotals`).
+- Not built yet in "Already entered": view factor, documents, and delete (single or batch). My entries (P04) has the drawer with documents; these can move here later.
+- A partial send (some rows saved, others failed) keeps the draft; sending the saved rows again later hits the duplicate dialog rather than creating copies.

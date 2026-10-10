@@ -135,3 +135,15 @@ export const getFileIcon = (fileType: string): string => {
   if (fileType.includes("document") || fileType.includes("word")) return "word";
   return "file";
 };
+
+/**
+ * Attach a bill the AI service read (its invoice row) as evidence to the
+ * emissions saved from it (B8). Idempotent per emission and invoice.
+ */
+export const linkInvoiceDocuments = async (invoiceId: number, emissionIds: number[]) => {
+  const response = await api.post<{ message: string; documents: { document_id: number; emission_id: number }[] }>(
+    "/user/documents/from-invoice",
+    { invoice_id: invoiceId, emission_ids: emissionIds }
+  );
+  return response.data;
+};

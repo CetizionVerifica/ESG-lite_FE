@@ -8,16 +8,27 @@ export interface NotificationItem {
   link: string | null;
   read: boolean;
   created_at: string;
+  /** Who reviewed and why (backend P13). Absent from older backends, null on older rows. */
+  meta?: { reviewer?: string; reason?: string | null } | null;
 }
+
+/** Server-side tab filter on GET /notifications (backend P13). */
+export type NotificationTypeGroup = "approvals" | "rejections" | "reminders";
 
 export interface NotificationPreferences {
   notification_preferences: Record<string, boolean>;
   timezone: string | null;
 }
 
-export const getNotifications = async (page = 1, limit = 20, unreadOnly = false) => {
+export const getNotifications = async (
+  page = 1,
+  limit = 20,
+  unreadOnly = false,
+  type: NotificationTypeGroup | null = null
+) => {
   const params: any = { page, limit };
   if (unreadOnly) params.unread = "true";
+  if (type) params.type = type;
   const response = await api.get<{ notifications: NotificationItem[]; total: number }>(
     "/notifications",
     { params }

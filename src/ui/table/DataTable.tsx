@@ -184,7 +184,8 @@ export function DataTable<T>({
   return (
     <div data-density={prefs.compact ? "compact" : undefined} className="rounded-card border border-line bg-panel">
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{toolbar}</div>
+        {/* Grows to the full row on phones, so the view buttons wrap below instead of overlapping it. */}
+        <div className="flex min-w-0 flex-[1_1_18rem] flex-wrap items-center gap-2">{toolbar}</div>
         <Button
           size="sm"
           variant="ghost"
@@ -340,6 +341,7 @@ export function DataTable<T>({
                 return (
                   <tr
                     key={id}
+                    data-row-id={String(id)}
                     aria-selected={selectable ? isSelected : undefined}
                     tabIndex={onRowClick ? 0 : undefined}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}

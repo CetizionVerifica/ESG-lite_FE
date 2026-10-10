@@ -1,12 +1,16 @@
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
-import { Badge, Button, Select, cn, formatNumber, panel } from "../../../ui";
+import { Badge, Button, FileDrop, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
 import { formColumns, isColumnVisible, visibleExtraFields, type FormModel } from "../logic/form";
 import type { RowIssue } from "../logic/entry";
 import type { CategoryMapping } from "../api";
 import type { EmissionFactor, ModalRow } from "../types";
+import { billOf, isAiField, LOW_CONFIDENCE } from "../logic/bill";
+import { AiChip, AiLabel, ConfidenceBadge } from "./AiMarks";
 import { DynamicField } from "./DynamicField";
+import { DistanceInput } from "./DistanceInput";
+import { distanceFieldFor, type DistanceField } from "../logic/distance";
 import { ExtraFields } from "./ExtraFields";
 
 export type RowComparison = { text: string; overThreshold: boolean; threshold: number; previousLabel: string } | null;
@@ -30,6 +34,10 @@ type Props = {
   onExtraChange: (key: string, value: string) => void;
   onDuplicate: () => void;
   onRemove: () => void;
+  /** Opens the distance drawer for a distance column. */
+  onCalculateDistance: (column: string, field: DistanceField) => void;
+  /** Evidence files for a typed row; bill rows have their bill. */
+  evidence?: { items: FileDropItem[]; onAdd: (files: File[]) => void; onRemove: (id: string) => void };
 };
 
 /** One entry as a card: what it is, its values, more details, and the live result. */
@@ -49,6 +57,10 @@ export function EntryRow(p: Props) {
     p.mappings.length > 0
       ? p.mappings.map((m) => ({ value: m.global_category_name, label: m.company_category_name }))
       : p.factors.map((f) => ({ value: f.emission_category_name, label: f.emission_category_name }));
+  const bill = billOf(row);
+  const aiCategory = isAiField(row, "emission_category");
+  const confidence = aiCategory ? (bill?.confidence ?? null) : null;
+  const unsure = confidence !== null && confidence < LOW_CONFIDENCE;
   const unitOptions = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
 
   return (
@@ -65,9 +77,12 @@ export function EntryRow(p: Props) {
         </div>
       </header>
 
+      <div className={cn(unsure && "rounded-control bg-warn-soft p-2")}>
       {mapped ? (
         <div className="text-sm">
-          <span className="block text-xs font-medium text-muted">Emission category</span>
+          <span className="block text-xs font-medium text-muted">
+            <AiLabel text="Emission category" ai={aiCategory} />
+          </span>
           {row.emission_category ? (
             <span className="mt-1 inline-flex flex-wrap items-center gap-1 rounded-chip bg-tint px-2 py-1 text-ink">
               {row._ecmKey || row.emission_category}
@@ -81,7 +96,7 @@ export function EntryRow(p: Props) {
         </div>
       ) : (
         <Select<string>
-          label="Emission category"
+          label={<AiLabel text="Emission category" ai={aiCategory} />}
           value={row.emission_category || null}
           onChange={(v) => p.onChange("emission_category", v ?? "")}
           options={categoryOptions}
@@ -89,15 +104,37 @@ export function EntryRow(p: Props) {
           error={fieldError("emission_category")}
         />
       )}
+      {confidence !== null && (
+        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+          <ConfidenceBadge confidence={confidence} />
+          {unsure && <span>The AI isn't sure about this category.</span>}
+        </p>
+      )}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {formColumns(model)
           .filter((c) => isColumnVisible(model, c, row))
-          .map((c) => (
-            <DynamicField key={c.pk_id} model={model} column={c} row={row} onChange={p.onChange} />
-          ))}
+          .map((c) => {
+            const labelExtra = isAiField(row, c.column_name) ? <AiChip /> : undefined;
+            const distance = distanceFieldFor(model, row, c);
+            return distance ? (
+              <DistanceInput
+                key={c.pk_id}
+                model={model}
+                column={c}
+                row={row}
+                field={distance}
+                onChange={p.onChange}
+                onCalculate={() => p.onCalculateDistance(c.column_name, distance)}
+                labelExtra={labelExtra}
+              />
+            ) : (
+              <DynamicField key={c.pk_id} model={model} column={c} row={row} onChange={p.onChange} labelExtra={labelExtra} />
+            );
+          })}
         <Select<string>
-          label="Unit"
+          label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
           value={row.activity_data_unit || null}
           onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
           options={unitOptions.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
@@ -115,6 +152,27 @@ export function EntryRow(p: Props) {
           </summary>
           <div className="pt-3">
             <ExtraFields fields={extras} row={row} onChange={p.onExtraChange} />
+          </div>
+        </details>
+      )}
+
+      {p.evidence && (
+        <details className="group" open={p.evidence.items.length > 0}>
+          <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-brand-text">
+            <ChevronDown aria-hidden className="size-4 transition-transform group-open:rotate-180" />
+            Evidence{p.evidence.items.length > 0 && ` (${p.evidence.items.length})`}
+          </summary>
+          <div className="pt-3">
+            <FileDrop
+              label={`Evidence for row ${p.index + 1}`}
+              help="PDF, image or spreadsheet, up to 10 MB each. Attached when you send."
+              accept={["application/pdf", "image/*", ".xlsx", ".xls", ".csv", ".doc", ".docx"]}
+              maxSize={10 * 1024 * 1024}
+              multiple
+              items={p.evidence.items}
+              onAdd={p.evidence.onAdd}
+              onRemove={p.evidence.onRemove}
+            />
           </div>
         </details>
       )}

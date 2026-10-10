@@ -55,11 +55,35 @@ export function Tabs<V extends string>({ label, items, value, onChange, idBase, 
   );
 }
 
-/** The panel for one tab. Renders only when selected. */
-export function TabPanel<V extends string>({ idBase, value, current, children, className }: { idBase: string; value: V; current: V; children: ReactNode; className?: string }) {
-  if (value !== current) return null;
+/**
+ * The panel for one tab. Renders only when selected, unless `keepMounted`
+ * (then it is hidden instead, so work in progress inside it survives a tab switch).
+ */
+export function TabPanel<V extends string>({
+  idBase,
+  value,
+  current,
+  children,
+  className,
+  keepMounted = false,
+}: {
+  idBase: string;
+  value: V;
+  current: V;
+  children: ReactNode;
+  className?: string;
+  keepMounted?: boolean;
+}) {
+  if (value !== current && !keepMounted) return null;
   return (
-    <div role="tabpanel" id={`${idBase}-panel-${value}`} aria-labelledby={`${idBase}-tab-${value}`} tabIndex={0} className={cn("focus:outline-none", className)}>
+    <div
+      role="tabpanel"
+      id={`${idBase}-panel-${value}`}
+      aria-labelledby={`${idBase}-tab-${value}`}
+      tabIndex={0}
+      hidden={value !== current}
+      className={cn("focus:outline-none", className)}
+    >
       {children}
     </div>
   );
