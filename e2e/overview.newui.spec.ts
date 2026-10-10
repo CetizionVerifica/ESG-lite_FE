@@ -112,6 +112,8 @@ test("a manager sees the period at a glance and drills into a site", async ({ pa
   await page.goto("/overview?period=CY2025");
 
   await expect(page.getByRole("heading", { level: 1, name: "CY 2025" })).toBeVisible();
+  // The heading comes from the URL, so it can render before the B4 request is sent.
+  await expect.poll(() => b4.length).toBeGreaterThan(0);
   expect(b4[0].get("period")).toBe("2025");
   expect(b4[0].get("siteIds")).toBe("1,2");
 
