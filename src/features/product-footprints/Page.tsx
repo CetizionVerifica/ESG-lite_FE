@@ -26,6 +26,7 @@ import {
   useContextParams,
   useFilterParams,
   useToast,
+  withoutParams,
   writeFilterParams,
 } from "../../ui";
 import { errorMessage, useApprovedProduction, useReconciliation, useSiteProducts, useStudies } from "./api";
@@ -114,16 +115,13 @@ export default function ProductFootprintsPage() {
 
   const setFocus = (f: Focus) =>
     setParams((p) => {
-      const next = new URLSearchParams(p);
-      if (focus === f) next.delete(FOCUS);
-      else next.set(FOCUS, f);
+      const next = withoutParams(p, [FOCUS]);
+      if (focus !== f) next.set(FOCUS, f);
       return next;
     }, { replace: true });
   const clearFilters = () =>
     setParams((p) => {
-      const next = writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS);
-      next.delete(FOCUS);
-      return next;
+      return withoutParams(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS), [FOCUS]);
     }, { replace: true });
 
   const columns = footprintColumns({ startLink, showSite: scopeSites.length > 1 });
