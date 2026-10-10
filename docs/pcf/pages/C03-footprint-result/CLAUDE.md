@@ -8,7 +8,7 @@
 
 ## Layout
 ```
-PageHeader: crumb "Products · {product}"  title "{product}"  status pill  version chip "v3 · CY 2025"
+PageHeader: title "{product}"  status pill  version chip "v3 · CY 2025"
             actions: primary "Export declaration" (C05), secondary "New version", "Submit/Approve/Publish" by status
 ┌ KpiStrip ────────────────────────────────────────────────────────────────────────────┐
 │ 7.52 kgCO₂e per kg (wide) │ ▼ 4.1% vs v2 │ Primary data 38% │ DQR 1.8 (good) │ Recycled input 20% │

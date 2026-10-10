@@ -1,12 +1,7 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
 import { Button } from "./Button";
 import { Skeleton } from "./Skeleton";
 import { cn } from "./cn";
-import { focusRing } from "./styles";
-
-export type Crumb = { label: string; to?: string };
 
 export type HeaderAction = {
   label: string;
@@ -18,7 +13,6 @@ export type HeaderAction = {
 
 export type PageHeaderProps = {
   title: ReactNode;
-  crumb?: Crumb[];
   /** One line under the title. */
   description?: ReactNode;
   /** Usually <ContextChips />. */
@@ -30,28 +24,10 @@ export type PageHeaderProps = {
   className?: string;
 };
 
-/** Page title row: breadcrumb, title, context chips and actions. One per page. */
-export function PageHeader({ title, crumb, description, context, primaryAction, secondaryActions = [], loading, className }: PageHeaderProps) {
+/** Page title row: title, context chips and actions. One per page. No breadcrumb: the top nav shows where you are. */
+export function PageHeader({ title, description, context, primaryAction, secondaryActions = [], loading, className }: PageHeaderProps) {
   return (
     <header className={cn("space-y-3", className)}>
-      {crumb && crumb.length > 0 && (
-        <nav aria-label="Breadcrumb">
-          <ol className="flex flex-wrap items-center gap-1 text-xs text-muted">
-            {crumb.map((c, i) => (
-              <li key={`${c.label}-${i}`} className="flex items-center gap-1">
-                {i > 0 && <ChevronRight aria-hidden className="size-3" />}
-                {c.to ? (
-                  <Link to={c.to} className={cn("rounded-chip hover:text-ink hover:underline", focusRing)}>
-                    {c.label}
-                  </Link>
-                ) : (
-                  <span aria-current={i === crumb.length - 1 ? "page" : undefined}>{c.label}</span>
-                )}
-              </li>
-            ))}
-          </ol>
-        </nav>
-      )}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           {loading ? (
