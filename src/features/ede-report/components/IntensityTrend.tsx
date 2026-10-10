@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ReportPeriod } from "../../../ui";
 import { ChartFrame, Select, formatEmissions, formatNumber } from "../../../ui";
 import type { EdeReportResponse } from "../../../services/reportService";
-import { type SiteRef, intensitySeries, monthLabel } from "../logic";
+import { type SiteRef, intensitySeries, intensitySites, monthLabel } from "../logic";
 
 type Props = {
   data: EdeReportResponse;
@@ -13,10 +13,10 @@ type Props = {
 
 /** One site at a time: monthly emissions as bars, intensity (tCO₂e per production unit) as a line on its own axis. */
 export function IntensityTrend({ data, period, sites, colorIndex }: Props) {
-  const withRows = sites.filter((s) => data.intensityMonthly.some((r) => r.siteName === s.siteName));
+  const withRows = intensitySites(data, sites);
   const [picked, setPicked] = useState<number | null>(null);
   const site = withRows.find((s) => s.siteId === picked) ?? withRows[0];
-  const series = site ? intensitySeries(data, period, site.siteName) : null;
+  const series = site ? intensitySeries(data, period, site) : null;
   const labels = series?.months.map(monthLabel) ?? [];
   const intensityUnit = `tCO₂e/${series?.unit ?? "unit"}`;
 

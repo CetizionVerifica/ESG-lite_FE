@@ -62,10 +62,17 @@ export function RecordDrawer({
   useEffect(() => setEditing(!!startEditing), [id, startEditing]);
   // Leaving the form unmounts the focused control; keep focus inside the drawer so Esc and Tab still work there.
   const bodyRef = useRef<HTMLDivElement>(null);
+  const refocus = useRef(false);
   const leaveEdit = () => {
+    refocus.current = true;
     setEditing(false);
-    requestAnimationFrame(() => bodyRef.current?.focus());
   };
+  // Focus once the record body is back in the DOM; a frame callback can run before React commits it.
+  useEffect(() => {
+    if (editing || !refocus.current) return;
+    refocus.current = false;
+    bodyRef.current?.focus();
+  }, [editing]);
   return (
     <Drawer
       open={row !== null}
