@@ -159,6 +159,24 @@ test("a rejected entry is fixed and resubmitted in the drawer", async ({ page })
   });
 });
 
+test("editing an entry with no factor in the factor year uses the newest one from another year, as the save does", async ({ page }) => {
+  await signIn(page);
+  // Only a 2023 factor exists; Sep 2025 data looks for 2024 first.
+  const older = [{ ...dieselFactors[0], emission_factor_id: 6, factor_value: 2.5, year: 2023 }];
+  await page.route(/\/user\/emission-factors\/site\/7\/category\/1(\?|$)/, (route) => {
+    // Like the backend: ?year= filters to that year, no year returns them all.
+    const year = new URL(route.request().url()).searchParams.get("year");
+    return route.fulfill({ json: year ? older.filter((f) => f.year === Number(year)) : older });
+  });
+  await page.goto("/data/mine");
+  await page.getByRole("table", { name: "My entries" }).getByRole("row").filter({ hasText: "Wrong unit" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByRole("button", { name: "Fix and resubmit" }).click();
+  await drawer.getByLabel("Quantity").fill("1200");
+  await expect(drawer.getByText("= 3.00 tCO₂e")).toBeVisible();
+  await expect(drawer.getByText("No factor for this category")).toHaveCount(0);
+});
+
 test("a My month link filters by site, category and month; a row opens its drawer", async ({ page }) => {
   const requests: URLSearchParams[] = [];
   await signIn(page, requests);
