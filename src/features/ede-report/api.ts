@@ -4,6 +4,9 @@ import { getSites } from "../../services/siteService";
 import type { SiteOption } from "../../ui";
 import { type EdeQuery, normalize, requestPayload } from "./logic";
 
+/** The PDF brands itself with the picked client's brand (Superadmin). */
+export { getBrand } from "../../services/brandService";
+
 export const keys = {
   all: ["ede-report"] as const,
   report: (q: EdeQuery) => [...keys.all, requestPayload(q)] as const,
