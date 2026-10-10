@@ -64,7 +64,6 @@ export function OverviewScreen({ pack, look }: { pack: ThemePack; look: Look }) 
       <div className="space-y-4 p-4">
         <PageHeader
           title="Overview"
-          crumb={[{ label: "Overview" }]}
           description="Sample figures for this preview"
           primaryAction={{ label: "Approve 3 entries", onClick: () => {} }}
           secondaryActions={[{ label: "Export", onClick: () => {} }]}

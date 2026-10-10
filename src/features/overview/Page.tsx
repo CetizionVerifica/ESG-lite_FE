@@ -196,7 +196,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={header.title} crumb={[{ label: header.crumb }]} context={chips} />
+      <PageHeader title={header.title} context={chips} />
 
       <KpiStrip items={kpis} loading={overview.isPending} error={err(overview)} onRetry={() => overview.refetch()} />
 
