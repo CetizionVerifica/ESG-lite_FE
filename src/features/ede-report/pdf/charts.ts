@@ -3,9 +3,9 @@ import type { EChartsOption } from "echarts";
 import type { PdfTheme } from "../../../theme";
 import type { EdeReportResponse } from "../../../services/reportService";
 import type { ReportPeriod } from "../../../ui";
-import { type SiteRef, intensitySeries, intensitySites, isSiteRow, monthLabel, monthlyGrid } from "../logic";
+import { type SiteRef, intensityGrid, monthLabel, monthlyGrid } from "../logic";
 
-export type EdePdfCharts = { share?: string; monthly?: string; renewables?: string; saved?: string; intensity?: string };
+export type EdePdfCharts = { share?: string; monthly?: string; renewables?: string; saved?: string; intensity: { unit: string; src?: string }[] };
 
 const W = 900;
 const H = 420;
@@ -42,7 +42,7 @@ function axes(t: PdfTheme, categories: string[]) {
 export function renderCharts(data: EdeReportResponse, period: ReportPeriod, sites: SiteRef[], colorIndex: Map<number, number>, t: PdfTheme): EdePdfCharts {
   const colorOf = (siteId: number) => t.colors.series[colorIndex.get(siteId) ?? 0];
   const legend = { bottom: 0, textStyle: { color: t.colors.ink } };
-  const out: EdePdfCharts = {};
+  const out: EdePdfCharts = { intensity: [] };
 
   const share = data.bySite.filter((r) => r.total > 0);
   if (share.length)
@@ -117,37 +117,33 @@ export function renderCharts(data: EdeReportResponse, period: ReportPeriod, site
     "tCO2e",
   );
 
-  // The PDF shows intensity for every site with production, one line each. Sites can use different
-  // production units, so each legend entry names its unit and the y-axis names it only when they all share one.
-  const withRows = intensitySites(data, sites).filter((s) => data.intensityMonthly.some((r) => isSiteRow(r, s) && r.production > 0));
-  if (withRows.length) {
-    const lines = withRows.map((s) => ({ site: s, series: intensitySeries(data, period, s) }));
-    const months = [...new Set(lines.flatMap((l) => l.series.months))].sort();
-    const units = new Set(lines.map((l) => l.series.unit));
+  // One intensity chart per production unit, so lines on an axis always share it.
+  const ig = intensityGrid(data, period, sites);
+  for (const g of ig.groups) {
     const base = axes(
       t,
-      months.map((m) => monthLabel(m)),
+      ig.months.map((m) => monthLabel(m)),
     );
-    out.intensity = png(
-      {
-        legend,
-        grid: { left: 8, right: 8, top: 28, bottom: 36, containLabel: true },
-        ...base,
-        yAxis: { ...base.yAxis, name: units.size === 1 ? `tCO2e/${[...units][0]}` : "tCO2e per unit", nameTextStyle: { color: t.colors.muted } },
-        series: lines.map(({ site, series }) => ({
-          name: units.size === 1 ? site.siteName : `${site.siteName} (tCO2e/${series.unit})`,
-          type: "line",
-          connectNulls: false,
-          symbolSize: 6,
-          itemStyle: { color: colorOf(site.siteId) },
-          data: months.map((m) => {
-            const i = series.months.indexOf(m);
-            return i < 0 ? null : series.intensity[i];
-          }),
-        })),
-      },
-      t,
-    );
+    out.intensity.push({
+      unit: g.unit,
+      src: png(
+        {
+          legend,
+          grid: { left: 8, right: 8, top: 28, bottom: 36, containLabel: true },
+          ...base,
+          yAxis: { ...base.yAxis, name: `tCO2e/${g.unit}`, nameTextStyle: { color: t.colors.muted } },
+          series: g.rows.map((r) => ({
+            name: r.site.siteName,
+            type: "line",
+            connectNulls: false,
+            symbolSize: 6,
+            itemStyle: { color: colorOf(r.site.siteId) },
+            data: r.values,
+          })),
+        },
+        t,
+      ),
+    });
   }
   return out;
 }

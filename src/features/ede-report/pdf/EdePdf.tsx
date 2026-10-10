@@ -2,7 +2,7 @@ import { Defs, Document, Image, LinearGradient, Page, Rect, Stop, StyleSheet, Sv
 import type { PdfTheme } from "../../../theme";
 import type { EdeReportResponse } from "../../../services/reportService";
 import { POWERED_BY_TEXT, type ReportPeriod } from "../../../ui";
-import { type EdeFigures, type SiteRef, edePeriodLabel, intensitySeries, intensitySites, monthLabel, monthlyGrid, overallTotals } from "../logic";
+import { type EdeFigures, type SiteRef, edePeriodLabel, intensityGrid, monthLabel, monthlyGrid, overallTotals } from "../logic";
 import type { EdePdfCharts } from "./charts";
 
 export type EdePdfProps = {
@@ -120,15 +120,7 @@ export function EdePdf(p: EdePdfProps) {
   const periodText = edePeriodLabel(p.period);
   const footer = `EDE report · ${p.company} · ${periodText}`;
   const grid = monthlyGrid(data, p.period, p.sites);
-  // Sites with production only (no production means no intensity), on the union of their months.
-  const intensity = intensitySites(data, p.sites)
-    .map((x) => ({ site: x, series: intensitySeries(data, p.period, x) }))
-    .filter((x) => x.series.intensity.some((v) => v !== null));
-  const intensityMonths = [...new Set(intensity.flatMap((x) => x.series.months))].sort();
-  const intensityAt = (x: (typeof intensity)[number], m: string) => {
-    const i = x.series.months.indexOf(m);
-    return i < 0 ? null : x.series.intensity[i];
-  };
+  const intensity = intensityGrid(data, p.period, p.sites);
   const kpis: [string, string][] = [
     ["Total emissions", `${n(f.total)} tCO2e`],
     ["Scope 1", `${n(f.scope1)} tCO2e`],
@@ -246,21 +238,26 @@ export function EdePdf(p: EdePdfProps) {
             ])
             .filter((r) => r[1] !== "0" || r[2] !== "0.00")}
         />
-        <Chart s={s} title="Intensity trend" note="tCO2e per unit of approved production; blank where a month has no production." src={p.charts.intensity} />
-        {intensity.length > 0 && (
-          <>
-            <Text style={s.h2}>Monthly intensity</Text>
+        {intensity.groups.map((g) => (
+          <View key={g.unit}>
+            <Chart
+              s={s}
+              title={`Intensity trend (tCO2e/${g.unit})`}
+              note="tCO2e per unit of approved production; blank where a month has no production."
+              src={p.charts.intensity.find((c) => c.unit === g.unit)?.src}
+            />
+            <Text style={s.h2}>Monthly intensity (tCO2e/{g.unit})</Text>
             {pivot(
-              intensityMonths,
-              intensity.map((x) => ({ name: `${x.site.siteName} (tCO2e/${x.series.unit})`, values: intensityMonths.map((m) => intensityAt(x, m)) })),
+              intensity.months,
+              g.rows.map((r) => ({ name: r.site.siteName, values: r.values })),
               6,
             ).map((tb, i) => (
               <View key={i} style={{ marginBottom: 8 }}>
                 <Table s={s} headers={tb.headers} widths={tb.widths} rows={tb.rows} numeric={tb.headers.map((_, j) => j).slice(1)} />
               </View>
             ))}
-          </>
-        )}
+          </View>
+        ))}
         <Footer s={s} label={footer} />
       </Page>
     </Document>

@@ -181,6 +181,29 @@ export function intensitySeries(d: EdeReportResponse, period: ReportPeriod, site
   };
 }
 
+/**
+ * Every site with production, grouped by production unit (one chart and table per unit), each on the
+ * union of the sites' months. A month without production is null, not zero.
+ */
+export function intensityGrid(d: EdeReportResponse, period: ReportPeriod, sites: SiteRef[]) {
+  const lines = intensitySites(d, sites)
+    .map((site) => ({ site, series: intensitySeries(d, period, site) }))
+    .filter((l) => l.series.intensity.some((v) => v !== null));
+  const months = [...new Set(lines.flatMap((l) => l.series.months))].sort();
+  const at = (l: (typeof lines)[number], m: string) => {
+    const i = l.series.months.indexOf(m);
+    return i < 0 ? null : l.series.intensity[i];
+  };
+  const units = [...new Set(lines.map((l) => l.series.unit))];
+  return {
+    months,
+    groups: units.map((unit) => ({
+      unit,
+      rows: lines.filter((l) => l.series.unit === unit).map((l) => ({ site: l.site, values: months.map((m) => at(l, m)) })),
+    })),
+  };
+}
+
 // ─── Labels ─────────────────────────────────────────────────────────────────
 
 /** "CY 2025" or "June 2025": the EDE report only has calendar periods. */
