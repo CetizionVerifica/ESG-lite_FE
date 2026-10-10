@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import { Badge, Button, Callout, type Column, DataTable, EmptyState, FileDrop, KpiStrip, SegmentedControl, exportMatrix, formatNumber, type FileDropItem } from "../../../ui";
-import type { HistoricalPlanRow } from "../../../services/historicalImportService";
-import { type Site, errorMessage, useHistoricalImport, useHistoricalPreview } from "../api";
+import { type HistoricalPlanRow, type Site, errorMessage, useHistoricalImport, useHistoricalPreview } from "../api";
 import type { UploadContext } from "../hooks/useUploadContext";
 import { HISTORICAL_ACCEPT, HISTORICAL_COLUMNS, HISTORICAL_MAX_BYTES, historicalFileProblem, historicalSkippedMatrix, monthLabel } from "../historical";
 import { ContextFields } from "./ContextFields";
@@ -22,6 +21,8 @@ export function HistoricalImport(props: {
   ctx: UploadContext;
   onContext: (patch: Partial<UploadContext>) => void;
   sites: { data: Site[]; loading: boolean; error: string | null; retry: () => void };
+  /** Told while the preview or import runs, so the page can lock its mode switch. */
+  onBusy: (busy: boolean) => void;
 }) {
   const { ctx, sites } = props;
   const [file, setFile] = useState<File | null>(null);
@@ -29,6 +30,10 @@ export function HistoricalImport(props: {
   const [shown, setShown] = useState<Shown>("all");
   const preview = useHistoricalPreview();
   const run = useHistoricalImport();
+
+  const busy = preview.isPending || run.isPending;
+  const { onBusy } = props;
+  useEffect(() => onBusy(busy), [busy, onBusy]);
 
   const site = selectedSite(sites.data, ctx, false);
   const ready = !!site && ctx.clientId !== null && ctx.categoryId !== null && !!file && !fileError;
@@ -55,7 +60,8 @@ export function HistoricalImport(props: {
   const plan = preview.data ?? null;
   const rows = useMemo(() => plan?.rows ?? [], [plan]);
   const visible = shown === "skipped" ? rows.filter((r) => r.status === "skip") : rows;
-  const skippedCount = rows.filter((r) => r.status === "skip").length;
+  // The whole sheet's count; the table may show only its first rows.
+  const skippedCount = plan?.summary.toSkip ?? 0;
 
   const columns: Column<HistoricalPlanRow>[] = [
     { id: "row", header: "Row", numeric: true, width: "4rem", hideable: false, value: (r) => r.row },
@@ -138,7 +144,7 @@ export function HistoricalImport(props: {
         </Callout>
       )}
       <div className="grid gap-4 md:grid-cols-3">
-        <ContextFields ctx={ctx} onContext={changeContext} sites={sites.data} sitesLoading={sites.loading} contributor={false} />
+        <ContextFields ctx={ctx} onContext={changeContext} sites={sites.data} sitesLoading={sites.loading} contributor={false} disabled={busy} />
       </div>
 
       <FileDrop

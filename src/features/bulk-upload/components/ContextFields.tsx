@@ -15,6 +15,8 @@ export function ContextFields(props: {
   sitesLoading: boolean;
   contributor: boolean;
   categoryLoading?: boolean;
+  /** While something runs that a new context would throw away. */
+  disabled?: boolean;
 }) {
   const { ctx, onContext, sites, contributor } = props;
 
@@ -40,6 +42,7 @@ export function ContextFields(props: {
           value={ctx.clientId}
           options={clients}
           loading={props.sitesLoading}
+          disabled={props.disabled}
           onChange={(v) => onContext({ clientId: v, siteId: null, categoryId: null })}
         />
       )}
@@ -50,7 +53,7 @@ export function ContextFields(props: {
         value={site ? ctx.siteId : null}
         options={clientSites}
         emptyText={contributor ? "No site is assigned to you yet" : ctx.clientId ? "This client has no sites" : "Choose a client first"}
-        disabled={!contributor && !ctx.clientId}
+        disabled={props.disabled || (!contributor && !ctx.clientId)}
         onChange={(v) => onContext({ siteId: v, categoryId: null, clientId: contributor ? (sites.find((s) => s.site_id === v)?.company?.company_id ?? null) : ctx.clientId })}
       />
       <Select<number>
@@ -61,6 +64,7 @@ export function ContextFields(props: {
         options={categories}
         emptyText={site ? "This site reports no categories" : "Choose a site first"}
         loading={props.categoryLoading}
+        disabled={props.disabled}
         onChange={(v) => onContext({ categoryId: v })}
       />
     </>

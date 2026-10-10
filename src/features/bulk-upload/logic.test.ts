@@ -20,7 +20,7 @@ import {
   unmapped,
 } from "./logic";
 import { historicalFileProblem, historicalSkippedMatrix, monthLabel } from "./historical";
-import type { HistoricalResult } from "../../services/historicalImportService";
+import type { HistoricalResult } from "./api";
 
 const col = (pk_id: number, column_name: string, column_type = "text"): ColumnEntity => ({ pk_id, column_name, column_type });
 

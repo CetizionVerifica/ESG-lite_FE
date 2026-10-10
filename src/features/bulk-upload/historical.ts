@@ -1,5 +1,5 @@
 import { MONTH_SHORT } from "../../ui";
-import type { HistoricalResult } from "../../services/historicalImportService";
+import type { HistoricalResult } from "./api";
 
 /** The old import's sheet format, shown as help. Column names are matched exactly. */
 export const HISTORICAL_COLUMNS: { name: string; text: string }[] = [

@@ -2,6 +2,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { getColumnConfigsBySiteAndCategory, getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { fetchPreviewRows, fetchUniqueCategories, importAllRows, uploadExcelGetHeaders } from "../../services/excelService";
 import { type HistoricalArgs, previewHistoricalImport, runHistoricalImport } from "../../services/historicalImportService";
+
+export type { HistoricalPlanRow, HistoricalResult } from "../../services/historicalImportService";
 import { getSites } from "../../services/siteService";
 import type { ColumnConfig } from "../../lib/emissions";
 import type { ImportResult, PreviewRow } from "./logic";
