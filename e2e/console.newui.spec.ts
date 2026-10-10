@@ -119,6 +119,9 @@ test("onboard client opens the onboarding page and load errors offer a retry", a
   await page.goto("/console");
   await expect(page.getByText("Database is down")).toBeVisible();
   await expect(page.getByRole("button", { name: /Retry|Try again/ }).first()).toBeVisible();
+  // Nothing could be checked, so the gaps panel must not claim everyone is set up.
+  await expect(page.getByText("Couldn't check setup.")).toBeVisible();
+  await expect(page.getByText("Every active client is fully set up.")).toHaveCount(0);
   await page.getByRole("button", { name: "Onboard client" }).click();
   await expect(page).toHaveURL(/\/clients\/new$/);
 });

@@ -1,8 +1,8 @@
 import { Upload } from "lucide-react";
-import { EmptyState, SkeletonText, cn, panel, timeAgo } from "../../../ui";
+import { Button, EmptyState, SkeletonText, cn, panel, timeAgo } from "../../../ui";
 import type { Activity } from "../logic";
 
-export function RecentActivity({ items, loading, error }: { items: Activity[]; loading: boolean; error: boolean }) {
+export function RecentActivity({ items, loading, error, onRetry }: { items: Activity[]; loading: boolean; error: boolean; onRetry: () => void }) {
   return (
     <section aria-labelledby="recent-activity" className={cn(panel, "p-4")}>
       <h2 id="recent-activity" className="mb-3 text-sm font-semibold text-ink">
@@ -11,7 +11,12 @@ export function RecentActivity({ items, loading, error }: { items: Activity[]; l
       {loading ? (
         <SkeletonText lines={3} />
       ) : error ? (
-        <p className="text-sm text-muted">Couldn't load recent uploads.</p>
+        <div className="space-y-2 text-sm">
+          <p className="text-muted">Couldn't load recent uploads.</p>
+          <Button size="sm" onClick={onRetry}>
+            Retry
+          </Button>
+        </div>
       ) : items.length === 0 ? (
         <EmptyState icon={Upload} title="No factor uploads yet." />
       ) : (

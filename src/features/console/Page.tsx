@@ -118,8 +118,8 @@ export default function ConsolePage() {
           />
         </div>
         <div className="min-w-0 space-y-4">
-          <SetupGaps gaps={gaps} loading={loading && !coreError} />
-          <RecentActivity items={activity} loading={batches.isPending} error={!!batches.error} />
+          <SetupGaps gaps={gaps} loading={loading && !coreError} error={!!coreError} partial={partial > 0} onRetry={retryCore} />
+          <RecentActivity items={activity} loading={batches.isPending} error={!!batches.error} onRetry={() => void batches.refetch()} />
         </div>
       </div>
     </div>

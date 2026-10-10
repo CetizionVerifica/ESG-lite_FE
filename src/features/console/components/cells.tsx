@@ -26,7 +26,7 @@ export function ThemeSwatch({ row }: { row: ClientRow }) {
   const b = row.brand;
   if (!b?.updatedAt) return <span className="text-muted">Default</span>;
   return (
-    <span className="flex items-center gap-1" aria-label={`${b.primary} and ${b.accent}`}>
+    <span className="flex items-center gap-1" role="img" aria-label="Custom theme" title={`${b.primary} · ${b.accent}`}>
       <span className="size-4 rounded-chip border border-line" style={{ background: b.primary }} />
       <span className="size-4 rounded-chip border border-line" style={{ background: b.accent }} />
     </span>
