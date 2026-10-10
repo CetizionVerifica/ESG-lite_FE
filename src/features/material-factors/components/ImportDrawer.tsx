@@ -34,6 +34,8 @@ export function ImportDrawer(props: Props) {
   const [readError, setReadError] = useState<string | null>(null);
   const [mapping, setMapping] = useState<Mapping>({});
   const [companyId, setCompanyId] = useState<number | null>(props.defaultCompanyId);
+  // The rows the server last refused; Import stays off until the file, columns or target change.
+  const [refused, setRefused] = useState<object | null>(null);
   const run = useImportFactors();
 
   const reset = () => {
@@ -42,6 +44,7 @@ export function ImportDrawer(props: Props) {
     setSheet(null);
     setReadError(null);
     setMapping({});
+    setRefused(null);
     run.reset();
   };
   const close = () => {
@@ -81,9 +84,17 @@ export function ImportDrawer(props: Props) {
   const clientOk = !!sheet && missing.length === 0 && withProblems.length === 0;
   // The server dry run also finds rows already in the library. If it can't run, the import itself still checks everything.
   const check = useImportCheck(body, clientOk && step === 1);
-  const canImport = clientOk && !run.isPending && (check.data ? check.data.valid : !!check.error);
+  const canImport = clientOk && !run.isPending && refused !== body && (check.data ? check.data.valid : !!check.error);
 
-  const submit = () => run.mutate(body, { onSuccess: () => setStep(2) });
+  const submit = () =>
+    run.mutate(body, {
+      onSuccess: () => setStep(2),
+      onError: (e) => {
+        const status = (e as { response?: { status?: number } })?.response?.status;
+        // 400 / 409: the rows themselves were refused, so the same rows would fail again.
+        if (status === 400 || status === 409) setRefused(body);
+      },
+    });
 
   const companyOptions = [{ value: 0, label: "Global library" }, ...props.companies.map((c) => ({ value: c.company_id, label: c.name }))];
   const headerOptions = (sheet?.headers ?? []).map((h) => ({ value: h, label: h }));
@@ -185,14 +196,16 @@ export function ImportDrawer(props: Props) {
                   <p className="text-sm text-muted" role="status">
                     {check.isFetching
                       ? `All ${parsed.length} rows look complete. Checking them against the library…`
-                      : check.data?.valid
+                      : refused === body
+                        ? `Nothing was imported. Fix the rows below, then choose the sheet again.`
+                        : check.data?.valid
                         ? `All ${parsed.length} rows are ready to import.`
                         : check.data
                           ? `Some rows can't be imported yet.`
-                          : `All ${parsed.length} rows look complete. The library checks for duplicates when you import.`}
+                          : `All ${parsed.length} rows look complete. We couldn't check them against the library, so duplicates are checked when you import; nothing is saved if any row fails.`}
                   </p>
                 )}
-                {!check.isFetching && check.data && !check.data.valid && (
+                {!check.isFetching && check.data && !check.data.valid && refused !== body && (
                   <ServerErrors
                     title="Fix these rows before importing"
                     errors={check.data.errors}
@@ -206,7 +219,7 @@ export function ImportDrawer(props: Props) {
               </section>
             )}
 
-            {!!run.error && (
+            {!!run.error && (refused === null || refused === body) && (
               <ServerErrors errors={serverErrors} lines={parsed.map((p) => p.line)} fallback={errorMessage(run.error, "Nothing was imported. Try again.")} onOpenExisting={props.onOpenExisting} />
             )}
           </div>

@@ -87,6 +87,9 @@ async function signIn(page: Page, role: "Superadmin" | "Manager") {
 
       if (path.endsWith("/pcf/material-factors/import")) {
         const rows = body!.rows as Record<string, unknown>[];
+        // Added by someone else between the dry run and the import.
+        const raced = rows.findIndex((r) => r.name === "Raced row");
+        if (raced >= 0) return json({ message: "Some rows already exist", errors: [{ index: raced, message: "A factor with this name, geography and year already exists", existing_id: 1 }] }, 409);
         const made = rows.map((r, i) => ({ ...base, ...r, material_factor_id: 100 + i, company_id: body!.company_id ?? 1 }) as Factor);
         factors = [...factors, ...made];
         return json({ created: made.length, factors: made }, 201);
@@ -197,4 +200,19 @@ test("a manager sees licensed values masked and edits their own factor", async (
   await own.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText('Factor "Supplier PVC compound" saved')).toBeVisible();
   expect(calls).toEqual([{ method: "PATCH", path: expect.stringMatching(/\/pcf\/material-factors\/3$/), body: { value_kgco2e: 2.3 } }]);
+});
+
+test("an import refused after the check keeps Import off until the sheet changes", async ({ page }) => {
+  const { calls } = await signIn(page, "Manager");
+  await page.goto("/factors/materials");
+  await page.getByRole("button", { name: "Import sheet" }).click();
+  const imp = page.getByRole("dialog", { name: "Import sheet" });
+  const csv = ["Material,Group,Unit,kgCO2e", "Raced row,steel,kg,2"].join("\n");
+  await imp.locator('input[type="file"]').setInputFiles({ name: "factors.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(imp.getByText("All 1 rows are ready to import.")).toBeVisible();
+  await imp.getByRole("button", { name: "Import 1 factor" }).click();
+  await expect(imp.getByText("Nothing was imported. Fix the rows below, then choose the sheet again.")).toBeVisible();
+  await expect(imp.getByRole("button", { name: "Open existing" })).toBeVisible();
+  await expect(imp.getByRole("button", { name: "Import 1 factor" })).toBeDisabled();
+  expect(calls.filter((c) => c.path.endsWith("/import"))).toHaveLength(1);
 });
