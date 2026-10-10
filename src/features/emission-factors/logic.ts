@@ -193,12 +193,29 @@ export type FactorPayload = {
   emission_category_name?: string;
 };
 
-/** Body for POST/PUT. Blank text fields are left out (the server stores null). */
+/** Body for POST. Blank text fields are left out (the server stores null). */
 export function toPayload(d: FactorDraft): FactorPayload {
   const out: FactorPayload = { site_id: d.siteId!, category_id: d.categoryId!, year: d.year!, factor_value: d.value! };
   if (d.unit.trim()) out.denominator_unit = d.unit.trim();
   if (d.source.trim()) out.source = d.source.trim();
   if (d.name.trim()) out.emission_category_name = d.name.trim();
+  return out;
+}
+
+/**
+ * Body for PUT: only the fields that changed, so an unchanged site/category/year/name doesn't trip the
+ * server's duplicate check. A cleared text field is sent as "" (the server stores null), not left out.
+ */
+export function toUpdatePayload(d: FactorDraft, row: Factor): Partial<FactorPayload> {
+  const base = draftFrom(row);
+  const out: Partial<FactorPayload> = {};
+  if (d.siteId !== base.siteId) out.site_id = d.siteId!;
+  if (d.categoryId !== base.categoryId) out.category_id = d.categoryId!;
+  if (d.year !== base.year) out.year = d.year!;
+  if (d.value !== base.value) out.factor_value = d.value!;
+  if (d.unit.trim() !== base.unit.trim()) out.denominator_unit = d.unit.trim();
+  if (d.source.trim() !== base.source.trim()) out.source = d.source.trim();
+  if (d.name.trim() !== base.name.trim()) out.emission_category_name = d.name.trim();
   return out;
 }
 
@@ -216,6 +233,15 @@ export function batchLabel(batchId: string | null | undefined, batches: Batch[] 
   if (!batchId) return "Added by hand";
   const b = batches?.find((x) => x.upload_batch_id === batchId);
   return b ? `Import · ${formatDay(b.uploaded_at)}` : "Import";
+}
+
+/**
+ * Everything DELETE /batch/:id removes: one import can span several sites and categories (the list
+ * shows one row per site and category), so the confirm adds them all up.
+ */
+export function batchScope(batchId: string, batches: Batch[] | undefined): { count: number; parts: string[] } {
+  const rows = (batches ?? []).filter((b) => b.upload_batch_id === batchId);
+  return { count: rows.reduce((n, b) => n + b.count, 0), parts: rows.map((b) => `${b.site_name} · ${b.category_name}`) };
 }
 
 export function formatDay(iso: string | null | undefined): string {
