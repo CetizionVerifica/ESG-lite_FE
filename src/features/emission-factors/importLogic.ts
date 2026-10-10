@@ -34,6 +34,19 @@ const COLS = {
 };
 
 /**
+ * A factor from a cell. Numbers pass through; text may use comma thousands
+ * grouping ("1,234.5"). Anything else, such as a decimal comma ("0,5"), is NaN
+ * so the row is reported rather than read as a different number.
+ */
+export function parseFactor(cell: unknown): number {
+  if (typeof cell === "number") return cell;
+  const s = String(cell ?? "").trim();
+  if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) return Number(s.replace(/,/g, ""));
+  if (/^-?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s)) return Number(s);
+  return NaN;
+}
+
+/**
  * Rows of a simple sheet (first sheet, header row: year, factor_value, unit,
  * source, name). Rows with no year or factor are reported by Excel row number.
  */
@@ -49,7 +62,7 @@ export function parseSimpleRows(json: Record<string, unknown>[]): SimpleParse {
       return;
     }
     const y = parseInt(String(year), 10);
-    const v = parseFloat(String(value).replace(/,/g, ""));
+    const v = parseFactor(value);
     if (!Number.isFinite(y) || !Number.isFinite(v)) {
       errors.push(`Row ${excelRow}: year or factor isn't a number.`);
       return;
@@ -173,24 +186,11 @@ export function planUpload(rows: ImportRow[], map: CategoryMap, target: Target, 
   return { jobs, notAssigned, unmappedGroups, rowCount };
 }
 
-export type JobResult = { site: string; category: string; categoryId: number; siteId: number; created: number; skipped: number; error: string | null };
+/** One bulk call's outcome; `problems` are the server's reasons for each skipped row. */
+export type JobResult = { site: string; category: string; categoryId: number; siteId: number; created: number; skipped: number; problems: string[]; error: string | null };
 
 export function totals(results: JobResult[]): { created: number; skipped: number; failed: number } {
   return results.reduce((t, r) => ({ created: t.created + r.created, skipped: t.skipped + r.skipped, failed: t.failed + (r.error ? 1 : 0) }), { created: 0, skipped: 0, failed: 0 });
-}
-
-/** Site and category pairs that got new factors: each can have a data-entry form generated. */
-export function formTargets(results: JobResult[]): { siteId: number; site: string; categoryId: number; category: string }[] {
-  const seen = new Set<string>();
-  const out: { siteId: number; site: string; categoryId: number; category: string }[] = [];
-  for (const r of results) {
-    const k = `${r.siteId}:${r.categoryId}`;
-    if (r.created > 0 && !seen.has(k)) {
-      seen.add(k);
-      out.push({ siteId: r.siteId, site: r.site, categoryId: r.categoryId, category: r.category });
-    }
-  }
-  return out;
 }
 
 export const SHEET_ACCEPT = [".xlsx", ".xls"];

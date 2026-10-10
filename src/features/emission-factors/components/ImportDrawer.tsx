@@ -323,6 +323,10 @@ export function ImportDrawer({ onClose, sites, companies, categories, defaults }
               rows={rows}
               shown={previewRows(rows, filter)}
               update={(key, patch) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)))}
+              setExcluded={(keys, excluded) => {
+                const set = new Set(keys);
+                setRows((rs) => rs.map((r) => (set.has(r.key) ? { ...r, excluded } : r)));
+              }}
               filter={filter}
               onFilter={setFilter}
               groups={groups.filter(Boolean)}

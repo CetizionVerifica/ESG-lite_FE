@@ -134,7 +134,7 @@ async function signIn(page: Page) {
 
       if (path.endsWith("/admin/emission-factors/bulk") && method === "POST") {
         const sent = (request.postDataJSON() as { factors: unknown[] }).factors;
-        return json({ created: sent.length - 1, skipped: 1 }, 201);
+        return json({ created: sent.length - 1, skipped: 1, errors: ["Emission factor already exists for site 1, category 1, year 2024"] }, 201);
       }
       const one = /\/admin\/emission-factors\/(\d+)$/.exec(path);
       const body = (isJson ? request.postDataJSON() : null) as Record<string, never> | null;
@@ -318,6 +318,13 @@ test("a superadmin imports a simple sheet to all of a client's sites", async ({ 
   await drawer.getByRole("checkbox", { name: "Include row 4" }).uncheck();
   await drawer.getByRole("textbox", { name: "Source, row 3" }).fill("DEFRA 2024");
   await expect(drawer.getByTestId("import-count")).toHaveText("2 factors to save");
+  // Rows the filters show can be included or excluded together.
+  await drawer.getByRole("combobox", { name: "Year" }).selectOption({ label: "2023" });
+  await expect(drawer.getByRole("button", { name: "Exclude all shown" })).toBeDisabled();
+  await drawer.getByRole("button", { name: "Include all shown" }).click();
+  await expect(drawer.getByTestId("import-count")).toHaveText("3 factors to save");
+  await drawer.getByRole("button", { name: "Exclude all shown" }).click();
+  await expect(drawer.getByTestId("import-count")).toHaveText("2 factors to save");
   await drawer.getByRole("button", { name: "Save factors" }).click();
 
   // Result: only Hidd reports Fuel; Pune belongs to another client and isn't listed.
@@ -333,7 +340,7 @@ test("a superadmin imports a simple sheet to all of a client's sites", async ({ 
       ],
     },
   });
-  await expect(drawer.getByRole("link", { name: "Hidd · Fuel" })).toHaveAttribute("href", "/capture/forms?site=1&category=1&generate=1");
+  await expect(drawer.getByRole("list", { name: "Skipped at Hidd, Fuel" })).toContainText("Emission factor already exists for site 1, category 1, year 2024");
   await drawer.getByRole("button", { name: "Done" }).click();
   await expect(drawer).toHaveCount(0);
 });

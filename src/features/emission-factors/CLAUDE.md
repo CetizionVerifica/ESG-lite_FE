@@ -34,5 +34,9 @@ Category filter on the list shows only the selected site's categories (consisten
   - The target (Client, "Save to" a site or all sites of the client) is chosen on Upload, not Preview as the blueprint drew it, because the AI's category suggestions and the Map step need it.
   - Preview: rows editable, excludable, filtered by group/year, searchable; invalid rows block saving; every included row is saved whatever the filters show.
   - Saving: one bulk call per site and group, one after the other so a failing site doesn't stop the rest; `global_category_name` = the full name, as Smart Upload did. A client-wide import skips sites that don't report the category and lists them. The AI upload record is stamped with the outcome.
-  - Result links each new site+category to `/capture/forms?site=&category=&generate=1` for P24 to honour.
+  - Result lists each site's created and skipped counts with the server's reason for every skipped row (bulk `errors[]`: already exists, site or category not found, missing fields).
+  - Factor text: comma thousands grouping ("1,234.5") is read; anything else, such as a decimal comma ("0,5"), is reported as an invalid row instead of being guessed.
+  - Preview has "Exclude all shown" / "Include all shown" for the rows the filters show (replaces Smart Upload's include/exclude-all). The old manual "Add row" isn't carried over: add single factors with Add factor.
+  - `global_category_name` (= the full name) is sent on simple sheets too, as Smart Upload did for AI reads.
+  - **Gap, for P24:** the old in-place "Generate data-entry forms" after an import is not offered. Add it to the Result step once P24's new Forms page reads `?site=&category=&generate=1` (/capture/forms is still the legacy page, which ignores it).
 - Old page and modals stay until the flag is removed (as other modules do); with the flag on, `/emission-factors` redirects to `/factors`.

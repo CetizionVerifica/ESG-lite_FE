@@ -137,10 +137,11 @@ export function useImportFactors() {
       for (const job of plan.jobs) {
         const base = { site: job.site.name, siteId: job.site.site_id, category: categoryName(job.categoryId), categoryId: job.categoryId };
         try {
-          const res = (await bulkCreateEmissionFactors(job.factors)) as { created?: number; skipped?: number };
-          results.push({ ...base, created: res.created ?? 0, skipped: res.skipped ?? 0, error: null });
+          const res = (await bulkCreateEmissionFactors(job.factors)) as { created?: number; skipped?: number; errors?: unknown };
+          const problems = Array.isArray(res.errors) ? res.errors.map(String) : [];
+          results.push({ ...base, created: res.created ?? 0, skipped: res.skipped ?? 0, problems, error: null });
         } catch (e) {
-          results.push({ ...base, created: 0, skipped: 0, error: errorMessage(e, "The server didn't save these.") });
+          results.push({ ...base, created: 0, skipped: 0, problems: [], error: errorMessage(e, "The server didn't save these.") });
         }
       }
       if (uploadId) {

@@ -5,10 +5,10 @@ import {
   type ParseResult,
   detectedColumns,
   distinctYears,
-  formTargets,
   groupsOf,
   initialMap,
   needsValueColumn,
+  parseFactor,
   parseSimpleRows,
   planUpload,
   previewRows,
@@ -52,6 +52,13 @@ describe("simple sheet", () => {
       ["r3", 2023, 1430, "kg", "R-134a"],
       ["r4", 2024, 0, "", ""],
     ]);
+  });
+  it("reads comma thousands grouping but reports a decimal comma", () => {
+    expect([1.5, "2.68", " 1,234.5 ", "1,430", "-0.5", ".5", "1e-3"].map(parseFactor)).toEqual([1.5, 2.68, 1234.5, 1430, -0.5, 0.5, 0.001]);
+    for (const bad of ["0,5", "1,23", "12,34,567", "2.68 kg", "", "1.2.3", null]) expect(parseFactor(bad)).toBeNaN();
+    const { rows, errors } = parseSimpleRows([{ year: 2024, factor_value: "0,5" }]);
+    expect(rows).toEqual([]);
+    expect(errors).toEqual(["Row 2: year or factor isn't a number."]);
   });
   it("reports rows with a missing or non-numeric year or factor by Excel row", () => {
     const { rows, errors } = parseSimpleRows([{ year: 2024 }, { year: "soon", factor_value: 1 }, { year: 2024, factor_value: " " }]);
@@ -105,11 +112,10 @@ describe("upload plan", () => {
 });
 
 describe("result", () => {
-  const r = (site: string, siteId: number, created: number, error: string | null = null): JobResult => ({ site, siteId, category: "Fuel", categoryId: 1, created, skipped: 1, error });
-  it("adds up and offers forms only where factors were added", () => {
+  const r = (site: string, siteId: number, created: number, error: string | null = null): JobResult => ({ site, siteId, category: "Fuel", categoryId: 1, created, skipped: 1, problems: [], error });
+  it("adds up created, skipped and failed sites", () => {
     const results = [r("Hidd", 1, 3), r("Sitra", 2, 0), r("Pune", 3, 0, "Site not found")];
     expect(totals(results)).toEqual({ created: 3, skipped: 3, failed: 1 });
-    expect(formTargets(results)).toEqual([{ siteId: 1, site: "Hidd", categoryId: 1, category: "Fuel" }]);
   });
 });
 

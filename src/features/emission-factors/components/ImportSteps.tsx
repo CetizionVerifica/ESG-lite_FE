@@ -1,5 +1,4 @@
-import { Link } from "react-router-dom";
-import { CheckCircle2, FileSpreadsheet, RefreshCw, Sparkles } from "lucide-react";
+import { FileSpreadsheet, RefreshCw, Sparkles } from "lucide-react";
 import {
   Badge,
   type BadgeTone,
@@ -25,9 +24,9 @@ import {
   SHEET_MAX,
   type UploadPlan,
   detectedColumns,
-  formTargets,
   groupsOf,
   needsValueColumn,
+  parseFactor,
   rowProblem,
   suggestionFor,
   totals,
@@ -306,6 +305,8 @@ export function PreviewStep(props: {
   rows: ImportRow[];
   shown: ImportRow[];
   update: (key: string, patch: Partial<ImportRow>) => void;
+  /** Includes or excludes every row the filters show. */
+  setExcluded: (keys: string[], excluded: boolean) => void;
   filter: { group: string | null; year: number | null; q: string };
   onFilter: (f: { group: string | null; year: number | null; q: string }) => void;
   groups: string[];
@@ -318,6 +319,8 @@ export function PreviewStep(props: {
 }) {
   const { update } = props;
   const invalid = props.rows.filter((r) => !r.excluded && rowProblem(r));
+  const shownKeys = props.shown.map((r) => r.key);
+  const shownExcluded = props.shown.filter((r) => r.excluded).length;
   const numberCell = (r: ImportRow, field: "year" | "factor_value", label: string) => (
     <input
       type="text"
@@ -326,7 +329,7 @@ export function PreviewStep(props: {
       defaultValue={Number.isFinite(r[field]) ? String(r[field]) : ""}
       disabled={r.excluded}
       onBlur={(e) => {
-        const n = field === "year" ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
+        const n = field === "year" ? parseInt(e.target.value, 10) : parseFactor(e.target.value);
         update(r.key, { [field]: Number.isFinite(n) ? n : NaN });
       }}
       className={cn(inputBase, "h-8 w-24 px-2 font-num", focusRing)}
@@ -432,6 +435,14 @@ export function PreviewStep(props: {
           className="w-36"
         />
         <TextField label="Search rows" value={props.filter.q} onChange={(v) => props.onFilter({ ...props.filter, q: v })} className="w-60" />
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" disabled={shownExcluded === shownKeys.length} onClick={() => props.setExcluded(shownKeys, true)}>
+            Exclude all shown
+          </Button>
+          <Button size="sm" variant="secondary" disabled={shownExcluded === 0} onClick={() => props.setExcluded(shownKeys, false)}>
+            Include all shown
+          </Button>
+        </div>
       </div>
       <p className="text-xs text-muted">Every included row is saved, whatever the filters show. Factors that already exist for the same site, category, year and name are skipped.</p>
       <DataTable<ImportRow>
@@ -459,28 +470,37 @@ export function PreviewStep(props: {
 
 export function ResultStep({ results, plan }: { results: JobResult[]; plan: UploadPlan | null }) {
   const sum = totals(results);
-  const forms = formTargets(results);
   return (
     <div className="space-y-4">
       <Callout tone={sum.failed ? "warn" : "brand"} title={`${sum.created} ${sum.created === 1 ? "factor" : "factors"} added, ${sum.skipped} skipped`}>
-        {sum.skipped > 0 && "Skipped factors already existed for that site, category, year and name. "}
+        {sum.skipped > 0 && "The reasons for skipped factors are listed under each site. "}
         {sum.failed > 0 && `${sum.failed} ${sum.failed === 1 ? "site" : "sites"} failed; the others were saved.`}
       </Callout>
       <ul className="divide-y divide-line rounded-control border border-line" aria-label="Saved per site">
         {results.map((r, i) => (
-          <li key={`${r.siteId}-${r.categoryId}-${i}`} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-            <span className="font-medium text-ink">{r.site}</span>
-            <span className="text-muted">{r.category}</span>
-            <span className="ml-auto flex items-center gap-2">
-              {r.error ? (
-                <Badge tone="bad">{r.error}</Badge>
-              ) : (
-                <>
-                  <Badge tone="good">{r.created} added</Badge>
-                  {r.skipped > 0 && <Badge tone="neutral">{r.skipped} skipped</Badge>}
-                </>
-              )}
-            </span>
+          <li key={`${r.siteId}-${r.categoryId}-${i}`} className="px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-ink">{r.site}</span>
+              <span className="text-muted">{r.category}</span>
+              <span className="ml-auto flex items-center gap-2">
+                {r.error ? (
+                  <Badge tone="bad">{r.error}</Badge>
+                ) : (
+                  <>
+                    <Badge tone="good">{r.created} added</Badge>
+                    {r.skipped > 0 && <Badge tone="neutral">{r.skipped} skipped</Badge>}
+                  </>
+                )}
+              </span>
+            </div>
+            {r.problems.length > 0 && (
+              <ul className="mt-1 list-disc pl-5 text-xs text-muted" aria-label={`Skipped at ${r.site}, ${r.category}`}>
+                {r.problems.slice(0, 5).map((p, j) => (
+                  <li key={j}>{p}</li>
+                ))}
+                {r.problems.length > 5 && <li>and {r.problems.length - 5} more.</li>}
+              </ul>
+            )}
           </li>
         ))}
       </ul>
@@ -493,25 +513,6 @@ export function ResultStep({ results, plan }: { results: JobResult[]; plan: Uplo
         <Callout tone="info" title="Groups skipped">
           No category was chosen for: {plan.unmappedGroups.join(", ")}.
         </Callout>
-      )}
-      {forms.length > 0 && (
-        <div className="space-y-2 rounded-control border border-line p-3">
-          <p className="flex items-center gap-1.5 text-sm font-medium text-ink">
-            <CheckCircle2 aria-hidden className="size-4 text-good" /> Generate data-entry forms for these categories
-          </p>
-          <ul className="flex flex-wrap gap-2">
-            {forms.map((f) => (
-              <li key={`${f.siteId}-${f.categoryId}`}>
-                <Link
-                  to={`/capture/forms?site=${f.siteId}&category=${f.categoryId}&generate=1`}
-                  className={cn("inline-flex rounded-chip border border-line px-2.5 py-1 text-sm text-brand hover:bg-tint", focusRing)}
-                >
-                  {f.site} · {f.category}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
       )}
     </div>
   );
