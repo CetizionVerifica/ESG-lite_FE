@@ -4,7 +4,7 @@ import { getMappings } from "../../services/categoryMappingService";
 import { deleteCompany, getCompanies, getReportingCalendar, onboardCompany, updateCompany } from "../../services/companyService";
 import { getSites } from "../../services/siteService";
 import { type EmissionThreshold, createThreshold, getThresholds, updateThreshold } from "../../services/thresholdService";
-import { getUsers } from "../../services/userService";
+import { getUsers, sendUserInvite } from "../../services/userService";
 import type { AdminUser, Company, Site } from "./logic";
 import { type OnboardDraft, toBrandUpdate, toOnboardForm } from "./onboarding";
 
@@ -105,7 +105,13 @@ export function useSaveGuideline(companyId: number) {
 
 export const useReportingCalendar = () => useQuery({ queryKey: [...keys.all, "calendar"], queryFn: getReportingCalendar, staleTime: Infinity, retry: 1 });
 
-export type OnboardResult = { companyId: number; companyName: string; warnings: string[] };
+export type OnboardResult = {
+  companyId: number;
+  companyName: string;
+  /** Set when the admin was invited by email: whether the email went out. */
+  invite: { sent: boolean; email: string } | null;
+  warnings: string[];
+};
 
 /**
  * Creates the company, its main site and admin (one request, with the light
@@ -116,7 +122,11 @@ export function useOnboard() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (d: OnboardDraft): Promise<OnboardResult> => {
-      const res = (await onboardCompany(toOnboardForm(d))) as { company?: { company_id: number; name: string }; warnings?: string[] };
+      const res = (await onboardCompany(toOnboardForm(d))) as {
+        company?: { company_id: number; name: string };
+        invite?: { sent: boolean };
+        warnings?: string[];
+      };
       const company = res.company;
       if (!company) throw new Error("The server didn't return the new company.");
       const warnings = [...(res.warnings ?? [])];
@@ -136,8 +146,12 @@ export function useOnboard() {
           warnings.push(`Dark logo was not saved: ${errorMessage(e, "the upload failed")}. Upload it in Brand theme.`);
         }
       }
-      return { companyId: company.company_id, companyName: company.name, warnings };
+      const invite = d.sendInvite ? { sent: !!res.invite?.sent, email: d.email.trim() } : null;
+      return { companyId: company.company_id, companyName: company.name, invite, warnings };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
   });
 }
+
+/** Emails a person a fresh link to choose their password. */
+export const useSendInvite = () => useMutation({ mutationFn: (userId: number) => sendUserInvite(userId) });
