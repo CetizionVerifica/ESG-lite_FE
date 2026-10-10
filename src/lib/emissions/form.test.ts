@@ -50,6 +50,24 @@ describe("form model (dependent selects and mapping)", () => {
     expect(columnOptionsFor(m, waste.columns[2], "am").map((o) => o.id)).toEqual(["ol", "lf"]);
   });
 
+  it("uses the row's own grandparent when two share a parent choice", () => {
+    const transport = toFormModel({
+      ...waste,
+      columns: [col(1, "mode"), col(2, "vehicle"), col(3, "fuel"), col(4, "distance", "number")],
+      column_options: { "1": [{ id: "Road", label: "Road" }, { id: "Rail", label: "Rail" }] },
+      column_dependencies: { vehicle: "mode", fuel: "vehicle" },
+      dependent_options: {
+        vehicle: { Road: [{ id: "Van", label: "Van" }], Rail: [{ id: "Van", label: "Van" }] },
+        fuel: { "Rail|Van": [{ id: "Electric", label: "Electric" }], "Road|Van": [{ id: "Diesel", label: "Diesel" }] },
+      },
+    });
+    const fuel = col(3, "fuel");
+    expect(columnOptionsFor(transport, fuel, "Van", "Road").map((o) => o.id)).toEqual(["Diesel"]);
+    expect(columnOptionsFor(transport, fuel, "Van", "Rail").map((o) => o.id)).toEqual(["Electric"]);
+    // A grandparent with no list of its own never borrows another's.
+    expect(columnOptionsFor(transport, fuel, "Van", "Air")).toEqual([]);
+  });
+
   it("falls back to case-insensitive parent labels", () => {
     expect(columnOptionsFor(m, waste.columns[2], "bk").map((o) => o.id)).toEqual(["cl"]);
   });

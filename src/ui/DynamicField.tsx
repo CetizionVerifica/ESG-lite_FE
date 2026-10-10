@@ -32,7 +32,8 @@ export function DynamicField({ model, column, row, onChange, error, labelExtra }
   );
   const parent = parentColumnOf(model, name);
   const parentValue = parent ? rowValue(row, parent) : undefined;
-  const options = columnOptionsFor(model, column, parentValue);
+  const grandparent = parent ? parentColumnOf(model, parent) : null;
+  const options = columnOptionsFor(model, column, parentValue, grandparent ? rowValue(row, grandparent) : undefined);
   const value = String(row[name] ?? "");
 
   if (isSelectColumn(model, column) && (options.length > 0 || isDependentColumn(model, name))) {

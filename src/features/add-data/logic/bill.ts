@@ -77,7 +77,9 @@ function toOptionIds(model: FormModel, row: ModalRow) {
       if (parent && !resolved.has(parent) && selects.some((c) => c.column_name === parent)) continue;
       const raw = row[name];
       if (raw) {
-        const options = columnOptionsFor(model, col, parent ? String(row[parent] ?? "") || undefined : undefined);
+        const grandparent = parent ? parentColumnOf(model, parent) : null;
+        const valueOf = (c: string | null) => (c ? String(row[c] ?? "") || undefined : undefined);
+        const options = columnOptionsFor(model, col, valueOf(parent), valueOf(grandparent));
         const hit = options.find((o) => lower(o.label) === lower(String(raw)));
         if (hit) row[name] = String(hit.id);
       }
