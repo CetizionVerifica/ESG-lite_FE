@@ -3,6 +3,7 @@ import type { EmissionData } from "../../services/emissionService";
 import {
   type LabelConfig,
   activityFields,
+  breakdownRows,
   attachFera,
   categoriesFor,
   keyActivity,
@@ -129,5 +130,25 @@ describe("activity labels", () => {
       { key: "Litres", value: "250" },
       { key: "meta", value: '{"a":1}' },
     ]);
+  });
+});
+
+describe("breakdownRows", () => {
+  const groups = [
+    { emission_category: "Diesel", entries: 2, total_emission: 1, consumption: 300, unit: "litre" },
+    { emission_category: "Petrol", entries: 1, total_emission: 3, consumption: 100, unit: "litre" },
+  ];
+
+  it("orders by the chosen figure with shares", () => {
+    expect(breakdownRows(groups, "emissions").map((r) => [r.label, r.share])).toEqual([["Petrol", 75], ["Diesel", 25]]);
+    expect(breakdownRows(groups, "consumption").map((r) => [r.label, r.value, r.unit, r.share])).toEqual([
+      ["Diesel", 300, "litre", 75],
+      ["Petrol", 100, "litre", 25],
+    ]);
+  });
+
+  it("gives no consumption shares across different units", () => {
+    const mixed = [{ ...groups[0], unit: "kg" }, groups[1]];
+    expect(breakdownRows(mixed, "consumption").map((r) => r.share)).toEqual([null, null]);
   });
 });

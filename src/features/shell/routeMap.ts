@@ -79,8 +79,8 @@ export const SHELL_ROUTES = [
   { id: "material-factors", path: "/factors/materials", title: "Material factors", crumb: ["Factors", "Material factors"], roles: ["Manager", "Superadmin"], spec: "C04" },
   { id: "thresholds", path: "/factors/thresholds", title: "Thresholds", crumb: ["Factors", "Thresholds"], roles: ["Superadmin"], spec: "P26" },
   { id: "capture-columns", path: "/capture/columns", title: "Columns", crumb: ["Capture", "Columns"], roles: ["Superadmin"], spec: "P24" },
-  { id: "capture-forms", path: "/capture/forms", title: "Column configs", crumb: ["Capture", "Column configs"], roles: ["Superadmin"], spec: "P24" },
-  { id: "capture-form", path: "/capture/forms/:id", title: "Column config", crumb: ["Capture", "Column configs", "Edit"], roles: ["Superadmin"], spec: "P24" },
+  { id: "capture-forms", path: "/capture/forms", title: "Data-entry forms", crumb: ["Capture", "Data-entry forms"], roles: ["Superadmin"], spec: "P24" },
+  { id: "capture-form", path: "/capture/forms/:id", title: "Form", crumb: ["Capture", "Data-entry forms", "Edit"], roles: ["Superadmin"], spec: "P24" },
   { id: "bulk-upload", path: "/capture/upload", title: "Bulk upload", crumb: ["Capture", "Bulk upload"], roles: ["Superadmin"], spec: "P27" },
 ] as const satisfies readonly ShellRoute[];
 

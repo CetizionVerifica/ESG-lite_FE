@@ -3,7 +3,29 @@ import { Avatar, Badge, type Column } from "../../../ui";
 import { type ClientRow, setupPercent } from "../logic";
 import { SetupBar, ThemeSwatch } from "./cells";
 
-export function clientColumns(): Column<ClientRow>[] {
+/** `month`: the summary loaded, so the "This month" column has data. */
+export function clientColumns(opts: { month: boolean } = { month: false }): Column<ClientRow>[] {
+  const month: Column<ClientRow>[] = opts.month
+    ? [
+        {
+          id: "month",
+          header: "This month",
+          sortable: true,
+          width: "9rem",
+          value: (r) => (r.month ? `${r.month.entries} entries, ${r.month.pending} pending` : ""),
+          sortValue: (r) => r.month?.entries ?? -1,
+          cell: (r) =>
+            r.month ? (
+              <span className="flex flex-col leading-tight">
+                <span className="font-num text-ink">{r.month.entries}</span>
+                <span className="text-xs text-muted">{r.month.pending ? `${r.month.pending} pending` : "none pending"}</span>
+              </span>
+            ) : (
+              <span className="text-muted">—</span>
+            ),
+        },
+      ]
+    : [];
   return [
     {
       id: "client",
@@ -31,6 +53,7 @@ export function clientColumns(): Column<ClientRow>[] {
       sortValue: (r) => (r.active ? (r.completeness ?? -1) : 2),
       cell: (r) => <SetupBar row={r} />,
     },
+    ...month,
     {
       id: "theme",
       header: "Theme",

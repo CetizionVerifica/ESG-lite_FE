@@ -167,7 +167,7 @@ describe("links and text", () => {
       links,
     });
     expect(items.map((i) => [i.text, i.to])).toEqual([
-      ["12 entries waiting for approval", "/a"],
+      ["12 entries waiting for approval (all periods)", "/a"],
       ["1 person missing Sep 2025", "#t"],
       ["Diesel up 6.2% vs Aug 2025, threshold 5%", "/c/4"],
     ]);
