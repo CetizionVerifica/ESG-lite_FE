@@ -46,6 +46,12 @@ describe("validate", () => {
     expect(validate(ok, true)).toEqual({});
     expect(validate({ ...ok, password: "" }, false)).toEqual({});
   });
+
+  it("keeps a name once the person has one", () => {
+    const ok = { ...EMPTY_DRAFT, email: "a@b.co", role: "User" as const, siteIds: [1] };
+    expect(validate(ok, false, true).name).toBe("Enter a name.");
+    expect(validate(ok, false, false)).toEqual({});
+  });
 });
 
 describe("payloads", () => {

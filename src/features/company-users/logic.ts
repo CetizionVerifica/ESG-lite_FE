@@ -46,8 +46,10 @@ export function draftFromUser(u: CompanyUser): PersonDraft {
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Field errors; `creating` adds the temporary password rule (the API needs one). */
-export function validate(d: PersonDraft, creating: boolean): DraftErrors {
+export function validate(d: PersonDraft, creating: boolean, hadName = false): DraftErrors {
   const e: DraftErrors = {};
+  // The server refuses an empty name once a person has one.
+  if (hadName && !d.name.trim()) e.name = "Enter a name.";
   if (!d.email.trim()) e.email = "Enter an email address.";
   else if (!EMAIL.test(d.email.trim())) e.email = "Enter a valid email address.";
   if (!d.role) e.role = "Choose a role.";

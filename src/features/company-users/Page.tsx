@@ -24,6 +24,13 @@ import { peopleColumns } from "./components/columns";
 import { type CompanyUser, type PersonDraft, createPayload, displayName, kpis, matchesFilters, updatePayload } from "./logic";
 
 const FILTER_KEYS = ["role"];
+
+/** The server answers 500 when the database refuses because the person has entries or approvals. */
+function removeError(e: unknown, name: string): string {
+  const status = (e as { response?: { status?: number } } | null)?.response?.status;
+  if (status !== undefined && status >= 500) return `Couldn't remove ${name}: they have entries or approvals on record. Nothing was changed.`;
+  return errorMessage(e, `Couldn't remove ${name}. Nothing was changed.`);
+}
 const ROLE_OPTIONS = [
   { value: "Manager", label: "Manager" },
   { value: "User", label: "User" },
@@ -109,7 +116,7 @@ export default function CompanyUsersPage() {
         setRemoving(null);
         toast({ title: `${displayName(u)} removed`, description: "Their entries are kept." });
       },
-      onError: (e) => setRemoveErr(errorMessage(e, "Couldn't remove them. Nothing was changed.")),
+      onError: (e) => setRemoveErr(removeError(e, displayName(u))),
     });
   };
 
@@ -155,6 +162,11 @@ export default function CompanyUsersPage() {
       />
       <KpiStrip
         loading={users.isPending || sites.isPending}
+        error={users.error || sites.error ? "Couldn't load the totals." : undefined}
+        onRetry={() => {
+          if (users.error) void users.refetch();
+          if (sites.error) void sites.refetch();
+        }}
         items={[
           { label: "People", value: summary.people, primary: true },
           { label: "Managers", value: summary.managers },

@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button, Callout, Drawer, Select, TextField, Toggle, cn, focusRing } from "../../../ui";
 import {
   type CompanySite,
@@ -33,6 +33,11 @@ export function PersonDrawer(props: {
   const [draft, setDraft] = useState<PersonDraft>(() => (props.user ? draftFromUser(props.user) : EMPTY_DRAFT));
   const [shown, setShown] = useState<DraftErrors>({});
   const sitesId = useId();
+  const errorRef = useRef<HTMLDivElement>(null);
+  // Focus moves to the error so Esc still works after the Save button was disabled.
+  useEffect(() => {
+    if (props.error) errorRef.current?.focus();
+  }, [props.error]);
 
   const set = <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -42,7 +47,7 @@ export function PersonDrawer(props: {
   const toggleSite = (id: number) => set("siteIds", draft.siteIds.includes(id) ? draft.siteIds.filter((x) => x !== id) : [...draft.siteIds, id]);
 
   const submit = () => {
-    const errors = validate(draft, creating);
+    const errors = validate(draft, creating, !!props.user?.name?.trim());
     setShown(errors);
     if (Object.keys(errors).length === 0) props.onSubmit(draft);
   };
@@ -72,14 +77,13 @@ export function PersonDrawer(props: {
         }}
       >
         {props.error && (
-          // Focus moves here so Esc still works after the Save button was disabled.
-          <div key={props.error} ref={(el) => el?.focus()} tabIndex={-1} className="focus:outline-none">
+          <div ref={errorRef} tabIndex={-1} className="focus:outline-none">
             <Callout tone="warn" title={creating ? "Couldn't invite" : "Couldn't save"}>
               {props.error}
             </Callout>
           </div>
         )}
-        <TextField label="Name" value={draft.name} onChange={(v) => set("name", v)} autoComplete="off" />
+        <TextField label="Name" value={draft.name} onChange={(v) => set("name", v)} error={shown.name} autoComplete="off" />
         <TextField label="Email" type="email" required value={draft.email} onChange={(v) => set("email", v)} error={shown.email} autoComplete="off" />
         <Select<Role>
           label="Role"
@@ -138,7 +142,7 @@ export function PersonDrawer(props: {
               hideLabel
               checked={draft.sendLink}
               onChange={(v) => set("sendLink", v)}
-              inlineLabel="Email them a link to choose their own password"
+              inlineLabel="Email them a link to choose their own password (expires in 1 hour)"
             />
           </>
         )}

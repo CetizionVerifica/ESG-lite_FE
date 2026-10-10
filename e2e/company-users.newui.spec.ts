@@ -131,7 +131,7 @@ test("remove asks first and a refusal changes nothing", async ({ page }) => {
   await expect(dialog).toContainText("The entries they submitted are not deleted.");
   expect(calls).toHaveLength(0);
   await dialog.getByRole("button", { name: "Remove" }).click();
-  await expect(dialog.getByText("Internal server error")).toBeVisible();
+  await expect(dialog.getByText("Couldn't remove Omar Saleh: they have entries or approvals on record. Nothing was changed.")).toBeVisible();
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(table(page).getByRole("row")).toHaveCount(2);
 });
