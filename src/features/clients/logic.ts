@@ -184,7 +184,7 @@ export function cascadeItems(r: Pick<ClientRow, "sites" | "users">, hasThreshold
   const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
   return [
     ...(r.sites.length ? [`${n(r.sites.length, "site", "sites")}, with their categories, capture columns, factors and products`] : []),
-    ...(r.users.length ? [`Its people's accounts (${n(r.users.length, "person", "people")}); anyone who also works for another client keeps theirs`] : []),
+    ...(r.users.length ? ["The accounts of people who work only for this client; anyone who also works for another client keeps theirs"] : []),
     "Its brand theme, logos and colour guideline",
     "Its category mappings",
     ...(hasThreshold ? ["Its approval threshold value"] : []),

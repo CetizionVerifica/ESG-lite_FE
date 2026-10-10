@@ -210,7 +210,7 @@ export default function ClientDetailPage() {
         title={row.active ? `Deactivate ${row.name}?` : `Reactivate ${row.name}?`}
         description={
           row.active
-            ? "Its people can't sign in until you reactivate it, and anyone signed in is stopped on their next action. Its sites, people and data stay as they are."
+            ? "Its people can't sign in or use ESGLite until you reactivate it. Its sites, people and data stay as they are."
             : "Its people can sign in again."
         }
         error={statusErr}

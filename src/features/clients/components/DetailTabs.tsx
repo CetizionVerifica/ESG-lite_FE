@@ -117,21 +117,27 @@ export function PeopleTab({ row, load }: { row: ClientRow; load: ListLoad }) {
                   <span className="block truncate text-xs text-muted">{u.email}</span>
                 </span>
                 {u.role && u.role !== "User" && <Badge>{u.role === "Admin" ? "Company admin" : u.role}</Badge>}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label={`Send ${personName(u)} an invite`}
-                  loading={invite.isPending && invite.variables === u.user_id}
-                  disabled={invite.isPending}
-                  onClick={() => sendInvite(u.user_id, u.email)}
-                >
-                  Send invite
-                </Button>
+                {row.active && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Send ${personName(u)} an invite`}
+                    loading={invite.isPending && invite.variables === u.user_id}
+                    disabled={invite.isPending}
+                    onClick={() => sendInvite(u.user_id, u.email)}
+                  >
+                    Send invite
+                  </Button>
+                )}
               </li>
             ))}
         </ul>
       )}
-      <p className="text-xs text-muted">An invite emails a link to choose a password. It works for 7 days, and their current password keeps working until they choose a new one.</p>
+      <p className="text-xs text-muted">
+        {row.active
+          ? "An invite emails a link to choose a password. It works for 7 days, and their current password keeps working until they choose a new one."
+          : "This client is inactive, so its people can't sign in. Reactivate it to send invites."}
+      </p>
       <GoLink to={`/setup/users?client=${row.company_id}`}>Manage people in Users</GoLink>
     </section>
   );
@@ -314,7 +320,7 @@ export function DangerTab({ row, sites, onToggleActive, onDelete }: { row: Clien
           <h3 className="text-sm font-semibold text-ink">{row.active ? "Deactivate client" : "Reactivate client"}</h3>
           <p className="text-sm text-muted">
             {row.active
-              ? "Its people can't sign in, and anyone signed in is stopped on their next action. Its data stays; nothing is deleted."
+              ? "Its people can't sign in or use ESGLite until you reactivate it. Its data stays; nothing is deleted."
               : "Its people can sign in again."}
           </p>
         </div>

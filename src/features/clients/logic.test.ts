@@ -76,6 +76,8 @@ describe("delete", () => {
     expect(items[0]).toMatch(/^1 site, with/);
     expect(items).toContain("Its approval threshold value");
     expect(items.some((i) => i.includes("people"))).toBe(false);
+    // No head count: people who also work for another client are kept.
+    expect(cascadeItems({ sites: [], users: [{} as AdminUser] }, false)[0]).toMatch(/^The accounts of people who work only for this client/);
     expect(cascadeItems({ sites: [], users: [] }, false)).toEqual(["Its brand theme, logos and colour guideline", "Its category mappings"]);
   });
 });
