@@ -25,7 +25,7 @@ Tabs: Summary · By location · Scope 1 · Scope 2 · Scope 3 · Findings
   By location: site × scope table for both years + bar
   Scope n:    category table (Category | Location | Emission category | prev: Consumption, Unit, tCO₂e | sel: …) + % distribution bars
   Findings:   key findings bullets (same rules as PDF) + recommended actions
-Right rail (≥1440px): "Report preview" thumbnail of branded cover in client theme
+Right rail (≥1440px): "Report preview" thumbnail of branded cover in client theme  ← deferred, see Status
 ```
 
 ## Rules
@@ -41,3 +41,8 @@ No sites: amber callout as today. No data for period: empty state with "Try {pre
 
 ## Acceptance
 Change any filter → results update without navigation. Both years always visible. Branded PDF uses Midal theme for Midal sites. Charts use scope tokens, not hardcoded `#1a56a8/#16a34a`.
+
+## Status (P10 shipped as #89, #94, #97)
+- Deferred: the ≥1440px "Report preview" right rail. A faithful thumbnail needs the backend cover rendered as an image (or a client copy of the cover layout that would drift from `src/reporting/*`). Pick it up with a backend preview endpoint.
+- Quick PDF retired (spec default): the branded PDF covers monthly and quarterly.
+- The new page sends the token in the Authorization header. Still open, outside this module: the legacy page (flag off) and the backend `reportAuth` `?token=` fallback.
