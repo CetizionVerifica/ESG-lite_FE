@@ -1,3 +1,4 @@
+import { ocrAuthHeaders } from "../api/ocrAxios";
 
 const PYTHON_API_URL = import.meta.env.VITE_OCR_API_URL;
 
@@ -31,6 +32,7 @@ export async function uploadExcelGetHeaders(file: File): Promise<UploadHeadersRe
 
   const response = await fetch(`${PYTHON_API_URL}/v1/excel/upload`, {
     method: "POST",
+    headers: ocrAuthHeaders(),
     body: formData,
   });
 
@@ -48,7 +50,7 @@ export async function fetchUniqueCategories(
 ): Promise<UniqueCategoriesResponse> {
   const response = await fetch(`${PYTHON_API_URL}/v1/excel/unique-categories`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...ocrAuthHeaders() },
     body: JSON.stringify({ document_id: documentId, mappings }),
   });
 
@@ -73,7 +75,7 @@ export async function fetchPreviewRows(
 ): Promise<PreviewRowsResponse> {
   const response = await fetch(`${PYTHON_API_URL}/v1/excel/preview`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...ocrAuthHeaders() },
     body: JSON.stringify({
       document_id: documentId,
       mappings,
@@ -107,7 +109,7 @@ export async function importAllRows(
 ): Promise<ImportResponse> {
   const response = await fetch(`${PYTHON_API_URL}/v1/excel/import`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...ocrAuthHeaders() },
     body: JSON.stringify({
       document_id: documentId,
       mappings,
