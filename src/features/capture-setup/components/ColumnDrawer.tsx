@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Button, Callout, Drawer, Modal, Select, TextField } from "../../../ui";
-import { COLUMN_TYPES, type ColumnDraft, type ColumnRow, type ColumnType, type LibraryColumn, draftFrom, hasErrors, validateDraft, wipesChoices } from "../logic";
+import { COLUMN_TYPES, type ColumnDraft, type ColumnRow, type ColumnType, type LibraryColumn, draftFrom, hasErrors, removedChoices, validateDraft, wipesChoices } from "../logic";
 import { ChoicesEditor } from "./ChoicesEditor";
 
 export type ColumnDrawerProps = {
@@ -30,8 +30,10 @@ export function ColumnDrawer({ row, open, loading, library, saving, error, onClo
   const shown = tried ? errors : { rows: {} as Record<string, string> };
   const wipe = wipesChoices(row, draft);
   const typeChanged = !!row && !!draft.type && draft.type !== row.column_type;
-  // Changing the type of a column forms use changes their fields too: ask first.
-  const needsConfirm = typeChanged && (wipe > 0 || (row?.usedBy.length ?? 0) > 0 || !usageReady);
+  const removed = removedChoices(row, draft);
+  // Changing the type of a column forms use changes their fields too, and a
+  // removed saved choice leaves entries and factor matches on a value no longer offered: ask first.
+  const needsConfirm = (typeChanged && (wipe > 0 || (row?.usedBy.length ?? 0) > 0 || !usageReady)) || removed.length > 0;
   const newTypeLabel = COLUMN_TYPES.find((t) => t.value === draft.type)?.label ?? "";
 
   const submit = () => {
@@ -121,20 +123,27 @@ export function ColumnDrawer({ row, open, loading, library, saving, error, onClo
         <Modal
           open
           tone="destructive"
-          title={wipe > 0 ? `Remove ${wipe} ${wipe === 1 ? "choice" : "choices"}?` : `Make "${row.column_name}" a ${newTypeLabel} column?`}
+          title={
+            wipe > 0
+              ? `Remove ${wipe} ${wipe === 1 ? "choice" : "choices"}?`
+              : typeChanged
+                ? `Make "${row.column_name}" a ${newTypeLabel} column?`
+                : `Remove ${removed.length} saved ${removed.length === 1 ? "choice" : "choices"}?`
+          }
           description={[
             wipe > 0 ? `"${row.column_name}" becomes a ${newTypeLabel} column and loses its default choices.` : null,
+            !typeChanged ? `${removed.map((o) => `"${o.label}"`).join(", ")} will no longer be offered.` : null,
             !usageReady
               ? "Couldn't check which forms use it; any that do change too."
               : row.usedBy.length
                 ? `${row.usedBy.length === 1 ? "This form changes" : `These ${row.usedBy.length} forms change`} too: ${row.usedBy.map((f) => f.name).join(", ")}.`
                 : null,
-            "Entries already saved keep their values.",
+            typeChanged ? "Entries already saved keep their values." : "Entries and factor matches that use them keep the old value.",
           ]
             .filter(Boolean)
             .join(" ")}
           primaryAction={{
-            label: "Change type",
+            label: typeChanged ? "Change type" : "Remove choices",
             onClick: () => {
               setConfirmType(false);
               onSave(draft);

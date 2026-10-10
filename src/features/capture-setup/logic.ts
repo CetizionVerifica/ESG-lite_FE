@@ -243,12 +243,13 @@ export const choiceId = (c: ChoiceDraft): string | number => (c.original !== und
 
 /**
  * Apply a label or stored-value edit. A new choice's value follows its label;
- * a saved choice keeps its stored value, since entries already reference it.
+ * a saved choice's stored value never changes, since entries and mappings reference it.
  */
 export function editChoice(c: ChoiceDraft, p: Partial<Pick<ChoiceDraft, "label" | "value">>): ChoiceDraft {
+  if (c.original !== undefined && p.value !== undefined) return c;
   const next = { ...c, ...p };
   if (p.label !== undefined && c.auto) next.value = slugify(p.label);
-  if (p.value !== undefined) next.auto = c.original === undefined && p.value === slugify(next.label);
+  if (p.value !== undefined) next.auto = p.value === slugify(next.label);
   return next;
 }
 
@@ -292,6 +293,13 @@ export function toPayload(d: ColumnDraft): { column_name: string; column_type: s
 export function wipesChoices(original: LibraryColumn | null, d: ColumnDraft): number {
   if (!original || original.column_type !== "select" || d.type === "select") return 0;
   return original.dropdown_options?.length ?? 0;
+}
+
+/** Saved choices of a Select column that the draft drops while staying Select. */
+export function removedChoices(original: LibraryColumn | null, d: ColumnDraft): ChoiceOption[] {
+  if (!original || original.column_type !== "select" || d.type !== "select") return [];
+  const kept = new Set(d.choices.filter((c) => c.original !== undefined).map((c) => String(c.original)));
+  return (original.dropdown_options ?? []).filter((o) => !kept.has(String(o.id)));
 }
 
 // ─── New form ────────────────────────────────────────────────────────────────

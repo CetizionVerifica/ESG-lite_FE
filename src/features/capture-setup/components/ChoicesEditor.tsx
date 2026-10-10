@@ -11,8 +11,9 @@ export type ChoicesEditorProps = {
 };
 
 /**
- * Default choices of a Select column. Contributors see the label; the stored
- * value follows the label until it is edited under "Show stored values".
+ * Default choices of a Select column. Contributors see the label. A new
+ * choice's stored value follows its label until edited under "Show stored
+ * values"; a saved choice's stored value is read-only, since entries use it.
  */
 export function ChoicesEditor({ choices, onChange, errors }: ChoicesEditorProps) {
   const [showValues, setShowValues] = useState(() => choices.some((c) => c.value !== slugify(c.label)));
@@ -35,7 +36,10 @@ export function ChoicesEditor({ choices, onChange, errors }: ChoicesEditorProps)
           {showValues ? "Hide stored values" : "Show stored values"}
         </Button>
       </div>
-      <p className="text-xs text-muted">Each form can override these for its own site.</p>
+      <p className="text-xs text-muted">
+        Each form can override these for its own site.
+        {showValues && choices.some((c) => c.original !== undefined) && " Saved choices keep their stored value because entries already use it."}
+      </p>
       {choices.length === 0 && <p className="rounded-control border border-dashed border-line px-3 py-3 text-sm text-muted">No choices yet. Add the first one.</p>}
       <ol className="space-y-2">
         {choices.map((c, i) => {
@@ -57,10 +61,12 @@ export function ChoicesEditor({ choices, onChange, errors }: ChoicesEditorProps)
                   />
                   {showValues && (
                     <input
-                      className={cn(inputBase, "h-9 font-mono text-xs")}
+                      className={cn(inputBase, "h-9 font-mono text-xs", c.original !== undefined && "bg-tint text-muted")}
                       value={c.value}
                       placeholder="stored_value"
                       aria-label={`Choice ${i + 1} stored value`}
+                      readOnly={c.original !== undefined}
+                      title={c.original !== undefined ? "Saved entries use this value, so it can't change." : undefined}
                       onChange={(e) => update(c.key, { value: e.target.value })}
                     />
                   )}

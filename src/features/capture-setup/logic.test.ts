@@ -11,6 +11,7 @@ import {
   columnUsage,
   draftFrom,
   editChoice,
+  removedChoices,
   hasErrors,
   matchesColumn,
   matchesForm,
@@ -121,12 +122,20 @@ describe("columns library", () => {
     const saved = draftFrom({ ...fuelType, dropdown_options: [{ id: "diesel", label: "Diesel" }, { id: 7, label: "LPG" }] });
     const renamed = saved.choices.map((c) => editChoice(c, { label: `${c.label} (road)` }));
     expect(renamed.map((c) => c.value)).toEqual(["diesel", "7"]);
-    // Typing the slug back in does not make a saved value follow the label again.
-    expect(editChoice(renamed[0], { value: "diesel_road" }).auto).toBe(false);
+    // A saved stored value is read-only.
+    expect(editChoice(renamed[0], { value: "dsl" }).value).toBe("diesel");
     expect(toPayload({ ...saved, choices: renamed }).dropdown_options).toEqual([
       { id: "diesel", label: "Diesel (road)" },
       { id: 7, label: "LPG (road)" },
     ]);
+  });
+
+  it("lists saved choices a Select draft drops", () => {
+    const d = draftFrom({ ...fuelType, dropdown_options: [{ id: "diesel", label: "Diesel" }, { id: 7, label: "LPG" }] });
+    const col = { ...fuelType, dropdown_options: [{ id: "diesel", label: "Diesel" }, { id: 7, label: "LPG" }] };
+    expect(removedChoices(col, { ...d, choices: [d.choices[0], newChoice("LPG")] })).toEqual([{ id: 7, label: "LPG" }]);
+    expect(removedChoices(col, d)).toEqual([]);
+    expect(removedChoices(col, { ...d, type: "text", choices: [] })).toEqual([]);
   });
 
   it("validates name, type and choices", () => {

@@ -103,6 +103,16 @@ test("columns: add a Select column, change a type, and blocked delete", async ({
 
   await table.getByText("Fuel type").click();
   const edit = page.getByRole("dialog", { name: "Fuel type" });
+  // Saved choices: the stored value is read-only and removing one asks first.
+  await edit.getByRole("button", { name: "Show stored values" }).click();
+  await expect(edit.getByLabel("Choice 2 stored value")).toHaveAttribute("readonly", "");
+  await edit.getByRole("button", { name: "Remove choice LPG" }).click();
+  await edit.getByRole("button", { name: "Save column" }).click();
+  const removeConfirm = page.getByRole("alertdialog", { name: "Remove 1 saved choice?" });
+  await expect(removeConfirm).toContainText('"LPG" will no longer be offered.');
+  await expect(removeConfirm).toContainText("Hidd fuel");
+  await removeConfirm.getByRole("button", { name: "Cancel" }).click();
+  expect(calls.some((c) => c.method === "PUT")).toBe(false);
   await edit.getByLabel("Type").selectOption("text");
   await expect(edit.getByText("Saving removes 2 choices")).toBeVisible();
   await edit.getByRole("button", { name: "Save column" }).click();
