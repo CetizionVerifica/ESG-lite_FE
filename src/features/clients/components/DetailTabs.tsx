@@ -4,7 +4,7 @@ import { ExternalLink } from "lucide-react";
 import type { Brand } from "../../../services/brandService";
 import { Avatar, Badge, Button, Callout, EmptyState, FileDrop, Modal, TextField, cn, focusRing, useToast } from "../../../ui";
 import { errorMessage, useMappingCount, useSaveGuideline, useSaveThreshold, useSendInvite, useThreshold } from "../api";
-import { type ClientRow, deleteBlocker, parseThreshold, personName } from "../logic";
+import { type ClientRow, parseThreshold, personName } from "../logic";
 import { GUIDELINE_MAX, GUIDELINE_TYPES } from "../onboarding";
 import { ClientLogo, StatusBadge, ThemeSwatch } from "./bits";
 
@@ -305,8 +305,8 @@ export function MappingsTab({ companyId }: { companyId: number }) {
 }
 
 export function DangerTab({ row, sites, onToggleActive, onDelete }: { row: ClientRow; sites: ListLoad; onToggleActive: () => void; onDelete: () => void }) {
-  // Delete is only safe once we know the client has no sites; until then it stays disabled.
-  const blocker = sites.failed ? "Couldn't check its sites. Reload the page and try again." : sites.loading ? "Checking its sites…" : deleteBlocker(row);
+  // The confirmation lists the sites that go with the client, so it waits for them.
+  const blocker = sites.failed ? "Couldn't load its sites. Reload the page and try again." : sites.loading ? "Checking its sites…" : null;
   return (
     <section className="space-y-4" aria-label="Danger zone">
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-control border border-line p-4">
@@ -323,7 +323,8 @@ export function DangerTab({ row, sites, onToggleActive, onDelete }: { row: Clien
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-control border border-bad/40 p-4">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-ink">Delete client</h3>
-          <p className="text-sm text-muted">{blocker ?? "Deletes the company for good. Its brand theme and category mappings stay behind in the database. This can't be undone."}</p>
+          <p className="text-sm text-muted">{blocker ??
+              "Deletes the client with its sites, its people's accounts, brand theme and category mappings. Only a client with no reporting history can be deleted; deactivate one that has data. This can't be undone."}</p>
         </div>
         <Button variant="danger" onClick={onDelete} disabled={!!blocker}>
           Delete client

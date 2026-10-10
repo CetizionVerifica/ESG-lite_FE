@@ -97,6 +97,12 @@ async function signIn(page: Page) {
         companies = companies.map((c) => (c.company_id === Number(one[1]) ? { ...c, ...body } : c));
         return json({ message: "Company updated" });
       }
+      if (one && method === "DELETE" && one[1] === "1") {
+        return json(
+          { code: "CLIENT_HAS_HISTORY", message: "This client has reporting history (12 entries), so it can't be deleted. Deactivate it instead.", history: { entries: 12 } },
+          409,
+        );
+      }
       if (one && method === "DELETE") {
         companies = companies.filter((c) => c.company_id !== Number(one[1]));
         return json({ message: "Company deleted" });
@@ -169,9 +175,15 @@ test("a superadmin edits details, sets the threshold, deactivates and deletes a 
   await expect(page.getByText("Threshold set to 3.5%")).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ method: "POST", body: { company_id: 1, threshold_percentage: 3.5 } });
 
-  // A client with sites can't be deleted, only deactivated.
+  // A client with reporting history can't be deleted: the server says so, and it is deactivated instead.
   await page.getByRole("tab", { name: /Danger zone/ }).click();
-  await expect(page.getByRole("button", { name: "Delete client" })).toBeDisabled();
+  await page.getByRole("button", { name: "Delete client" }).click();
+  const refuse = page.getByRole("alertdialog", { name: 'Delete client "Midal Cables BSC"?' });
+  await expect(refuse).toContainText("2 sites, with their categories");
+  await refuse.getByLabel(/Type Midal Cables BSC to confirm/).fill("Midal Cables BSC");
+  await refuse.getByRole("button", { name: "Delete client" }).click();
+  await expect(refuse).toContainText("This client has reporting history (12 entries)");
+  await refuse.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("button", { name: "Deactivate" }).click();
   await page.getByRole("alertdialog", { name: /Deactivate Midal Cables BSC/ }).getByRole("button", { name: "Deactivate" }).click();
   await expect(page.getByText("Midal Cables BSC deactivated")).toBeVisible();

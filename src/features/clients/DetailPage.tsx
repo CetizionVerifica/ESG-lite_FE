@@ -221,7 +221,7 @@ export default function ClientDetailPage() {
           open
           noun="client"
           name={row.name}
-          cascades={cascadeItems(!!threshold.data)}
+          cascades={cascadeItems(row, !!threshold.data)}
           deleting={remove.isPending}
           error={deleteErr}
           onClose={() => setDeleting(false)}

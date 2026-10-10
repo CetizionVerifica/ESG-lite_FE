@@ -175,14 +175,20 @@ export function toPayload(d: CompanyDraft): Record<string, string | boolean | nu
  * cascade, so a client that still has sites can't be deleted (the server
  * would refuse). Returns why, or null when delete is allowed.
  */
-export function deleteBlocker(r: Pick<ClientRow, "sites">): string | null {
-  const n = r.sites.length;
-  return n ? `Remove its ${n} ${n === 1 ? "site" : "sites"} first, or deactivate the client instead.` : null;
-}
-
-/** What goes with the company (cascades in the database). */
-export function cascadeItems(hasThreshold: boolean): string[] {
-  return hasThreshold ? ["Its approval threshold value"] : [];
+/**
+ * What goes with the client. The backend deletes it only while it has no
+ * reporting history (entries, production, PCF, uploaded documents); otherwise
+ * it answers 409 with the counts and the client should be deactivated.
+ */
+export function cascadeItems(r: Pick<ClientRow, "sites" | "users">, hasThreshold: boolean): string[] {
+  const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+  return [
+    ...(r.sites.length ? [`${n(r.sites.length, "site", "sites")}, with their categories, capture columns, factors and products`] : []),
+    ...(r.users.length ? [`Its people's accounts (${n(r.users.length, "person", "people")}); anyone who also works for another client keeps theirs`] : []),
+    "Its brand theme, logos and colour guideline",
+    "Its category mappings",
+    ...(hasThreshold ? ["Its approval threshold value"] : []),
+  ];
 }
 
 // ---- Threshold ----
