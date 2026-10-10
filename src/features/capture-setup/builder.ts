@@ -517,7 +517,7 @@ export function describeMethod(d: BuilderDraft, key: string): string {
 
 // ─── Validation, save, preview ───────────────────────────────────────────────
 
-export type BuilderTab = "fields" | "choices" | "match" | "extra" | "calculation";
+export type BuilderTab = "fields" | "choices" | "match" | "extra" | "calculation" | "test";
 export type BuilderIssue = { tab: BuilderTab; message: string };
 
 export function validateBuilder(d: BuilderDraft, library: LibraryName[] = []): BuilderIssue[] {

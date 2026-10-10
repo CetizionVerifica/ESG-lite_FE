@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readPeriod, supportedPeriod, writePeriod } from "./reportFilters";
+import { readPeriod, supportedPeriod, writePeriod } from "./reportFilterModel";
 
 describe("supportedPeriod", () => {
   const all = { fy: true, quarterly: true };

@@ -2,7 +2,8 @@ import { type Page, expect, test } from "@playwright/test";
 
 /**
  * P24 Capture setup smoke tests (VITE_NEW_UI=1 server): the forms list with
- * its coverage matrix, the form builder, and the columns library. Column and form endpoints are
+ * its coverage matrix, auto-generate, the form builder with its Test tab, and
+ * the columns library. Column and form endpoints are
  * answered locally and writes are recorded.
  */
 
@@ -205,31 +206,181 @@ test("old capture routes redirect", async ({ page }) => {
   await expect(page).toHaveURL(/\/capture\/columns$/);
 });
 
-test("form builder: edits show in the preview and save in one request", async ({ page }) => {
-  const { calls } = await signIn(page);
-  const transport = {
-    pk_id: 7,
-    config_name: "Hidd transport",
-    site: { site_id: 1, name: "Hidd" },
-    category: { category_id: 30, category_name: "Upstream transport" },
-    columns: [
-      { pk_id: 1, column_name: "mode", column_type: "select" },
-      { pk_id: 2, column_name: "vehicle", column_type: "select" },
-      { pk_id: 4, column_name: "distance", column_type: "number" },
-    ],
-    column_options: { "1": [{ id: "road", label: "Road" }, { id: "boat", label: "Boat" }] },
-    column_dependencies: { vehicle: "mode" },
-    dependent_options: { vehicle: { Road: [{ id: "van", label: "Van" }, { id: "hgv", label: "HGV" }], Boat: [{ id: "ferry", label: "Ferry" }] } },
-    emission_category_mapping: { "Road|Van": "Van - Diesel", "Boat|Ferry": "Ferry crossing" },
-    extra_fields: [],
-    calculation: null,
-  };
+const transport = {
+  pk_id: 7,
+  config_name: "Hidd transport",
+  site: { site_id: 1, name: "Hidd" },
+  category: { category_id: 30, category_name: "Upstream transport" },
+  columns: [
+    { pk_id: 1, column_name: "mode", column_type: "select" },
+    { pk_id: 2, column_name: "vehicle", column_type: "select" },
+    { pk_id: 4, column_name: "distance", column_type: "number" },
+  ],
+  column_options: { "1": [{ id: "road", label: "Road" }, { id: "boat", label: "Boat" }] },
+  column_dependencies: { vehicle: "mode" },
+  dependent_options: { vehicle: { Road: [{ id: "van", label: "Van" }, { id: "hgv", label: "HGV" }], Boat: [{ id: "ferry", label: "Ferry" }] } },
+  emission_category_mapping: { "Road|Van": "Van - Diesel", "Boat|Ferry": "Ferry crossing" },
+  extra_fields: [],
+  calculation: null,
+};
+
+async function routeTransport(page: Page, calls: Call[]) {
   await page.route(/\/admin\/column-configs\/7$/, (route) =>
     route.request().method() === "PUT"
       ? (calls.push({ method: "PUT", path: "/admin/column-configs/7", body: route.request().postDataJSON() }), route.fulfill({ json: { message: "updated", columnConfig: { ...transport, ...route.request().postDataJSON() } } }))
       : route.fulfill({ json: transport }),
   );
   await page.route(/\/admin\/emission-factors\/category-names/, (route) => route.fulfill({ json: ["Van - Diesel", "HGV - Diesel"] }));
+}
+
+test("form builder: Test tab calculates with the real factor", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await routeTransport(page, calls);
+  await page.route(/\/user\/emission-factors\/site\/1\/category\/30/, (route) =>
+    route.fulfill({
+      json: [
+        { emission_factor_id: 1, emission_category_name: "Van - Diesel", factor_value: 0.25, denominator_unit: "km", year: 2025 },
+        { emission_factor_id: 2, emission_category_name: "Van - Diesel", factor_value: 0.3, denominator_unit: "km", year: 2024 },
+      ],
+    }),
+  );
+  await page.route(/\/user\/units\/site\/1\/category\/30/, (route) => route.fulfill({ json: [{ unit_name: "km" }, { unit_name: "mile" }] }));
+
+  await page.goto("/capture/forms/7");
+  await page.getByRole("tab", { name: "Test" }).click();
+  const panel = page.getByRole("tabpanel", { name: "Test" });
+  const result = panel.getByTestId("test-result");
+  await expect(result).toContainText("Select emission category");
+  await panel.getByLabel("Mode").selectOption("road");
+  await panel.getByLabel("Vehicle").selectOption("van");
+  await panel.getByLabel("Distance").fill("10000");
+  await panel.getByLabel("Unit", { exact: true }).selectOption("km");
+  await expect(result).toContainText("2.50 tCO₂e");
+  await expect(result).toContainText("Van - Diesel: 0.25 kgCO₂e per km (2025)");
+  await panel.getByLabel("Factor year").selectOption("2024");
+  await expect(result).toContainText("3.00 tCO₂e");
+  // Nothing typed in the Test tab is saved or makes the form dirty.
+  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  expect(calls.some((c) => c.method === "PUT")).toBe(false);
+});
+
+test("forms: auto-generate builds a form from the factors", async ({ page }) => {
+  const { calls } = await signIn(page);
+  const select = (column_name: string, existing_id: number | null = null) => ({ existing_id, column_name, column_type: "select", is_new: existing_id === null });
+  await page.route(/\/admin\/column-configs\/auto-generate\/preview/, (route) =>
+    route.fulfill({
+      json: {
+        config_name: "Hidd - Stationary combustion",
+        site_id: 1,
+        category_id: 10,
+        site_name: "Hidd",
+        category_name: "Stationary combustion",
+        existing_config_ids: [7],
+        proposed_units: [
+          { unit_name: "litre", already_exists: true },
+          { unit_name: "kWh", already_exists: false },
+        ],
+        configs: [
+          {
+            denominator_unit: "litre",
+            pattern: "TWO_DIM",
+            columns: [],
+            column_options: {},
+            column_dependencies: {},
+            dependent_options: {},
+            emission_category_mapping: {},
+            ef_names: ["Diesel - Generator", "Diesel - Boiler", "LPG - Boiler"],
+            column_names_by_dim: {
+              2: { activity_column_name: "quantity", columns: [select("fuel", 101), select("equipment"), { existing_id: 100, column_name: "quantity", column_type: "number", is_new: false }] },
+            },
+          },
+          {
+            denominator_unit: "kWh",
+            pattern: "FLAT",
+            columns: [],
+            column_options: {},
+            column_dependencies: {},
+            dependent_options: {},
+            emission_category_mapping: {},
+            ef_names: ["Grid"],
+            column_names_by_dim: {},
+          },
+        ],
+      },
+    }),
+  );
+  await page.route(/\/admin\/column-configs\/auto-generate\/confirm/, (route) => {
+    calls.push({ method: "POST", path: "/admin/column-configs/auto-generate/confirm", body: route.request().postDataJSON() });
+    return route.fulfill({ status: 201, json: { message: "created", columnConfig: { pk_id: 7 }, units_created: ["kWh", "tonne"] } });
+  });
+
+  // The deep link from Emission factors opens the drawer on the pair.
+  await page.goto("/capture/forms?generate=1&site=1&category=10");
+  const linked = page.getByRole("dialog", { name: "Auto-generate a form" });
+  await expect(linked.getByText("3 factors")).toBeVisible();
+  await linked.getByRole("button", { name: "Back" }).click();
+  await expect(linked.getByLabel("Category")).toHaveValue(/.+/);
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/capture\/forms\?site=1$/);
+  // A category the site doesn't have starts at the first step instead.
+  await page.goto("/capture/forms?generate=1&site=3&category=10");
+  await expect(linked.getByLabel("Site")).toHaveValue(/.+/);
+  await expect(linked.getByLabel("Category")).toHaveValue("");
+  await expect(linked.getByRole("button", { name: "Next" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+
+  await page.goto("/capture/forms");
+  await page.getByRole("button", { name: "Auto-generate" }).click();
+  const drawer = page.getByRole("dialog", { name: "Auto-generate a form" });
+  await drawer.getByLabel("Site").selectOption({ label: "Hidd (Midal Cables)" });
+  await drawer.getByLabel("Category").selectOption({ label: "Stationary combustion" });
+  await drawer.getByRole("button", { name: "Next" }).click();
+
+  await expect(drawer.getByText("This site and category already has a form")).toBeVisible();
+  await expect(drawer.getByText("3 factors")).toBeVisible();
+  await drawer.getByRole("switch", { name: "Per kWh" }).click();
+  await drawer.getByLabel("Add another unit").fill("Tonne");
+  await drawer.getByLabel("Add another unit").press("Enter");
+  await expect(drawer.getByRole("list", { name: "Units to add" })).toContainText("tonne");
+  await drawer.getByRole("button", { name: "Next" }).click();
+
+  await expect(drawer.getByLabel("Form name")).toHaveValue("Hidd - Stationary combustion - litre");
+  // A typed name belongs to its site and category: another pair starts from its own default.
+  await drawer.getByLabel("Form name").fill("Hidd diesel");
+  await drawer.getByRole("button", { name: "Back" }).click();
+  await drawer.getByRole("button", { name: "Back" }).click();
+  await drawer.getByLabel("Category").selectOption({ label: "Purchased electricity" });
+  await drawer.getByRole("button", { name: "Next" }).click();
+  await expect(drawer.getByRole("list", { name: "Units to add" })).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Next" }).click();
+  await expect(drawer.getByLabel("Form name")).toHaveValue("Hidd - Stationary combustion - litre + kWh");
+  await drawer.getByRole("button", { name: "Back" }).click();
+  await drawer.getByRole("button", { name: "Back" }).click();
+  await drawer.getByLabel("Category").selectOption({ label: "Stationary combustion" });
+  await drawer.getByRole("button", { name: "Next" }).click();
+  await drawer.getByRole("button", { name: "Next" }).click();
+  await expect(drawer.getByLabel("Form name")).toHaveValue("Hidd diesel");
+  await expect(drawer.getByRole("heading", { name: "Factor rules (3)" })).toBeVisible();
+  await expect(drawer.getByText("Diesel › Generator")).toBeVisible();
+  await drawer.getByRole("button", { name: "Create and review" }).click();
+
+  await expect(page).toHaveURL(/\/capture\/forms\/7$/);
+  await expect(page.getByText('Form "Hidd diesel" created. Units added: kWh, tonne. Review it before contributors use it.')).toBeVisible();
+  const body = calls.find((c) => c.path.endsWith("/auto-generate/confirm"))?.body as Record<string, unknown>;
+  expect(body.config_name).toBe("Hidd diesel");
+  expect((body.columns as { column_name: string }[]).map((c) => c.column_name)).toEqual(["fuel", "equipment", "quantity"]);
+  expect(body.column_dependencies).toEqual({ equipment: "fuel" });
+  expect(body.emission_category_mapping).toEqual({ "Diesel|Generator": "Diesel - Generator", "Diesel|Boiler": "Diesel - Boiler", "LPG|Boiler": "LPG - Boiler" });
+  expect(body.create_units).toBe(true);
+  expect(body.proposed_units).toEqual([
+    { unit_name: "kWh", already_exists: false },
+    { unit_name: "tonne", already_exists: false },
+  ]);
+});
+
+test("form builder: edits show in the preview and save in one request", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await routeTransport(page, calls);
 
   await page.goto("/capture/forms/7");
   await expect(page.getByRole("heading", { name: "Hidd transport", level: 1 })).toBeVisible();
