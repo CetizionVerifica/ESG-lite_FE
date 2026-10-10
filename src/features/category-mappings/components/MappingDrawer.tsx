@@ -72,7 +72,7 @@ export function MappingDrawer(props: Props) {
 
   const match =
     draft.company_id !== null && draft.category_id !== null && current
-      ? findFactor(factors.index, { company_id: draft.company_id, category_id: draft.category_id, site_id: draft.site_id, global_category_name: current, company_category_name: draft.company_category_name.trim() }, props.sites)
+      ? findFactor(factors.index, { company_id: draft.company_id, category_id: draft.category_id, site_id: draft.site_id, global_category_name: current }, props.sites)
       : null;
 
   const close = () => (dirty && !props.saving ? setConfirmClose(true) : props.onClose());

@@ -88,11 +88,10 @@ describe("findFactor", () => {
     expect(pick("hsd ")).toBe(3);
     expect(pick("Petrol")).toBeNull();
   });
-  it("falls back to a factor named with the client's own name, before case-blind names", () => {
-    const idx: FactorIndex = new Map([[1, [f(1, "HSD fuel", 10, 2024), f(2, "diesel", 10, 2025)]]]);
-    // m() maps the client's "HSD fuel" to "Diesel".
-    expect(findFactor(idx, m(1, { site_id: 10 }), SITES)).toMatchObject({ state: "matched", factor: { emission_factor_id: 1 } });
-    expect(findFactor(idx, m(1, { site_id: 10, company_category_name: "Gas oil" }), SITES)).toMatchObject({ factor: { emission_factor_id: 2 } });
+  it("never matches a factor named with the client's own name, as the backend doesn't", () => {
+    const idx: FactorIndex = new Map([[1, [f(1, "HSD fuel", 10, 2024)]]]);
+    // m() maps the client's "HSD fuel" to "Diesel"; entries submit "Diesel".
+    expect(findFactor(idx, m(1, { site_id: 10 }), SITES).state).toBe("missing");
   });
   it("counts the client's sites that have a company-wide mapping's factor", () => {
     const wide = findFactor(INDEX, m(1), SITES);

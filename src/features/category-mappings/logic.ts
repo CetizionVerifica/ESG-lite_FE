@@ -57,16 +57,16 @@ export function clientSiteIds(sites: Site[], companyId: number): Set<number> {
 
 /**
  * Whether entries using this global name will find a factor. Names are tried in
- * the entry form's order (findEmissionFactor, src/lib/emissions/emissionCalc.ts):
- * exact factor name, exact global name, a factor named with the client's own
- * name, then factor and global names trimmed and case-blind. The entry form
- * takes the factor of the entry's year; here the newest year stands in for it.
- * Scope is the mapping's site or, for a company-wide mapping, the client's
- * sites; `sites` then counts how many of them have the factor.
+ * the order the backend uses when an entry is saved (findEmissionFactorForCategory
+ * in ESG-lite src/utils/findEmissionFactor.ts): exact factor name, exact global
+ * name, then both trimmed and case-blind. The backend prefers the entry's year;
+ * here the newest year stands in for it. Scope is the mapping's site or, for a
+ * company-wide mapping, the client's sites; `sites` then counts how many of them
+ * have the factor.
  */
 export function findFactor(
   index: FactorIndex,
-  m: Pick<Mapping, "category_id" | "company_id" | "site_id" | "global_category_name"> & { company_category_name?: string },
+  m: Pick<Mapping, "category_id" | "company_id" | "site_id" | "global_category_name">,
   sites: Site[],
 ): Match {
   const factors = index.get(m.category_id);
@@ -79,7 +79,6 @@ export function findFactor(
   const tiers: ((f: Factor) => boolean)[] = [
     (f) => f.emission_category_name === raw,
     (f) => f.global_category_name === raw,
-    (f) => !!m.company_category_name && m.company_category_name !== raw && f.emission_category_name === m.company_category_name,
     (f) => lower(f.emission_category_name) === target,
     (f) => lower(f.global_category_name) === target,
   ];
@@ -304,7 +303,7 @@ export function checkImport(rows: ImportRow[], target: ImportTarget, existing: M
     const match =
       target.category_id === null || target.company_id === null
         ? ({ state: "unknown" } as Match)
-        : findFactor(index, { category_id: target.category_id, company_id: target.company_id, site_id: target.site_id, global_category_name: r.global_category_name, company_category_name: r.company_category_name }, sites);
+        : findFactor(index, { category_id: target.category_id, company_id: target.company_id, site_id: target.site_id, global_category_name: r.global_category_name }, sites);
     let problem: string | null = null;
     if (!r.company_category_name || !r.global_category_name) problem = "Both names are needed.";
     else if (findDuplicate({ ...target, company_category_name: r.company_category_name, global_category_name: r.global_category_name }, existing, null)) problem = "Already mapped";
