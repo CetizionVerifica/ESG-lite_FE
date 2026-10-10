@@ -24,7 +24,7 @@ export function ChoicesEditor({ choices, onChange, errors, title = "Choices", he
   const titleId = useId();
   const [showValues, setShowValues] = useState(() => choices.some((c) => c.value !== slugify(c.label)));
   const update = (key: string, p: Partial<Pick<ChoiceDraft, "label" | "value">>) =>
-    onChange(choices.map((c) => (c.key === key ? editChoice(c, p) : c)));
+    onChange(choices.map((c) => (c.key === key ? editChoice(c, p, lockSavedLabels) : c)));
   const move = (i: number, by: number) => {
     const next = [...choices];
     const [item] = next.splice(i, 1);

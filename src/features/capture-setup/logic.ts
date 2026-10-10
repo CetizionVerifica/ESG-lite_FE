@@ -238,15 +238,15 @@ export const newChoice = (label = "", value?: string): ChoiceDraft => ({
 /** A saved choice: its stored value never follows label edits. */
 export const savedChoice = (o: ChoiceOption): ChoiceDraft => ({ ...newChoice(o.label, String(o.id)), original: o.id });
 
-/** The stored id of a choice: the original (number or string) while the value is unchanged. */
-export const choiceId = (c: ChoiceDraft): string | number => (c.original !== undefined && String(c.original) === c.value.trim() ? c.original : c.value.trim());
+/** The stored id of a choice: a saved choice's original (number or string) exactly as stored, else the trimmed value. */
+export const choiceId = (c: ChoiceDraft): string | number => (c.original !== undefined ? c.original : c.value.trim());
 
 /**
  * Apply a label or stored-value edit. A new choice's value follows its label;
  * a saved choice's stored value never changes, since entries and mappings reference it.
  */
-export function editChoice(c: ChoiceDraft, p: Partial<Pick<ChoiceDraft, "label" | "value">>): ChoiceDraft {
-  if (c.original !== undefined && p.value !== undefined) return c;
+export function editChoice(c: ChoiceDraft, p: Partial<Pick<ChoiceDraft, "label" | "value">>, lockSavedLabel = false): ChoiceDraft {
+  if (c.original !== undefined && (p.value !== undefined || (lockSavedLabel && p.label !== undefined))) return c;
   const next = { ...c, ...p };
   if (p.label !== undefined && c.auto) next.value = slugify(p.label);
   if (p.value !== undefined) next.auto = p.value === slugify(next.label);

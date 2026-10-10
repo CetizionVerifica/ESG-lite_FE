@@ -237,6 +237,11 @@ test("form builder: edits show in the preview and save in one request", async ({
   await expect(road.getByLabel("Choice 1 label")).toHaveAttribute("readonly", "");
   await road.getByRole("button", { name: "Add choice" }).click();
   await road.getByLabel("Choice 3 label").fill("Pickup truck");
+  // A choice added in this session stays editable after switching tabs.
+  await page.getByRole("tab", { name: "Fields" }).click();
+  await page.getByRole("tab", { name: "Choices" }).click();
+  await page.getByLabel("Field", { exact: true }).selectOption("vehicle");
+  await expect(road.getByLabel("Choice 3 label")).not.toHaveAttribute("readonly", "");
   await preview.getByLabel("Mode").selectOption("road");
   await expect(preview.getByLabel("Vehicle").locator("option", { hasText: "Pickup truck" })).toHaveCount(1);
 

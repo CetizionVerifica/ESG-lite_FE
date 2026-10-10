@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from "react";
 import type { DropdownOptionValue } from "../builder";
-import { type ChoiceDraft, choiceId, savedChoice } from "../logic";
+import { type ChoiceDraft, choiceId, newChoice, savedChoice } from "../logic";
 import { ChoicesEditor } from "./ChoicesEditor";
 
 export type OptionListProps = {
@@ -8,9 +8,11 @@ export type OptionListProps = {
   onChange: (value: DropdownOptionValue[]) => void;
   title?: ReactNode;
   help?: ReactNode | null;
+  /** The saved choices of this list; only these are locked. */
+  saved?: DropdownOptionValue[];
 };
 
-const toOptions = (drafts: ChoiceDraft[]): DropdownOptionValue[] => drafts.map((c) => ({ id: choiceId(c), label: c.label }));
+const toOptions = (drafts: ChoiceDraft[]): DropdownOptionValue[] => drafts.map((c) => ({ id: choiceId(c), label: c.label.trim() }));
 
 function rowErrors(drafts: ChoiceDraft[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -30,8 +32,11 @@ function rowErrors(drafts: ChoiceDraft[]): Record<string, string> {
  * Choices stored as `{ id, label }`, edited with the library's choices editor.
  * Keeps its own row keys, so mount it with a `key` per field / branch.
  */
-export function OptionList({ value, onChange, title, help = null }: OptionListProps) {
-  const [drafts, setDrafts] = useState<ChoiceDraft[]>(() => value.map(savedChoice));
+export function OptionList({ value, onChange, title, help = null, saved = [] }: OptionListProps) {
+  const [drafts, setDrafts] = useState<ChoiceDraft[]>(() => {
+    const savedIds = new Set(saved.map((o) => String(o.id)));
+    return value.map((o) => (savedIds.has(String(o.id)) ? savedChoice(o) : newChoice(o.label, String(o.id))));
+  });
   return (
     <ChoicesEditor
       choices={drafts}

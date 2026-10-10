@@ -109,6 +109,11 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
       setTab(issues[0].tab);
       return;
     }
+    // A changed key is checked against library names, so wait for the library.
+    if (Object.keys(renames).length && !library.data) {
+      setSaveErr(library.isError ? "Couldn't load the column library to check the new keys. Reload and try again." : "Checking the new keys against the column library. Try again in a moment.");
+      return;
+    }
     if (Object.keys(renames).length || removes) setConfirmRename(true);
     else doSave();
   };
@@ -169,7 +174,7 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
             <FieldsTab draft={draft} onChange={update} library={library.data ?? []} libraryLoading={library.isPending} />
           </TabPanel>
           <TabPanel idBase="builder" value="choices" current={tab}>
-            <ChoicesTab draft={draft} onChange={update} />
+            <ChoicesTab draft={draft} onChange={update} initial={initial} />
           </TabPanel>
           <TabPanel idBase="builder" value="match" current={tab}>
             <MatchTab

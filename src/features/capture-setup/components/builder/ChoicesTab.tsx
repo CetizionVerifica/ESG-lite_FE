@@ -19,14 +19,24 @@ import { OptionList } from "../OptionList";
 export type ChoicesTabProps = {
   draft: BuilderDraft;
   onChange: (update: (d: BuilderDraft) => BuilderDraft) => void;
+  /** The form as it was saved: only its choices are locked. */
+  initial: BuilderDraft;
 };
+
+/** A field's saved choices (own list, or one branch), found through its column id so key renames don't matter. */
+function savedChoices(initial: BuilderDraft, draft: BuilderDraft, field: string, branch?: string) {
+  const pk = draft.fields.find((f) => f.column_name === field)?.pk_id;
+  const was = initial.fields.find((f) => f.pk_id === pk)?.column_name;
+  if (!was) return [];
+  return (branch === undefined ? initial.options[was] : initial.dependentOptions[was]?.[branch]) ?? [];
+}
 
 /**
  * Each select field's choices for this form. A field can depend on another;
  * its choices are then set per parent choice, shown as a path
  * (Mode › Vehicle › Fuel).
  */
-export function ChoicesTab({ draft, onChange }: ChoicesTabProps) {
+export function ChoicesTab({ draft, onChange, initial }: ChoicesTabProps) {
   const selects = draft.fields.filter(isSelect);
   const [current, setCurrent] = useState<string | null>(selects[0]?.column_name ?? null);
   const field = selects.find((f) => f.column_name === current) ?? selects[0];
@@ -73,16 +83,17 @@ export function ChoicesTab({ draft, onChange }: ChoicesTabProps) {
           key={`own-${name}`}
           title={`${fieldTitle(name)} choices`}
           value={choicesUnder(draft, name)}
+          saved={savedChoices(initial, draft, name)}
           onChange={(list) => onChange((d) => setOptions(d, name, list))}
         />
       ) : (
-        <Branches draft={draft} field={name} onChange={onChange} />
+        <Branches draft={draft} initial={initial} field={name} onChange={onChange} />
       )}
     </div>
   );
 }
 
-function Branches({ draft, field, onChange }: { draft: BuilderDraft; field: string; onChange: ChoicesTabProps["onChange"] }) {
+function Branches({ draft, initial, field, onChange }: { draft: BuilderDraft; initial: BuilderDraft; field: string; onChange: ChoicesTabProps["onChange"] }) {
   const branches = parentBranches(draft, field);
   if (!branches.length) {
     return <p className="rounded-control border border-dashed border-line px-3 py-3 text-sm text-muted">{fieldTitle(draft.dependencies[field])} has no choices yet. Add them first.</p>;
@@ -107,6 +118,7 @@ function Branches({ draft, field, onChange }: { draft: BuilderDraft; field: stri
             key={`${field}-${b.key}`}
             title={fieldTitle(field)}
             value={choicesUnder(draft, field, b.key)}
+            saved={savedChoices(initial, draft, field, b.key)}
             onChange={(list) => onChange((d) => setBranchChoices(d, field, b.key, list))}
           />
         </li>
