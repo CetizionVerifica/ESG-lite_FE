@@ -57,3 +57,9 @@ export const getProductsBySite = async (siteId: number | string): Promise<Produc
   const response = await api.get(`/user/products/site/${siteId}`);
   return response.data;
 };
+
+/** A product's newest production records and their total (P25 drawer). */
+export const getProductProduction = async (id: number | string, limit = 12) => {
+  const response = await api.get(`/admin/products/${id}/production`, { params: { limit } });
+  return response.data;
+};
