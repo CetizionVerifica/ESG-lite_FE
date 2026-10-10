@@ -181,7 +181,7 @@ test("scope tabs load detail rows on demand, and findings follow the PDF", async
 });
 
 test("the branded PDF downloads with the auth header, not a token in the URL", async ({ page }) => {
-  const { pdf } = await signIn(page);
+  const { pdf, details } = await signIn(page);
   await page.goto("/reports/ghg?cal=FY&freq=month&year=2025&month=6");
   await expect(page.getByText("Comparing June 2024 with June 2023")).toBeVisible();
 
@@ -197,6 +197,8 @@ test("the branded PDF downloads with the auth header, not a token in the URL", a
   const xlsx = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export tables" }).click();
   expect((await xlsx).suggestedFilename()).toBe("ghg-report-june-2024.xlsx");
+  // The export loads the detail rows for the period on screen, even from the Summary tab.
+  expect(details.at(-1)).toEqual({ siteIds: [1, 2], yearType: "FY", year: 2025, frequency: "monthly", month: 6 });
 });
 
 test("a superadmin reports on the picked client's sites only", async ({ page }) => {
