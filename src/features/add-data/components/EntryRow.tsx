@@ -182,7 +182,11 @@ export function EntryRow(p: Props) {
           {factor ? (
             <>
               Factor {factor.factor_value} kgCO₂e per {factor.denominator_unit}, {factor.year}
-              {factor.year !== p.reportingYear && <> · factor year {factor.year} used for {p.reportingYear} data</>}
+              {factor.year === p.factorYear ? (
+                <> · factor year {factor.year} used for {p.reportingYear} data</>
+              ) : (
+                <> · no {p.factorYear} factor; {factor.year} used for {p.reportingYear} data</>
+              )}
             </>
           ) : row.emission_category ? (
             <span className="text-bad">No factor for this category</span>

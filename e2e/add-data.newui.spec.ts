@@ -199,7 +199,7 @@ test("contributor types a row, sees tCO2e live and submits it", async ({ page })
   });
 });
 
-test("with no factor in the factor year, the preview uses the newest earlier one, as the save does", async ({ page }) => {
+test("with no factor in the factor year, the preview uses the newest factor from another year, as the save does", async ({ page }) => {
   await signIn(page, []);
   // Only 2022 and 2023 factors exist; Sep 2025 data looks for 2024 first.
   const older = [
@@ -216,7 +216,7 @@ test("with no factor in the factor year, the preview uses the newest earlier one
   await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
   await row.getByLabel("Quantity").fill("1000");
   await row.getByLabel("Unit").selectOption("litre");
-  await expect(row.getByText("factor year 2023 used for 2025 data")).toBeVisible();
+  await expect(row.getByText("no 2024 factor; 2023 used for 2025 data")).toBeVisible();
   await expect(row.getByText("= 2.50 tCO₂e")).toBeVisible();
 });
 
