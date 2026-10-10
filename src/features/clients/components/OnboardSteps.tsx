@@ -190,7 +190,7 @@ export function BrandStep({ draft, set, error, onSkip }: StepProps & { onSkip: (
         </div>
         <FileDrop
           label="Colour guideline (optional)"
-          help="The client's brand sheet: PDF or image, up to 10 MB. Kept with the brand for reference."
+          help="The client's brand sheet: PDF, PNG, JPG or WEBP, up to 10 MB. Kept with the brand for reference."
           accept={GUIDELINE_TYPES}
           maxSize={GUIDELINE_MAX}
           multiple={false}

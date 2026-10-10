@@ -65,8 +65,8 @@ export const EMPTY_ONBOARD: OnboardDraft = {
   guideline: null,
 };
 
-/** Colour guidelines: a PDF or an image of the brand sheet, up to 10 MB (backend limit). */
-export const GUIDELINE_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+/** Colour guidelines: a PDF or an image of the brand sheet (no SVG), up to 10 MB (backend limits). */
+export const GUIDELINE_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
 export const GUIDELINE_MAX = 10 * 1024 * 1024;
 
 export const STEPS = [

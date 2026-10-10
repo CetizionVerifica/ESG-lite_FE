@@ -174,7 +174,7 @@ function GuidelineSection({ companyId, url, name }: { companyId: number; url: st
       )}
       <FileDrop
         label={url ? "Replace the colour guideline" : "Upload a colour guideline"}
-        help="PDF or image, up to 10 MB."
+        help="PDF, PNG, JPG or WEBP, up to 10 MB."
         accept={GUIDELINE_TYPES}
         maxSize={GUIDELINE_MAX}
         multiple={false}
@@ -199,7 +199,7 @@ function GuidelineSection({ companyId, url, name }: { companyId: number; url: st
         onClose={() => setConfirmRemove(false)}
         tone="destructive"
         title="Remove the colour guideline?"
-        description="The file is no longer linked to this client."
+        description="The file is deleted from storage. You can upload a new one later."
         primaryAction={{ label: "Remove", onClick: () => run(null), loading: save.isPending }}
       >
         {save.error && <p className="text-sm text-bad">{errorMessage(save.error, "Couldn't remove it. Try again.")}</p>}

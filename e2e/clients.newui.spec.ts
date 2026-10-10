@@ -224,17 +224,20 @@ test("a superadmin onboards a client in steps, with brand colours", async ({ pag
   await expect(page.getByText("Pick a primary colour to go with the accent.")).toBeVisible();
   await page.getByRole("textbox", { name: "Primary" }).fill("#0b5c3b");
   await expect(page.getByRole("img", { name: "Sign-in cover preview" })).toContainText("Sign in to Bahrain Steel");
+  // Third file input: logo, dark logo, colour guideline.
+  await page.locator('input[type="file"]').nth(2).setInputFiles({ name: "steel-colours.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test") });
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Review, then create.
   await expect(page.getByRole("heading", { name: "Review and create" })).toBeVisible();
   await expect(page.getByText("huda@steel.example")).toBeVisible();
+  await expect(page.getByText("steel-colours.pdf")).toBeVisible();
   expect(calls).toHaveLength(0);
   await page.getByRole("button", { name: "Create client" }).click();
 
   await expect(page.getByRole("heading", { name: "Bahrain Steel is onboarded" })).toBeVisible();
   const form = calls.find((c) => c.path.endsWith("/admin/onboarding/company"))!;
-  for (const part of ["Bahrain Steel", "Metals and mining", "201-500", "huda@steel.example", "long enough", "esgMitraAccess"]) expect(String(form.body)).toContain(part);
+  for (const part of ["Bahrain Steel", "Metals and mining", "201-500", "huda@steel.example", "long enough", "esgMitraAccess", 'name="colorGuideline"; filename="steel-colours.pdf"']) expect(String(form.body)).toContain(part);
   expect(calls.at(-1)).toMatchObject({ method: "PUT", path: expect.stringMatching(/\/brands\/7$/), body: { name: "Bahrain Steel", primary: "#0b5c3b", coverTo: "#0b5c3b" } });
   await page.getByRole("link", { name: "Open client" }).click();
   await expect(page).toHaveURL(/\/clients\/7$/);
