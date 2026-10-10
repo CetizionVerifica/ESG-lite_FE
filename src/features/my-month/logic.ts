@@ -17,6 +17,11 @@ export function shortDay(iso: string): string {
   return `${d} ${MONTH_SHORT[m - 1]}`;
 }
 
+/** "10 Oct" in the year of `today`, "10 Oct 2025" in any other year. */
+export function dayWithYear(iso: string, today: string): string {
+  return iso.slice(0, 4) === today.slice(0, 4) ? shortDay(iso) : `${shortDay(iso)} ${iso.slice(0, 4)}`;
+}
+
 /** "September 2025" from "2025-09". */
 export function monthTitle(month: string): string {
   const [y, m] = month.split("-").map(Number);
@@ -154,9 +159,9 @@ export function dueState(data: MyMonthResponse, today: string): DueState {
   const { filed, total } = progress(data);
   const tally = `${filed} of ${total} ${total === 1 ? "category" : "categories"} filed.`;
   const days = daysBetween(today, data.due_date);
-  const due = shortDay(data.due_date);
+  const due = dayWithYear(data.due_date, today);
   if (today >= data.escalation_date) return { phase: "escalated", message: `Overdue since ${due}. Escalated to your manager. ${tally}` };
-  if (days < 0) return { phase: "late", message: `Overdue since ${due}. Escalates to your manager on ${shortDay(data.escalation_date)}. ${tally}` };
+  if (days < 0) return { phase: "late", message: `Overdue since ${due}. Escalates to your manager on ${dayWithYear(data.escalation_date, today)}. ${tally}` };
   if (days === 0) return { phase: "open", message: `Due today (${due}). ${tally}` };
   if (days === 1) return { phase: "open", message: `Due tomorrow (${due}). ${tally}` };
   return { phase: "open", message: `Due in ${days} days (${due}). ${tally}` };
