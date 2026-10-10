@@ -103,6 +103,7 @@ Read `src/features/<module>/CLAUDE.md`, the open PRs and their checklists, and C
 - New UI in `src/features/<module>/` (Page.tsx, components/, hooks/, api.ts wrapping existing src/services/*). Shared UI only from `src/ui/`, theme from `src/theme/`. Never import from another feature folder.
 - Token colours only: no hex values, no `isDark`, no slate-*/gray-* Tailwind colours in new code.
 - Server state via TanStack Query hooks; filters and context (`?site=&period=`) in the URL.
+- FE routes: a page registers itself in its own `src/features/<module>/routes.tsx` (`export const pages: ModulePages = { <shell route id>: <Page /> }`, Page lazy-loaded); see `src/features/README.md`. Never edit `src/routes/newUiRoutes.tsx` or `src/routes/legacyPages.tsx` for a page, so parallel PRs don't conflict.
 - Behind `VITE_NEW_UI` until the phase ships. The old route redirects to the new one; delete the old files in the PR that switches the route.
 - Done = matches spec + previews; renders in PlanetPulse, Midal Classic, Midal Light, Midal Night; loading/empty/error states (no alert()/confirm()); keyboard reachable, Esc closes dialogs; works at 1280/1024/768/390px; unit tests for moved logic; one Playwright smoke test for the main path.
 - Don't change backend behaviour unless the module is a backend item (B*, E*). Never invent API fields: degrade as the spec says and list the missing field in the PR.
