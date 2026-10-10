@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { Button, cn, focusRing, inputBase } from "../../../ui";
 import { type ChoiceDraft, editChoice, newChoice, slugify } from "../logic";
@@ -8,6 +8,9 @@ export type ChoicesEditorProps = {
   onChange: (choices: ChoiceDraft[]) => void;
   /** Per-choice errors, by draft key. */
   errors: Record<string, string>;
+  title?: ReactNode;
+  /** Line under the title; null hides it. */
+  help?: ReactNode | null;
 };
 
 /**
@@ -15,7 +18,8 @@ export type ChoicesEditorProps = {
  * choice's stored value follows its label until edited under "Show stored
  * values"; a saved choice's stored value is read-only, since entries use it.
  */
-export function ChoicesEditor({ choices, onChange, errors }: ChoicesEditorProps) {
+export function ChoicesEditor({ choices, onChange, errors, title = "Choices", help = "Each form can override these for its own site." }: ChoicesEditorProps) {
+  const titleId = useId();
   const [showValues, setShowValues] = useState(() => choices.some((c) => c.value !== slugify(c.label)));
   const update = (key: string, p: Partial<Pick<ChoiceDraft, "label" | "value">>) =>
     onChange(choices.map((c) => (c.key === key ? editChoice(c, p) : c)));
@@ -27,19 +31,21 @@ export function ChoicesEditor({ choices, onChange, errors }: ChoicesEditorProps)
   };
 
   return (
-    <div role="group" aria-labelledby="choices-title" className="space-y-2">
+    <div role="group" aria-labelledby={titleId} className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <h3 id="choices-title" className="text-sm font-medium text-ink">
-          Choices <span className="font-normal text-muted">({choices.length})</span>
+        <h3 id={titleId} className="text-sm font-medium text-ink">
+          {title} <span className="font-normal text-muted">({choices.length})</span>
         </h3>
         <Button size="sm" variant="ghost" type="button" onClick={() => setShowValues((v) => !v)} aria-pressed={showValues}>
           {showValues ? "Hide stored values" : "Show stored values"}
         </Button>
       </div>
-      <p className="text-xs text-muted">
-        Each form can override these for its own site.
-        {showValues && choices.some((c) => c.original !== undefined) && " Saved choices keep their stored value because entries already use it."}
-      </p>
+      {(help || (showValues && choices.some((c) => c.original !== undefined))) && (
+        <p className="text-xs text-muted">
+          {help}
+          {showValues && choices.some((c) => c.original !== undefined) && " Saved choices keep their stored value because entries already use it."}
+        </p>
+      )}
       {choices.length === 0 && <p className="rounded-control border border-dashed border-line px-3 py-3 text-sm text-muted">No choices yet. Add the first one.</p>}
       <ol className="space-y-2">
         {choices.map((c, i) => {

@@ -1,8 +1,8 @@
 import { type Page, expect, test } from "@playwright/test";
 
 /**
- * P24 Capture setup smoke tests (VITE_NEW_UI=1 server): the columns library.
- * The forms list joins with the form builder in part 2. Column and form endpoints are
+ * P24 Capture setup smoke tests (VITE_NEW_UI=1 server): the forms list with
+ * its coverage matrix, the form builder, and the columns library. Column and form endpoints are
  * answered locally and writes are recorded.
  */
 
@@ -76,6 +76,35 @@ async function signIn(page: Page) {
   return { calls };
 }
 
+test("forms: coverage matrix starts a form for a missing site and category", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/capture/forms");
+  await expect(page.getByRole("heading", { name: "Data-entry forms", level: 1 })).toBeVisible();
+  const table = page.getByRole("table", { name: "Data-entry forms" });
+  await expect(table.getByText("Hidd fuel")).toBeVisible();
+  await expect(table.getByText("Dallas power")).toBeVisible();
+  // Two clients in view: the matrix asks for one.
+  await expect(page.getByText("Pick a client to see which of its site and category pairs have a form.")).toBeVisible();
+
+  await page.goto("/capture/forms?client=1");
+  const matrix = page.getByTestId("coverage-matrix");
+  await expect(matrix).toBeVisible();
+  await expect(matrix.getByText("1 configured")).toBeVisible();
+  await expect(matrix.getByText("2 missing")).toBeVisible();
+  await expect(table.getByText("Dallas power")).toHaveCount(0);
+
+  await matrix.getByRole("button", { name: "Hidd, Purchased electricity: missing. Create form" }).click();
+  const dialog = page.getByRole("dialog", { name: "New form" });
+  await expect(dialog.getByLabel("Form name")).toHaveValue("Hidd · Purchased electricity");
+  await dialog.getByRole("button", { name: "Create form" }).click();
+  await expect(page.getByText('Form "Hidd · Purchased electricity" created')).toBeVisible();
+  expect(calls.find((c) => c.path.endsWith("/admin/column-configs"))?.body).toEqual({ config_name: "Hidd · Purchased electricity", site_id: 1, category_id: 20 });
+
+  // A configured cell opens its form.
+  await matrix.getByRole("button", { name: "Hidd, Stationary combustion: configured. Open form" }).click();
+  await expect(page).toHaveURL(/\/capture\/forms\/7$/);
+});
+
 test("columns: add a Select column, change a type, and blocked delete", async ({ page }) => {
   const { calls } = await signIn(page);
   await page.goto("/capture/columns");
@@ -132,7 +161,7 @@ test("columns: add a Select column, change a type, and blocked delete", async ({
   await amountDrawer.getByLabel("Type").selectOption("number");
   await amountDrawer.getByRole("button", { name: "Delete column" }).click();
   const blocked = page.getByRole("dialog", { name: '"Amount" is still in use' });
-  await expect(blocked.getByRole("link", { name: "Hidd fuel" })).toHaveAttribute("href", "/capture/forms");
+  await expect(blocked.getByRole("link", { name: "Hidd fuel" })).toHaveAttribute("href", "/capture/forms/7");
   await expect(blocked.getByRole("link", { name: "Dallas power" })).toBeVisible();
   await blocked.getByRole("button", { name: "Close", exact: true }).last().click();
   await page.keyboard.press("Escape");
@@ -151,4 +180,80 @@ test("old capture routes redirect", async ({ page }) => {
   await expect(page).toHaveURL(/\/capture\/forms$/);
   await page.goto("/manage-columns");
   await expect(page).toHaveURL(/\/capture\/columns$/);
+});
+
+test("form builder: edits show in the preview and save in one request", async ({ page }) => {
+  const { calls } = await signIn(page);
+  const transport = {
+    pk_id: 7,
+    config_name: "Hidd transport",
+    site: { site_id: 1, name: "Hidd" },
+    category: { category_id: 30, category_name: "Upstream transport" },
+    columns: [
+      { pk_id: 1, column_name: "mode", column_type: "select" },
+      { pk_id: 2, column_name: "vehicle", column_type: "select" },
+      { pk_id: 4, column_name: "distance", column_type: "number" },
+    ],
+    column_options: { "1": [{ id: "road", label: "Road" }, { id: "boat", label: "Boat" }] },
+    column_dependencies: { vehicle: "mode" },
+    dependent_options: { vehicle: { Road: [{ id: "van", label: "Van" }, { id: "hgv", label: "HGV" }], Boat: [{ id: "ferry", label: "Ferry" }] } },
+    emission_category_mapping: { "Road|Van": "Van - Diesel", "Boat|Ferry": "Ferry crossing" },
+    extra_fields: [],
+    calculation: null,
+  };
+  await page.route(/\/admin\/column-configs\/7$/, (route) =>
+    route.request().method() === "PUT"
+      ? (calls.push({ method: "PUT", path: "/admin/column-configs/7", body: route.request().postDataJSON() }), route.fulfill({ json: { message: "updated", columnConfig: { ...transport, ...route.request().postDataJSON() } } }))
+      : route.fulfill({ json: transport }),
+  );
+  await page.route(/\/admin\/emission-factors\/category-names/, (route) => route.fulfill({ json: ["Van - Diesel", "HGV - Diesel"] }));
+
+  await page.goto("/capture/forms/7");
+  await expect(page.getByRole("heading", { name: "Hidd transport", level: 1 })).toBeVisible();
+  const preview = page.getByTestId("form-preview");
+
+  // The preview follows the form's dependent choices and factor match.
+  await preview.getByLabel("Mode").selectOption("road");
+  await preview.getByLabel("Vehicle").selectOption("van");
+  await expect(preview.getByText("Van - Diesel")).toBeVisible();
+
+  // Add a field from the library: it appears in the preview at once.
+  await page.getByRole("combobox", { name: "Add a field from the library" }).click();
+  await page.getByRole("option", { name: /Notes/ }).click();
+  await expect(preview.getByLabel("Notes")).toBeVisible();
+
+  // Factor match flags a target with no factor and generates the missing rule.
+  await page.getByRole("tab", { name: "Factor match" }).click();
+  await expect(page.getByText("1 rule points to a category with no factor")).toBeVisible();
+  await page.getByRole("button", { name: "Generate from choices (1)" }).click();
+  await expect(page.getByLabel("Emission category for Road › HGV")).toHaveValue("Road - HGV");
+  await page.getByLabel("Emission category for Road › HGV").fill("HGV - Diesel");
+
+  // Choices of a dependent field are edited per parent choice.
+  await page.getByRole("tab", { name: "Choices" }).click();
+  await page.getByLabel("Field", { exact: true }).selectOption("vehicle");
+  const road = page.locator('[data-branch="Road"]');
+  await road.getByRole("button", { name: "Add choice" }).click();
+  await road.getByLabel("Choice 3 label").fill("Pickup truck");
+  await preview.getByLabel("Mode").selectOption("road");
+  await expect(preview.getByLabel("Vehicle").locator("option", { hasText: "Pickup truck" })).toHaveCount(1);
+
+  // Leaving with unsaved changes asks first.
+  await page.getByRole("link", { name: "Console" }).click();
+  const leave = page.getByRole("alertdialog", { name: "Leave without saving?" });
+  await expect(leave).toBeVisible();
+  await leave.getByRole("button", { name: "Stay" }).click();
+
+  await page.getByRole("button", { name: "Save form" }).click();
+  await expect(page.getByText('Form "Hidd transport" saved')).toBeVisible();
+  const body = calls.find((c) => c.method === "PUT")?.body as Record<string, unknown>;
+  expect(body.column_ids).toEqual([1, 2, 4, 102]);
+  expect(body.emission_category_mapping).toEqual({ "Road|Van": "Van - Diesel", "Boat|Ferry": "Ferry crossing", "Road|HGV": "HGV - Diesel" });
+  expect((body.dependent_options as Record<string, Record<string, unknown[]>>).vehicle.Road).toEqual([
+    { id: "van", label: "Van" },
+    { id: "hgv", label: "HGV" },
+    { id: "pickup_truck", label: "Pickup truck" },
+  ]);
+  expect(body.rename_map).toBeUndefined();
+  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
 });
