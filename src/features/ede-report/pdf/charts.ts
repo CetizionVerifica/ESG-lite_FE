@@ -117,25 +117,33 @@ export function renderCharts(data: EdeReportResponse, period: ReportPeriod, site
     "tCO2e",
   );
 
-  // The PDF shows intensity for every site with production, one line each.
+  // The PDF shows intensity for every site with production, one line each. Sites can use different
+  // production units, so each legend entry names its unit and the y-axis names it only when they all share one.
   const withRows = intensitySites(data, sites).filter((s) => data.intensityMonthly.some((r) => isSiteRow(r, s) && r.production > 0));
   if (withRows.length) {
-    const first = intensitySeries(data, period, withRows[0]);
+    const lines = withRows.map((s) => ({ site: s, series: intensitySeries(data, period, s) }));
+    const months = [...new Set(lines.flatMap((l) => l.series.months))].sort();
+    const units = new Set(lines.map((l) => l.series.unit));
+    const base = axes(
+      t,
+      months.map((m) => monthLabel(m)),
+    );
     out.intensity = png(
       {
         legend,
-        grid: { left: 8, right: 8, top: 16, bottom: 36, containLabel: true },
-        ...axes(
-          t,
-          first.months.map((m) => monthLabel(m)),
-        ),
-        series: withRows.map((s) => ({
-          name: s.siteName,
+        grid: { left: 8, right: 8, top: 28, bottom: 36, containLabel: true },
+        ...base,
+        yAxis: { ...base.yAxis, name: units.size === 1 ? `tCO2e/${[...units][0]}` : "tCO2e per unit", nameTextStyle: { color: t.colors.muted } },
+        series: lines.map(({ site, series }) => ({
+          name: units.size === 1 ? site.siteName : `${site.siteName} (tCO2e/${series.unit})`,
           type: "line",
           connectNulls: false,
           symbolSize: 6,
-          itemStyle: { color: colorOf(s.siteId) },
-          data: intensitySeries(data, period, s).intensity,
+          itemStyle: { color: colorOf(site.siteId) },
+          data: months.map((m) => {
+            const i = series.months.indexOf(m);
+            return i < 0 ? null : series.intensity[i];
+          }),
         })),
       },
       t,

@@ -120,7 +120,15 @@ export function EdePdf(p: EdePdfProps) {
   const periodText = edePeriodLabel(p.period);
   const footer = `EDE report · ${p.company} · ${periodText}`;
   const grid = monthlyGrid(data, p.period, p.sites);
-  const intensity = intensitySites(data, p.sites).map((x) => ({ site: x, series: intensitySeries(data, p.period, x) }));
+  // Sites with production only (no production means no intensity), on the union of their months.
+  const intensity = intensitySites(data, p.sites)
+    .map((x) => ({ site: x, series: intensitySeries(data, p.period, x) }))
+    .filter((x) => x.series.intensity.some((v) => v !== null));
+  const intensityMonths = [...new Set(intensity.flatMap((x) => x.series.months))].sort();
+  const intensityAt = (x: (typeof intensity)[number], m: string) => {
+    const i = x.series.months.indexOf(m);
+    return i < 0 ? null : x.series.intensity[i];
+  };
   const kpis: [string, string][] = [
     ["Total emissions", `${n(f.total)} tCO2e`],
     ["Scope 1", `${n(f.scope1)} tCO2e`],
@@ -209,7 +217,8 @@ export function EdePdf(p: EdePdfProps) {
         <Text style={s.h2}>Monthly emissions (tCO2e)</Text>
         {pivot(
           grid.months,
-          grid.series.map((x) => ({ name: x.siteName, values: x.values })),
+          // Renewables-only sites have no emissions to tabulate (same filter as the chart).
+          grid.series.filter((x) => x.values.some((v) => v !== 0)).map((x) => ({ name: x.siteName, values: x.values })),
           2,
         ).map((tb, i) => (
           <View key={i} style={{ marginBottom: 8 }}>
@@ -242,9 +251,9 @@ export function EdePdf(p: EdePdfProps) {
           <>
             <Text style={s.h2}>Monthly intensity</Text>
             {pivot(
-              intensity[0].series.months,
-              intensity.map((x) => ({ name: `${x.site.siteName} (tCO2e/${x.series.unit})`, values: x.series.intensity })),
-              4,
+              intensityMonths,
+              intensity.map((x) => ({ name: `${x.site.siteName} (tCO2e/${x.series.unit})`, values: intensityMonths.map((m) => intensityAt(x, m)) })),
+              6,
             ).map((tb, i) => (
               <View key={i} style={{ marginBottom: 8 }}>
                 <Table s={s} headers={tb.headers} widths={tb.widths} rows={tb.rows} numeric={tb.headers.map((_, j) => j).slice(1)} />

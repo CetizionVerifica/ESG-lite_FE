@@ -59,7 +59,7 @@ export function IntensityTrend({ data, period, sites, colorIndex }: Props) {
                   id: "intensity",
                   header: intensityUnit,
                   numeric: true,
-                  decimals: 4,
+                  decimals: 6,
                 },
               ],
               rows: labels.map((month, i) => ({
@@ -108,7 +108,7 @@ export function IntensityTrend({ data, period, sites, colorIndex }: Props) {
             },
             lineStyle: { width: 2 },
             tooltip: {
-              valueFormatter: (v) => (typeof v === "number" ? `${formatNumber(v, 4)} ${intensityUnit}` : "—"),
+              valueFormatter: (v) => (typeof v === "number" ? `${formatNumber(v, 6)} ${intensityUnit}` : "—"),
             },
             data: series?.intensity ?? [],
           },
