@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Brand } from "../../services/brandService";
-import { type ConsoleData, brandProblem, buildClientRows, recentActivity, setupGaps } from "./logic";
+import { type ConsoleData, brandProblem, buildClientRows, recentActivity, setupGaps, summaryActivity, withMonth } from "./logic";
 
 const goodBrand = (companyId: number): Brand => ({
   companyId,
@@ -129,5 +129,41 @@ describe("recentActivity", () => {
       ["Factor upload · 40 factors", "Glochem · Dammam · Electricity"],
       ["Factor upload · 1 factor", "Midal Cables · Hidd · Fuel"],
     ]);
+  });
+});
+
+describe("summary", () => {
+  const summary = {
+    month: "2026-10",
+    totals: { clients: 2, active_clients: 2, sites: 2, users: 3, emission_factors: 10, entries_this_month: 5, pending_entries: 7 },
+    clients: [{ company_id: 1, entries_this_month: 5, pending_this_month: 2, pending: 7 }],
+    activity: [],
+  };
+
+  it("adds this month's entries to every client row, zero for clients with none", () => {
+    const rows = withMonth(buildClientRows(data(), 2026), summary);
+    expect(rows.map((r) => [r.name, r.month])).toEqual([
+      ["Midal Cables", { entries: 5, pending: 2 }],
+      ["Glochem", { entries: 0, pending: 0 }],
+    ]);
+    const without = withMonth(buildClientRows(data(), 2026), undefined);
+    expect(without.every((r) => r.month === undefined)).toBe(true);
+  });
+
+  it("describes bulk uploads, factor uploads and onboarding", () => {
+    const base = { company_id: 2, company_name: "Glochem", site_id: 20, site_name: "Dammam", category_name: "Electricity", by: "Ana", batch_id: "x" };
+    const items = summaryActivity([
+      { ...base, kind: "onboarding", at: "2026-10-09T00:00:00Z", site_id: null, site_name: null, category_name: null, rows: null, pending: null, by: null, batch_id: null },
+      { ...base, kind: "bulk_upload", at: "2026-10-08T00:00:00Z", rows: 12, pending: 3 },
+      { ...base, kind: "bulk_upload", at: "2026-10-07T00:00:00Z", rows: 1, pending: 0, batch_id: "y" },
+      { ...base, kind: "factor_upload", at: "2026-10-06T00:00:00Z", rows: 40, pending: null, by: null },
+    ]);
+    expect(items.map((i) => [i.kind, i.title, i.detail])).toEqual([
+      ["onboarding", "Client onboarded · Glochem", "New client"],
+      ["bulk_upload", "Bulk upload · 12 entries, 3 pending", "Glochem · Dammam · Electricity · Ana"],
+      ["bulk_upload", "Bulk upload · 1 entry", "Glochem · Dammam · Electricity · Ana"],
+      ["factor_upload", "Factor upload · 40 factors", "Glochem · Dammam · Electricity"],
+    ]);
+    expect(new Set(items.map((i) => i.id)).size).toBe(4);
   });
 });
