@@ -84,6 +84,17 @@ describe("mergeFera", () => {
   it("keeps FERA rows when looking at the FERA category", () => {
     expect(mergeFera([parent, fera], true).rows).toHaveLength(2);
   });
+
+  it("keeps a FERA row whose parent isn't in the list", () => {
+    expect(mergeFera([fera, other], false).rows.map((r) => r.pk_id)).toEqual([2, 3]);
+  });
+
+  it("keeps a pending FERA row of an approved parent as its own row", () => {
+    const approved = row({ pk_id: 1, fera_linked_id: 2, status: "approved" });
+    const m = mergeFera([approved, fera], false);
+    expect(m.rows.map((r) => r.pk_id)).toEqual([1, 2]);
+    expect(m.feraOf.has(1)).toBe(false);
+  });
 });
 
 describe("optionLabel", () => {

@@ -57,6 +57,8 @@ export interface ApprovedEmissionsReportPayload {
 export interface EmissionsSummary {
   total_emission: number;
   pending_count: number;
+  /** Pending entries as the approvals list shows them (ESG-lite #82); absent on older APIs. */
+  pending_review_count?: number;
   approved_count: number;
   rejected_count: number;
 }

@@ -112,17 +112,21 @@ export const isFera = (row: EmissionData) => row.category?.category_name?.toLowe
 /**
  * FERA (fuel- and energy-related) rows ride on their parent: they are hidden
  * from the list and shown as "+X tCO₂e" on the parent, unless the user is
- * looking at the FERA category itself.
+ * looking at the FERA category itself. A FERA row stays a row of its own when
+ * its parent isn't in the list, or when it waits for review and its parent
+ * doesn't (an edit can send a twin back for review): it needs its own decision.
  */
 export function mergeFera<T extends EmissionData>(rows: T[], showFera: boolean): { rows: T[]; feraOf: Map<number, T> } {
-  const fera = rows.filter(isFera);
   const feraOf = new Map<number, T>();
+  const folded = new Set<number>();
   for (const row of rows) {
     if (isFera(row)) continue;
-    const linked = fera.find((f) => f.pk_id === row.fera_linked_id || f.fera_linked_id === row.pk_id);
-    if (linked) feraOf.set(row.pk_id, linked);
+    const linked = rows.find((f) => isFera(f) && (f.pk_id === row.fera_linked_id || f.fera_linked_id === row.pk_id));
+    if (!linked || (linked.status === "pending" && row.status !== "pending")) continue;
+    feraOf.set(row.pk_id, linked);
+    folded.add(linked.pk_id);
   }
-  return { rows: showFera ? rows : rows.filter((r) => !isFera(r)), feraOf };
+  return { rows: showFera ? rows : rows.filter((r) => !isFera(r) || !folded.has(r.pk_id)), feraOf };
 }
 
 // ── Activity data ───────────────────────────────────────────────────────────
