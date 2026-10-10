@@ -90,12 +90,15 @@ export function BulkUploadModal(props: BulkUploadModalProps) {
       // wrong total, so the count has to be reported — a bare "imported N rows"
       // reads as success even when a third of the sheet never made it in.
       const skipped = res?.skipped ?? res?.data?.skipped ?? 0;
+      // Newer AI service: FERA twins are counted apart from `inserted`.
+      const fera = res?.fera_inserted ?? res?.data?.fera_inserted ?? 0;
+      const feraNote = fera > 0 ? ` Plus ${fera} FERA row${fera === 1 ? "" : "s"}.` : "";
 
       setSuccessMsg(
         inserted !== null
           ? skipped > 0
-            ? `Imported ${inserted} rows. ${skipped} row${skipped === 1 ? "" : "s"} skipped — they could not be calculated (check the Issue column in the preview).`
-            : `Saved successfully. Imported ${inserted} rows.`
+            ? `Imported ${inserted} rows.${feraNote} ${skipped} row${skipped === 1 ? "" : "s"} skipped — they could not be calculated (check the Issue column in the preview).`
+            : `Saved successfully. Imported ${inserted} rows.${feraNote}`
           : "Saved successfully."
       );
 

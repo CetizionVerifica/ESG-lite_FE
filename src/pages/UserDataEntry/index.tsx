@@ -2177,7 +2177,7 @@ const UserDataEntryPage = () => {
           activity_data: activityData,
           extra_data: extraData,
           total_emission: 0,
-          unit: "kg CO2e",
+          unit: "tCO2e",
           date_of_reporting: date_of_reporting || selectedDate || "",
           activity_data_unit: activity_data_unit || undefined,
         };
