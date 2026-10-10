@@ -299,6 +299,12 @@ test("forms: auto-generate builds a form from the factors", async ({ page }) => 
   await expect(linked.getByLabel("Category")).toHaveValue(/.+/);
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/capture\/forms\?site=1$/);
+  // A category the site doesn't have starts at the first step instead.
+  await page.goto("/capture/forms?generate=1&site=3&category=10");
+  await expect(linked.getByLabel("Site")).toHaveValue(/.+/);
+  await expect(linked.getByLabel("Category")).toHaveValue("");
+  await expect(linked.getByRole("button", { name: "Next" })).toBeDisabled();
+  await page.keyboard.press("Escape");
 
   await page.goto("/capture/forms");
   await page.getByRole("button", { name: "Auto-generate" }).click();

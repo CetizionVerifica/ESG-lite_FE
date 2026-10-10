@@ -99,8 +99,12 @@ function parentLabelOf(m: FormModel, columnName: string, parentValue: string): s
   return label;
 }
 
-/** Options for a select column; a dependent column's options follow its parent's value. */
-export function columnOptionsFor(m: FormModel, col: ColumnEntity, parentValue?: string): DropdownOptionValue[] {
+/**
+ * Options for a select column; a dependent column's options follow its parent's value.
+ * Three levels down, pass the grandparent's value too: Road › Van and Rail › Van can
+ * have different lists, and only the row knows which one it is in.
+ */
+export function columnOptionsFor(m: FormModel, col: ColumnEntity, parentValue?: string, grandparentValue?: string): DropdownOptionValue[] {
   const name = col.column_name;
   const childDeps = isDependentColumn(m, name) && parentValue ? getCI(m.dependentOptions, name) : undefined;
   if (childDeps && parentValue) {
@@ -109,7 +113,13 @@ export function columnOptionsFor(m: FormModel, col: ColumnEntity, parentValue?: 
     let found: DropdownOptionValue[] | undefined;
     // 0. "grandparent|parent" composite key (3-level configs: Road|Van → fuels).
     const gpCol = parentCol ? parentColumnOf(m, parentCol) : null;
-    if (parentCol && gpCol && isDependentColumn(m, parentCol)) {
+    if (parentCol && gpCol && isDependentColumn(m, parentCol) && grandparentValue) {
+      // The row's own grandparent: its key, and never another grandparent's list.
+      const key = `${parentLabelOf(m, parentCol, grandparentValue)}|${parentLabel}`;
+      found = childDeps[key];
+      if (!found?.length) found = getCI(childDeps, key);
+    } else if (parentCol && gpCol && isDependentColumn(m, parentCol)) {
+      // Grandparent unknown: the first grandparent with a list for this parent.
       const gpEntity = columnByName(m, gpCol);
       for (const gp of (gpEntity && m.columnOptions[String(gpEntity.pk_id)]) || []) {
         const matched = childDeps[`${gp.label}|${parentLabel}`];
