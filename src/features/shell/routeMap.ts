@@ -17,7 +17,7 @@ export interface ShellRoute {
   /** React Router path, absolute. */
   path: string;
   title: string;
-  /** Breadcrumb shown above the page, ending with the page itself. */
+  /** Page trail, ending with the page itself. Route metadata only; not rendered above the title. */
   crumb: string[];
   roles: readonly Role[];
   /** Page spec that will replace the placeholder (docs/redesign/pages, docs/pcf). */

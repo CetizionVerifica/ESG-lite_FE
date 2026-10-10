@@ -63,7 +63,6 @@ export function PageHeaderDemo() {
   return (
     <DemoSection id="page-header" title="PageHeader and ContextChips">
       <PageHeader
-        crumb={[{ label: "Manager", to: "/__ui" }, { label: "Approvals" }]}
         title="Approvals"
         description="Review what your team submitted."
         primaryAction={{ label: "Add data", onClick: () => {}, icon: <Plus aria-hidden className="size-4" /> }}
@@ -82,7 +81,7 @@ export function PageHeaderDemo() {
         {ctx.scope ?? "all"}
       </p>
       <Variant label="Loading">
-        <PageHeader title="" loading crumb={[{ label: "Sites" }]} primaryAction={{ label: "Edit", onClick: () => {} }} />
+        <PageHeader title="" loading primaryAction={{ label: "Edit", onClick: () => {} }} />
       </Variant>
     </DemoSection>
   );

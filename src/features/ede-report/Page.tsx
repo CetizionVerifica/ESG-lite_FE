@@ -143,7 +143,6 @@ export default function EdeReportPage() {
   const header = (context?: ReactNode) => (
     <PageHeader
       title="EDE report"
-      crumb={company ? [{ label: company }] : undefined}
       context={context}
       primaryAction={
         context

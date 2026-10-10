@@ -7,7 +7,7 @@ Every component: token colours only, keyboard accessible, has loading/empty/erro
 
 | Component | Purpose | Key props / behaviour |
 |---|---|---|
-| `PageHeader` | Title, breadcrumb, context chips, actions | `title`, `crumb[]`, `context` (period/site), `primaryAction`, `secondaryActions[]` |
+| `PageHeader` | Title, context chips, actions (no breadcrumb) | `title`, `context` (period/site), `primaryAction`, `secondaryActions[]` |
 | `ContextChips` | Period / Site / Category / Scope selectors | Synced to URL query; period supports Month, Quarter, CY, FY, custom |
 | `KpiStrip` | One row of 3–5 figures in one panel | Primary KPI wider; delta with ▲▼ and fixed good/bad colour; unit in small text |
 | `ScopeBar` | Stacked Scope 1/2/3 bar + legend | Uses `--t-s1/2/3` only |
