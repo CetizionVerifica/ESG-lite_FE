@@ -211,7 +211,7 @@ test("an import refused after the check keeps Import off until the sheet changes
   await imp.locator('input[type="file"]').setInputFiles({ name: "factors.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
   await expect(imp.getByText("All 1 rows are ready to import.")).toBeVisible();
   await imp.getByRole("button", { name: "Import 1 factor" }).click();
-  await expect(imp.getByText("Nothing was imported. Fix the rows below, then choose the sheet again.")).toBeVisible();
+  await expect(imp.getByText("Nothing was imported. Fix the rows below in the sheet or the columns, then import again.")).toBeVisible();
   await expect(imp.getByRole("button", { name: "Open existing" })).toBeVisible();
   await expect(imp.getByRole("button", { name: "Import 1 factor" })).toBeDisabled();
   expect(calls.filter((c) => c.path.endsWith("/import"))).toHaveLength(1);

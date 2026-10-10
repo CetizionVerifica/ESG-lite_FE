@@ -86,7 +86,8 @@ export function ImportDrawer(props: Props) {
   const check = useImportCheck(body, clientOk && step === 1);
   const canImport = clientOk && !run.isPending && refused !== body && (check.data ? check.data.valid : !!check.error);
 
-  const submit = () =>
+  const submit = () => {
+    setRefused(null);
     run.mutate(body, {
       onSuccess: () => setStep(2),
       onError: (e) => {
@@ -95,6 +96,7 @@ export function ImportDrawer(props: Props) {
         if (status === 400 || status === 409) setRefused(body);
       },
     });
+  };
 
   const companyOptions = [{ value: 0, label: "Global library" }, ...props.companies.map((c) => ({ value: c.company_id, label: c.name }))];
   const headerOptions = (sheet?.headers ?? []).map((h) => ({ value: h, label: h }));
@@ -197,7 +199,7 @@ export function ImportDrawer(props: Props) {
                     {check.isFetching
                       ? `All ${parsed.length} rows look complete. Checking them against the library…`
                       : refused === body
-                        ? `Nothing was imported. Fix the rows below, then choose the sheet again.`
+                        ? `Nothing was imported. Fix the rows below in the sheet or the columns, then import again.`
                         : check.data?.valid
                         ? `All ${parsed.length} rows are ready to import.`
                         : check.data
