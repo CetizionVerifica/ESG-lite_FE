@@ -4,6 +4,7 @@ import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConf
 import { type EmissionDocument, getDocumentsByEmission } from "../../services/documentService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { type UnitData, getUserUnitsBySiteAndCategory } from "../../services/unitService";
+import { invalidateEmissionQueries } from "../../lib/emissionQueries";
 import {
   type EmissionUploadBatch,
   approveEmission,
@@ -141,7 +142,7 @@ export function commitApprove(id: number, opts?: { keepalive?: boolean }) {
 
 export function useReviewMutations() {
   const qc = useQueryClient();
-  const refresh = () => qc.invalidateQueries({ queryKey: keys.all });
+  const refresh = () => invalidateEmissionQueries(qc);
   const reject = useMutation({
     mutationFn: ({ ids, reason }: { ids: number[]; reason: string }) =>
       ids.length === 1 ? rejectEmission(ids[0], reason) : bulkRejectEmissions(ids, reason),
@@ -179,7 +180,7 @@ export function useManagerEdit() {
   return useMutation({
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof managerUpdateEmission>[1] }) => managerUpdateEmission(id, body),
     onSettled: (_d, _e, v) => {
-      void qc.invalidateQueries({ queryKey: keys.all });
+      void invalidateEmissionQueries(qc);
       void qc.invalidateQueries({ queryKey: ["audit-logs", "emission", v.id] });
     },
   });
@@ -199,7 +200,7 @@ export function useBatches(siteIds: number[], categoryId: number | null) {
 
 export function useBatchMutations() {
   const qc = useQueryClient();
-  const refresh = () => qc.invalidateQueries({ queryKey: keys.all });
+  const refresh = () => invalidateEmissionQueries(qc);
   const approve = useMutation({ mutationFn: (batchId: string) => approveEmissionsByBatch(batchId), onSettled: refresh });
   const reject = useMutation({
     mutationFn: ({ batchId, reason }: { batchId: string; reason: string }) => rejectEmissionsByBatch(batchId, reason),
