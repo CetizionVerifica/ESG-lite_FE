@@ -56,7 +56,7 @@ export function EntryRow(p: Props) {
   const categoryOptions =
     p.mappings.length > 0
       ? p.mappings.map((m) => ({ value: m.global_category_name, label: m.company_category_name }))
-      : p.factors.map((f) => ({ value: f.emission_category_name, label: f.emission_category_name }));
+      : [...new Set(p.factors.map((f) => f.emission_category_name))].map((name) => ({ value: name, label: name }));
   const bill = billOf(row);
   const aiCategory = isAiField(row, "emission_category");
   const confidence = aiCategory ? (bill?.confidence ?? null) : null;
@@ -182,10 +182,10 @@ export function EntryRow(p: Props) {
           {factor ? (
             <>
               Factor {factor.factor_value} kgCO₂e per {factor.denominator_unit}, {factor.year}
-              {factor.year !== p.reportingYear && <> · factor year {p.factorYear} used for {p.reportingYear} data</>}
+              {factor.year !== p.reportingYear && <> · factor year {factor.year} used for {p.reportingYear} data</>}
             </>
           ) : row.emission_category ? (
-            <span className="text-bad">No factor for {p.factorYear}</span>
+            <span className="text-bad">No factor for this category</span>
           ) : null}
           {p.comparison && (
             <span className="mt-1 block">

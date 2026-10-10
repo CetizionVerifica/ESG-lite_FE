@@ -105,7 +105,8 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       if (path.endsWith("/user/emission-factors/site/4/category/11")) return json(travelFactors);
       if (path.endsWith("/user/emission-factors/site/4/category/99")) return json([]);
       if (path.endsWith("/user/emission-factors/site/4/category/9")) {
-        const year = Number(url.searchParams.get("year"));
+        // The page asks for every year; the factors here are 2024's.
+        const year = Number(url.searchParams.get("year") ?? 2024);
         return json(factors.map((f) => ({ ...f, year })));
       }
       if (path.includes("/user/units/site/4/category/")) return json([{ unit_id: 1, unit_name: "litre" }, { unit_id: 2, unit_name: "gallon" }]);
@@ -196,6 +197,27 @@ test("contributor types a row, sees tCO2e live and submits it", async ({ page })
     date_of_reporting: "2025-09-30",
     reporting_period: "monthly",
   });
+});
+
+test("with no factor in the factor year, the preview uses the newest earlier one, as the save does", async ({ page }) => {
+  await signIn(page, []);
+  // Only 2022 and 2023 factors exist; Sep 2025 data looks for 2024 first.
+  const older = [
+    { ...factors[0], emission_factor_id: 21, factor_value: 2.5, year: 2023 },
+    { ...factors[0], emission_factor_id: 20, factor_value: 2.4, year: 2022 },
+  ];
+  await page.route(/\/user\/emission-factors\/site\/4\/category\/9(\?|$)/, (route) => {
+    // Like the backend: ?year= filters to that year, no year returns them all.
+    const year = new URL(route.request().url()).searchParams.get("year");
+    return route.fulfill({ json: year ? older.filter((f) => f.year === Number(year)) : older });
+  });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1000");
+  await row.getByLabel("Unit").selectOption("litre");
+  await expect(row.getByText("factor year 2023 used for 2025 data")).toBeVisible();
+  await expect(row.getByText("= 2.50 tCO₂e")).toBeVisible();
 });
 
 test("an incomplete row blocks review and a duplicate can be replaced", async ({ page }) => {
