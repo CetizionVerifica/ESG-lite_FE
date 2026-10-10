@@ -53,6 +53,8 @@ export const SHELL_ROUTES = [
   { id: "targets", path: "/targets", title: "Targets (SBTi)", crumb: ["Targets (SBTi)"], roles: ["Manager"], spec: "P12" },
   // PCF slot, owned by the Product carbon footprint plan (docs/pcf/).
   { id: "pcf", path: "/products/*", title: "Products (PCF)", crumb: ["Products (PCF)"], roles: ["Manager"], spec: "C01–C06", roleRedirect: { Superadmin: "/setup/products" } },
+  // C05: a footprint's declaration as PDF, PACT JSON or CSV; more specific than /products/*, so it wins.
+  { id: "declaration-export", path: "/products/:studyId/export", title: "Export declaration", crumb: ["Products (PCF)", "Export declaration"], roles: ["Manager"], spec: "C05", roleRedirect: { Superadmin: "/setup/products" } },
 
   // Everyone
   { id: "notifications", path: "/notifications", title: "Notifications", crumb: ["Notifications"], roles: ALL, spec: "P13" },
