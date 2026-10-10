@@ -57,6 +57,6 @@ export * from "./reportPeriod";
 export { SetupListPage, type SetupListPageProps } from "./SetupListPage";
 export { TypedDeleteModal, type TypedDeleteModalProps } from "./TypedDeleteModal";
 export { typedNameMatches, withoutParams } from "./setupList";
-export * from "./reportFilters";
+export * from "./reportFilterModel";
 export { ReportFilters, type ReportFiltersProps } from "./ReportFilters";
 export { useDebounced } from "./hooks/useDebounced";
