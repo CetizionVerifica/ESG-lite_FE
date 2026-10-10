@@ -3,7 +3,7 @@
  * unit, e.g. "Road - Van - Diesel") into fields, choices, dependencies and
  * factor rules for the chosen depth of each unit group. Ported from the
  * legacy AutoGenerateColumnConfigModal; dependent choices are keyed by the
- * parent's choice, as that modal stored them.
+ * parent's choice, and third-level ones by "grandparent|parent".
  */
 import type {
   ColumnConfigProposal,
@@ -73,11 +73,14 @@ export function buildGroup(g: ProposedConfigGroup, depth: number): Generated {
     options[col] = sorted(entries.map((e) => e.parts[i])).map(opt);
     if (i === 0) continue;
     deps[col] = columns[i - 1].column_name;
+    // Second level: keyed by the parent's choice. Third: by "grandparent|parent",
+    // so Road › Van and Rail › Van keep their own lists (the form reads that key first).
     const under = new Map<string, Set<string>>();
     for (const e of entries) {
-      const set = under.get(e.parts[i - 1]) ?? new Set<string>();
+      const parentKey = e.parts.slice(0, i).join("|");
+      const set = under.get(parentKey) ?? new Set<string>();
       set.add(e.parts[i]);
-      under.set(e.parts[i - 1], set);
+      under.set(parentKey, set);
     }
     depOpts[col] = Object.fromEntries([...under].map(([parent, kids]) => [parent, sorted(kids).map(opt)]));
   }

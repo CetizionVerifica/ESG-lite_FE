@@ -48,13 +48,21 @@ describe("splitName", () => {
 });
 
 describe("buildGroup", () => {
+  it("keeps third-level choices apart when two parents share a choice", () => {
+    const g = buildGroup(group({ ef_names: ["Road - Van - Diesel", "Rail - Van - Electric"] }), 3);
+    expect(g.depOpts.vehicle).toEqual({ Rail: [{ id: "Van", label: "Van" }], Road: [{ id: "Van", label: "Van" }] });
+    expect(g.depOpts.fuel["Road|Van"].map((o) => o.id)).toEqual(["Diesel"]);
+    expect(g.depOpts.fuel["Rail|Van"].map((o) => o.id)).toEqual(["Electric"]);
+  });
+
   it("builds dependent choices and one rule per factor name", () => {
     const g = buildGroup(group(), 3);
     expect(g.columns.map((c) => c.column_name)).toEqual(["mode", "vehicle", "fuel", "distance"]);
     expect(g.options.mode.map((o) => o.id)).toEqual(["Air", "Road"]);
     expect(g.deps).toEqual({ vehicle: "mode", fuel: "vehicle" });
     expect(g.depOpts.vehicle.Road.map((o) => o.id)).toEqual(["Car", "Van"]);
-    expect(g.depOpts.fuel.Van.map((o) => o.id)).toEqual(["Diesel", "Petrol"]);
+    expect(g.depOpts.fuel["Road|Van"].map((o) => o.id)).toEqual(["Diesel", "Petrol"]);
+    expect(g.depOpts.fuel.Van).toBeUndefined();
     expect(g.mappings["Road|Van|Diesel"]).toBe("Road - Van - Diesel");
     expect(g.mappings["Air|Short|Unknown"]).toBe("Air - Short - -");
   });

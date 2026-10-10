@@ -288,8 +288,17 @@ test("forms: auto-generate builds a form from the factors", async ({ page }) => 
   );
   await page.route(/\/admin\/column-configs\/auto-generate\/confirm/, (route) => {
     calls.push({ method: "POST", path: "/admin/column-configs/auto-generate/confirm", body: route.request().postDataJSON() });
-    return route.fulfill({ status: 201, json: { message: "created", columnConfig: { pk_id: 7 }, units_created: [] } });
+    return route.fulfill({ status: 201, json: { message: "created", columnConfig: { pk_id: 7 }, units_created: ["kWh", "tonne"] } });
   });
+
+  // The deep link from Emission factors opens the drawer on the pair.
+  await page.goto("/capture/forms?generate=1&site=1&category=10");
+  const linked = page.getByRole("dialog", { name: "Auto-generate a form" });
+  await expect(linked.getByText("3 factors")).toBeVisible();
+  await linked.getByRole("button", { name: "Back" }).click();
+  await expect(linked.getByLabel("Category")).toHaveValue(/.+/);
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/capture\/forms\?site=1$/);
 
   await page.goto("/capture/forms");
   await page.getByRole("button", { name: "Auto-generate" }).click();
@@ -301,22 +310,43 @@ test("forms: auto-generate builds a form from the factors", async ({ page }) => 
   await expect(drawer.getByText("This site and category already has a form")).toBeVisible();
   await expect(drawer.getByText("3 factors")).toBeVisible();
   await drawer.getByRole("switch", { name: "Per kWh" }).click();
+  await drawer.getByLabel("Add another unit").fill("Tonne");
+  await drawer.getByLabel("Add another unit").press("Enter");
+  await expect(drawer.getByRole("list", { name: "Units to add" })).toContainText("tonne");
   await drawer.getByRole("button", { name: "Next" }).click();
 
   await expect(drawer.getByLabel("Form name")).toHaveValue("Hidd - Stationary combustion - litre");
+  // A typed name belongs to its site and category: another pair starts from its own default.
+  await drawer.getByLabel("Form name").fill("Hidd diesel");
+  await drawer.getByRole("button", { name: "Back" }).click();
+  await drawer.getByRole("button", { name: "Back" }).click();
+  await drawer.getByLabel("Category").selectOption({ label: "Purchased electricity" });
+  await drawer.getByRole("button", { name: "Next" }).click();
+  await expect(drawer.getByRole("list", { name: "Units to add" })).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Next" }).click();
+  await expect(drawer.getByLabel("Form name")).toHaveValue("Hidd - Stationary combustion - litre + kWh");
+  await drawer.getByRole("button", { name: "Back" }).click();
+  await drawer.getByRole("button", { name: "Back" }).click();
+  await drawer.getByLabel("Category").selectOption({ label: "Stationary combustion" });
+  await drawer.getByRole("button", { name: "Next" }).click();
+  await drawer.getByRole("button", { name: "Next" }).click();
+  await expect(drawer.getByLabel("Form name")).toHaveValue("Hidd diesel");
   await expect(drawer.getByRole("heading", { name: "Factor rules (3)" })).toBeVisible();
   await expect(drawer.getByText("Diesel › Generator")).toBeVisible();
   await drawer.getByRole("button", { name: "Create and review" }).click();
 
   await expect(page).toHaveURL(/\/capture\/forms\/7$/);
-  await expect(page.getByText('Form "Hidd - Stationary combustion - litre" created. Review it before contributors use it.')).toBeVisible();
+  await expect(page.getByText('Form "Hidd diesel" created. Units added: kWh, tonne. Review it before contributors use it.')).toBeVisible();
   const body = calls.find((c) => c.path.endsWith("/auto-generate/confirm"))?.body as Record<string, unknown>;
-  expect(body.config_name).toBe("Hidd - Stationary combustion - litre");
+  expect(body.config_name).toBe("Hidd diesel");
   expect((body.columns as { column_name: string }[]).map((c) => c.column_name)).toEqual(["fuel", "equipment", "quantity"]);
   expect(body.column_dependencies).toEqual({ equipment: "fuel" });
   expect(body.emission_category_mapping).toEqual({ "Diesel|Generator": "Diesel - Generator", "Diesel|Boiler": "Diesel - Boiler", "LPG|Boiler": "LPG - Boiler" });
   expect(body.create_units).toBe(true);
-  expect(body.proposed_units).toEqual([{ unit_name: "kWh", already_exists: false }]);
+  expect(body.proposed_units).toEqual([
+    { unit_name: "kWh", already_exists: false },
+    { unit_name: "tonne", already_exists: false },
+  ]);
 });
 
 test("form builder: edits show in the preview and save in one request", async ({ page }) => {

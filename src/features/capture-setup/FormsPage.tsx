@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronRight, FileStack, MoreHorizontal, Plus, SearchX, Sparkles, Trash2 } from "lucide-react";
 import {
   Button,
@@ -26,6 +26,14 @@ import { type FormRow, buildCoverage, buildFormRows, errorMessage, formPath, mat
 
 const FILTER_KEYS = ["client", "site"];
 
+/** `?generate=1&site=&category=` (e.g. from Emission factors import) opens auto-generate for that pair. */
+function generateLink(params: URLSearchParams): { siteId: number | null; categoryId: number | null } | null {
+  if (params.get("generate") !== "1") return null;
+  const sites = toIds(params.get("site")?.split(","));
+  const category = Number(params.get("category"));
+  return { siteId: sites.length === 1 ? sites[0] : null, categoryId: Number.isInteger(category) && category > 0 ? category : null };
+}
+
 /** P24 `/capture/forms`: which site × category pairs have a data-entry form, and every form. */
 export default function FormsPage() {
   const navigate = useNavigate();
@@ -38,7 +46,15 @@ export default function FormsPage() {
 
   const [creating, setCreating] = useState<{ siteId: number | null; categoryId: number | null } | null>(null);
   const [createErr, setCreateErr] = useState<string | null>(null);
-  const [generating, setGenerating] = useState<{ siteId: number | null; categoryId: number | null } | null>(null);
+  const [params, setParams] = useSearchParams();
+  const [generating, setGeneratingState] = useState(() => generateLink(params));
+  // Closing the drawer also drops the deep link, so a reload doesn't reopen it.
+  const setGenerating = (next: { siteId: number | null; categoryId: number | null } | null) => {
+    setGeneratingState(next);
+    if (!next && params.has("generate")) {
+      setParams((p) => new URLSearchParams([...p].filter(([k]) => k !== "generate" && k !== "category")), { replace: true });
+    }
+  };
   const [deleting, setDeleting] = useState<FormRow | null>(null);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
@@ -247,9 +263,10 @@ export default function FormsPage() {
           sites={clientIds.length ? allSites.filter((s) => s.company && clientIds.includes(s.company.company_id)) : allSites}
           initial={generating}
           onClose={() => setGenerating(null)}
-          onCreated={(id, name) => {
+          onCreated={(id, name, units) => {
             setGenerating(null);
-            toast({ title: `Form "${name}" created. Review it before contributors use it.`, tone: "good" });
+            const added = units.length ? ` Units added: ${units.join(", ")}.` : "";
+            toast({ title: `Form "${name}" created.${added} Review it before contributors use it.`, tone: "good" });
             if (id) navigate(formPath(id));
           }}
         />
