@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { type Page, expect, test } from "@playwright/test";
 
 /**
@@ -157,4 +158,18 @@ test("an empty period offers the year before", async ({ page }) => {
   await expect(page.getByText("Nothing approved for CY 2025.")).toBeVisible();
   await page.getByRole("button", { name: "Try CY 2024" }).click();
   await expect.poll(() => last()?.year).toBe(2024);
+});
+
+test("the PDF downloads with the company and period in its name", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/reports/ede?year=2025");
+  await expect(page.getByText("Intensity trend")).toBeVisible();
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download PDF" }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("EDE_Report_Midal_Cables_CY_2025.pdf");
+  const bytes = readFileSync((await file.path())!);
+  expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+  await expect(page.getByRole("button", { name: "Download PDF" })).toBeEnabled();
 });

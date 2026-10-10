@@ -108,7 +108,7 @@ export function reportSites(d: EdeReportResponse): SiteRef[] {
   add(d.monthlyBySite);
   add(d.savedBySite);
   add(d.renewableKwhBySite);
-  add(d.intensityMonthly as (IntensityMonthlyRow & { siteId?: number })[]);
+  add(d.intensityMonthly);
   return [...map].map(([siteId, siteName]) => ({ siteId, siteName })).sort((a, b) => a.siteName.localeCompare(b.siteName) || a.siteId - b.siteId);
 }
 
@@ -151,10 +151,20 @@ export function monthlyGrid(d: EdeReportResponse, period: ReportPeriod, sites: S
   };
 }
 
+/** True when an intensity row belongs to `site`: by id, or by name from a backend that doesn't send one. */
+export const isSiteRow = (r: IntensityMonthlyRow, site: SiteRef) => (r.siteId !== undefined ? r.siteId === site.siteId : r.siteName === site.siteName);
+
+/** Sites with intensity rows, those with emissions first (a renewables-only site has nothing to show). */
+export function intensitySites(d: EdeReportResponse, sites: SiteRef[]): SiteRef[] {
+  const emits = (s: SiteRef) => d.intensityMonthly.some((r) => isSiteRow(r, s) && r.emissions > 0);
+  const listed = sites.filter((s) => d.intensityMonthly.some((r) => isSiteRow(r, s)));
+  return [...listed.filter(emits), ...listed.filter((s) => !emits(s))];
+}
+
 /** One site's monthly emissions, production and intensity across the period. */
-export function intensitySeries(d: EdeReportResponse, period: ReportPeriod, siteName: string) {
+export function intensitySeries(d: EdeReportResponse, period: ReportPeriod, site: SiteRef) {
   const months = periodMonths(period);
-  const rows = d.intensityMonthly.filter((r) => r.siteName === siteName);
+  const rows = d.intensityMonthly.filter((r) => isSiteRow(r, site));
   const byMonth = new Map(rows.map((r) => [r.month, r]));
   for (const r of rows) if (!months.includes(r.month)) months.push(r.month);
   months.sort();

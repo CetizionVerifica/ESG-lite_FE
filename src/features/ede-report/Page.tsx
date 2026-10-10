@@ -1,6 +1,7 @@
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { FileBarChart } from "lucide-react";
+import { Download, FileBarChart } from "lucide-react";
+import { useTheme } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
 import {
@@ -24,6 +25,7 @@ import {
   supportedPeriod,
   useDebounced,
   useFilterParams,
+  useToast,
   writePeriod,
 } from "../../ui";
 import { useAdminSites, useEdeReport } from "./api";
@@ -112,7 +114,50 @@ export default function EdeReportPage() {
   const setPeriod = (p: typeof period) => setParams((cur) => writePeriod(cur, p), { replace: true });
 
   const company = sites[0]?.company?.name;
-  const header = (context?: ReactNode) => <PageHeader title="EDE report" crumb={company ? [{ label: company }] : undefined} context={context} />;
+  const { pack } = useTheme();
+  const { toast } = useToast();
+  const [generating, setGenerating] = useState(false);
+  const downloadPdf = async () => {
+    if (!data) return;
+    setGenerating(true);
+    try {
+      // Loaded on demand: @react-pdf and the print charts stay out of the page bundle.
+      const { downloadEdePdf } = await import("./pdf/download");
+      const shown = data.query;
+      const siteNames = sites.filter((s) => shown.siteIds.includes(s.site_id)).map((s) => s.name);
+      const categoryNames = categories.filter((c) => shown.categoryIds.includes(c.value)).map((c) => c.label);
+      await downloadEdePdf({
+        data,
+        period: shown.period,
+        company,
+        sitesText: siteNames.length === sites.length ? `All sites (${siteNames.length})` : siteNames.join(", "),
+        categoriesText: categoryNames.length ? categoryNames.join(", ") : "All categories",
+        brand: isStaff && clientId !== null ? { clientId } : { pack },
+      });
+    } catch {
+      toast({ tone: "bad", title: "Couldn't create the PDF.", description: "Try again; if it keeps failing, use the chart and table exports." });
+    } finally {
+      setGenerating(false);
+    }
+  };
+  const header = (context?: ReactNode) => (
+    <PageHeader
+      title="EDE report"
+      crumb={company ? [{ label: company }] : undefined}
+      context={context}
+      primaryAction={
+        context
+          ? {
+              label: generating ? "Generating…" : "Download PDF",
+              icon: <Download className="h-4 w-4" aria-hidden />,
+              onClick: downloadPdf,
+              loading: generating,
+              disabled: generating || !data || !figures || figures.empty || report.isPlaceholderData,
+            }
+          : undefined
+      }
+    />
+  );
 
   if (isStaff && clientId === null)
     return (
