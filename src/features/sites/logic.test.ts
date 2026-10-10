@@ -77,6 +77,16 @@ describe("buildRows", () => {
   it("lists cascades, naming the user accounts that go with the site", () => {
     const items = cascadeItems(row);
     expect(items).toContain("3 column configs");
+    // Every site relation the backend deletes with ON DELETE CASCADE.
+    expect(items).toEqual(
+      expect.arrayContaining([
+        "All emission entries recorded for this site",
+        "Its emission factors",
+        "Its products and their production data",
+        "Its PCF studies",
+        "Its site-specific units",
+      ]),
+    );
     expect(items[items.length - 1]).toMatch(/^1 user account assigned to this site \(u1@x\.io\)/);
   });
 });

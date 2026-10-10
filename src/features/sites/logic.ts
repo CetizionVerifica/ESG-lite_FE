@@ -181,6 +181,8 @@ export function cascadeItems(row: SiteRow): string[] {
     "Its emission factors",
     `${plural(row.configCount, "column config", "column configs")}`,
     "Its products and their production data",
+    "Its PCF studies",
+    "Its site-specific units",
     row.users.length
       ? `${plural(row.users.length, "user account", "user accounts")} assigned to this site (${row.users.slice(0, 3).map(personName).join(", ")}${row.users.length > 3 ? ", …" : ""})`
       : "No user accounts (no one is assigned to this site)",
