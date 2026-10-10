@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { Button, EmptyState, cn, formatNumber, panel } from "../../../ui";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateEmissionQueries } from "../../../lib/emissionQueries";
 import { linkBillEvidence, saveRow, updateRow, uploadRowEvidence, type SaveOutcome } from "../api";
 import { editOf } from "../logic/existing";
 import { billOf } from "../logic/bill";
@@ -68,7 +69,7 @@ export function Review(p: Props) {
       setEvidence((e) => ({ ...e, ...Object.fromEntries(g.rowIds.map((id) => [id, ok ? "attached" : "failed"])) }));
     }
     setSending(false);
-    void client.invalidateQueries({ queryKey: ["add-data", "existing"] });
+    void invalidateEmissionQueries(client);
     // All conflicts from this send are decided together.
     setAskDuplicates(conflicts > 0);
   };

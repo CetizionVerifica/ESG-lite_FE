@@ -1,7 +1,6 @@
 import type { ProductionDataStatus } from "../../../services/productionDataService";
-import { type Column, StatusPill, formatDate, formatNumber } from "../../../ui";
+import { type Column, OverlapChip, StatusPill, formatDate, formatNumber } from "../../../ui";
 import { type ProductionRow, periodText } from "../logic";
-import { OverlapChip } from "./OverlapChip";
 import { type RowActions, RowMenu } from "./RowMenu";
 
 export type { RowActions };

@@ -124,7 +124,7 @@ test("a manager sees the period at a glance and drills into a site", async ({ pa
 
   // Attention: pending queue, missing person, pending production.
   const attention = page.getByRole("region", { name: /Needs your attention/ });
-  await expect(attention.getByRole("link", { name: "7 entries waiting for approval" })).toHaveAttribute("href", "/data/approvals?period=all");
+  await expect(attention.getByRole("link", { name: "7 entries waiting for approval (all periods)" })).toHaveAttribute("href", "/data/approvals?period=all");
   await expect(attention).toContainText("1 person missing Sep 2025");
   await expect(attention).toContainText("1 production record pending");
 

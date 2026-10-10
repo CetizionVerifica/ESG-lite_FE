@@ -3,6 +3,7 @@ import { type UseQueryResult, useQueries, useQuery } from "@tanstack/react-query
 import { type Brand, getBrand } from "../../services/brandService";
 import { getColumnConfigs } from "../../services/columnConfigService";
 import { getCompanies } from "../../services/companyService";
+import { type ConsoleSummary, getConsoleSummary } from "../../services/consoleService";
 import { getEmissionFactorBatches, getEmissionFactors } from "../../services/emissionFactorService";
 import { getSites } from "../../services/siteService";
 import { getThresholds } from "../../services/thresholdService";
@@ -10,8 +11,8 @@ import { getUnits } from "../../services/unitService";
 import { getUsers } from "../../services/userService";
 import type { ConsoleCompany, ConsoleSite, ConsoleThreshold, ConsoleUser, FactorBatch, SiteCategoryRef } from "./logic";
 
-// No /admin/console summary exists yet, so the Console aggregates the
-// existing Superadmin list endpoints client-side (spec: "Data").
+// Setup checks aggregate the existing Superadmin list endpoints client-side
+// (spec: "Data"); counts and recent activity come from GET /admin/console.
 export const keys = {
   all: ["console"] as const,
   list: (name: string) => [...keys.all, name] as const,
@@ -41,8 +42,13 @@ export const useUsers = () => useQuery(list<ConsoleUser>("users", getUsers));
 export const useColumnConfigs = () => useQuery(list<SiteCategoryRef>("column-configs", getColumnConfigs));
 export const useUnits = () => useQuery(list<SiteCategoryRef>("units", getUnits));
 export const useThresholds = () => useQuery(list<ConsoleThreshold>("thresholds", getThresholds));
-/** Feeds the activity list only; a failure just blanks it. */
-export const useFactorBatches = () => useQuery({ ...list<FactorBatch>("factor-batches", () => getEmissionFactorBatches()), retry: 1 });
+/** Totals, this month's entries per client and recent activity. */
+export const useSummary = () =>
+  useQuery<ConsoleSummary>({ queryKey: keys.list("summary"), queryFn: () => getConsoleSummary(8), retry: 1 });
+
+/** Activity fallback for a backend without /admin/console; a failure just blanks it. */
+export const useFactorBatches = (enabled: boolean) =>
+  useQuery({ ...list<FactorBatch>("factor-batches", () => getEmissionFactorBatches()), retry: 1, enabled });
 
 /** Total emission factors: the paged list's `total`, asking for one row. */
 export function useFactorTotal() {

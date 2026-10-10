@@ -135,6 +135,10 @@ describe("due banner", () => {
     expect(dueState(data, "2025-10-11")).toMatchObject({ phase: "late", message: expect.stringMatching(/^Overdue since 10 Oct\. Escalates to your manager on 15 Oct/) });
     expect(dueState(data, "2025-10-15")).toMatchObject({ phase: "escalated", message: expect.stringMatching(/Escalated to your manager/) });
   });
+
+  it("names the year when the due date is in another year", () => {
+    expect(dueState(data, "2026-10-10").message).toMatch(/^Overdue since 10 Oct 2025\. Escalated to your manager/);
+  });
 });
 
 describe("page helpers", () => {

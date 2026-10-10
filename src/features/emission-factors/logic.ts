@@ -265,8 +265,9 @@ export function layoutLabel(layout: string | null | undefined): string {
 export function uploadStatus(u: UploadRecord): { label: string; tone: "good" | "warn" | "neutral" } {
   const s = (u.status ?? "").toLowerCase();
   if (s === "completed") return { label: "Saved", tone: "good" };
+  if (s === "completed_with_errors") return { label: "Saved with errors", tone: "warn" };
   if (s === "parsed") return { label: "Not saved", tone: "warn" };
-  return { label: s ? s[0].toUpperCase() + s.slice(1) : "—", tone: "neutral" };
+  return { label: s ? s[0].toUpperCase() + s.slice(1).replace(/_/g, " ") : "—", tone: "neutral" };
 }
 
 /** Uploads for the chosen client/site; a record with no site only shows unfiltered. */
