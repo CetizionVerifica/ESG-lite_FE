@@ -18,9 +18,11 @@ describe("formatEmissions", () => {
     expect(formatEmissions(12.46)).toBe("12.5 tCO₂e");
     expect(formatEmissions(12)).toBe("12 tCO₂e");
   });
-  it("switches to kgCO₂e below 1 t", () => {
-    expect(formatEmissions(0.42)).toBe("420 kgCO₂e");
-    expect(emissionsParts(0.0004)).toEqual({ value: "0", unit: "kgCO₂e" });
+  it("stays in tCO₂e below 1 t, with up to 3 decimals", () => {
+    expect(formatEmissions(0.71)).toBe("0.71 tCO₂e");
+    expect(formatEmissions(0.42)).toBe("0.42 tCO₂e");
+    expect(formatEmissions(0.0123)).toBe("0.012 tCO₂e");
+    expect(emissionsParts(0.0004)).toEqual({ value: "0", unit: "tCO₂e" });
   });
   it("shows zero in tonnes and a dash for missing values", () => {
     expect(formatEmissions(0)).toBe("0 tCO₂e");
@@ -30,16 +32,16 @@ describe("formatEmissions", () => {
   it("handles negative values (removals)", () => {
     expect(formatEmissions(-1500)).toBe("-1,500 tCO₂e");
   });
-  it("picks the unit after rounding", () => {
+  it("rounds near the 1 t and 1,000 t boundaries", () => {
     expect(formatEmissions(0.9996)).toBe("1 tCO₂e");
     expect(formatEmissions(-0.9996)).toBe("-1 tCO₂e");
-    expect(formatEmissions(0.9994)).toBe("999 kgCO₂e");
+    expect(formatEmissions(0.9994)).toBe("0.999 tCO₂e");
     expect(formatEmissions(999.96)).toBe("1,000 tCO₂e");
   });
   it("never prints -0", () => {
-    expect(formatEmissions(-0.0004)).toBe("0 kgCO₂e");
+    expect(formatEmissions(-0.0004)).toBe("0 tCO₂e");
     expect(formatEmissions(-0)).toBe("0 tCO₂e");
-    expect(formatEmissions(-0.04)).toBe("-40 kgCO₂e");
+    expect(formatEmissions(-0.04)).toBe("-0.04 tCO₂e");
     expect(formatNumber(-0.4)).toBe("0");
     expect(formatNumber(-0.004, 2)).toBe("0.00");
     expect(formatIntensity(-0.04)).toBe("0.0 tCO₂e/t");

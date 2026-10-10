@@ -30,21 +30,17 @@ export type FormattedFigure = { value: string; unit: string };
 
 /**
  * Emissions given in tonnes CO₂e, split into value and unit so the unit can be
- * set in smaller type. ≥ 1,000 t: no decimals; 1–1,000 t: 1 decimal;
- * below 1 t: switches to kgCO₂e with no decimals.
+ * set in smaller type. Always tCO₂e, never converted to kg. ≥ 1,000 t: no
+ * decimals; 1–1,000 t: 1 decimal; below 1 t: up to 3 decimals.
  */
 export function emissionsParts(tonnes: number | null | undefined): FormattedFigure {
   if (!isNum(tonnes)) return { value: EMPTY_VALUE, unit: "tCO₂e" };
   const abs = Math.abs(tonnes);
-  if (abs > 0 && abs < 1) {
-    // The unit is picked after rounding: 0.9996 t is 1,000 kg, so it shows as 1 t.
-    const kg = Math.round(tonnes * 1000);
-    if (Math.abs(kg) < 1000) return { value: nf(0, 0).format(kg), unit: "kgCO₂e" };
-  }
-  return { value: abs >= 1000 ? nf(0, 0).format(tonnes) : nf(0, 1).format(tonnes), unit: "tCO₂e" };
+  const decimals = abs >= 1000 ? 0 : abs >= 1 ? 1 : 3;
+  return { value: nf(0, decimals).format(tonnes), unit: "tCO₂e" };
 }
 
-/** "1,234 tCO₂e", "12.5 tCO₂e", "420 kgCO₂e". */
+/** "1,234 tCO₂e", "12.5 tCO₂e", "0.42 tCO₂e". */
 export function formatEmissions(tonnes: number | null | undefined): string {
   const { value, unit } = emissionsParts(tonnes);
   return value === EMPTY_VALUE ? value : `${value} ${unit}`;
