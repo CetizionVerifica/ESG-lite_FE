@@ -90,7 +90,7 @@ describe("rows", () => {
       activity_data: { fuel: "7", quantity: "1600", emission_category: "Diesel" },
       extra_data: { po: "PO-1" },
       total_emission: 0,
-      unit: "kg CO2e",
+      unit: "tCO2e",
       date_of_reporting: "2025-09-30",
       activity_data_unit: "litre",
       reporting_period: "monthly",
