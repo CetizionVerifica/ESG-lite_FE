@@ -1,7 +1,7 @@
 import { AlertTriangle } from "lucide-react";
-import { Badge } from "../../../ui";
+import { Badge } from "./Badge";
 
-/** "Overlaps Feb 1–15" (+N more). */
+/** "Overlaps Feb 1–15" (+N more): a production record shares days with another of the same product and site. */
 export function OverlapChip({ ranges }: { ranges: string[] }) {
   return (
     <Badge tone="warn" className="gap-1 whitespace-nowrap">

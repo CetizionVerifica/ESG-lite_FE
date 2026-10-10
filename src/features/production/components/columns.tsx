@@ -1,22 +1,33 @@
-import type { ProductionDataStatus } from "../../../services/productionDataService";
-import { type Column, OverlapChip, StatusPill, formatDate, formatNumber } from "../../../ui";
+import { type Column, OverlapChip, StatusPill, formatNumber } from "../../../ui";
 import { type ProductionRow, periodText } from "../logic";
 import { type RowActions, RowMenu } from "./RowMenu";
 
 export type { RowActions };
 
+/** P05 table. Same columns and cells as P08, without site and reviewer columns (a contributor sees their own sites). */
 export function productionColumns({
-  statusOf,
   overlaps,
+  showSite,
   actions,
 }: {
-  statusOf: (row: ProductionRow) => ProductionDataStatus;
   overlaps: Map<number, string[]>;
+  showSite: boolean;
   actions: RowActions;
 }): Column<ProductionRow>[] {
   return [
-    { id: "site", header: "Site", value: (r) => r.site?.name, sortable: true },
-    { id: "product", header: "Product", value: (r) => r.product?.name, sortable: true },
+    {
+      id: "product",
+      header: "Product",
+      sortable: true,
+      hideable: false,
+      value: (r) => r.product?.name,
+      cell: (r) => (
+        <div className="min-w-0">
+          <p className="font-medium text-ink">{r.product?.name ?? "—"}</p>
+          {showSite && <p className="text-xs text-muted">{r.site?.name}</p>}
+        </div>
+      ),
+    },
     { id: "quantity", header: "Quantity", numeric: true, sortable: true, value: (r) => Number(r.quantity), cell: (r) => formatNumber(Number(r.quantity), 2) },
     { id: "unit", header: "Unit", value: (r) => r.unit },
     {
@@ -40,24 +51,23 @@ export function productionColumns({
       },
     },
     {
-      id: "submitted",
-      header: "Submitted by",
-      sortable: true,
-      value: (r) => r.created_by?.name,
-      sortValue: (r) => r.created_at,
-      cell: (r) => (
-        <span className="whitespace-nowrap">
-          {r.created_by?.name ?? "—"} <span className="text-muted">· {formatDate(r.created_at)}</span>
-        </span>
-      ),
+      id: "notes",
+      header: "Notes",
+      value: (r) => r.notes ?? "",
+      cell: (r) => (r.notes?.trim() ? <span className="line-clamp-2 max-w-[16rem] text-sm">{r.notes}</span> : <span className="text-muted">—</span>),
     },
     {
       id: "status",
       header: "Status",
       sortable: true,
-      value: (r) => statusOf(r),
-      cell: (r) => <StatusPill status={statusOf(r)} size="sm" />,
-      exportValue: (r) => `${statusOf(r)}${r.status === "rejected" && r.review_comment ? `: ${r.review_comment}` : ""}`,
+      value: (r) => r.status,
+      cell: (r) => (
+        <div className="space-y-1">
+          <StatusPill status={r.status} size="sm" />
+          {r.status === "rejected" && r.review_comment && <p className="max-w-[16rem] text-xs text-bad">{r.review_comment}</p>}
+        </div>
+      ),
+      exportValue: (r) => `${r.status}${r.status === "rejected" && r.review_comment ? `: ${r.review_comment}` : ""}`,
     },
     {
       id: "actions",
@@ -65,7 +75,7 @@ export function productionColumns({
       hideable: false,
       value: () => null,
       exportValue: () => null,
-      cell: (r) => <RowMenu row={r} pending={statusOf(r) === "pending"} actions={actions} />,
+      cell: (r) => <RowMenu row={r} actions={actions} />,
     },
   ];
 }
