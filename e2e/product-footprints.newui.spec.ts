@@ -48,6 +48,8 @@ function study(id: number, productId: number, version: number, status: string, t
 const STUDIES = [
   study(10, 5, 1, "superseded", 2.2),
   study(11, 5, 2, "published", 2.0),
+  // A newer version in progress doesn't hide the published one.
+  study(12, 5, 3, "draft", 1.9),
   study(31, 7, 1, "approved", 3.5, { stale: true }),
 ];
 
@@ -122,6 +124,7 @@ test("shows the portfolio for the year with KPIs that filter the table", async (
   await expect(wire).toContainText("2.00");
   await expect(wire).toContainText("▼ 9.1%");
   await expect(wire).toContainText("Published");
+  await expect(wire).toContainText("v3 draft");
   await expect(rows.filter({ hasText: "Copper rod 8 mm" })).toContainText("Out of date");
   await expect(rows.filter({ hasText: "AAAC conductor" })).toContainText("No footprint");
 

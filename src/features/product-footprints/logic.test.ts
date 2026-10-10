@@ -64,6 +64,21 @@ describe("currentStudy", () => {
     expect(currentStudy(list, "2024-01-01", "2024-12-31")).toBeNull();
   });
 
+  it("keeps showing the published version while a newer one is in progress", () => {
+    const list = [study({ id: 1, version: 1, status: "published" }), study({ id: 2, version: 2, status: "draft" })];
+    expect(currentStudy(list, FROM, TO)?.pcf_study_id).toBe(1);
+    const rows = buildRows({ products: [product(1)], studies: list, production: [made(1, 10)], from: FROM, to: TO });
+    expect(rows[0]).toMatchObject({ status: "published", usable: true, in_progress: "v2 draft" });
+    // With no approved version yet, the draft itself shows.
+    expect(currentStudy([list[1]], FROM, TO)?.pcf_study_id).toBe(2);
+  });
+
+  it("only counts studies made for the product's own site", () => {
+    const elsewhere = study({ id: 9, site: { site_id: 99, name: "Elsewhere" } });
+    const rows = buildRows({ products: [product(1)], studies: [elsewhere], production: [], from: FROM, to: TO });
+    expect(rows[0].status).toBe("none");
+  });
+
   it("counts a fiscal-year study in each calendar year it overlaps", () => {
     const fy = study({ id: 4, reference_start: "2025-04-01", reference_end: "2026-03-31", year_type: "FY" });
     expect(currentStudy([fy], FROM, TO)?.pcf_study_id).toBe(4);
@@ -87,6 +102,7 @@ describe("rowStatus", () => {
     expect(rowStatus(study({ id: 1, status: "published", stale: true }))).toBe("stale");
     expect(rowStatus(study({ id: 1, status: "draft", stale: true }))).toBe("draft");
     expect(rowStatus(study({ id: 1, status: "in_review" }))).toBe("in_review");
+    expect(rowStatus(study({ id: 1, status: "in_review", stale: true }))).toBe("stale");
   });
 });
 

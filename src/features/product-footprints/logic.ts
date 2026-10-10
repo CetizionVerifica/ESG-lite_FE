@@ -87,6 +87,8 @@ export type FootprintRow = {
   primary: number | null;
   pcr_tag: string | null;
   updated: string | null;
+  /** A newer draft or in-review version, e.g. "v3 in review". */
+  in_progress: string | null;
   /** Approved production in the year, in the product's unit; null when there is none. */
   approved_qty: number | null;
   /** The unit approved production was reported in; null when units are mixed. */
@@ -103,17 +105,31 @@ export function overlaps(s: Pick<Study, "reference_start" | "reference_end">, fr
 
 const newer = (a: Study, b: Study) => a.version - b.version || a.updated_at.localeCompare(b.updated_at);
 
+function latest(studies: Study[], keep: (s: Study) => boolean): Study | null {
+  let best: Study | null = null;
+  for (const s of studies) if (keep(s) && (!best || newer(s, best) > 0)) best = s;
+  return best;
+}
+
 /**
- * The study a product's row shows for the year: the highest version whose
- * reference period overlaps the year. Superseded versions never show.
+ * The study a product's row shows for the year, among versions whose reference
+ * period overlaps the year: the latest approved or published one, else the
+ * latest draft or in-review one. Superseded versions never show.
  */
 export function currentStudy(studies: Study[], from: string, to: string): Study | null {
-  let best: Study | null = null;
-  for (const s of studies) {
-    if (s.status === "superseded" || !overlaps(s, from, to)) continue;
-    if (!best || newer(s, best) > 0) best = s;
-  }
-  return best;
+  const inYear = studies.filter((s) => s.status !== "superseded" && overlaps(s, from, to));
+  return latest(inYear, (s) => USABLE.includes(s.status)) ?? latest(inYear, () => true);
+}
+
+/** A newer draft or in-review version behind the shown footprint ("v3 in review"). */
+export function newerVersion(studies: Study[], current: Study, from: string, to: string): Study | null {
+  return latest(studies, (s) => s.status !== "superseded" && s.version > current.version && overlaps(s, from, to));
+}
+
+/** "v3 draft", "v3 in review". */
+export function inProgressLabel(s: Study | null): string | null {
+  if (!s) return null;
+  return `v${s.version} ${s.status === "in_review" ? "in review" : "draft"}`;
 }
 
 /** Total of the latest earlier version that was approved or published, for "vs previous". */
@@ -129,7 +145,7 @@ export function previousTotal(studies: Study[], current: Study): number | null {
 
 export function rowStatus(s: Study | null): RowStatus {
   if (!s) return "none";
-  if (s.stale && USABLE.includes(s.status)) return "stale";
+  if (s.stale && s.status !== "draft") return "stale";
   return s.status === "superseded" ? "approved" : s.status;
 }
 
@@ -155,7 +171,10 @@ export function productionByProduct(records: ApprovedProduction[]): Map<number, 
   return out;
 }
 
-/** One row per product on the chosen sites, latest study for the year. */
+/**
+ * One row per product on the chosen sites. Only studies made for the
+ * product's own site count (a product belongs to one site).
+ */
 export function buildRows(input: {
   products: SiteProduct[];
   studies: Study[];
@@ -163,15 +182,16 @@ export function buildRows(input: {
   from: string;
   to: string;
 }): FootprintRow[] {
-  const byProduct = new Map<number, Study[]>();
+  const key = (productId: number, siteId: number) => `${productId}:${siteId}`;
+  const byProduct = new Map<string, Study[]>();
   for (const s of input.studies) {
-    const id = s.product?.product_id;
-    if (id === undefined) continue;
-    byProduct.set(id, [...(byProduct.get(id) ?? []), s]);
+    if (!s.product || !s.site) continue;
+    const k = key(s.product.product_id, s.site.site_id);
+    byProduct.set(k, [...(byProduct.get(k) ?? []), s]);
   }
   const produced = productionByProduct(input.production);
   return input.products.map((p) => {
-    const all = byProduct.get(p.product_id) ?? [];
+    const all = byProduct.get(key(p.product_id, p.site.site_id)) ?? [];
     const study = currentStudy(all, input.from, input.to);
     const status = rowStatus(study);
     const result = study?.result ?? null;
@@ -191,6 +211,7 @@ export function buildRows(input: {
       hidden_stages: result?.hidden_stages ?? [],
       primary: result?.primary_data_share_pct ?? null,
       pcr_tag: study?.pcr_tag ?? null,
+      in_progress: study && study.status !== "draft" && study.status !== "in_review" ? inProgressLabel(newerVersion(all, study, input.from, input.to)) : null,
       updated: study?.updated_at ?? null,
       approved_qty: made && made.qty > 0 ? made.qty : null,
       approved_unit: made && made.qty > 0 ? made.unit : null,

@@ -74,6 +74,7 @@ export function footprintColumns(opts: { startLink: (r: FootprintRow) => string;
       sortable: true,
       width: "10rem",
       value: (r) => STATUS_LABEL[r.status],
+      exportValue: (r) => [STATUS_LABEL[r.status], r.in_progress].filter(Boolean).join(" · "),
       cell: (r) =>
         r.status === "none" ? (
           <span className="inline-flex items-center gap-2">
@@ -87,7 +88,10 @@ export function footprintColumns(opts: { startLink: (r: FootprintRow) => string;
             </Link>
           </span>
         ) : (
-          <FootprintStatus status={r.status} />
+          <span className="inline-flex flex-col items-start gap-0.5">
+            <FootprintStatus status={r.status} />
+            {r.in_progress && <span className="text-xs text-muted">{r.in_progress}</span>}
+          </span>
         ),
     },
     {
