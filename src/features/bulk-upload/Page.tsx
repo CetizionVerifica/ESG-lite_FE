@@ -120,12 +120,7 @@ export default function BulkUploadPage() {
   };
 
   const toggleCategory = (name: string) =>
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
+    setExcluded((prev) => (prev.has(name) ? new Set([...prev].filter((c) => c !== name)) : new Set([...prev, name])));
   const toggleAll = () => setExcluded(categoryList && selected.size === categoryList.length ? new Set(categoryList) : new Set());
 
   const result = importState?.status === "done" ? importState.result : null;

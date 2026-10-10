@@ -26,12 +26,10 @@ export function useUploadContext(): [UploadContext, (patch: Partial<UploadContex
   };
   const set = (patch: Partial<UploadContext>) => {
     const next = { ...ctx, ...patch };
-    const p = new URLSearchParams(params);
-    const put = (k: string, v: number | string | null) => (v === null || v === "" ? p.delete(k) : p.set(k, String(v)));
-    put("client", next.clientId);
-    put("site", next.siteId);
-    put("category", next.categoryId);
-    put("period", next.month);
+    const own: Record<string, number | string | null> = { client: next.clientId, site: next.siteId, category: next.categoryId, period: next.month };
+    // Other params pass through; ours are rewritten, and left out when empty.
+    const p = new URLSearchParams([...params].filter(([k]) => !(k in own)));
+    for (const [k, v] of Object.entries(own)) if (v !== null && v !== "") p.set(k, String(v));
     setParams(p, { replace: true });
   };
   return [ctx, set];
