@@ -233,3 +233,35 @@ export function fileProblem(file: File): string | null {
   if (file.size > MAX_BYTES) return "The file is over 100 MB. Split it and upload each part.";
   return null;
 }
+
+type RawSite = {
+  site_id: number;
+  name: string;
+  company?: { company_id: number; name?: string } | null;
+  categories?: { category_id: number; category_name: string; scope?: string | null }[] | null;
+};
+
+/**
+ * A contributor's own sites from the signed-in user (user.sites, or the single
+ * user.site of older accounts). FERA is left out: its rows are added by the
+ * backend when the fuel row is saved, never uploaded directly.
+ */
+export function contributorSites(user: unknown) {
+  const u = (user ?? {}) as { sites?: RawSite[]; site?: RawSite | null };
+  const raw = u.sites?.length ? u.sites : u.site ? [u.site] : [];
+  return raw.map((s) => ({
+    site_id: s.site_id,
+    name: s.name,
+    company: s.company ? { company_id: s.company.company_id, name: s.company.name ?? "" } : null,
+    categories: (s.categories ?? []).filter((c) => c.category_name.toLowerCase() !== "fera"),
+  }));
+}
+
+/** The chosen site, if it belongs to the chosen client (any of a contributor's own sites). */
+export function selectedSite<S extends { site_id: number; company?: { company_id: number } | null }>(
+  sites: S[],
+  ctx: { siteId: number | null; clientId: number | null },
+  contributor: boolean,
+): S | undefined {
+  return sites.find((s) => s.site_id === ctx.siteId && (contributor || s.company?.company_id === ctx.clientId));
+}
