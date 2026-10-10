@@ -61,12 +61,12 @@ export function useEntryDocuments(entryId: number | null) {
   });
 }
 
-/** What the edit form needs for one site × category × factor year. */
+/** What the edit form needs for one site × category. Factors come for every year, as the backend falls back to other years when saving. */
 export type EditSetup = { config: ColumnConfig | null; factors: EmissionFactor[]; units: string[] };
 
 export function useEditSetup(siteId: number | undefined, categoryId: number | undefined, factorYear: number | null) {
   return useQuery({
-    queryKey: ["entry-edit-setup", siteId, categoryId, factorYear],
+    queryKey: ["entry-edit-setup", siteId, categoryId],
     enabled: siteId !== undefined && categoryId !== undefined && factorYear !== null,
     staleTime: 10 * 60_000,
     queryFn: async (): Promise<EditSetup> => {
@@ -74,7 +74,7 @@ export function useEditSetup(siteId: number | undefined, categoryId: number | un
       const category = categoryId as number;
       const [configs, factors, units] = await Promise.all([
         getUserColumnConfigsBySiteAndCategory(site, category) as Promise<ColumnConfig[] | null>,
-        getUserEmissionFactorsBySiteAndCategory(site, category, factorYear as number) as Promise<EmissionFactor[]>,
+        getUserEmissionFactorsBySiteAndCategory(site, category) as Promise<EmissionFactor[]>,
         getUserUnitsBySiteAndCategory(site, category) as Promise<UnitData[]>,
       ]);
       return { config: configs?.[0] ?? null, factors: factors ?? [], units: (units ?? []).map((u) => u.unit_name) };
