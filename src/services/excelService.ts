@@ -24,9 +24,10 @@ export interface ImportResponse {
   inserted: number;
   skipped: number;
   total_rows: number;
-  upload_batch_id?: string;
-  /** Newer AI service only: why each row was skipped, rows outside the chosen categories, FERA twins saved. */
-  skipped_rows?: { row: number; reason: string }[];
+  upload_batch_id?: string | null;
+  /** Newer AI service only: each skipped row with its data row number (1 = first under the header), category and reason. Capped at 1000. */
+  skipped_rows?: { row: number; emission_category: string | null; reason: string }[];
+  /** Rows outside the chosen categories, and FERA twins saved. */
   not_selected?: number;
   fera_inserted?: number;
 }
