@@ -54,3 +54,6 @@ export { NotificationIcon } from "./NotificationIcon";
 export { notificationKind, type NotificationKind } from "./notificationKind";
 export { timeAgo } from "./timeAgo";
 export * from "./reportPeriod";
+export { SetupListPage, type SetupListPageProps } from "./SetupListPage";
+export { TypedDeleteModal, type TypedDeleteModalProps } from "./TypedDeleteModal";
+export { typedNameMatches, withoutParams } from "./setupList";

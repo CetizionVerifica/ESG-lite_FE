@@ -35,7 +35,6 @@ const Legacy = {
   SuperAdmin: lazy(() => import("../pages/SuperAdminPage")),
   Companies: lazy(() => import("../pages/CompanyPage")),
   CompanyOnboarding: lazy(() => import("../pages/CompanyOnboardingPage")),
-  Sites: lazy(() => import("../pages/SitePage")),
   Users: lazy(() => import("../pages/UserPage")),
   Countries: lazy(() => import("../pages/CountryPage")),
   Categories: lazy(() => import("../pages/CategoryPage")),
@@ -62,6 +61,7 @@ const TeamAccessPage = lazy(() => import("../features/team-access/Page"));
 const SettingsPage = lazy(() => import("../features/settings/Page"));
 const NotificationsPage = lazy(() => import("../features/notifications/Page"));
 const GhgReportPage = lazy(() => import("../features/ghg-report/Page"));
+const SitesPage = lazy(() => import("../features/sites/Page"));
 
 const placeholder = (id: ShellRouteId) => <PlaceholderPage route={getShellRoute(id)} />;
 
@@ -90,7 +90,7 @@ const pages: Record<ShellRouteId, ReactNode> = {
   "client-detail": placeholder("client-detail"),
   "brand-themes": <BrandThemesPage />,
   "brand-view": <BrandViewPage />,
-  sites: <Legacy.Sites />,
+  sites: <SitesPage />,
   "users-global": <Legacy.Users />,
   "reference-data": (
     <QueryTabSwitch
