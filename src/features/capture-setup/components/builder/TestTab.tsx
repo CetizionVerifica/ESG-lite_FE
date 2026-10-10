@@ -38,7 +38,6 @@ export function TestTab({ draft, formId, setup, loading, error, onRetry }: TestT
     emissionFactors: factors,
     targetYear: year ?? undefined,
     columns: model.columns,
-    emissionCategoryMapping: model.mapping,
     calculationSpec: model.spec,
   };
   const mapped = Object.keys(model.mapping).length > 0;

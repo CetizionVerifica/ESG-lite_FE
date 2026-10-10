@@ -7,7 +7,6 @@ export const useEmissionCalc = ({
   targetYear,
   columns,
   selectColumnNames,
-  emissionCategoryMapping,
   fallbackToRaw,
   calculationSpec,
 }: EmissionCalcInput) =>
@@ -18,9 +17,8 @@ export const useEmissionCalc = ({
         targetYear,
         columns,
         selectColumnNames,
-        emissionCategoryMapping,
         fallbackToRaw,
         calculationSpec,
       }),
-    [emissionFactors, targetYear, columns, selectColumnNames, emissionCategoryMapping, fallbackToRaw, calculationSpec],
+    [emissionFactors, targetYear, columns, selectColumnNames, fallbackToRaw, calculationSpec],
   );

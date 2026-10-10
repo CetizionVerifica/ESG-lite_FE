@@ -83,7 +83,6 @@ function Fields(p: FieldsProps) {
     emissionFactors: p.factors,
     targetYear: p.factorYear,
     columns: model.columns,
-    emissionCategoryMapping: model.mapping,
     calculationSpec: model.spec,
   });
   const result = calc.calculateEmission(row);
