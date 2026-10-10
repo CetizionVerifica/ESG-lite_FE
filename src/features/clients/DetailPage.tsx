@@ -35,6 +35,16 @@ export default function ClientDetailPage() {
   const company = companies.data?.find((c) => c.company_id === id) ?? null;
   const row = useMemo(() => (company ? buildRows([company], sites.data, users.data)[0] : null), [company, sites.data, users.data]);
 
+  const sitesLoad = { loading: sites.isPending, failed: !!sites.error && !sites.data, retry: () => void sites.refetch() };
+  const peopleLoad = {
+    loading: sites.isPending || users.isPending,
+    failed: (!!sites.error && !sites.data) || (!!users.error && !users.data),
+    retry: () => {
+      if (sites.error) void sites.refetch();
+      if (users.error) void users.refetch();
+    },
+  };
+
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [confirmStatus, setConfirmStatus] = useState(false);
   const [statusErr, setStatusErr] = useState<string | null>(null);
@@ -149,10 +159,10 @@ export default function ClientDetailPage() {
         <OverviewTab row={row} />
       </TabPanel>
       <TabPanel idBase={idBase} value="sites" current={tab}>
-        <SitesTab row={row} ready={!!sites.data} />
+        <SitesTab row={row} load={sitesLoad} />
       </TabPanel>
       <TabPanel idBase={idBase} value="people" current={tab}>
-        <PeopleTab row={row} ready={!!sites.data && !!users.data} />
+        <PeopleTab row={row} load={peopleLoad} />
       </TabPanel>
       <TabPanel idBase={idBase} value="brand" current={tab}>
         <BrandTab row={row} brand={brandData} loading={brand.isPending} />
@@ -166,6 +176,7 @@ export default function ClientDetailPage() {
       <TabPanel idBase={idBase} value="danger" current={tab}>
         <DangerTab
           row={row}
+          sites={sitesLoad}
           onToggleActive={() => {
             update.reset();
             setStatusErr(null);

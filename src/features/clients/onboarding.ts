@@ -87,7 +87,9 @@ export function validateStep(step: StepId, d: OnboardDraft): Partial<Record<Onbo
     else if (d.password.length < PASSWORD_MIN) e.password = `Use at least ${PASSWORD_MIN} characters.`;
   }
   if (step === "brand" && d.brandOn) {
-    if (!isHex(d.primary)) e.primary = "Pick a primary colour, or skip the brand for now.";
+    // A logo alone is a valid brand; colours are optional, but an accent needs a primary to go with.
+    if (d.primary && !isHex(d.primary)) e.primary = "Enter a hex colour like #0B5C3B.";
+    else if (!d.primary && d.accent) e.primary = "Pick a primary colour to go with the accent.";
     if (d.accent && !isHex(d.accent)) e.accent = "Enter a hex colour like #1EA79A.";
   }
   return e;
@@ -139,7 +141,17 @@ export function defaultAccent(primary: string): string {
   return hslToHex((hue + 150) % 360, Math.max(sat, 0.45), Math.min(Math.max(light, 0.35), 0.55));
 }
 
-/** PUT /brands/:id body for the Brand step, or null when the brand is skipped. */
+/** True when the Brand step has a logo or colours to save. */
+export function hasBrandInput(d: OnboardDraft): boolean {
+  return d.brandOn && !!(d.logo || d.logoDark || d.primary || d.accent);
+}
+
+/** The Brand step with nothing kept: "Skip for now" clears what was picked so nothing is saved by surprise. */
+export function skipBrand(d: OnboardDraft): OnboardDraft {
+  return { ...d, brandOn: false, logo: null, logoDark: null, primary: "", accent: "" };
+}
+
+/** PUT /brands/:id body for the Brand step's colours, or null when the brand is skipped or has no colours. */
 export function toBrandUpdate(d: OnboardDraft): { name: string; primary: string; accent: string; coverFrom: string; coverTo: string } | null {
   if (!d.brandOn || !isHex(d.primary)) return null;
   const primary = normalizeHex(d.primary);

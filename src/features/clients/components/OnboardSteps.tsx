@@ -4,7 +4,7 @@ import { textOnGradient } from "../../../theme";
 import { BLACK } from "../../../theme/color";
 import { Button, Callout, ColourField, FileDrop, PoweredBy, Select, TextField, Toggle } from "../../../ui";
 import { EMPLOYEE_RANGES } from "../logic";
-import { INDUSTRIES, type OnboardDraft, type OnboardField, PASSWORD_MIN, REGIONS, coverFor, suggestFromPixels, toBrandUpdate } from "../onboarding";
+import { INDUSTRIES, type OnboardDraft, type OnboardField, PASSWORD_MIN, REGIONS, coverFor, hasBrandInput, suggestFromPixels, toBrandUpdate } from "../onboarding";
 
 export type StepProps = {
   draft: OnboardDraft;
@@ -126,7 +126,7 @@ function SignInCover({ name, primary, logoUrl }: { name: string; primary: string
   );
 }
 
-export function BrandStep({ draft, set, error }: StepProps) {
+export function BrandStep({ draft, set, error, onSkip }: StepProps & { onSkip: () => void }) {
   const logoUrl = useObjectUrl(draft.logo);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestNote, setSuggestNote] = useState<string | null>(null);
@@ -135,7 +135,7 @@ export function BrandStep({ draft, set, error }: StepProps) {
   if (!draft.brandOn) {
     return (
       <div className="space-y-3">
-        <Callout tone="info">This client will see the PlanetPulse theme. You can set its brand later from the client's Brand theme tab.</Callout>
+        <Callout tone="info">No logo or colours will be saved, so this client will see the PlanetPulse theme. You can set its brand later from the client's Brand theme tab.</Callout>
         <Button onClick={() => set("brandOn", true)}>Set up the brand now</Button>
       </div>
     );
@@ -189,14 +189,14 @@ export function BrandStep({ draft, set, error }: StepProps) {
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <ColourField label="Primary" required value={draft.primary} onChange={(v) => set("primary", v)} error={error("primary")} />
+          <ColourField label="Primary" help="Optional. Leave empty to keep PlanetPulse colours." value={draft.primary} onChange={(v) => set("primary", v)} error={error("primary")} />
           <ColourField label="Accent" help="Leave empty to derive one from the primary." value={draft.accent} onChange={(v) => set("accent", v)} error={error("accent")} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button icon={<Wand2 aria-hidden className="size-4" />} onClick={() => void suggest()} disabled={!logoUrl} loading={suggesting}>
             Suggest from logo
           </Button>
-          <Button variant="ghost" onClick={() => set("brandOn", false)}>
+          <Button variant="ghost" onClick={onSkip}>
             Skip for now
           </Button>
         </div>
@@ -256,6 +256,12 @@ export function ReviewStep({ draft, onEdit }: { draft: OnboardDraft; onEdit: (st
         brand
           ? [
               ["Colours", `${brand.primary} · ${brand.accent}`],
+              ["Logo", draft.logo?.name ?? ""],
+              ["Dark logo", draft.logoDark?.name ?? ""],
+            ]
+          : hasBrandInput(draft)
+          ? [
+              ["Colours", "PlanetPulse (none picked)"],
               ["Logo", draft.logo?.name ?? ""],
               ["Dark logo", draft.logoDark?.name ?? ""],
             ]

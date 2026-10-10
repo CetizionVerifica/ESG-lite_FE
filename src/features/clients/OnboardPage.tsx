@@ -4,7 +4,7 @@ import { CheckCircle2, ChevronRight } from "lucide-react";
 import { Button, Callout, Modal, PageHeader, Stepper, cn, focusRing, useToast, useUnsavedGuard } from "../../ui";
 import { type OnboardResult, errorMessage, useOnboard, useReportingCalendar } from "./api";
 import { AccessStep, AdminStep, BrandStep, CompanyStep, ReviewStep } from "./components/OnboardSteps";
-import { EMPTY_ONBOARD, type OnboardDraft, type OnboardField, STEPS, firstInvalidStep, isOnboardDirty, validateStep } from "./onboarding";
+import { EMPTY_ONBOARD, type OnboardDraft, type OnboardField, STEPS, firstInvalidStep, isOnboardDirty, skipBrand, validateStep } from "./onboarding";
 
 /** P17 `/clients/new`: onboard a client in four steps plus a review. */
 export default function OnboardPage() {
@@ -77,7 +77,7 @@ export default function OnboardPage() {
         {step.id === "company" && <CompanyStep draft={draft} set={set} error={error} />}
         {step.id === "admin" && <AdminStep draft={draft} set={set} error={error} />}
         {step.id === "access" && <AccessStep draft={draft} set={set} error={error} calendar={{ rule: calendar.data?.fiscalYearRule ?? null, loading: calendar.isPending }} />}
-        {step.id === "brand" && <BrandStep draft={draft} set={set} error={error} />}
+        {step.id === "brand" && <BrandStep draft={draft} set={set} error={error} onSkip={() => setDraft(skipBrand)} />}
         {isReview && <ReviewStep draft={draft} onEdit={go} />}
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
           <Button onClick={() => navigate("/clients")} disabled={onboard.isPending}>

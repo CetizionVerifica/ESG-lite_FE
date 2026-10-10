@@ -211,8 +211,9 @@ test("a superadmin onboards a client in steps, with brand colours", async ({ pag
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Step 4: brand; the primary drives the cover preview.
+  await page.getByRole("textbox", { name: "Accent" }).fill("#c8a24a");
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByText("Pick a primary colour, or skip the brand for now.")).toBeVisible();
+  await expect(page.getByText("Pick a primary colour to go with the accent.")).toBeVisible();
   await page.getByRole("textbox", { name: "Primary" }).fill("#0b5c3b");
   await expect(page.getByRole("img", { name: "Sign-in cover preview" })).toContainText("Sign in to Bahrain Steel");
   await page.getByRole("button", { name: "Continue" }).click();

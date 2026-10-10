@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { contrast } from "../../theme/color";
-import { EMPTY_ONBOARD, type OnboardDraft, coverFor, defaultAccent, firstInvalidStep, isOnboardDirty, suggestFromPixels, toBrandUpdate, toOnboardForm, validateStep } from "./onboarding";
+import { EMPTY_ONBOARD, type OnboardDraft, coverFor, defaultAccent, firstInvalidStep, hasBrandInput, isOnboardDirty, skipBrand, suggestFromPixels, toBrandUpdate, toOnboardForm, validateStep } from "./onboarding";
 
 const filled: OnboardDraft = {
   ...EMPTY_ONBOARD,
@@ -25,10 +25,12 @@ describe("validateStep", () => {
       password: "Use at least 8 characters.",
     });
   });
-  it("brand needs a primary colour unless skipped", () => {
-    expect(validateStep("brand", { ...filled, primary: "" })).toHaveProperty("primary");
-    expect(validateStep("brand", { ...filled, primary: "", brandOn: false })).toEqual({});
+  it("brand colours are optional, but must be hex and an accent needs a primary", () => {
+    expect(validateStep("brand", { ...filled, primary: "" })).toEqual({});
+    expect(validateStep("brand", { ...filled, primary: "green" })).toHaveProperty("primary");
+    expect(validateStep("brand", { ...filled, primary: "", accent: "#C8A24A" })).toHaveProperty("primary");
     expect(validateStep("brand", { ...filled, accent: "blue" })).toHaveProperty("accent");
+    expect(validateStep("brand", { ...filled, primary: "green", brandOn: false })).toEqual({});
   });
 });
 
@@ -47,6 +49,9 @@ describe("toOnboardForm", () => {
   const logo = new File(["x"], "logo.png", { type: "image/png" });
   it("uses the backend's field names, trims text and keeps the password as typed", () => {
     const f = toOnboardForm({ ...filled, logo });
+    expect([...new Set(f.keys())].sort()).toEqual(
+      ["address", "cinNumber", "companyName", "contactPerson", "email", "employeeRange", "industry", "logo", "password", "phoneNumber", "region"],
+    );
     expect(f.get("companyName")).toBe("Midal Cables");
     expect(f.get("contactPerson")).toBe("Omar");
     expect(f.get("password")).toBe("secret pass");
@@ -61,6 +66,20 @@ describe("toOnboardForm", () => {
 });
 
 describe("brand", () => {
+  it("a logo alone is a brand: sent with the form, no colour update", () => {
+    const logo = new File(["x"], "logo.png", { type: "image/png" });
+    const d = { ...filled, primary: "", logo };
+    expect(firstInvalidStep(d)).toBeNull();
+    expect(hasBrandInput(d)).toBe(true);
+    expect(toOnboardForm(d).get("logo")).toBe(logo);
+    expect(toBrandUpdate(d)).toBeNull();
+  });
+  it("skipping clears what was picked, so nothing is saved", () => {
+    const s = skipBrand({ ...filled, logo: new File(["x"], "l.png"), logoDark: new File(["x"], "d.png"), accent: "#C8A24A" });
+    expect(s).toMatchObject({ brandOn: false, logo: null, logoDark: null, primary: "", accent: "" });
+    expect(hasBrandInput(s)).toBe(false);
+    expect(toOnboardForm(s).get("logo")).toBeNull();
+  });
   it("builds the brand update with a cover gradient and a derived accent", () => {
     const b = toBrandUpdate(filled)!;
     expect(b.name).toBe("Midal Cables");

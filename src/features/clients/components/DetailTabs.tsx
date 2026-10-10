@@ -54,8 +54,20 @@ export function OverviewTab({ row }: { row: ClientRow }) {
   );
 }
 
-export function SitesTab({ row, ready }: { row: ClientRow; ready: boolean }) {
-  if (!ready) return <EmptyState compact variant="error" title="Couldn't load this client's sites." />;
+/** Where a tab's list query stands; tabs show a loading line, or an error with a retry, until it's loaded. */
+export type ListLoad = { loading: boolean; failed: boolean; retry: () => void };
+
+function LoadGate({ load, what }: { load: ListLoad; what: string }) {
+  if (load.failed) return <EmptyState compact variant="error" title={`Couldn't load ${what}.`} action={<Button onClick={load.retry}>Try again</Button>} />;
+  return (
+    <p role="status" className="text-sm text-muted">
+      Loading {what}…
+    </p>
+  );
+}
+
+export function SitesTab({ row, load }: { row: ClientRow; load: ListLoad }) {
+  if (load.loading || load.failed) return <LoadGate load={load} what="this client's sites" />;
   return (
     <section className="space-y-3" aria-label="Sites">
       {row.sites.length === 0 ? (
@@ -79,8 +91,8 @@ export function SitesTab({ row, ready }: { row: ClientRow; ready: boolean }) {
   );
 }
 
-export function PeopleTab({ row, ready }: { row: ClientRow; ready: boolean }) {
-  if (!ready) return <EmptyState compact variant="error" title="Couldn't load the people at this client." />;
+export function PeopleTab({ row, load }: { row: ClientRow; load: ListLoad }) {
+  if (load.loading || load.failed) return <LoadGate load={load} what="the people at this client" />;
   return (
     <section className="space-y-3" aria-label="People">
       {row.users.length === 0 ? (
@@ -207,8 +219,9 @@ export function MappingsTab({ companyId }: { companyId: number }) {
   );
 }
 
-export function DangerTab({ row, onToggleActive, onDelete }: { row: ClientRow; onToggleActive: () => void; onDelete: () => void }) {
-  const blocker = deleteBlocker(row);
+export function DangerTab({ row, sites, onToggleActive, onDelete }: { row: ClientRow; sites: ListLoad; onToggleActive: () => void; onDelete: () => void }) {
+  // Delete is only safe once we know the client has no sites; until then it stays disabled.
+  const blocker = sites.failed ? "Couldn't check its sites. Reload the page and try again." : sites.loading ? "Checking its sites…" : deleteBlocker(row);
   return (
     <section className="space-y-4" aria-label="Danger zone">
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-control border border-line p-4">
@@ -223,7 +236,7 @@ export function DangerTab({ row, onToggleActive, onDelete }: { row: ClientRow; o
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-control border border-bad/40 p-4">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-ink">Delete client</h3>
-          <p className="text-sm text-muted">{blocker ?? "Deletes the company for good. This can't be undone."}</p>
+          <p className="text-sm text-muted">{blocker ?? "Deletes the company for good. Its brand theme and category mappings stay behind in the database. This can't be undone."}</p>
         </div>
         <Button variant="danger" onClick={onDelete} disabled={!!blocker}>
           Delete client

@@ -22,14 +22,15 @@ export default function ClientsPage() {
   const brands = useMemo(() => new Map([...fetched].filter(([, b]) => hasBrand(b))), [fetched]);
 
   const all = useMemo(() => buildRows(companies.data ?? [], sites.data, users.data), [companies.data, sites.data, users.data]);
-  const status = (filters.filters.status ?? []) as StatusFilter[];
-  const industries = filters.filters.industry ?? [];
-  const regions = filters.filters.region ?? [];
-  const rows = useMemo(
-    () => all.filter((r) => matchesFilters(r, { q: filters.q, status, industries, regions })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- status/industries/regions derive from filters
-    [all, filters],
+  const { status, industries, regions } = useMemo(
+    () => ({
+      status: (filters.filters.status ?? []) as StatusFilter[],
+      industries: filters.filters.industry ?? [],
+      regions: filters.filters.region ?? [],
+    }),
+    [filters.filters],
   );
+  const rows = useMemo(() => all.filter((r) => matchesFilters(r, { q: filters.q, status, industries, regions })), [all, filters.q, status, industries, regions]);
 
   const filterDefs: FilterDef[] = [
     {

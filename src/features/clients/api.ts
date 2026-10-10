@@ -118,12 +118,13 @@ export function useOnboard() {
         } catch (e) {
           warnings.push(`Brand colours were not saved: ${errorMessage(e, "the request failed")}. Set them in Brand theme.`);
         }
-        if (d.logoDark) {
-          try {
-            await uploadBrandDarkLogo(company.company_id, d.logoDark);
-          } catch (e) {
-            warnings.push(`Dark logo was not saved: ${errorMessage(e, "the upload failed")}. Upload it in Brand theme.`);
-          }
+      }
+      // Saved with or without colours: the upload creates the brand row when there isn't one.
+      if (d.brandOn && d.logoDark) {
+        try {
+          await uploadBrandDarkLogo(company.company_id, d.logoDark);
+        } catch (e) {
+          warnings.push(`Dark logo was not saved: ${errorMessage(e, "the upload failed")}. Upload it in Brand theme.`);
         }
       }
       return { companyId: company.company_id, companyName: company.name, warnings };
