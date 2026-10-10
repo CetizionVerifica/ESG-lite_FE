@@ -197,7 +197,7 @@ for (const width of [1280, 1024, 768, 390]) {
     await page.setViewportSize({ width, height: 800 });
     await signIn(page, "Superadmin");
     await page.goto("/clients/3");
-    await expect(page.getByRole("heading", { name: "Client" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Glochem" })).toBeVisible();
     const desktop = width >= 1024;
     await expect(page.getByRole("button", { name: "Open menu" })).toBeVisible({ visible: !desktop });
     await expect(mainNav(page).getByRole("button", { name: "Capture" })).toBeVisible({ visible: desktop });
