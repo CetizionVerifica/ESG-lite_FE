@@ -53,3 +53,8 @@ export const deleteUser = async (id: string | number) => {
 };
 
 //comment
+/** Superadmin: email the person a link to choose a password (a fresh link each time). */
+export const sendUserInvite = async (id: number): Promise<{ message: string; expiresAt: string }> => {
+  const response = await api.post(`/admin/users/${id}/invite`);
+  return response.data;
+};
