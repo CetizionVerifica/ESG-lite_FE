@@ -96,7 +96,8 @@ describe("categories", () => {
   it("only allows deleting a category nothing uses", () => {
     const [fuel, solar, unused] = categoryRows(cats, SITES);
     expect(categoryDeleteBlock(fuel)).toBe("Fuel is still in use (2 sites, 7 entries, 2 emission factors, 1 column config). Take it off its sites and remove its data first.");
-    expect(categoryDeleteBlock(solar)).toMatch(/1 site\)/);
+    // No counts from the server: can't tell it is unused, so no delete.
+    expect(categoryDeleteBlock(solar)).toMatch(/^Couldn't check what uses Solar/);
     expect(categoryDeleteBlock(unused)).toBeNull();
   });
 

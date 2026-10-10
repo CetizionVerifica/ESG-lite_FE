@@ -44,7 +44,7 @@ export function UnitsTab({ nav, panel }: TabShell) {
   const [openParam, setOpen] = useOpenParam();
   const sites = useSites();
   const categories = useCategories();
-  const units = useUnits(ctx.siteIds, ctx.categoryId);
+  const units = useUnits();
   const save = useSaveUnit();
   const remove = useDeleteUnit();
   const [saveErr, setSaveErr] = useState<string | null>(null);
@@ -52,7 +52,6 @@ export function UnitsTab({ nav, panel }: TabShell) {
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   const all = useMemo(() => unitRows(units.data ?? [], sites.data, categories.data), [units.data, sites.data, categories.data]);
-  // The same filter runs on the server's pair answer too, so both paths agree.
   const rows = useMemo(
     () => all.filter((r) => matchesUnit(r, { q: filters.q, siteIds: ctx.siteIds, categoryId: ctx.categoryId })),
     [all, filters.q, ctx.siteIds, ctx.categoryId],

@@ -169,8 +169,14 @@ test("categories: filter by scope, edit sites after creation, add another", asyn
   await expect(page.getByText('Category "Solar generation" added')).toBeVisible();
   add = page.getByRole("dialog", { name: "Add category" });
   await expect(add.getByLabel("Category name")).toHaveValue("");
+  // "Add another" stays ticked for the next one.
+  await expect(add.getByRole("checkbox", { name: "Add another after this" })).toBeChecked();
+  await add.getByRole("checkbox", { name: "Add another after this" }).uncheck();
   await add.getByLabel("Category name").fill("Water");
-  await add.getByRole("checkbox", { name: /Assign to all sites/ }).check();
+  await expect(add.getByLabel("Category name")).toHaveValue("Water");
+  const all = add.getByRole("checkbox", { name: /Assign to all sites/ });
+  await all.click();
+  await expect(all).toBeChecked();
   await add.getByRole("button", { name: "Add category" }).click();
   await expect(page.getByText('Category "Water" added')).toBeVisible();
   expect(calls.slice(-2).map((c) => c.body)).toEqual([
@@ -179,7 +185,7 @@ test("categories: filter by scope, edit sites after creation, add another", asyn
   ]);
 });
 
-test("units: site and category chips ask the server for that pair", async ({ page }) => {
+test("units: site and category chips filter the list; delete keeps entries", async ({ page }) => {
   await signIn(page);
   await page.goto("/setup/reference?tab=units&site=2&category=2");
   const table = page.getByRole("table", { name: "Units" });

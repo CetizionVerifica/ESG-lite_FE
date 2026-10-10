@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createCategory, deleteCategory, getCategories, updateCategory } from "../../services/categoryService";
 import { createCountry, deleteCountry, getCountries, updateCountry } from "../../services/countryService";
 import { getSites } from "../../services/siteService";
-import { createUnit, deleteUnit, getUnits, getUnitsBySiteAndCategory, updateUnit } from "../../services/unitService";
+import { createUnit, deleteUnit, getUnits, updateUnit } from "../../services/unitService";
 import {
   type Category,
   type CategoryDraft,
@@ -22,7 +22,6 @@ export const keys = {
   categories: () => [...keys.all, "categories"] as const,
   sites: () => [...keys.all, "sites"] as const,
   units: () => [...keys.all, "units"] as const,
-  unitsFor: (siteId: number, categoryId: number) => [...keys.units(), siteId, categoryId] as const,
 };
 
 /** Server message from an axios error, or the fallback. */
@@ -42,14 +41,11 @@ export const useCountries = () => useQuery<Country[]>({ queryKey: keys.countries
 export const useCategories = () => useQuery<Category[]>({ queryKey: keys.categories(), queryFn: async () => asList<Category>(await getCategories(), "categories") });
 export const useSites = () => useQuery<Site[]>({ queryKey: keys.sites(), queryFn: async () => asList<Site>(await getSites(), "sites") });
 
-/** One site and one category ask the server for just that pair; anything else loads every unit. */
-export function useUnits(siteIds: number[], categoryId: number | null) {
-  const pair = siteIds.length === 1 && categoryId ? ([siteIds[0], categoryId] as const) : null;
-  return useQuery<Unit[]>({
-    queryKey: pair ? keys.unitsFor(pair[0], pair[1]) : keys.units(),
-    queryFn: async () => asList<Unit>(pair ? await getUnitsBySiteAndCategory(pair[0], pair[1]) : await getUnits(), "units"),
-  });
-}
+/**
+ * Every unit, filtered on the page. The per-pair endpoint has no entry counts,
+ * so one list keeps every filter combination showing the same columns.
+ */
+export const useUnits = () => useQuery<Unit[]>({ queryKey: keys.units(), queryFn: async () => asList<Unit>(await getUnits(), "units") });
 
 export function useSaveCountry() {
   const qc = useQueryClient();
@@ -88,7 +84,7 @@ export function useSaveCategory() {
 export function useDeleteCategory() {
   const qc = useQueryClient();
   return useMutation({
-    // data-loss-reviewed: only offered for unused categories; without force the server refuses (409) while anything uses it.
+    // data-loss-reviewed: only offered for unused categories; the server refuses (409) while anything uses it.
     mutationFn: (id: number) => deleteCategory(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
   });

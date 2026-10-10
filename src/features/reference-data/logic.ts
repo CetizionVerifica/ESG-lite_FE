@@ -172,7 +172,7 @@ export function removedSites(d: CategoryDraft, row: CategoryRow | null): number[
   return row.siteIds.filter((id) => !d.site_ids.includes(id));
 }
 
-/** What still uses the category; empty when it can be deleted. Unknown counts are skipped (the server checks again). */
+/** What on this page still uses the category (the server also checks mappings, invoices and user grants). */
 export function categoryUsage(row: CategoryRow): string[] {
   const parts: [number | null, string, string][] = [
     [row.siteIds.length, "site", "sites"],
@@ -185,6 +185,9 @@ export function categoryUsage(row: CategoryRow): string[] {
 }
 
 export function categoryDeleteBlock(row: CategoryRow): string | null {
+  // Without the server's counts there is no way to tell it is unused.
+  if (row.factors === null || row.configs === null || row.units === null || row.entries === null)
+    return `Couldn't check what uses ${row.category_name}, so it can't be deleted right now. Reload the page and try again.`;
   const used = categoryUsage(row);
   if (!used.length) return null;
   return `${row.category_name} is still in use (${used.join(", ")}). Take it off its sites and remove its data first.`;

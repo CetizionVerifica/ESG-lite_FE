@@ -66,6 +66,7 @@ export function CategoriesTab({ nav, panel }: TabShell) {
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
   // Bumped after "add another" so the drawer starts a fresh form.
   const [round, setRound] = useState(0);
+  const [addAnother, setAddAnother] = useState(false);
 
   const all = useMemo(() => categoryRows(categories.data ?? [], sites.data), [categories.data, sites.data]);
   const scopes = useMemo(() => filters.filters.scope ?? [], [filters.filters.scope]);
@@ -180,7 +181,12 @@ export function CategoriesTab({ nav, panel }: TabShell) {
         sites={{ data: sites.data ?? [], loading: sites.isPending, error: !!sites.error }}
         saving={save.isPending}
         error={saveErr}
-        onClose={() => open(null)}
+        addAnother={addAnother}
+        onAddAnother={setAddAnother}
+        onClose={() => {
+          setAddAnother(false);
+          open(null);
+        }}
         onSave={onSave}
         onDelete={() => {
           remove.reset();
@@ -193,7 +199,7 @@ export function CategoriesTab({ nav, panel }: TabShell) {
           noun="category"
           name={deleting.category_name}
           blocked={categoryDeleteBlock(deleting)}
-          consequence="Nothing uses it yet, so nothing else changes. This can't be undone."
+          consequence="No site, entry, factor, config or unit uses it. This can't be undone. If anything else still uses it, the delete is refused and nothing changes."
           deleting={remove.isPending}
           error={deleteErr}
           onClose={() => setDeleting(null)}
@@ -225,13 +231,15 @@ function CategoryDrawer(props: {
   saving: boolean;
   error: string | null;
   onClose: () => void;
+  addAnother: boolean;
+  onAddAnother: (on: boolean) => void;
   onSave: (d: CategoryDraft, addAnother: boolean) => void;
   onDelete: () => void;
 }) {
   const { row, creating } = props;
   const [draft, setDraft] = useState<CategoryDraft>(() => categoryDraftFrom(row));
   const [touched, setTouched] = useState(false);
-  const [addAnother, setAddAnother] = useState(false);
+  const { addAnother, onAddAnother: setAddAnother } = props;
   const [confirmClose, setConfirmClose] = useState(false);
 
   if (props.loading) return <Drawer open loading onClose={props.onClose} title="Loading category…" />;
