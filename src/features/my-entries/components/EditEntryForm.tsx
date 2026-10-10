@@ -169,7 +169,7 @@ function Fields(p: FieldsProps) {
               Factor {factor.factor_value} kgCO₂e per {factor.denominator_unit}, {factor.year}
             </>
           ) : row.emission_category ? (
-            <span className="text-bad">No factor for {p.factorYear}</span>
+            <span className="text-bad">No factor for this category</span>
           ) : null}
           {entry.fera && <span className="mt-1 block">The linked FERA entry is recalculated when you save.</span>}
         </div>
