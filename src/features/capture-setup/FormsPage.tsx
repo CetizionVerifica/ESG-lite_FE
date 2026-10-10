@@ -1,0 +1,244 @@
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ChevronRight, FileStack, MoreHorizontal, Plus, SearchX, Trash2 } from "lucide-react";
+import {
+  Button,
+  Callout,
+  type Column,
+  DataTable,
+  EMPTY_FILTERS,
+  EmptyState,
+  FilterBar,
+  type FilterDef,
+  Menu,
+  Modal,
+  PageHeader,
+  cn,
+  focusRing,
+  useFilterParams,
+  useToast,
+} from "../../ui";
+import { createdId, useCreateForm, useDeleteForm, useForms, useSites } from "./api";
+import { CoverageMatrix } from "./components/CoverageMatrix";
+import { NewFormModal } from "./components/NewFormModal";
+import { type FormRow, buildCoverage, buildFormRows, errorMessage, formPath, matchesForm, singleClient, sitesInView, toIds } from "./logic";
+
+const FILTER_KEYS = ["client", "site"];
+
+/** P24 `/capture/forms`: which site × category pairs have a data-entry form, and every form. */
+export default function FormsPage() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [filters, setFilters] = useFilterParams(FILTER_KEYS);
+  const forms = useForms();
+  const sites = useSites();
+  const create = useCreateForm();
+  const remove = useDeleteForm();
+
+  const [creating, setCreating] = useState<{ siteId: number | null; categoryId: number | null } | null>(null);
+  const [createErr, setCreateErr] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<FormRow | null>(null);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
+
+  const clientIds = useMemo(() => toIds(filters.filters.client), [filters.filters.client]);
+  const siteIds = useMemo(() => toIds(filters.filters.site), [filters.filters.site]);
+  const allSites = useMemo(() => sites.data ?? [], [sites.data]);
+  const all = useMemo(() => buildFormRows(forms.data ?? [], allSites), [forms.data, allSites]);
+  const rows = useMemo(() => all.filter((r) => matchesForm(r, { q: filters.q, clientIds, siteIds })), [all, filters.q, clientIds, siteIds]);
+
+  const viewSites = useMemo(() => sitesInView(allSites, { clientIds, siteIds }), [allSites, clientIds, siteIds]);
+  const client = singleClient(viewSites);
+  const coverage = useMemo(() => (client ? buildCoverage(viewSites, forms.data ?? []) : null), [client, viewSites, forms.data]);
+
+  const clientOptions = useMemo(() => {
+    const seen = new Map<number, string>();
+    for (const s of allSites) if (s.company) seen.set(s.company.company_id, s.company.name);
+    return [...seen].map(([id, name]) => ({ value: String(id), label: name })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [allSites]);
+  const siteOptions = useMemo(
+    () =>
+      allSites
+        .filter((s) => !clientIds.length || (s.company && clientIds.includes(s.company.company_id)))
+        .map((s) => ({ value: String(s.site_id), label: s.name }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [allSites, clientIds],
+  );
+  const filterDefs: FilterDef[] = [
+    { key: "client", label: "Client", multiple: false, options: clientOptions },
+    { key: "site", label: "Site", options: siteOptions },
+  ];
+
+  const startCreate = (siteId: number | null = null, categoryId: number | null = null) => {
+    create.reset();
+    setCreateErr(null);
+    setCreating({ siteId: siteId ?? (siteIds.length === 1 ? siteIds[0] : null), categoryId });
+  };
+
+  const onCreate = (d: { name: string; siteId: number; categoryId: number }) => {
+    setCreateErr(null);
+    create.mutate(d, {
+      onSuccess: (res) => {
+        setCreating(null);
+        const id = createdId(res);
+        toast({
+          title: `Form "${d.name.trim()}" created`,
+          tone: "good",
+          action: id ? { label: "Open", onClick: () => navigate(formPath(id)) } : undefined,
+        });
+      },
+      onError: (e) => setCreateErr(errorMessage(e, "The form wasn't created. Try again.")),
+    });
+  };
+
+  const onDelete = () => {
+    if (!deleting) return;
+    setDeleteErr(null);
+    remove.mutate(deleting.id, {
+      onSuccess: () => {
+        toast({ title: `Form "${deleting.name}" deleted`, tone: "good" });
+        setDeleting(null);
+      },
+      onError: (e) => setDeleteErr(errorMessage(e, "The form wasn't deleted. Try again.")),
+    });
+  };
+
+  const columns: Column<FormRow>[] = [
+    { id: "name", header: "Form name", value: (r) => r.name, hideable: false, cell: (r) => <span className="font-medium text-ink">{r.name}</span> },
+    { id: "site", header: "Site", value: (r) => r.siteName },
+    { id: "client", header: "Client", value: (r) => r.clientName },
+    { id: "category", header: "Category", value: (r) => r.categoryName },
+    { id: "fields", header: "Fields", value: (r) => r.fields, numeric: true },
+    { id: "calculation", header: "Calculation mode", value: (r) => r.calculation },
+    { id: "mappings", header: "Mappings", value: (r) => r.mappings, numeric: true },
+    { id: "extra", header: "Extra fields", value: (r) => r.extraFields, numeric: true },
+    {
+      id: "actions",
+      header: "Actions",
+      value: () => null,
+      exportValue: () => null,
+      sortable: false,
+      hideable: false,
+      width: "5.5rem",
+      cell: (r) => (
+        // Clicks inside stay here; the row itself opens the form.
+        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <Menu
+            align="end"
+            trigger={(p) => (
+              <button {...p} type="button" aria-label={`More actions for ${r.name}`} className={cn("rounded-control p-1.5 text-muted hover:bg-tint hover:text-ink", focusRing)}>
+                <MoreHorizontal aria-hidden className="size-4" />
+              </button>
+            )}
+            items={[
+              { label: "Open form", onSelect: () => navigate(formPath(r.id)) },
+              {
+                label: "Delete form",
+                danger: true,
+                icon: <Trash2 aria-hidden className="size-4" />,
+                onSelect: () => {
+                  remove.reset();
+                  setDeleteErr(null);
+                  setDeleting(r);
+                },
+              },
+            ]}
+          />
+          <ChevronRight aria-hidden className="size-4 text-muted" />
+        </div>
+      ),
+    },
+  ];
+
+  const filtered = !!filters.q.trim() || clientIds.length > 0 || siteIds.length > 0;
+  const empty =
+    all.length === 0 ? (
+      <EmptyState
+        icon={FileStack}
+        title="No data-entry forms yet."
+        description="Create a form for a site and category so contributors can enter data."
+        action={<Button variant="primary" onClick={() => startCreate()}>New form</Button>}
+      />
+    ) : (
+      <EmptyState icon={SearchX} title="No forms match these filters." action={filtered ? <Button onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button> : undefined} />
+    );
+
+  const coverageHint = sites.error
+    ? "Sites couldn't be loaded."
+    : !sites.data
+    ? undefined
+    : viewSites.length === 0
+      ? "No sites match these filters."
+      : "Pick a client to see which of its site and category pairs have a form.";
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Data-entry forms"
+        description="The form contributors fill for each site and category."
+        primaryAction={{ label: "New form", onClick: () => startCreate(), icon: <Plus aria-hidden className="size-4" />, disabled: !sites.data }}
+      />
+      {sites.error && (
+        <Callout
+          tone="warn"
+          title="Couldn't load the sites."
+          action={<Button variant="ghost" onClick={() => void sites.refetch()}>Try again</Button>}
+        >
+          {errorMessage(sites.error, "The client and site filters, the coverage matrix and new forms need the site list.")}
+        </Callout>
+      )}
+      <FilterBar
+        filters={filterDefs}
+        value={filters}
+        onChange={setFilters}
+        loading={sites.isPending}
+        searchPlaceholder="Search form, site, client, category"
+        searchDelay={0}
+      />
+      <CoverageMatrix
+        coverage={coverage}
+        hint={coverageHint}
+        loading={sites.isPending || (forms.isPending && !!client)}
+        onOpenForm={(id) => navigate(formPath(id))}
+        onCreate={(site, cat) => startCreate(site.site_id, cat.category_id)}
+      />
+      <DataTable<FormRow>
+        label="Data-entry forms"
+        rows={rows}
+        columns={columns}
+        getRowId={(r) => r.id}
+        rowLabel={(r) => r.name}
+        loading={forms.isPending}
+        error={forms.error ? errorMessage(forms.error, "Couldn't load the forms.") : null}
+        onRetry={() => void forms.refetch()}
+        empty={empty}
+        defaultSort={{ id: "name", dir: "asc" }}
+        pagination={{ mode: "client", pageSize: 50 }}
+        onRowClick={(r) => navigate(formPath(r.id))}
+        exportName="data-entry-forms"
+        storageKey="p24-forms"
+      />
+      {creating && (
+        <NewFormModal
+          sites={clientIds.length ? allSites.filter((s) => s.company && clientIds.includes(s.company.company_id)) : allSites}
+          configs={forms.data ?? []}
+          initial={creating}
+          saving={create.isPending}
+          error={createErr}
+          onClose={() => setCreating(null)}
+          onCreate={onCreate}
+        />
+      )}
+      {deleting && (
+        <Modal
+          open
+          tone="destructive"
+          title={`Delete "${deleting.name}"?`}
+          description={`Contributors at ${deleting.siteName} lose this form for ${deleting.categoryName}. Entries already saved stay.`}
+          primaryAction={{ label: "Delete form", onClick: onDelete, loading: remove.isPending }}
+          error={deleteErr}
+          onClose={() => setDeleting(null)}
+        />
+      )}
+    </div>
+  );
+}
