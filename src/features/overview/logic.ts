@@ -1,11 +1,9 @@
 import type { OverviewCategory, OverviewLastYear, OverviewMonth, OverviewSite, SubmissionUser } from "../../services/overviewService";
+import { fyBothYears } from "../../lib/fiscalYear";
 import { DEFAULT_FY_START_MONTH, MONTH_SHORT, type Period, type PeriodKind, periodContaining, periodLabel, serializePeriod } from "../../ui";
 
 /** Period kinds the overview offers; B4 has no custom ranges. */
 export const PERIOD_KINDS: PeriodKind[] = ["month", "quarter", "cy", "fy"];
-
-/** B4 reads FY as April–March. */
-export const FY_START_MONTH = DEFAULT_FY_START_MONTH;
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -16,7 +14,7 @@ export function lastDueMonth(now: Date): Date {
 
 /** Opening period: the calendar year holding the last month that was due. */
 export function defaultPeriod(now: Date): Period {
-  return periodContaining("cy", lastDueMonth(now), FY_START_MONTH);
+  return periodContaining("cy", lastDueMonth(now));
 }
 
 /** Custom ranges (a pasted URL) fall back to the default; B4 can't serve them. */
@@ -26,7 +24,8 @@ export function supportedPeriod(p: Period | null, now: Date): Period {
 
 /**
  * The `period` B4 expects. Month and quarter read the same; CY is the bare
- * year; FY is named by both years ("FY2025-26" for the FE's FY2025).
+ * year; FY is named by both years ("FY2025-26" for the FE's FY2025). B4 and the
+ * reporting calendar share the backend's FY start.
  */
 export function toOverviewPeriod(p: Period): string {
   switch (p.kind) {
@@ -36,7 +35,7 @@ export function toOverviewPeriod(p: Period): string {
     case "cy":
       return String(p.year);
     case "fy":
-      return `FY${p.startYear}-${pad((p.startYear + 1) % 100)}`;
+      return fyBothYears(p.startYear);
     case "custom":
       throw new Error("B4 has no custom periods");
   }
@@ -221,9 +220,9 @@ export function attentionItems(input: {
 }
 
 /** Page title and crumb pieces. */
-export function headerText(company: string | null, siteCount: number, totalSites: number, period: Period) {
+export function headerText(company: string | null, siteCount: number, totalSites: number, period: Period, fyStartMonth = DEFAULT_FY_START_MONTH) {
   const sites = siteCount === 0 || siteCount === totalSites ? (totalSites === 1 ? "1 site" : "All sites") : siteCount === 1 ? "1 site" : `${siteCount} sites`;
-  return { title: periodLabel(period, FY_START_MONTH), crumb: [company, sites].filter(Boolean).join(" · ") };
+  return { title: periodLabel(period, fyStartMonth), crumb: [company, sites].filter(Boolean).join(" · ") };
 }
 
 // ── Lower tabs ──────────────────────────────────────────────────────────────

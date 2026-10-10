@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Building2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useFyStartMonth } from "../../lib/fiscalYear";
 import {
   Button,
   Callout,
@@ -27,7 +28,6 @@ import { SitesTable } from "./components/SitesTable";
 import { SubmissionPanel } from "./components/SubmissionPanel";
 import { TrendChart } from "./components/TrendChart";
 import {
-  FY_START_MONTH,
   PERIOD_KINDS,
   attentionItems,
   categoryBars,
@@ -68,7 +68,8 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
   const [ctx] = useContextParams({ period: fallback });
   const period = supportedPeriod(ctx.period, now);
   const scopeSites = ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id);
-  const range = periodRange(period, FY_START_MONTH);
+  const fyStartMonth = useFyStartMonth();
+  const range = periodRange(period, fyStartMonth);
 
   const overview = useOverview(toOverviewPeriod(period), scopeSites, ctx.categoryId);
   // Threshold alerts compare a month or quarter with the one before.
@@ -93,14 +94,14 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
     return [...map].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sites, ctx.siteIds]);
 
-  const header = headerText(sites[0]?.company?.name ?? null, ctx.siteIds.length, sites.length, period);
+  const header = headerText(sites[0]?.company?.name ?? null, ctx.siteIds.length, sites.length, period, fyStartMonth);
   const chips = (
     <ContextChips
       chips={["site", "category", "period"]}
       sites={sites.map((s) => ({ value: s.site_id, label: s.name }))}
       categories={categories}
       periodKinds={PERIOD_KINDS}
-      fyStartMonth={FY_START_MONTH}
+      fyStartMonth={fyStartMonth}
       defaults={{ period: fallback }}
     />
   );
@@ -186,7 +187,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
     missingMonth: data?.submission.month ?? null,
     overThreshold: alerts,
     threshold: threshold.data ?? null,
-    previousLabel: comparable ? periodLabel(previousPeriod, FY_START_MONTH) : null,
+    previousLabel: comparable ? periodLabel(previousPeriod, fyStartMonth) : null,
     links: { approvals: links.approvals, production: links.production, team: "#submission-status", category: links.category },
   });
   const insight = data ? insightText(data.by_category, data.kpis.gross) : null;
