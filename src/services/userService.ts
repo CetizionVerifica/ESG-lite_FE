@@ -10,14 +10,23 @@ export const getUserById = async (id: string | number) => {
   return response.data;
 };
 
+// Profile fields and category_ids need ESG-lite #70 (P20); older backends ignore them.
+type UserProfileFields = {
+  last_name?: string | null;
+  phone_number?: string | null;
+  timezone?: string | null;
+  category_ids?: number[];
+};
+
+/** Without a password the backend generates one and returns it once as `temporary_password`. */
 export const createUser = async (data: {
   name?: string;
   email: string;
-  password: string;
+  password?: string;
   role: string;
   site_id?: number;
   site_ids?: number[];
-}) => {
+} & UserProfileFields) => {
   const response = await api.post("/admin/users", data);
   return response.data;
 };
@@ -31,7 +40,7 @@ export const updateUser = async (
     role?: string;
     site_id?: number | null;
     site_ids?: number[];
-  }
+  } & UserProfileFields
 ) => {
   const response = await api.patch(`/admin/users/${id}`, data);
 
