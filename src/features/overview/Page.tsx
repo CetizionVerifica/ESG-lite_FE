@@ -212,7 +212,9 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
             ) : undefined
           }
         >
-          {k.pending_count > 0 ? `${k.pending_count} ${k.pending_count === 1 ? "entry is" : "entries are"} waiting for you.` : "No entries are waiting for approval."}
+          {k.pending_count > 0
+            ? `${k.pending_count} ${k.pending_count === 1 ? "entry" : "entries"} from this period ${k.pending_count === 1 ? "is" : "are"} waiting for you.`
+            : "No entries from this period are waiting for approval."}
         </Callout>
       )}
 

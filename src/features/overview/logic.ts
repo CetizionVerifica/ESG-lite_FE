@@ -191,7 +191,7 @@ export function attentionItems(input: {
   const items: AttentionItem[] = [];
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   if (input.pendingEntries)
-    items.push({ id: "pending", count: input.pendingEntries, text: `${plural(input.pendingEntries, "entry", "entries")} waiting for approval`, to: input.links.approvals, tone: "warn" });
+    items.push({ id: "pending", count: input.pendingEntries, text: `${plural(input.pendingEntries, "entry", "entries")} waiting for approval (all periods)`, to: input.links.approvals, tone: "warn" });
   if (input.missingPeople && input.missingMonth)
     items.push({
       id: "missing",
