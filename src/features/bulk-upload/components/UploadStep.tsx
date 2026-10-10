@@ -1,6 +1,7 @@
-import { useMemo } from "react";
 import { Download } from "lucide-react";
-import { Button, Callout, Combobox, FileDrop, MonthPicker, Select, exportMatrix, type FileDropItem } from "../../../ui";
+import { Button, Callout, FileDrop, MonthPicker, exportMatrix, type FileDropItem } from "../../../ui";
+import { ContextFields } from "./ContextFields";
+import { selectedSite } from "../logic";
 import type { Site } from "../api";
 import type { UploadContext } from "../hooks/useUploadContext";
 import { ACCEPT, MAX_BYTES, buildFields, templateHeaders } from "../logic";
@@ -10,6 +11,8 @@ export function UploadStep(props: {
   ctx: UploadContext;
   onContext: (patch: Partial<UploadContext>) => void;
   sites: { data: Site[]; loading: boolean; error: string | null; retry: () => void };
+  /** A contributor uploads for their own sites only, with no client picker. */
+  contributor: boolean;
   form: { data: ColumnConfig | null | undefined; loading: boolean; error: string | null };
   file: File | null;
   onFile: (file: File | null) => void;
@@ -19,24 +22,15 @@ export function UploadStep(props: {
 }) {
   const { ctx, onContext, sites, form, file } = props;
 
-  const clients = useMemo(() => {
-    const byId = new Map<number, string>();
-    for (const s of sites.data) if (s.company) byId.set(s.company.company_id, s.company.name);
-    return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [sites.data]);
-  const clientSites = sites.data
-    .filter((s) => s.company?.company_id === ctx.clientId)
-    .map((s) => ({ value: s.site_id, label: s.name }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-  const site = sites.data.find((s) => s.site_id === ctx.siteId && s.company?.company_id === ctx.clientId);
-  const categories = (site?.categories ?? []).map((c) => ({ value: c.category_id, label: c.category_name })).sort((a, b) => a.label.localeCompare(b.label));
+  const site = selectedSite(sites.data, ctx, props.contributor);
+  const categoryName = site?.categories?.find((c) => c.category_id === ctx.categoryId)?.category_name;
 
   const items: FileDropItem[] = file ? [{ id: "sheet", file, status: props.uploading ? "uploading" : "queued" }] : [];
   const noForm = !!site && ctx.categoryId !== null && !form.loading && !form.error && form.data === null;
   const ready = !!site && ctx.categoryId !== null && !!form.data && !!file;
 
   const downloadTemplate = () => {
-    const name = categories.find((c) => c.value === ctx.categoryId)?.label ?? "category";
+    const name = categoryName ?? "category";
     void exportMatrix([templateHeaders(buildFields(form.data ?? null))], `bulk-upload-template-${name.toLowerCase().replace(/\W+/g, "-")}`, "xlsx");
   };
 
@@ -48,34 +42,13 @@ export function UploadStep(props: {
         </Callout>
       )}
       <div className="grid gap-4 md:grid-cols-2">
-        <Select<number>
-          label="Client"
-          required
-          placeholder="Choose a client"
-          value={ctx.clientId}
-          options={clients}
-          loading={sites.loading}
-          onChange={(v) => onContext({ clientId: v, siteId: null, categoryId: null })}
-        />
-        <Combobox<number>
-          label="Site"
-          required
-          placeholder="Search sites…"
-          value={site ? ctx.siteId : null}
-          options={clientSites}
-          emptyText={ctx.clientId ? "This client has no sites" : "Choose a client first"}
-          disabled={!ctx.clientId}
-          onChange={(v) => onContext({ siteId: v, categoryId: null })}
-        />
-        <Select<number>
-          label="Category"
-          required
-          placeholder="Choose a category"
-          value={site ? ctx.categoryId : null}
-          options={categories}
-          emptyText={site ? "This site reports no categories" : "Choose a site first"}
-          loading={!!site && ctx.categoryId !== null && form.loading}
-          onChange={(v) => onContext({ categoryId: v })}
+        <ContextFields
+          ctx={ctx}
+          onContext={onContext}
+          sites={sites.data}
+          sitesLoading={sites.loading}
+          contributor={props.contributor}
+          categoryLoading={!!site && ctx.categoryId !== null && form.loading}
         />
         <MonthPicker
           label="Reporting month"
@@ -85,7 +58,7 @@ export function UploadStep(props: {
         />
       </div>
 
-      {noForm && <Callout tone="warn" title="This category has no entry form at this site">Set one up in Capture, Column configs before uploading rows for it.</Callout>}
+      {noForm && <Callout tone="warn" title="This category has no entry form at this site">{props.contributor ? "Ask your administrator to set one up before uploading rows for it." : "Set one up in Capture, Data-entry forms before uploading rows for it."}</Callout>}
       {form.error && <Callout tone="warn" title="Couldn't load the entry form">{form.error}</Callout>}
 
       <FileDrop
