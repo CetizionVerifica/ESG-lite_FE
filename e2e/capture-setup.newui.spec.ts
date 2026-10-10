@@ -21,7 +21,7 @@ const notes = { pk_id: 102, column_name: "Notes", column_type: "text", dropdown_
 
 type Call = { method: string; path: string; body: unknown };
 
-async function signIn(page: Page) {
+async function signIn(page: Page, opts: { onlyFirstForm?: boolean } = {}) {
   const calls: Call[] = [];
   const user = { name: "Sam Staff", email: "sam@example.com" };
   await page.addInitScript((u) => {
@@ -34,6 +34,7 @@ async function signIn(page: Page) {
     { pk_id: 7, config_name: "Hidd fuel", site: { site_id: 1, name: "Hidd" }, category: fuel, columns: [amount, fuelType], emission_category_mapping: { diesel: "Diesel" }, extra_fields: [], calculation: null },
     { pk_id: 9, config_name: "Dallas power", site: { site_id: 3, name: "Dallas" }, category: power, columns: [amount], emission_category_mapping: {}, extra_fields: [], calculation: { mode: "per_unit" } },
   ];
+  if (opts.onlyFirstForm) configs.splice(1);
   await page.route(
     (url) => url.port !== "4174",
     (route) => {
@@ -103,6 +104,28 @@ test("forms: coverage matrix starts a form for a missing site and category", asy
   // A configured cell opens its form.
   await matrix.getByRole("button", { name: "Hidd, Stationary combustion: configured. Open form" }).click();
   await expect(page).toHaveURL(/\/capture\/forms\/7$/);
+});
+
+test("forms: the row actions menu isn't clipped by the table and keeps the row in view", async ({ page }) => {
+  await signIn(page, { onlyFirstForm: true });
+  await page.goto("/capture/forms");
+  const table = page.getByRole("table", { name: /forms/i });
+  await expect(table.getByRole("cell", { name: "Hidd fuel", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "More actions for Hidd fuel" }).click();
+  const del = page.getByRole("menuitem", { name: "Delete form" });
+  await expect(del).toBeVisible();
+  // The item is on top at its own centre: nothing (the table card's edge) covers it.
+  const box = (await del.boundingBox())!;
+  const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('[role="menuitem"]')?.textContent, [box.x + box.width / 2, box.y + box.height / 2]);
+  expect(hit).toContain("Delete form");
+  // Opening the menu didn't scroll the table's own scroll box, so the row is still there.
+  const scrolled = await table.evaluate((t) => t.parentElement!.scrollTop);
+  expect(scrolled).toBe(0);
+  await expect(table.getByRole("cell", { name: "Hidd fuel", exact: true })).toBeVisible();
+
+  await del.click();
+  await expect(page.getByRole("alertdialog", { name: /Hidd fuel/ })).toBeVisible();
 });
 
 test("columns: add a Select column, change a type, and blocked delete", async ({ page }) => {
