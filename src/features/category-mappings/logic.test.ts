@@ -9,7 +9,9 @@ import {
   categoriesInUse,
   checkImport,
   createFactorHref,
+  coverageLabel,
   createPayload,
+  deleteTitle,
   draftFrom,
   emptyDraft,
   factorNames,
@@ -70,8 +72,29 @@ describe("findFactor", () => {
   it("misses at another site, matches trimmed names, and is unknown until factors load", () => {
     expect(findFactor(INDEX, m(1, { site_id: 11 }), SITES).state).toBe("missing");
     expect(findFactor(INDEX, m(1, { global_category_name: "LPG" }), SITES).state).toBe("matched");
-    expect(findFactor(INDEX, m(1, { global_category_name: "diesel" }), SITES).state).toBe("missing");
     expect(findFactor(INDEX, m(1, { category_id: 2 }), SITES).state).toBe("unknown");
+  });
+  it("tries names in the entry form's order: exact name, exact global name, then trimmed and case-blind", () => {
+    const g = (id: number, name: string, global: string, year: number): Factor => ({ ...f(id, name, 10, year), global_category_name: global });
+    const idx: FactorIndex = new Map([[1, [g(1, "diesel", "HSD", 2025), g(2, "Diesel ", "Diesel", 2024), g(3, "HSD", "x", 2023)]]]);
+    const pick = (name: string) => {
+      const r = findFactor(idx, m(1, { site_id: 10, global_category_name: name }), SITES);
+      return r.state === "matched" ? r.factor.emission_factor_id : null;
+    };
+    // Exact name beats a newer case-blind one; exact global name comes next.
+    expect(pick("HSD")).toBe(3);
+    expect(pick("Diesel")).toBe(2);
+    expect(pick("DIESEL")).toBe(1);
+    expect(pick("hsd ")).toBe(3);
+    expect(pick("Petrol")).toBeNull();
+  });
+  it("counts the client's sites that have a company-wide mapping's factor", () => {
+    const wide = findFactor(INDEX, m(1), SITES);
+    expect(wide).toMatchObject({ state: "matched", sites: { covered: 1, total: 2 } });
+    expect(coverageLabel(wide)).toBe("1 of 2 sites");
+    const both: FactorIndex = new Map([[1, [f(1, "Diesel", 10, 2025), f(2, "diesel", 11, 2025)]]]);
+    expect(coverageLabel(findFactor(both, m(1), SITES))).toBeNull();
+    expect(findFactor(INDEX, m(1, { site_id: 10 }), SITES)).not.toHaveProperty("sites");
   });
 });
 
@@ -115,6 +138,15 @@ describe("factor names and links", () => {
     expect(formatFactor(f(9, "Diesel", 10, 2025, "2.6800"))).toBe("2.68 kgCO₂e / litre · 2025");
     expect(createFactorHref(m(1, { site_id: 10 }))).toBe("/factors?client=1&category=1&q=Diesel&site=10");
     expect(createFactorHref(m(1))).toBe("/factors?client=1&category=1&q=Diesel");
+  });
+});
+
+describe("deleteTitle", () => {
+  it("names the client or clients", () => {
+    const r = (name: string, client: string) => ({ company_category_name: name, clientName: client });
+    expect(deleteTitle([r("HSD", "Steel Co")])).toBe("Delete “HSD” for Steel Co?");
+    expect(deleteTitle([r("HSD", "Steel Co"), r("Gas", "Foods Co")])).toBe("Delete 2 mappings for Foods Co and Steel Co?");
+    expect(deleteTitle([r("a", "A"), r("b", "B"), r("c", "C")])).toBe("Delete 3 mappings for 3 clients?");
   });
 });
 

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Button, Callout, Combobox, Drawer, FileDrop, type FileDropItem, Modal, Select, Stepper, cn, focusRing, inputBase } from "../../../ui";
 import { errorMessage, useFactorIndex, useImportMappings, useParseSheet } from "../api";
 import {
+  ALL_SITES,
   type Category,
   type Company,
   type ImportRow,
@@ -55,6 +56,9 @@ export function ImportDrawer(props: Props) {
   const checks = useMemo(() => checkImport(rows, target, props.existing, factors.index, props.sites), [rows, target, props.existing, factors.index, props.sites]);
   const summary = summarizeImport(rows, checks);
   const company = props.companies.find((c) => c.company_id === target.company_id) ?? null;
+  const categoryName = props.categories.find((c) => c.category_id === target.category_id)?.category_name ?? "";
+  const siteName = target.site_id === null ? ALL_SITES : (props.sites.find((s) => s.site_id === target.site_id)?.name ?? "");
+  const targetLabel = [company?.name, categoryName, siteName].filter(Boolean).join(" · ");
   const clientSites = target.company_id === null ? [] : props.sites.filter((s) => s.company?.company_id === target.company_id).sort((a, b) => a.name.localeCompare(b.name));
 
   const uploadErrors = {
@@ -177,6 +181,9 @@ export function ImportDrawer(props: Props) {
 
           {step === 1 && (
             <div className="space-y-4">
+              <p className="text-sm text-muted" data-testid="import-target">
+                Adding to <span className="text-ink">{targetLabel}</span>
+              </p>
               <p className="text-sm text-ink" data-testid="import-summary">
                 <span className="font-num">{summary.matched}</span> of <span className="font-num">{summary.included}</span> match existing factors
                 {summary.blocked > 0 && (
@@ -195,15 +202,16 @@ export function ImportDrawer(props: Props) {
               {warnings.length > 0 && (
                 <Callout tone="info" title="Notes from reading the sheet">
                   <ul className="list-disc pl-4">
-                    {warnings.map((w) => (
-                      <li key={w}>{w}</li>
+                    {warnings.map((w, i) => (
+                      // Notes can repeat word for word; their order never changes.
+                      <li key={i}>{w}</li>
                     ))}
                   </ul>
                 </Callout>
               )}
               {save.isError && (
-                <Callout tone="warn" title="Nothing was added">
-                  {errorMessage(save.error, "Try again.")}
+                <Callout tone="warn" title="The import stopped part way">
+                  {errorMessage(save.error, "Something went wrong.")} Some rows may have been added; the list has been refreshed, so rows now marked “Already mapped” went in.
                 </Callout>
               )}
               {rows.length === 0 ? (
@@ -280,8 +288,8 @@ export function ImportDrawer(props: Props) {
                 <div>
                   <h3 className="mb-1 text-sm font-medium text-ink">Skipped rows</h3>
                   <ul className="list-disc space-y-0.5 pl-5 text-sm text-muted">
-                    {result.errors.map((e) => (
-                      <li key={e}>{e}</li>
+                    {result.errors.map((e, i) => (
+                      <li key={i}>{e}</li>
                     ))}
                   </ul>
                 </div>

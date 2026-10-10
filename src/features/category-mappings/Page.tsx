@@ -21,7 +21,7 @@ import { errorMessage, useCategories, useCompanies, useFactorIndex, useMappings,
 import { ImportDrawer } from "./components/ImportDrawer";
 import { MappingDrawer } from "./components/MappingDrawer";
 import { mappingColumns } from "./components/columns";
-import { COMPANY_WIDE, type MappingDraft, type MappingRow, buildRows, categoriesInUse, createPayload, matchesFilters, toIds, updatePayload } from "./logic";
+import { COMPANY_WIDE, type MappingDraft, type MappingRow, buildRows, categoriesInUse, deleteTitle, createPayload, matchesFilters, toIds, updatePayload } from "./logic";
 
 const FILTER_KEYS = ["client", "category", "site", "match"];
 const OPEN = "open";
@@ -291,7 +291,7 @@ export default function CategoryMappingsPage() {
         open={!!removing}
         tone="destructive"
         onClose={() => setRemoving(null)}
-        title={removing && removing.length === 1 ? `Delete “${removing[0].company_category_name}”?` : `Delete ${removing?.length ?? 0} mappings?`}
+        title={removing ? deleteTitle(removing) : ""}
         description="Entries already saved keep their factor. New entries with these names won't be translated until they are mapped again."
         primaryAction={{ label: "Delete", onClick: onRemove, loading: remove.isPending }}
       >

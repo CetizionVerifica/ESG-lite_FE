@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowRight, CheckCircle2, MoreHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button, Menu, Tooltip, cn, focusRing } from "../../../ui";
-import { type Match, type MappingRow, createFactorHref, formatFactor } from "../logic";
+import { type Match, type MappingRow, coverageLabel, createFactorHref, formatFactor } from "../logic";
 
 export type RowActions = {
   edit: (row: MappingRow) => void;
@@ -31,10 +31,13 @@ export function GlobalName({ row }: { row: MappingRow }) {
 
 export function MatchMark({ match }: { match: Match }) {
   if (match.state === "matched") {
+    const partial = coverageLabel(match);
+    const scope = match.sites ? (partial ? `Only ${partial} have it.` : "Every site of this client has it.") : "";
+    const text = `Factor ${formatFactor(match.factor)}${scope ? `. ${scope}` : ""}`;
     return (
-      <Tooltip content={`Factor ${formatFactor(match.factor)}`}>
-        <span tabIndex={0} className={cn("inline-flex shrink-0 items-center gap-1 text-xs text-good", focusRing)} aria-label={`Matched: ${formatFactor(match.factor)}`}>
-          <CheckCircle2 aria-hidden className="size-3.5" /> Matched
+      <Tooltip content={text}>
+        <span tabIndex={0} className={cn("inline-flex shrink-0 items-center gap-1 text-xs", partial ? "text-warn" : "text-good", focusRing)} aria-label={`Matched: ${text}`}>
+          <CheckCircle2 aria-hidden className="size-3.5" /> Matched{partial && ` · ${partial}`}
         </span>
       </Tooltip>
     );

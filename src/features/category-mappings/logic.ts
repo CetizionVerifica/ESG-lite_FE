@@ -23,6 +23,7 @@ export type Factor = {
   factor_value: number | string;
   denominator_unit?: string | null;
   emission_category_name?: string | null;
+  global_category_name?: string | null;
   site?: { site_id: number; name?: string } | null;
 };
 
@@ -30,7 +31,8 @@ export type Factor = {
 export type FactorIndex = Map<number, Factor[]>;
 
 export type Match =
-  | { state: "matched"; factor: Factor }
+  /** `sites`: for a company-wide mapping, how many of the client's sites have the factor. */
+  | { state: "matched"; factor: Factor; sites?: { covered: number; total: number } }
   | { state: "missing" }
   /** Factors for the category are still loading or failed. */
   | { state: "unknown" };
@@ -54,9 +56,11 @@ export function clientSiteIds(sites: Site[], companyId: number): Set<number> {
 }
 
 /**
- * The factor an entry would pick for this global name: the newest year at the
- * mapping's site, or at any of the client's sites for a company-wide mapping.
- * Names compare exactly (trimmed), as the entry form and the backend do.
+ * The factor an entry would pick for this global name, in the order the entry
+ * form's findEmissionFactor (src/lib/emissions/emissionCalc.ts) tries names:
+ * exact factor name, exact global name, then both again trimmed and case-blind.
+ * Newest year wins, at the mapping's site or, for a company-wide mapping, at any
+ * of the client's sites; `sites` then counts how many of them have the factor.
  */
 export function findFactor(
   index: FactorIndex,
@@ -65,16 +69,27 @@ export function findFactor(
 ): Match {
   const factors = index.get(m.category_id);
   if (!factors) return { state: "unknown" };
-  const name = norm(m.global_category_name);
-  if (!name) return { state: "missing" };
+  const raw = m.global_category_name ?? "";
+  if (!norm(raw)) return { state: "missing" };
   const allowed = m.site_id !== null ? new Set([m.site_id]) : clientSiteIds(sites, m.company_id);
-  let best: Factor | null = null;
-  for (const f of factors) {
-    if (norm(f.emission_category_name) !== name) continue;
-    if (!f.site || !allowed.has(f.site.site_id)) continue;
-    if (!best || f.year > best.year) best = f;
+  const inScope = factors.filter((f) => f.site && allowed.has(f.site.site_id));
+  const target = lower(raw);
+  const tiers: ((f: Factor) => boolean)[] = [
+    (f) => f.emission_category_name === raw,
+    (f) => f.global_category_name === raw,
+    (f) => lower(f.emission_category_name) === target,
+    (f) => lower(f.global_category_name) === target,
+  ];
+  for (const test of tiers) {
+    const hits = inScope.filter(test);
+    if (!hits.length) continue;
+    const factor = hits.reduce((a, b) => (b.year > a.year ? b : a));
+    if (m.site_id !== null) return { state: "matched", factor };
+    // Company-wide: count the client's sites that have this name under any tier.
+    const covered = new Set(inScope.flatMap((f) => (f.site && tiers.some((t) => t(f)) ? [f.site.site_id] : [])));
+    return { state: "matched", factor, sites: { covered: covered.size, total: allowed.size } };
   }
-  return best ? { state: "matched", factor: best } : { state: "missing" };
+  return { state: "missing" };
 }
 
 export function buildRows(mappings: Mapping[], ctx: { companies: Company[]; categories: Category[]; sites: Site[]; factors: FactorIndex }): MappingRow[] {
@@ -129,6 +144,19 @@ export function createFactorHref(r: Pick<Mapping, "company_id" | "site_id" | "ca
   const p = new URLSearchParams({ client: String(r.company_id), category: String(r.category_id), q: r.global_category_name });
   if (r.site_id !== null) p.set("site", String(r.site_id));
   return `/factors?${p.toString()}`;
+}
+
+/** "2 of 3 sites" when a company-wide mapping's factor exists at only some of the client's sites. */
+export function coverageLabel(match: Match): string | null {
+  if (match.state !== "matched" || !match.sites || match.sites.covered >= match.sites.total) return null;
+  return `${match.sites.covered} of ${match.sites.total} sites`;
+}
+
+/** Delete confirm title that names the client(s), so a bulk delete across clients is visible. */
+export function deleteTitle(rows: Pick<MappingRow, "company_category_name" | "clientName">[]): string {
+  const clients = [...new Set(rows.map((r) => r.clientName))].sort((a, b) => a.localeCompare(b));
+  const owner = clients.length === 1 ? clients[0] : clients.length === 2 ? `${clients[0]} and ${clients[1]}` : `${clients.length} clients`;
+  return rows.length === 1 ? `Delete “${rows[0].company_category_name}” for ${owner}?` : `Delete ${rows.length} mappings for ${owner}?`;
 }
 
 export function formatFactor(f: Factor): string {

@@ -202,6 +202,7 @@ test("a superadmin imports a sheet and deletes mappings in bulk", async ({ page 
   // Fix the third row's name inline: it now matches.
   await drawer.getByLabel("Global factor name, row 3").fill("Diesel");
   await expect(drawer.getByTestId("import-summary")).toHaveText("2 of 2 match existing factors · 1 can't be added");
+  await expect(drawer.getByTestId("import-target")).toHaveText(/Adding to Midal Cables · .+ · All sites/);
   await drawer.getByRole("button", { name: "Add 2 mappings" }).click();
 
   await expect(drawer.getByTestId("import-result")).toContainText("2 mappings added");
@@ -217,7 +218,7 @@ test("a superadmin imports a sheet and deletes mappings in bulk", async ({ page 
   await page.getByRole("checkbox", { name: /Select Bottled gas/ }).check();
   await page.getByRole("checkbox", { name: /Select Bunker oil/ }).check();
   await page.getByRole("button", { name: "Delete 2 mappings…" }).click();
-  const confirm = page.getByRole("alertdialog", { name: "Delete 2 mappings?" });
+  const confirm = page.getByRole("alertdialog", { name: "Delete 2 mappings for Midal Cables?" });
   await confirm.getByRole("button", { name: "Delete" }).click();
   await expect(page.getByText("2 mappings deleted")).toBeVisible();
   expect(calls[2]).toEqual({ method: "DELETE", path: expect.stringMatching(/\/admin\/category-mappings\/bulk$/), body: { ids: [10, 11] } });
