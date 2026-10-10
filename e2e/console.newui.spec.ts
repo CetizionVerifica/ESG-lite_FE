@@ -37,7 +37,22 @@ const midalBrand = {
   updatedAt: "2026-10-01T10:00:00.000Z",
 };
 
-async function signIn(page: Page, opts: { failCompanies?: boolean } = {}) {
+const now = () => new Date().toISOString();
+const summary = () => ({
+  month: now().slice(0, 7),
+  totals: { clients: 3, active_clients: 2, sites: 2, users: 2, emission_factors: 312, entries_this_month: 57, pending_entries: 9 },
+  clients: [
+    { company_id: 1, entries_this_month: 45, pending_this_month: 4, pending: 6 },
+    { company_id: 2, entries_this_month: 12, pending_this_month: 3, pending: 3 },
+  ],
+  activity: [
+    { kind: "onboarding", at: now(), company_id: 2, company_name: "Glochem", site_id: null, site_name: null, category_name: null, rows: null, pending: null, by: null, batch_id: null },
+    { kind: "bulk_upload", at: now(), company_id: 2, company_name: "Glochem", site_id: 20, site_name: "Dammam", category_name: "Fuel", rows: 12, pending: 3, by: "Ana", batch_id: "e1" },
+    { kind: "factor_upload", at: now(), company_id: 2, company_name: "Glochem", site_id: 20, site_name: "Dammam", category_name: "Electricity", rows: 42, pending: null, by: null, batch_id: "b1" },
+  ],
+});
+
+async function signIn(page: Page, opts: { failCompanies?: boolean; noSummary?: boolean } = {}) {
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Superadmin");
@@ -53,6 +68,7 @@ async function signIn(page: Page, opts: { failCompanies?: boolean } = {}) {
       if (path.endsWith("/auth/me/appearance")) return json({ appearance: "light" });
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
+      if (path.endsWith("/admin/console")) return opts.noSummary ? json({ message: "Not found" }, 404) : json(summary());
       if (path.endsWith("/admin/companies")) return opts.failCompanies ? json({ message: "Database is down" }, 500) : json(companies);
       if (path.endsWith("/admin/sites")) return json(sites);
       if (path.endsWith("/admin/users"))
@@ -103,8 +119,18 @@ test("superadmin sees client health, setup gaps and recent uploads", async ({ pa
   // Inactive clients don't add gaps.
   await expect(gaps).not.toContainText("Old Co");
 
-  await expect(page.getByTestId("recent-activity")).toContainText("Factor upload · 42 factors");
-  await expect(page.getByTestId("recent-activity")).toContainText("Glochem · Dammam · Electricity");
+  const activity = page.getByTestId("recent-activity");
+  await expect(activity).toContainText("Client onboarded · Glochem");
+  await expect(activity).toContainText("Bulk upload · 12 entries, 3 pending");
+  await expect(activity).toContainText("Factor upload · 42 factors");
+  await expect(activity).toContainText("Glochem · Dammam · Electricity");
+
+  // Entries this month: the KPI and each client's row.
+  await expect(page.getByText("57", { exact: true })).toBeVisible();
+  await expect(page.getByText("9 pending review")).toBeVisible();
+  await expect(table.getByRole("row", { name: /Midal Cables/ })).toContainText("45");
+  await expect(table.getByRole("row", { name: /Midal Cables/ })).toContainText("4 pending");
+  await expect(table.getByRole("row", { name: /Old Co/ })).toContainText("none pending");
 
   await gaps.getByRole("link", { name: /no threshold set/ }).click();
   await expect(page).toHaveURL(/\/factors\/thresholds$/);
@@ -124,6 +150,14 @@ test("onboard client opens the onboarding page and load errors offer a retry", a
   await expect(page.getByText("Every active client is fully set up.")).toHaveCount(0);
   await page.getByRole("button", { name: "Onboard client" }).click();
   await expect(page).toHaveURL(/\/clients\/new$/);
+});
+
+test("an older backend without the summary still shows factor uploads", async ({ page }) => {
+  await signIn(page, { noSummary: true });
+  await page.goto("/console");
+  await expect(page.getByTestId("recent-activity")).toContainText("Factor upload · 42 factors");
+  await expect(page.getByText("Couldn't load", { exact: true })).toBeVisible();
+  await expect(clientsTable(page).getByRole("columnheader", { name: "This month" })).toHaveCount(0);
 });
 
 for (const width of [1280, 1024, 768, 390]) {
