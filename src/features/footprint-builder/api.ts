@@ -23,6 +23,8 @@ export const keys = {
   products: (siteId: number) => ["products", "site", siteId] as const,
 };
 
+const isConflict = (e: unknown) => (e as { response?: { status?: number } })?.response?.status === 409;
+
 /** Server message from an axios error, or the fallback. */
 export function errorMessage(e: unknown, fallback: string): string {
   const msg = (e as { response?: { data?: { message?: unknown } } })?.response?.data?.message;
@@ -91,6 +93,8 @@ export function useSaveScope(id: number) {
       qc.setQueryData<Study>(keys.study(id), (old) => (old ? { ...old, ...s, inputs: old.inputs } : old));
       void qc.invalidateQueries({ queryKey: [...keys.all, "preview", id] });
     },
+    // 409: someone submitted it meanwhile; reloading shows it read-only.
+    onError: (e) => void (isConflict(e) && qc.invalidateQueries({ queryKey: keys.study(id) })),
   });
 }
 
@@ -99,6 +103,7 @@ export function useSaveInputs(id: number) {
   return useMutation<{ inputs: InputRow[] }, unknown, InputRow[]>({
     mutationFn: (rows) => replacePcfInputs(id, rows),
     onSuccess: (r) => qc.setQueryData<Study>(keys.study(id), (old) => (old ? { ...old, inputs: r.inputs } : old)),
+    onError: (e) => void (isConflict(e) && qc.invalidateQueries({ queryKey: keys.study(id) })),
   });
 }
 

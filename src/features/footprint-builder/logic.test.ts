@@ -60,6 +60,12 @@ describe("priceLine (mirrors computePcf)", () => {
     expect(priceLine(leg, book).kg).toBeCloseTo(206, 10);
   });
 
+  it("prices a leg with a tonne.km factor from the material library, like the server", () => {
+    const book2: FactorBook = { ...book, material: new Map([...book.material, [6, { unit: "tonne.km", value: 0.05 }]]) };
+    const leg = { ...blankLine("A2"), name: "Truck", payload_t: 1.03, distance_km: 693, material_factor_id: 6 };
+    expect(priceLine(leg, book2).kg).toBeCloseTo(35.6895, 10);
+  });
+
   it("says why a line can't be priced", () => {
     expect(priceLine(line({ material_factor_id: null }), book)).toEqual({ kg: null, reason: "Pick a factor" });
     expect(priceLine(line({ quantity: null }), book).kg).toBeNull();
@@ -106,10 +112,19 @@ describe("saving", () => {
   });
 
   it("sends only finished lines and drops editor-only keys", () => {
-    const rows = savableInputs([line({ key: "a", pcf_input_id: 9 }), line({ key: "b", quantity: null })]);
+    const { rows } = savableInputs([{ ...line({ key: "a", pcf_input_id: 9 }), sort_order: 0 } as Line, line({ key: "b", quantity: null })]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).not.toHaveProperty("key");
     expect(rows[0]).not.toHaveProperty("pcf_input_id");
+    expect(rows[0]).not.toHaveProperty("sort_order");
+  });
+
+  it("keeps the last finished version of a saved line while it is being edited", () => {
+    const first = savableInputs([line({ key: "a", quantity: 2 })]);
+    const editing = savableInputs([line({ key: "a", quantity: null }), line({ key: "b", quantity: null })], first.finished);
+    expect(editing.rows).toEqual(first.rows);
+    const removed = savableInputs([], editing.finished);
+    expect(removed.rows).toEqual([]);
   });
 });
 
@@ -130,6 +145,13 @@ describe("checklist", () => {
   });
 
   it("does not block on licensed lines priced by the server", () => {
-    expect(canCalculate(checklist({ product }, [line({ material_factor_id: 4 })], book, preview))).toBe(true);
+    const items = checklist({ product }, [line({ material_factor_id: 4 })], book, preview);
+    expect(canCalculate(items)).toBe(true);
+    expect(items.find((i) => i.id === "priced")?.label).toBe("1 licensed line priced on Calculate");
+  });
+
+  it("calls a line licensed only when its value is hidden", () => {
+    const items = checklist({ product }, [line({ material_factor_id: 4 }), line({ unit: "m" })], book, preview);
+    expect(items.find((i) => i.id === "priced")?.label).toBe("2 lines not in the running total yet");
   });
 });

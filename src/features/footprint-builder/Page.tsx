@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, CloudOff, Loader2, Package } from "lucide-react";
 import { Button, Callout, EmptyState, Modal, PageHeader, Skeleton, Stepper, panel, useToast, useUnsavedGuard, withoutParams, type Step } from "../../ui";
@@ -67,7 +67,7 @@ export default function FootprintBuilderPage() {
       </div>
     );
 
-  if (study.error || !study.data) {
+  if (!study.data) {
     const missing = (study.error as { response?: { status?: number } })?.response?.status === 404;
     return (
       <div className="space-y-4">
@@ -104,14 +104,31 @@ export default function FootprintBuilderPage() {
     );
 
   // Keyed by study so a different study starts with fresh editor state.
-  return <Builder key={s.pcf_study_id} study={s} header={header(desc)} />;
+  // A failed background refetch keeps the editor and says so above it.
+  const refreshError = study.error && (
+    <Callout tone="warn" title="Couldn't refresh the footprint." action={<Button size="sm" onClick={() => void study.refetch()}>Try again</Button>}>
+      {errorMessage(study.error, "You can keep editing; changes still save.")}
+    </Callout>
+  );
+  return (
+    <Builder
+      key={s.pcf_study_id}
+      study={s}
+      header={
+        <>
+          {header(desc)}
+          {refreshError}
+        </>
+      }
+    />
+  );
 }
 
-function SaveIndicator({ state, onRetry, incomplete }: { state: SaveState; onRetry: () => void; incomplete: number }) {
+function SaveIndicator({ state, error, onRetry, incomplete }: { state: SaveState; error: unknown; onRetry: () => void; incomplete: number }) {
   if (state === "error")
     return (
       <span className="flex items-center gap-2 text-sm text-bad" role="status">
-        <CloudOff aria-hidden className="size-4" /> Couldn't save
+        <CloudOff aria-hidden className="size-4" /> {errorMessage(error, "Couldn't save")}
         <Button size="sm" variant="ghost" onClick={onRetry}>
           Retry
         </Button>
@@ -153,9 +170,15 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
   const saveScope = useSaveScope(study.pcf_study_id);
   const saveInputs = useSaveInputs(study.pcf_study_id);
   const scopeSave = useAutosave(scope, initialScope, (v) => saveScope.mutateAsync(v));
-  const savable = useMemo(() => savableInputs(lines), [lines]);
+  // Last finished version of each line, so a line being edited isn't deleted by PUT /inputs.
   const initialSavable = useMemo(() => savableInputs(initialLines), [initialLines]);
-  const linesSave = useAutosave(savable, initialSavable, (v) => saveInputs.mutateAsync(v));
+  const lastFinished = useRef(initialSavable.finished);
+  const savable = useMemo(() => {
+    const next = savableInputs(lines, lastFinished.current);
+    lastFinished.current = next.finished;
+    return next.rows;
+  }, [lines]);
+  const linesSave = useAutosave(savable, initialSavable.rows, (v) => saveInputs.mutateAsync(v));
 
   const factors = useMaterialFactors();
   const book = useMemo<FactorBook>(
@@ -171,6 +194,7 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
 
   const incomplete = lines.filter((l) => lineProblem(l) !== null).length;
   const states = [scopeSave.state, linesSave.state];
+  const saveError = scopeSave.state === "error" ? scopeSave.error : linesSave.error;
   const saveState: SaveState = states.includes("error") ? "error" : states.includes("saving") ? "saving" : states.includes("pending") ? "pending" : "saved";
   const retry = () => {
     scopeSave.retry();
@@ -204,7 +228,7 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
       {header}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Stepper steps={STEPS} current={stepIndex} completed={completed} canJump={() => true} onStepChange={goTo} label="Footprint steps" />
-        <SaveIndicator state={saveState} onRetry={retry} incomplete={incomplete} />
+        <SaveIndicator state={saveState} error={saveError} onRetry={retry} incomplete={incomplete} />
       </div>
 
       {preview.data && preview.data.blockers.length > 0 && step.id !== "energy" && (

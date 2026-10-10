@@ -115,6 +115,8 @@ function toFactorUnit(qty: number, from: string, to: string): number | null {
   return null;
 }
 
+export const LICENSED = "Licensed value, shown after Calculate";
+
 export type Priced = { kg: number } | { kg: null; reason: string };
 
 /** kg CO₂e per declared unit for one line, or why it can't be priced yet. */
@@ -122,10 +124,16 @@ export function priceLine(line: InputRow, book: FactorBook): Priced {
   const miss = (reason: string): Priced => ({ kg: null, reason });
   if (line.stage === "A2") {
     if (line.payload_t == null || line.distance_km == null) return miss("Needs a mass and a distance");
-    const f = line.emission_factor_id != null ? book.transport.get(line.emission_factor_id) : undefined;
-    if (!f) return miss("Pick a transport factor");
+    // Like the server: a site freight factor first, else a tonne.km factor from the material library.
+    const f =
+      line.emission_factor_id != null
+        ? book.transport.get(line.emission_factor_id)
+        : line.material_factor_id != null
+          ? book.material.get(line.material_factor_id)
+          : undefined;
+    if (!f) return miss(line.emission_factor_id != null || line.material_factor_id != null ? "Priced on Calculate" : "Pick a transport factor");
     if (f.unit.trim().toLowerCase() !== "tonne.km") return miss("The transport factor must be per tonne.km");
-    if (f.value === null) return miss("Licensed value, shown after Calculate");
+    if (f.value === null) return miss(LICENSED);
     return { kg: line.payload_t * line.distance_km * f.value };
   }
   if (line.quantity == null) return miss("Enter a quantity");
@@ -136,13 +144,13 @@ export function priceLine(line: InputRow, book: FactorBook): Priced {
   if (r < 0 || r > 1) return miss("Recycled share must be 0–100%");
   const qty = toFactorUnit(line.quantity, line.unit, virgin.unit);
   if (qty === null) return miss(`"${line.unit}" can't be converted to the factor's unit "${virgin.unit}"`);
-  if (virgin.value === null) return miss("Licensed value, shown after Calculate");
+  if (virgin.value === null) return miss(LICENSED);
   if (r === 0) return { kg: qty * virgin.value };
   const recycled = line.recycled_material_factor_id != null ? book.material.get(line.recycled_material_factor_id) : undefined;
   if (!recycled) return miss("A recycled share needs a recycled factor");
   const qtyR = toFactorUnit(line.quantity, line.unit, recycled.unit);
   if (qtyR === null) return miss(`"${line.unit}" can't be converted to the recycled factor's unit "${recycled.unit}"`);
-  if (recycled.value === null) return miss("Licensed value, shown after Calculate");
+  if (recycled.value === null) return miss(LICENSED);
   return { kg: (1 - r) * qty * virgin.value + r * qtyR * recycled.value };
 }
 
@@ -198,9 +206,25 @@ export function lineProblem(l: InputRow): string | null {
   return null;
 }
 
-/** Lines ready to save, as the PUT /inputs body; incomplete lines stay in the editor only. */
-export function savableInputs(lines: Line[]): InputRow[] {
-  return lines.filter((l) => lineProblem(l) === null).map(({ key: _key, pcf_input_id: _id, ...row }) => row);
+// Editor keys, ids and the server's sort_order stay out of the PUT body (row order is the order).
+const toRow = ({ key: _key, pcf_input_id: _id, sort_order: _order, ...row }: Line & { sort_order?: number }): InputRow => row;
+
+/**
+ * The PUT /inputs body. PUT replaces every line, so a line the user is
+ * halfway through editing is sent as it was last finished (`lastFinished`,
+ * by line key) rather than dropped; a new line nobody has finished stays in
+ * the editor only. Returns the rows and the updated `lastFinished`.
+ */
+export function savableInputs(lines: Line[], lastFinished: ReadonlyMap<string, InputRow> = new Map()): { rows: InputRow[]; finished: Map<string, InputRow> } {
+  const finished = new Map<string, InputRow>();
+  const rows: InputRow[] = [];
+  for (const l of lines) {
+    const row = lineProblem(l) === null ? toRow(l) : lastFinished.get(l.key);
+    if (!row) continue;
+    finished.set(l.key, row);
+    rows.push(row);
+  }
+  return { rows, finished };
 }
 
 let seq = 0;
@@ -243,7 +267,14 @@ export function checklist(study: Pick<Study, "product">, lines: Line[], book: Fa
   const a1 = lines.filter((l) => l.stage === "A1");
   const incomplete = lines.filter((l) => lineProblem(l) !== null).length;
   const unconfirmed = lines.filter(needsConfirm).length;
-  const unpriced = lines.filter((l) => lineProblem(l) === null && priceLine(l, book).kg === null).length;
+  const reasons = lines.filter((l) => lineProblem(l) === null).map((l) => priceLine(l, book)).flatMap((p) => (p.kg === null ? [p.reason] : []));
+  const licensed = reasons.filter((r) => r === LICENSED).length;
+  const unpriced = reasons.length;
+  const unpricedLabel = !unpriced
+    ? "Every line priced"
+    : licensed === unpriced
+      ? `${licensed} licensed line${licensed === 1 ? "" : "s"} priced on Calculate`
+      : `${unpriced} line${unpriced === 1 ? "" : "s"} not in the running total yet`;
   return [
     { id: "unit", label: p?.declared_unit ? `Declared unit: ${p.declared_unit_qty ?? 1} ${p.declared_unit}` : "Set the product's declared unit", done: !!p?.declared_unit, blocking: true },
     { id: "materials", label: a1.length ? `${a1.length} material line${a1.length === 1 ? "" : "s"}` : "Add the materials", done: a1.length > 0, blocking: true },
@@ -255,7 +286,7 @@ export function checklist(study: Pick<Study, "product">, lines: Line[], book: Fa
       done: preview !== null && preview.blockers.length === 0,
       blocking: true,
     },
-    { id: "priced", label: unpriced ? `${unpriced} licensed line${unpriced === 1 ? "" : "s"} priced on Calculate` : "Every line priced", done: unpriced === 0, blocking: false },
+    { id: "priced", label: unpricedLabel, done: unpriced === 0, blocking: false },
   ];
 }
 
