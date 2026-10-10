@@ -23,7 +23,9 @@ export interface ImportResponse {
   inserted: number;
   skipped: number;
   total_rows: number;
-  upload_batch_id?: string;
+  upload_batch_id?: string | null;
+  /** Each skipped row: data row number (1 = first under the header), category, reason. Capped at 1000. */
+  skipped_rows?: { row: number; emission_category: string | null; reason: string }[];
 }
 
 export async function uploadExcelGetHeaders(file: File): Promise<UploadHeadersResponse> {
