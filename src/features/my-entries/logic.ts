@@ -214,3 +214,31 @@ export function activityFields(activityData: Record<string, unknown> | null | un
       value: typeof value === "object" ? JSON.stringify(value) : optionLabel(key, String(value), config, data),
     }));
 }
+
+/* -------------------------------------------------------------- breakdown */
+
+export type BreakdownMetric = "consumption" | "emissions";
+
+export type BreakdownRow = { label: string; entries: number; value: number; unit: string | null; share: number | null };
+
+/**
+ * Rows for the Breakdown panel, largest first, with each one's share of the
+ * total. Consumption shares are only given when every row has the same unit.
+ */
+export function breakdownRows(
+  groups: { emission_category: string; entries: number; total_emission: number; consumption: number; unit: string | null }[],
+  metric: BreakdownMetric,
+): BreakdownRow[] {
+  const rows = groups.map((g) => ({
+    label: g.emission_category,
+    entries: g.entries,
+    value: metric === "emissions" ? g.total_emission : g.consumption,
+    unit: metric === "emissions" ? "tCO₂e" : g.unit,
+  }));
+  const units = new Set(rows.map((r) => r.unit));
+  const comparable = metric === "emissions" || (units.size === 1 && !units.has("mixed"));
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  return rows
+    .map((r) => ({ ...r, share: comparable && total > 0 ? Math.round((r.value / total) * 100) : null }))
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+}
