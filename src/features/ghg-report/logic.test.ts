@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { GhgReportTablesResponse, OverviewRow } from "../../services/ghgreportService";
+import type { GhgDetailsRow, GhgReportTablesResponse, OverviewRow } from "../../services/ghgreportService";
 import {
   categoryOptions,
+  findings,
+  recommendedActions,
+  scopeDetails,
+  scopeDistribution,
   clientSites,
   locationRows,
   readPeriod,
@@ -194,5 +198,61 @@ describe("tables", () => {
     expect(rows[0].previous.total).toBe(100);
     expect(rows[1].selected.total).toBe(20);
     expect(rows[2].selected.total).toBe(0);
+  });
+});
+
+const detail = (scope: string, categoryName: string, siteName: string, prev: number, sel: number, fuelType = ""): GhgDetailsRow => ({
+  scope,
+  categoryId: categoryName.length,
+  categoryName,
+  fuelType,
+  siteId: siteName.length,
+  siteName,
+  compare: { consumption: prev * 10, unit: "L", emissions: prev },
+  selected: { consumption: sel * 10, unit: "L", emissions: sel },
+});
+
+describe("scope tabs", () => {
+  const rows = [
+    detail("Scope 1", "Diesel", "Hidd", 40, 30, "Diesel"),
+    detail("Scope 1", "LPG", "Sitra", 0, 10, "LPG"),
+    detail("Scope 1", "Diesel", "Sitra", 10, 0, "Diesel"),
+    detail("Scope 2", "Electricity", "Hidd", 85, 70),
+  ];
+
+  it("keeps one scope's rows, largest this period first", () => {
+    expect(scopeDetails(rows, "Scope 1").map((r) => `${r.categoryName}/${r.siteName}`)).toEqual(["Diesel/Hidd", "LPG/Sitra", "Diesel/Sitra"]);
+    expect(scopeDetails(rows, "Scope 3")).toEqual([]);
+  });
+
+  it("gives each category's share of the scope in both periods", () => {
+    expect(scopeDistribution(rows, "Scope 1")).toEqual([
+      { category: "Diesel", previous: 50, selected: 30, previousPct: 100, selectedPct: 75 },
+      { category: "LPG", previous: 0, selected: 10, previousPct: 0, selectedPct: 25 },
+    ]);
+  });
+});
+
+describe("findings", () => {
+  const f = reportFigures(data, sites);
+
+  it("follows the PDF's four rules", () => {
+    expect(findings(f, locationRows(data, sites), "CY 2025", "CY 2024")).toEqual([
+      "Total CY 2025 emissions were 100 tCO₂e (up 0.0% vs CY 2024).",
+      "Hidd is the largest contributing site at 80 tCO₂e (80.0% of total).",
+      "Scope 2 (purchased energy) dominates the footprint at 70.0%, indicating the highest-leverage reduction pathway.",
+      "Electricity is the single largest emission source (70.0%).",
+    ]);
+  });
+
+  it("drops actions the data already meets", () => {
+    // Askar has no data; renewables are recorded.
+    expect(recommendedActions(f)).toHaveLength(3);
+    expect(recommendedActions(f)[0]).toMatch(/^Close data gaps/);
+    expect(recommendedActions({ ...f, renewable: 0, coverage: { ...f.coverage, missing: [] } })).toEqual([
+      "Prioritise Scope 2 reduction through renewable electricity procurement or on-site generation.",
+      "Set a validated, science-based reduction target aligned to a 1.5 °C pathway.",
+      "Begin capturing renewable-energy consumption to quantify avoided emissions.",
+    ]);
   });
 });
