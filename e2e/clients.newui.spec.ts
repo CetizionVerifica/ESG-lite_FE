@@ -40,6 +40,7 @@ const MIDAL_BRAND = { companyId: 1, name: "Midal", primary: "#0b5c3b", accent: "
 
 async function signIn(page: Page) {
   let companies = makeCompanies();
+  let midal: Record<string, unknown> = { ...MIDAL_BRAND };
   let thresholds: Array<{ threshold_id: number; threshold_percentage: number; company: { company_id: number; name: string } }> = [];
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
   const user = { name: "Sam Staff", email: "sam@example.com" };
@@ -65,14 +66,21 @@ async function signIn(page: Page) {
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       const brand = /\/brands\/(\d+)$/.exec(path);
-      if (brand && method === "GET") return json(brand[1] === "1" ? MIDAL_BRAND : { companyId: Number(brand[1]), name: "", primary: "#1f2a44", accent: "#3b82f6", logoUrl: null });
+      if (brand && method === "GET") return json(brand[1] === "1" ? midal : { companyId: Number(brand[1]), name: "", primary: "#1f2a44", accent: "#3b82f6", logoUrl: null });
       if (path.endsWith("/user/reporting-calendar")) return json({ fiscalYearStartMonth: 4, fiscalYearRule: "Apr 1 → Mar 31" });
       if (path.endsWith("/admin/onboarding/company")) {
         const company = { company_id: 7, name: "Bahrain Steel", status: true };
         companies = [...companies, company];
         return json({ message: "Company onboarded successfully", company, warnings: [] }, 201);
       }
-      if (brand && method === "PUT") return json({ ...body, companyId: Number(brand[1]) });
+      if (brand && method === "PUT") {
+        if (brand[1] === "1") midal = { ...midal, ...body, ...(body?.guidelineUrl === null ? { guidelineName: null } : {}) };
+        return json({ message: "Brand saved", brand: { ...body, companyId: Number(brand[1]) } });
+      }
+      if (/\/brands\/1\/guideline$/.test(path) && method === "POST") {
+        midal = { ...midal, guidelineUrl: "https://assets.example.invalid/brand-assets/company_1_guideline.pdf?v=1", guidelineName: "midal-colours.pdf" };
+        return json({ message: "Colour guideline uploaded", brand: midal });
+      }
       if (path.endsWith("/admin/sites")) return json(SITES);
       if (path.endsWith("/admin/users")) return json(USERS);
       if (path.endsWith("/admin/category-mappings")) return json([{ id: 1 }, { id: 2 }]);
@@ -243,4 +251,21 @@ test("leaving a half-filled onboarding asks first", async ({ page }) => {
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Leave" }).click();
   await expect(page).toHaveURL(/\/clients$/);
+});
+
+test("a superadmin uploads and removes a client's colour guideline", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/clients/1?tab=brand");
+  await expect(page.getByText("No colour guideline yet.")).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles({ name: "midal-colours.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test") });
+  await expect(page.getByText("Colour guideline saved")).toBeVisible();
+  expect(calls.at(-1)).toMatchObject({ method: "POST", path: expect.stringMatching(/\/brands\/1\/guideline$/) });
+  const link = page.getByRole("link", { name: "midal-colours.pdf" });
+  await expect(link).toHaveAttribute("href", /company_1_guideline\.pdf/);
+
+  await page.getByRole("button", { name: "Remove" }).click();
+  await page.getByRole("alertdialog", { name: "Remove the colour guideline?" }).getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByText("Colour guideline removed")).toBeVisible();
+  expect(calls.at(-1)).toMatchObject({ method: "PUT", body: { guidelineUrl: null } });
+  await expect(page.getByText("No colour guideline yet.")).toBeVisible();
 });

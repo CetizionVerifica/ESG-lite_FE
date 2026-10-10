@@ -165,7 +165,7 @@ export default function ClientDetailPage() {
         <PeopleTab row={row} load={peopleLoad} />
       </TabPanel>
       <TabPanel idBase={idBase} value="brand" current={tab}>
-        <BrandTab row={row} brand={brandData} loading={brand.isPending} />
+        <BrandTab row={row} brand={brandData} raw={brand.data} loading={brand.isPending} />
       </TabPanel>
       <TabPanel idBase={idBase} value="thresholds" current={tab}>
         {tab === "thresholds" && <ThresholdTab companyId={id} />}

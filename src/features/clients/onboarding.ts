@@ -40,6 +40,8 @@ export type OnboardDraft = {
   accent: string;
   logo: File | null;
   logoDark: File | null;
+  /** The client's colour-guideline file (PDF or image), kept for whoever builds the theme. */
+  guideline: File | null;
 };
 export type OnboardField = keyof OnboardDraft;
 
@@ -60,7 +62,12 @@ export const EMPTY_ONBOARD: OnboardDraft = {
   accent: "",
   logo: null,
   logoDark: null,
+  guideline: null,
 };
+
+/** Colour guidelines: a PDF or an image of the brand sheet, up to 10 MB (backend limit). */
+export const GUIDELINE_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+export const GUIDELINE_MAX = 10 * 1024 * 1024;
 
 export const STEPS = [
   { id: "company", label: "Company" },
@@ -126,6 +133,7 @@ export function toOnboardForm(d: OnboardDraft): FormData {
   // The backend treats presence as true.
   if (d.esgMitraAccess) f.append("esgMitraAccess", "true");
   if (d.brandOn && d.logo) f.append("logo", d.logo);
+  if (d.brandOn && d.guideline) f.append("colorGuideline", d.guideline);
   return f;
 }
 
@@ -143,12 +151,12 @@ export function defaultAccent(primary: string): string {
 
 /** True when the Brand step has a logo or colours to save. */
 export function hasBrandInput(d: OnboardDraft): boolean {
-  return d.brandOn && !!(d.logo || d.logoDark || d.primary || d.accent);
+  return d.brandOn && !!(d.logo || d.logoDark || d.guideline || d.primary || d.accent);
 }
 
 /** The Brand step with nothing kept: "Skip for now" clears what was picked so nothing is saved by surprise. */
 export function skipBrand(d: OnboardDraft): OnboardDraft {
-  return { ...d, brandOn: false, logo: null, logoDark: null, primary: "", accent: "" };
+  return { ...d, brandOn: false, logo: null, logoDark: null, guideline: null, primary: "", accent: "" };
 }
 
 /** PUT /brands/:id body for the Brand step's colours, or null when the brand is skipped or has no colours. */

@@ -4,7 +4,7 @@ import { textOnGradient } from "../../../theme";
 import { BLACK } from "../../../theme/color";
 import { Button, Callout, ColourField, FileDrop, PoweredBy, Select, TextField, Toggle } from "../../../ui";
 import { EMPLOYEE_RANGES } from "../logic";
-import { INDUSTRIES, type OnboardDraft, type OnboardField, PASSWORD_MIN, REGIONS, coverFor, hasBrandInput, suggestFromPixels, toBrandUpdate } from "../onboarding";
+import { GUIDELINE_MAX, GUIDELINE_TYPES, INDUSTRIES, type OnboardDraft, type OnboardField, PASSWORD_MIN, REGIONS, coverFor, hasBrandInput, suggestFromPixels, toBrandUpdate } from "../onboarding";
 
 export type StepProps = {
   draft: OnboardDraft;
@@ -188,6 +188,17 @@ export function BrandStep({ draft, set, error, onSkip }: StepProps & { onSkip: (
             onRemove={() => set("logoDark", null)}
           />
         </div>
+        <FileDrop
+          label="Colour guideline (optional)"
+          help="The client's brand sheet: PDF or image, up to 10 MB. Kept with the brand for reference."
+          accept={GUIDELINE_TYPES}
+          maxSize={GUIDELINE_MAX}
+          multiple={false}
+          maxFiles={1}
+          items={fileItems(draft.guideline, "guideline")}
+          onAdd={(files) => set("guideline", files[0] ?? null)}
+          onRemove={() => set("guideline", null)}
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           <ColourField label="Primary" help="Optional. Leave empty to keep PlanetPulse colours." value={draft.primary} onChange={(v) => set("primary", v)} error={error("primary")} />
           <ColourField label="Accent" help="Leave empty to derive one from the primary." value={draft.accent} onChange={(v) => set("accent", v)} error={error("accent")} />
@@ -258,12 +269,14 @@ export function ReviewStep({ draft, onEdit }: { draft: OnboardDraft; onEdit: (st
               ["Colours", `${brand.primary} · ${brand.accent}`],
               ["Logo", draft.logo?.name ?? ""],
               ["Dark logo", draft.logoDark?.name ?? ""],
+              ["Colour guideline", draft.guideline?.name ?? ""],
             ]
           : hasBrandInput(draft)
           ? [
               ["Colours", "PlanetPulse (none picked)"],
               ["Logo", draft.logo?.name ?? ""],
               ["Dark logo", draft.logoDark?.name ?? ""],
+              ["Colour guideline", draft.guideline?.name ?? ""],
             ]
           : [["Theme", "PlanetPulse (brand skipped)"]],
       )}

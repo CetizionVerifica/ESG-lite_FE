@@ -74,9 +74,16 @@ describe("brand", () => {
     expect(toOnboardForm(d).get("logo")).toBe(logo);
     expect(toBrandUpdate(d)).toBeNull();
   });
+  it("sends the colour guideline as colorGuideline, and counts it as brand input", () => {
+    const guideline = new File(["%PDF"], "colours.pdf", { type: "application/pdf" });
+    const d = { ...filled, primary: "", guideline };
+    expect(hasBrandInput(d)).toBe(true);
+    expect(toOnboardForm(d).get("colorGuideline")).toBe(guideline);
+    expect(toOnboardForm({ ...d, brandOn: false }).get("colorGuideline")).toBeNull();
+  });
   it("skipping clears what was picked, so nothing is saved", () => {
-    const s = skipBrand({ ...filled, logo: new File(["x"], "l.png"), logoDark: new File(["x"], "d.png"), accent: "#C8A24A" });
-    expect(s).toMatchObject({ brandOn: false, logo: null, logoDark: null, primary: "", accent: "" });
+    const s = skipBrand({ ...filled, logo: new File(["x"], "l.png"), logoDark: new File(["x"], "d.png"), guideline: new File(["x"], "g.pdf"), accent: "#C8A24A" });
+    expect(s).toMatchObject({ brandOn: false, logo: null, logoDark: null, guideline: null, primary: "", accent: "" });
     expect(hasBrandInput(s)).toBe(false);
     expect(toOnboardForm(s).get("logo")).toBeNull();
   });

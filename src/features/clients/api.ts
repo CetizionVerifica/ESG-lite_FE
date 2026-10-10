@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type Brand, getBrand, saveBrand, uploadBrandDarkLogo } from "../../services/brandService";
+import { type Brand, getBrand, saveBrand, uploadBrandDarkLogo, uploadBrandGuideline } from "../../services/brandService";
 import { getMappings } from "../../services/categoryMappingService";
 import { deleteCompany, getCompanies, getReportingCalendar, onboardCompany, updateCompany } from "../../services/companyService";
 import { getSites } from "../../services/siteService";
@@ -91,6 +91,15 @@ export function useSaveThreshold(companyId: number) {
     mutationFn: ({ existing, value }: { existing: EmissionThreshold | null; value: number }) =>
       existing ? updateThreshold(existing.threshold_id, { threshold_percentage: value }) : createThreshold({ company_id: companyId, threshold_percentage: value }),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.thresholds() }),
+  });
+}
+
+/** Upload (or replace) the client's colour-guideline file; null removes it. */
+export function useSaveGuideline(companyId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File | null) => (file ? uploadBrandGuideline(companyId, file) : saveBrand(companyId, { guidelineUrl: null })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.brand(companyId) }),
   });
 }
 

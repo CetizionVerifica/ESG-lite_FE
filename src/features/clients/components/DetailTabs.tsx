@@ -2,9 +2,10 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 import type { Brand } from "../../../services/brandService";
-import { Avatar, Badge, Button, Callout, EmptyState, TextField, cn, focusRing, useToast } from "../../../ui";
-import { errorMessage, useMappingCount, useSaveThreshold, useThreshold } from "../api";
+import { Avatar, Badge, Button, Callout, EmptyState, FileDrop, Modal, TextField, cn, focusRing, useToast } from "../../../ui";
+import { errorMessage, useMappingCount, useSaveGuideline, useSaveThreshold, useThreshold } from "../api";
 import { type ClientRow, deleteBlocker, parseThreshold, personName } from "../logic";
+import { GUIDELINE_MAX, GUIDELINE_TYPES } from "../onboarding";
 import { ClientLogo, StatusBadge, ThemeSwatch } from "./bits";
 
 export function GoLink({ to, children }: { to: string; children: ReactNode }) {
@@ -118,7 +119,7 @@ export function PeopleTab({ row, load }: { row: ClientRow; load: ListLoad }) {
   );
 }
 
-export function BrandTab({ row, brand, loading }: { row: ClientRow; brand: Brand | undefined; loading: boolean }) {
+export function BrandTab({ row, brand, raw, loading }: { row: ClientRow; brand: Brand | undefined; raw: Brand | undefined; loading: boolean }) {
   return (
     <section className="space-y-4" aria-label="Brand theme">
       {loading ? (
@@ -137,7 +138,73 @@ export function BrandTab({ row, brand, loading }: { row: ClientRow; brand: Brand
         <p className="text-sm text-muted">This client uses the PlanetPulse theme. Set its logo and colours to give its people their own look.</p>
       )}
       <GoLink to={`/clients/${row.company_id}/brand`}>{brand ? "Open brand theme" : "Set up brand theme"}</GoLink>
+      {raw && <GuidelineSection companyId={row.company_id} url={raw.guidelineUrl ?? null} name={raw.guidelineName ?? null} />}
     </section>
+  );
+}
+
+/** The client's colour-guideline file: open it, replace it or remove it. */
+function GuidelineSection({ companyId, url, name }: { companyId: number; url: string | null; name: string | null }) {
+  const save = useSaveGuideline(companyId);
+  const { toast } = useToast();
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const run = (file: File | null) =>
+    save.mutate(file, {
+      onSuccess: () => {
+        setConfirmRemove(false);
+        toast({ title: file ? "Colour guideline saved" : "Colour guideline removed", tone: "good" });
+      },
+    });
+
+  return (
+    <div className="space-y-3 border-t border-line pt-4">
+      <h3 className="text-sm font-semibold text-ink">Colour guideline</h3>
+      {url ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <a href={url} target="_blank" rel="noreferrer" className={cn("inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-brand-text hover:underline", focusRing)}>
+            <span className="truncate">{name || "Open colour guideline"}</span>
+            <ExternalLink aria-hidden className="size-3.5 shrink-0" />
+          </a>
+          <Button size="sm" variant="ghost" onClick={() => setConfirmRemove(true)} disabled={save.isPending}>
+            Remove
+          </Button>
+        </div>
+      ) : (
+        <p className="text-sm text-muted">No colour guideline yet.</p>
+      )}
+      <FileDrop
+        label={url ? "Replace the colour guideline" : "Upload a colour guideline"}
+        help="PDF or image, up to 10 MB."
+        accept={GUIDELINE_TYPES}
+        maxSize={GUIDELINE_MAX}
+        multiple={false}
+        maxFiles={1}
+        disabled={save.isPending}
+        items={[]}
+        onAdd={(files) => files[0] && run(files[0])}
+        onRemove={() => undefined}
+      />
+      {save.isPending && (
+        <p role="status" className="text-sm text-muted">
+          Saving…
+        </p>
+      )}
+      {save.error && !confirmRemove && (
+        <Callout tone="warn" title="The colour guideline wasn't saved">
+          {errorMessage(save.error, "Try again.")}
+        </Callout>
+      )}
+      <Modal
+        open={confirmRemove}
+        onClose={() => setConfirmRemove(false)}
+        tone="destructive"
+        title="Remove the colour guideline?"
+        description="The file is no longer linked to this client."
+        primaryAction={{ label: "Remove", onClick: () => run(null), loading: save.isPending }}
+      >
+        {save.error && <p className="text-sm text-bad">{errorMessage(save.error, "Couldn't remove it. Try again.")}</p>}
+      </Modal>
+    </div>
   );
 }
 
