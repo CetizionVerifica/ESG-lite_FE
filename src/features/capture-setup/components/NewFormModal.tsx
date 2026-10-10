@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Modal, Select, TextField } from "../../../ui";
+import { Modal, Select, TextField, cn, focusRing } from "../../../ui";
 import { type FormConfig, type NewFormDraft, type Site, suggestedFormName, validateNewForm } from "../logic";
 
 export type NewFormModalProps = {
@@ -10,10 +10,12 @@ export type NewFormModalProps = {
   error: string | null;
   onClose: () => void;
   onCreate: (draft: { name: string; siteId: number; categoryId: number }) => void;
+  /** Hands the chosen site and category to auto-generate instead. */
+  onAutoGenerate?: (initial: { siteId: number | null; categoryId: number | null }) => void;
 };
 
 /** Name, site and category; fields, choices and rules are set in the form builder afterwards. */
-export function NewFormModal({ sites, configs, initial, saving, error, onClose, onCreate }: NewFormModalProps) {
+export function NewFormModal({ sites, configs, initial, saving, error, onClose, onCreate, onAutoGenerate }: NewFormModalProps) {
   const siteById = useMemo(() => new Map(sites.map((s) => [s.site_id, s])), [sites]);
   const nameFor = (siteId: number | null, categoryId: number | null) => {
     const site = siteId ? siteById.get(siteId) : undefined;
@@ -93,6 +95,15 @@ export function NewFormModal({ sites, configs, initial, saving, error, onClose, 
           }}
           error={shown.name}
         />
+        {onAutoGenerate && (
+          <p className="text-sm text-muted">
+            Or{" "}
+            <button type="button" className={cn("rounded-control text-brand-text underline underline-offset-2", focusRing)} onClick={() => onAutoGenerate({ siteId: draft.siteId, categoryId: draft.categoryId })}>
+              auto-generate it
+            </button>{" "}
+            from this site's emission factors.
+          </p>
+        )}
       </form>
     </Modal>
   );
