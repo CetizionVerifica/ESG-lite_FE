@@ -2,7 +2,7 @@ import { type FormEvent, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Building2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { Button, Callout, EmptyState, PageHeader, SegmentedControl, Select, Toggle, YearPicker, panel } from "../../ui";
+import { Button, Callout, EmptyState, PageHeader, SegmentedControl, Select, Toggle, YearPicker, panel, withoutParams } from "../../ui";
 import { errorMessage, useCreateStudy, useSiteProducts, useVersions } from "./api";
 import { type YearType, periodFor, periodText } from "./logic";
 
@@ -32,10 +32,8 @@ export default function NewFootprintPage() {
   const setParam = (key: string, value: number | null, drop?: string) =>
     setParams(
       (p) => {
-        const next = new URLSearchParams(p);
-        if (value === null) next.delete(key);
-        else next.set(key, String(value));
-        if (drop) next.delete(drop);
+        const next = withoutParams(p, drop ? [key, drop] : [key]);
+        if (value !== null) next.set(key, String(value));
         return next;
       },
       { replace: true },

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, CloudOff, Loader2, Package } from "lucide-react";
-import { Button, Callout, EmptyState, Modal, PageHeader, Skeleton, Stepper, panel, useToast, useUnsavedGuard, type Step } from "../../ui";
+import { Button, Callout, EmptyState, Modal, PageHeader, Skeleton, Stepper, panel, useToast, useUnsavedGuard, withoutParams, type Step } from "../../ui";
 import { errorMessage, useAllocationPreview, useCalculate, useMaterialFactors, useSaveInputs, useSaveScope, useStudy } from "./api";
 import { ScopeStep } from "./components/ScopeStep";
 import { TotalRail } from "./components/TotalRail";
@@ -133,9 +133,8 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
   const goTo = (i: number) =>
     setParams(
       (p) => {
-        const next = new URLSearchParams(p);
-        if (i === 0) next.delete("step");
-        else next.set("step", STEPS[i].id);
+        const next = withoutParams(p, ["step"]);
+        if (i > 0) next.set("step", STEPS[i].id);
         return next;
       },
       { replace: true },
