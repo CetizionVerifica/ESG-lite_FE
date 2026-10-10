@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 test("login page loads", async ({ page }) => {
   await page.goto("/login");
 
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  // Generous on the first render: the dev server may still be compiling.
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('input[type="email"]').first()).toBeVisible();
   await expect(page.locator('input[type="password"]')).toBeVisible();
 });
