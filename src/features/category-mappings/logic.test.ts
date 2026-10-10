@@ -88,6 +88,11 @@ describe("findFactor", () => {
     expect(pick("hsd ")).toBe(3);
     expect(pick("Petrol")).toBeNull();
   });
+  it("never matches a factor named with the client's own name, as the backend doesn't", () => {
+    const idx: FactorIndex = new Map([[1, [f(1, "HSD fuel", 10, 2024)]]]);
+    // m() maps the client's "HSD fuel" to "Diesel"; entries submit "Diesel".
+    expect(findFactor(idx, m(1, { site_id: 10 }), SITES).state).toBe("missing");
+  });
   it("counts the client's sites that have a company-wide mapping's factor", () => {
     const wide = findFactor(INDEX, m(1), SITES);
     expect(wide).toMatchObject({ state: "matched", sites: { covered: 1, total: 2 } });
@@ -209,7 +214,7 @@ describe("import", () => {
     expect([0, 1, 2, 3, 4].map((k) => checks.get(k)?.problem ?? null)).toEqual(["Already mapped", null, null, "Repeats row 2", "Both names are needed."]);
     expect(checks.get(1)?.match.state).toBe("missing");
     expect(checks.get(2)?.match.state).toBe("matched");
-    expect(summarizeImport(rows, checks)).toEqual({ included: 2, matched: 1, missing: 1, blocked: 2 });
+    expect(summarizeImport(rows, checks)).toEqual({ included: 2, matched: 1, partial: 1, missing: 1, blocked: 2 });
   });
   it("sends only included rows without a problem", () => {
     const edited = rows.map((r) => (r.key === 1 ? { ...r, include: false } : r));

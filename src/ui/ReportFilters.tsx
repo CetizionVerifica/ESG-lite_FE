@@ -7,7 +7,7 @@ import { Tooltip } from "./Tooltip";
 import { focusRing } from "./styles";
 import { cn } from "./cn";
 import { type ReportFrequency, type ReportPeriod, type ReportYearType, reportMonthOptions, reportQuarterOptions } from "./reportPeriod";
-import { type PeriodSupport, switchCalendar, withFrequency, yearOptions } from "./reportFilters";
+import { type PeriodSupport, switchCalendar, withFrequency, yearOptions } from "./reportFilterModel";
 
 export type ReportFiltersProps = {
   sites: { value: number; label: string }[];
