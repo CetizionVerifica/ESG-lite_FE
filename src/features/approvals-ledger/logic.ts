@@ -1,5 +1,6 @@
 /** Pure helpers for P07 Approvals and Emissions ledger. No React, no requests. */
 import type { EmissionData, EmissionStatus } from "../../services/emissionService";
+import { fyEndYear, fyStartYearOf } from "../../lib/fiscalYear";
 import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatReportingYear } from "../../ui";
 
 export type FactorSnapshot = {
@@ -273,10 +274,10 @@ export function reportOptions(period: Period | null, fyStartMonth = DEFAULT_FY_S
     { kind: "month", label: `${formatMonth(`${year}-${String(month).padStart(2, "0")}`)} (month)`, year, month },
     { kind: "year", label: `Calendar year ${year}`, year, yearType: "CY" },
   ];
-  // The backend's FY export runs April to March.
+  // The backend's FY export runs April to March and names the FY by its end year.
   if (fyStartMonth === 4) {
-    const startYear = month >= 4 ? year : year - 1;
-    options.push({ kind: "year", label: formatReportingYear(startYear, "FY", 4), year: startYear + 1, yearType: "FY" });
+    const startYear = fyStartYearOf(new Date(year, month - 1, 1), fyStartMonth);
+    options.push({ kind: "year", label: formatReportingYear(startYear, "FY", fyStartMonth), year: fyEndYear(startYear, fyStartMonth), yearType: "FY" });
   }
   return options;
 }

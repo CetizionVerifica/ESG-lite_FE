@@ -4,6 +4,8 @@ import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConf
 import { type EmissionDocument, getDocumentsByEmission } from "../../services/documentService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { type UnitData, getUserUnitsBySiteAndCategory } from "../../services/unitService";
+import { invalidateEmissionQueries } from "../../lib/emissionQueries";
+import { fetchPendingForApproval } from "../../lib/emissions/pendingCount";
 import {
   type EmissionUploadBatch,
   approveEmission,
@@ -50,11 +52,20 @@ export function useEmissionList(params: ReturnType<typeof listParams>) {
   });
 }
 
-/** Pending / approved / rejected counts for the chosen sites, whatever the filters (tab badge). */
-export function useStatusCounts(siteIds: number[]) {
+/**
+ * Pending / approved / rejected counts for the chosen sites, whatever the filters
+ * (tab badge). Pending leaves out FERA twins, as the list folds them away.
+ */
+export function useStatusCounts(siteIds: number[], feraIds: number[]) {
   return useQuery({
-    queryKey: keys.counts(siteIds),
-    queryFn: async () => (await getEmissionsPaginated({ siteIds, page: 1, limit: 1 })).summary,
+    queryKey: [...keys.counts(siteIds), feraIds],
+    queryFn: async () => {
+      const [{ summary }, pending] = await Promise.all([
+        getEmissionsPaginated({ siteIds, page: 1, limit: 1 }),
+        fetchPendingForApproval(siteIds, feraIds),
+      ]);
+      return { ...summary, pending_count: pending };
+    },
   });
 }
 
@@ -141,7 +152,7 @@ export function commitApprove(id: number, opts?: { keepalive?: boolean }) {
 
 export function useReviewMutations() {
   const qc = useQueryClient();
-  const refresh = () => qc.invalidateQueries({ queryKey: keys.all });
+  const refresh = () => invalidateEmissionQueries(qc);
   const reject = useMutation({
     mutationFn: ({ ids, reason }: { ids: number[]; reason: string }) =>
       ids.length === 1 ? rejectEmission(ids[0], reason) : bulkRejectEmissions(ids, reason),
@@ -179,7 +190,7 @@ export function useManagerEdit() {
   return useMutation({
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof managerUpdateEmission>[1] }) => managerUpdateEmission(id, body),
     onSettled: (_d, _e, v) => {
-      void qc.invalidateQueries({ queryKey: keys.all });
+      void invalidateEmissionQueries(qc);
       void qc.invalidateQueries({ queryKey: ["audit-logs", "emission", v.id] });
     },
   });
@@ -199,7 +210,7 @@ export function useBatches(siteIds: number[], categoryId: number | null) {
 
 export function useBatchMutations() {
   const qc = useQueryClient();
-  const refresh = () => qc.invalidateQueries({ queryKey: keys.all });
+  const refresh = () => invalidateEmissionQueries(qc);
   const approve = useMutation({ mutationFn: (batchId: string) => approveEmissionsByBatch(batchId), onSettled: refresh });
   const reject = useMutation({
     mutationFn: ({ batchId, reason }: { batchId: string; reason: string }) => rejectEmissionsByBatch(batchId, reason),

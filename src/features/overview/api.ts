@@ -1,4 +1,5 @@
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
+import { fetchPendingForApproval } from "../../lib/emissions/pendingCount";
 import { getEmissionsPaginated } from "../../services/emissionService";
 import { type OverviewResponse, type SubmissionUser, getManagerOverview, getSubmissionStatus } from "../../services/overviewService";
 import { getEmissionIntensity, getEmissionIntensityComparison, getProductionDataForManager } from "../../services/productionDataService";
@@ -56,12 +57,12 @@ export function useIntensity(siteIds: number[], from: string, to: string) {
   });
 }
 
-/** Pending entries on the chosen sites, whatever the period (the approvals queue). */
-export function usePendingEntries(siteIds: number[]) {
+/** Pending entries on the chosen sites, whatever the period, counted as the approvals queue shows them. */
+export function usePendingEntries(siteIds: number[], feraIds: number[]) {
   return useQuery({
-    queryKey: keys.pending(siteIds),
+    queryKey: [...keys.pending(siteIds), feraIds],
     enabled: siteIds.length > 0,
-    queryFn: async () => (await getEmissionsPaginated({ siteIds, status: "pending", page: 1, limit: 1 })).summary.pending_count,
+    queryFn: () => fetchPendingForApproval(siteIds, feraIds),
   });
 }
 
