@@ -7,6 +7,8 @@ const UI_SNAPSHOTS = "ui/**";
 
 export default defineConfig({
   testDir: "./e2e",
+  // Loads the app once per dev server so the first test doesn't meet a cold Vite.
+  globalSetup: "./e2e/warmup.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -32,6 +34,9 @@ export default defineConfig({
       command: `npm run dev -- --port ${PORT} --strictPort`,
       url: `http://localhost:${PORT}/login`,
       reuseExistingServer: !process.env.CI,
+      // The legacy UI, even when the shell has VITE_NEW_UI=1 (the smoke test
+      // expects the legacy sign-in page here).
+      env: { VITE_NEW_UI: "0" },
     },
     {
       command: `npm run dev -- --port ${NEW_UI_PORT} --strictPort`,

@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createColumnConfig, deleteColumnConfig, getColumnConfigs } from "../../services/columnConfigService";
+import { createColumnConfig, deleteColumnConfig, getColumnConfigById, getColumnConfigs, updateColumnConfig } from "../../services/columnConfigService";
+import { getEmissionCategoryNames } from "../../services/emissionFactorService";
 import { createColumn, deleteColumn, getColumns, updateColumn } from "../../services/columnService";
 import { getSites } from "../../services/siteService";
 import type { ColumnDraft, FormConfig, LibraryColumn, Site } from "./logic";
 import { toPayload } from "./logic";
+import type { SourceConfig, UpdatePayload } from "./builder";
 
 export const keys = {
   all: ["capture-setup"] as const,
@@ -69,4 +71,41 @@ export function useDeleteForm() {
 /** The new form's id, whichever shape the create response has. */
 export function createdId(res: { columnConfig?: { pk_id?: number }; pk_id?: number } | undefined): number | null {
   return res?.columnConfig?.pk_id ?? res?.pk_id ?? null;
+}
+
+export const formKey = (id: number) => [...keys.configs(), id] as const;
+
+/** One form with its columns, site and category. */
+export const useForm = (id: number | null) =>
+  useQuery<SourceConfig>({
+    queryKey: formKey(id ?? 0),
+    queryFn: async () => {
+      const data = (await getColumnConfigById(id as number)) as SourceConfig | { columnConfig: SourceConfig };
+      return "columnConfig" in data ? data.columnConfig : data;
+    },
+    enabled: !!id,
+  });
+
+/** Emission categories with a factor for this site and category: the Factor match targets. */
+export const useFactorNames = (categoryId: number | null | undefined, siteId: number | null | undefined) =>
+  useQuery<string[]>({
+    queryKey: [...keys.all, "factor-names", categoryId, siteId],
+    queryFn: async () => asList<string>(await getEmissionCategoryNames(categoryId as number, siteId ?? undefined), "names"),
+    enabled: !!categoryId,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+export function useSaveForm(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: UpdatePayload) =>
+      updateColumnConfig(id, payload) as Promise<{ columnConfig?: SourceConfig; migrationWarning?: boolean; message?: string }>,
+    onSuccess: (res) => {
+      if (res?.columnConfig) qc.setQueryData(formKey(id), res.columnConfig);
+      // Renames can create library columns; the list shows every form.
+      void qc.invalidateQueries({ queryKey: keys.columns() });
+      void qc.invalidateQueries({ queryKey: keys.configs(), exact: true });
+    },
+  });
 }
