@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Building2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { feraCategoryIds } from "../../lib/emissions/pendingCount";
 import { useFyStartMonth } from "../../lib/fiscalYear";
 import {
   Button,
@@ -77,7 +78,8 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
   const previousPeriod = shiftPeriod(period, -1);
   const previous = useOverview(comparable ? toOverviewPeriod(previousPeriod) : null, scopeSites, ctx.categoryId);
   const intensity = useIntensity(scopeSites, range.from, range.to);
-  const pendingEntries = usePendingEntries(scopeSites);
+  const feraIds = useMemo(() => feraCategoryIds(sites.filter((s) => scopeSites.includes(s.site_id))), [sites, scopeSites]);
+  const pendingEntries = usePendingEntries(scopeSites, feraIds);
   const pendingProduction = usePendingProduction(scopeSites);
   const companyId = sites[0]?.company?.company_id ?? null;
   const threshold = useThreshold(companyId);

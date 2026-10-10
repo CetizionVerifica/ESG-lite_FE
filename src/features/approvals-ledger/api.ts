@@ -5,6 +5,7 @@ import { type EmissionDocument, getDocumentsByEmission } from "../../services/do
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { type UnitData, getUserUnitsBySiteAndCategory } from "../../services/unitService";
 import { invalidateEmissionQueries } from "../../lib/emissionQueries";
+import { fetchPendingForApproval } from "../../lib/emissions/pendingCount";
 import {
   type EmissionUploadBatch,
   approveEmission,
@@ -51,11 +52,20 @@ export function useEmissionList(params: ReturnType<typeof listParams>) {
   });
 }
 
-/** Pending / approved / rejected counts for the chosen sites, whatever the filters (tab badge). */
-export function useStatusCounts(siteIds: number[]) {
+/**
+ * Pending / approved / rejected counts for the chosen sites, whatever the filters
+ * (tab badge). Pending leaves out FERA twins, as the list folds them away.
+ */
+export function useStatusCounts(siteIds: number[], feraIds: number[]) {
   return useQuery({
-    queryKey: keys.counts(siteIds),
-    queryFn: async () => (await getEmissionsPaginated({ siteIds, page: 1, limit: 1 })).summary,
+    queryKey: [...keys.counts(siteIds), feraIds],
+    queryFn: async () => {
+      const [{ summary }, pending] = await Promise.all([
+        getEmissionsPaginated({ siteIds, page: 1, limit: 1 }),
+        fetchPendingForApproval(siteIds, feraIds),
+      ]);
+      return { ...summary, pending_count: pending };
+    },
   });
 }
 
