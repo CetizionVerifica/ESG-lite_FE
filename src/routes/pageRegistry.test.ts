@@ -35,6 +35,6 @@ describe("module route files", () => {
     const placeholderOnly = SHELL_ROUTES.map((r) => r.id).filter(
       (id) => (legacyPages[id] as { type?: { name?: string } })?.type?.name === "PlaceholderPage" && !owned.has(id),
     );
-    expect(placeholderOnly.sort()).toEqual(["client-detail", "pcf"]);
+    expect(placeholderOnly.sort()).toEqual(["pcf"]);
   });
 });
