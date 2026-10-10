@@ -207,10 +207,11 @@ export function skippedMatrix(result: ImportResult, preview: PreviewRow[]): { ma
       partial: result.skipped_rows.length < result.skipped,
     };
   }
-  const fromPreview = preview.map((r, i) => ({ r, i })).filter(({ r }) => r.row_error);
+  const fromPreview = preview.filter((r) => r.row_error);
   if (!fromPreview.length) return null;
   return {
-    matrix: [["Row", "Emission category", "Reason"], ...fromPreview.map(({ r, i }) => [String(i + 1), String(r.emission_category ?? ""), String(r.row_error)])],
+    // Row stays empty: the preview holds only the ticked categories, so its positions aren't sheet rows.
+    matrix: [["Row", "Emission category", "Reason"], ...fromPreview.map((r) => ["", String(r.emission_category ?? ""), String(r.row_error)])],
     partial: true,
   };
 }

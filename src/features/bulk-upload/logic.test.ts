@@ -128,7 +128,7 @@ describe("skippedMatrix", () => {
 
   it("falls back to preview rows with an error, and is null with nothing skipped", () => {
     const preview = [{ emission_category: "A" }, { emission_category: "B", row_error: "Missing field" }];
-    expect(skippedMatrix({ inserted: 1, skipped: 1, total_rows: 2 }, preview)?.matrix[1]).toEqual(["2", "B", "Missing field"]);
+    expect(skippedMatrix({ inserted: 1, skipped: 1, total_rows: 2 }, preview)?.matrix[1]).toEqual(["", "B", "Missing field"]);
     expect(skippedMatrix({ inserted: 2, skipped: 0, total_rows: 2 }, preview)).toBeNull();
   });
 });

@@ -75,7 +75,7 @@ export function ImportStep(props: {
       {result.skipped > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted">
-            {result.skipped} {result.skipped === 1 ? "row was" : "rows were"} skipped because their category needs fields the sheet doesn't have.
+            {result.skipped} {result.skipped === 1 ? "row was" : "rows were"} skipped{props.skippedFile ? ". The file gives the reason for each one." : "."}
             {props.skippedFile?.partial ? " The file lists only some of them: the service didn't return every skipped row." : ""}
           </p>
           {props.skippedFile && (
