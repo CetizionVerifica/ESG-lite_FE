@@ -23,6 +23,13 @@ describe("pending count for approvals", () => {
     expect(getEmissionsPaginated).toHaveBeenCalledWith({ siteIds: [1, 2], categoryId: 9, status: "pending", page: 1, limit: 1 });
   });
 
+  it("uses the API's review count when it has one", async () => {
+    getEmissionsPaginated.mockReset();
+    getEmissionsPaginated.mockResolvedValue({ summary: { pending_count: 4, pending_review_count: 3 } });
+    expect(await fetchPendingForApproval([1], [9])).toBe(3);
+    expect(getEmissionsPaginated).toHaveBeenCalledTimes(1);
+  });
+
   it("asks once when there is no FERA category", async () => {
     getEmissionsPaginated.mockReset();
     getEmissionsPaginated.mockResolvedValue({ summary: { pending_count: 4 } });

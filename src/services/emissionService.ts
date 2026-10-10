@@ -38,6 +38,8 @@ export interface EmissionData {
   };
   fera_linked_id?: number | null;
   parent_category_name?: string | null;
+  /** FERA rows: status of the linked non-FERA entry; null when there is none. */
+  fera_partner_status?: EmissionStatus | null;
 }
 
 export type ReportFrequency = "yearly" | "monthly";
@@ -57,6 +59,8 @@ export interface ApprovedEmissionsReportPayload {
 export interface EmissionsSummary {
   total_emission: number;
   pending_count: number;
+  /** Pending entries as the approvals list shows them (ESG-lite #82); absent on older APIs. */
+  pending_review_count?: number;
   approved_count: number;
   rejected_count: number;
 }
