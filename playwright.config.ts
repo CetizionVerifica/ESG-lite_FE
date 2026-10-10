@@ -7,6 +7,8 @@ const UI_SNAPSHOTS = "ui/**";
 
 export default defineConfig({
   testDir: "./e2e",
+  // Loads the app once per dev server so the first test doesn't meet a cold Vite.
+  globalSetup: "./e2e/warmup.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
