@@ -255,3 +255,42 @@ describe("Context 4 · Bahrain × FERA (fallbackToRaw) · monthly 2025-09", () =
     ).toMatchSnapshot();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Factor lookup order: one case per step of the backend's save-time matcher
+// (findEmissionFactorForCategory), so the preview and the saved total agree.
+// ---------------------------------------------------------------------------
+describe("factor lookup follows the backend's order", () => {
+  const find = (factors: EmissionFactor[], category: string, targetYear?: number) =>
+    createEmissionCalculator({ emissionFactors: factors, targetYear }).getEmissionFactor(category);
+
+  it("1 · exact factor name in the target year beats an exact global name", () => {
+    const want = ef("LPG", 1, "litre", 2024);
+    expect(find([ef("Other", 2, "litre", 2024, "LPG"), want], "LPG", 2024)).toBe(want);
+  });
+  it("2 · exact global name in the target year beats an exact factor name from another year", () => {
+    const want = ef("Diesel (avg)", 1, "litre", 2024, "Diesel");
+    expect(find([ef("Diesel", 2, "litre", 2023), want], "Diesel", 2024)).toBe(want);
+  });
+  it("3 · without a target-year match, the newest exact factor name from any year", () => {
+    const want = ef("LPG", 2, "litre", 2023);
+    expect(find([ef("LPG", 1, "litre", 2021), want], "LPG", 2025)).toBe(want);
+  });
+  it("4 · then the newest exact global name from any year", () => {
+    const want = ef("Diesel (avg)", 2, "litre", 2023, "Diesel");
+    expect(find([ef("Diesel (old)", 1, "litre", 2021, "Diesel"), want], "Diesel", 2025)).toBe(want);
+  });
+  it("exact matches from any year come before a case-blind match in the target year", () => {
+    const want = ef("LPG", 1, "litre", 2023);
+    expect(find([ef("lpg", 2, "litre", 2025), want], "LPG", 2025)).toBe(want);
+  });
+  it("5 · a case-blind match on either name: the target year first, else the newest", () => {
+    const inYear = ef(" lpg ", 1, "litre", 2024);
+    expect(find([ef("Lpg", 2, "litre", 2025), inYear], "LPG", 2024)).toBe(inYear);
+    const newestGlobal = ef("Other", 3, "litre", 2023, "lpg");
+    expect(find([ef(" lpg", 1, "litre", 2021), newestGlobal], "LPG", 2025)).toBe(newestGlobal);
+  });
+  it("no factor when nothing matches", () => {
+    expect(find([ef("Petrol", 1, "litre", 2024)], "LPG", 2024)).toBeUndefined();
+  });
+});
