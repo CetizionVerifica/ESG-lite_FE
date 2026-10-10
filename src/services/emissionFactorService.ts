@@ -13,6 +13,8 @@ export const getEmissionFactors = async (params?: {
   limit?: number;
   site_id?: number | null;
   category_id?: number | null;
+  company_id?: number | null;
+  year?: number | null;
   search?: string;
 }): Promise<PaginatedResponse<any>> => {
   const query: Record<string, string | number> = {};
@@ -20,6 +22,8 @@ export const getEmissionFactors = async (params?: {
   if (params?.limit) query.limit = params.limit;
   if (params?.site_id) query.site_id = params.site_id;
   if (params?.category_id) query.category_id = params.category_id;
+  if (params?.company_id) query.company_id = params.company_id;
+  if (params?.year) query.year = params.year;
   if (params?.search) query.search = params.search;
   const response = await api.get("/admin/emission-factors", { params: query });
   return response.data;
@@ -158,8 +162,10 @@ export interface UploadBatch {
 export const getEmissionFactorBatches = async (
   siteId?: number | null,
   categoryId?: number | null,
+  companyId?: number | null,
 ): Promise<UploadBatch[]> => {
   const params: Record<string, number> = {};
+  if (companyId) params.company_id = companyId;
   if (siteId) params.site_id = siteId;
   if (categoryId) params.category_id = categoryId;
   const response = await api.get("/admin/emission-factors/batches", { params });
