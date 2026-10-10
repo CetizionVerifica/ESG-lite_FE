@@ -56,11 +56,13 @@ export function clientSiteIds(sites: Site[], companyId: number): Set<number> {
 }
 
 /**
- * The factor an entry would pick for this global name, in the order the entry
- * form's findEmissionFactor (src/lib/emissions/emissionCalc.ts) tries names:
- * exact factor name, exact global name, then both again trimmed and case-blind.
- * Newest year wins, at the mapping's site or, for a company-wide mapping, at any
- * of the client's sites; `sites` then counts how many of them have the factor.
+ * Whether entries using this global name will find a factor. Names are tried in
+ * the order the backend uses when an entry is saved (findEmissionFactorForCategory
+ * in ESG-lite src/utils/findEmissionFactor.ts): exact factor name, exact global
+ * name, then both trimmed and case-blind. The backend prefers the entry's year;
+ * here the newest year stands in for it. Scope is the mapping's site or, for a
+ * company-wide mapping, the client's sites; `sites` then counts how many of them
+ * have the factor.
  */
 export function findFactor(
   index: FactorIndex,
@@ -315,10 +317,11 @@ export function checkImport(rows: ImportRow[], target: ImportTarget, existing: M
   return out;
 }
 
-export type ImportSummary = { included: number; matched: number; missing: number; blocked: number };
+/** `partial`: the matched rows whose factor exists at only some of the client's sites. */
+export type ImportSummary = { included: number; matched: number; partial: number; missing: number; blocked: number };
 
 export function summarizeImport(rows: ImportRow[], checks: Map<number, ImportCheck>): ImportSummary {
-  const s: ImportSummary = { included: 0, matched: 0, missing: 0, blocked: 0 };
+  const s: ImportSummary = { included: 0, matched: 0, partial: 0, missing: 0, blocked: 0 };
   for (const r of rows) {
     if (!r.include) continue;
     const c = checks.get(r.key);
@@ -327,8 +330,10 @@ export function summarizeImport(rows: ImportRow[], checks: Map<number, ImportChe
       continue;
     }
     s.included++;
-    if (c?.match.state === "matched") s.matched++;
-    else if (c?.match.state === "missing") s.missing++;
+    if (c?.match.state === "matched") {
+      s.matched++;
+      if (coverageLabel(c.match)) s.partial++;
+    } else if (c?.match.state === "missing") s.missing++;
   }
   return s;
 }
