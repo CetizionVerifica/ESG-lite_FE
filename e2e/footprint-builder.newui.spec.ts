@@ -7,7 +7,11 @@ import { type Page, expect, test } from "@playwright/test";
 
 const company = { company_id: 1, name: "Midal Cables" };
 const SITE = { site_id: 1, name: "Bahrain" };
-const user = { name: "Mia Manager", email: "mia@example.com", sites: [{ ...SITE, company }] };
+const user = {
+  name: "Mia Manager",
+  email: "mia@example.com",
+  sites: [{ ...SITE, company, categories: [{ category_id: 9, category_name: "Upstream transport", scope: "Scope 3" }] }],
+};
 const PRODUCT = { product_id: 5, name: "EC-grade wire rod 9.5 mm", unit: "t", site: SITE };
 
 function study(id: number, version: number, status: string, extra: Record<string, unknown> = {}) {
@@ -62,6 +66,7 @@ function study(id: number, version: number, status: string, extra: Record<string
 }
 
 const FACTORS = [
+  { material_factor_id: 2, name: "Copper cathode (placeholder)", material_group: "Metals", geography: "GLO", unit: "kg", value_kgco2e: null, value_hidden: true, source: "ecoinvent", source_year: 2023, licence: "ecoinvent", recycled_variant: false },
   { material_factor_id: 1, name: "Aluminium, primary (placeholder)", material_group: "Metals", geography: "GLO", unit: "kg", value_kgco2e: 2, value_hidden: false, source: "Test", source_year: 2024, licence: "open", recycled_variant: false },
 ];
 
@@ -101,6 +106,11 @@ async function signIn(page: Page, studies: Record<number, ReturnType<typeof stud
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       if (/\/products\/site\/1$/.test(path)) return json([PRODUCT]);
       if (path.endsWith("/pcf/material-factors")) return json(FACTORS);
+      if (/\/emission-factors\/site\/1\/category\/9$/.test(path))
+        return json([
+          { emission_factor_id: 40, emission_category_name: "HGV, average laden", denominator_unit: "tonne.km", factor_value: "0.1", source: "DEFRA", year: 2024 },
+          { emission_factor_id: 41, emission_category_name: "Van", denominator_unit: "km", factor_value: "0.2", source: "DEFRA", year: 2024 },
+        ]);
       const one = /\/pcf\/studies\/(\d+)(\/[a-z-]+)?$/.exec(path);
       if (one) {
         const s = studies[Number(one[1])];
@@ -154,4 +164,36 @@ test("a footprint in review can't be edited", async ({ page }) => {
   await signIn(page, { 12: study(12, 2, "in_review") });
   await page.goto("/products/5/footprints/12/edit");
   await expect(page.getByText("This footprint is in review, so it can't be edited.")).toBeVisible();
+});
+
+test("adds a material and its transport leg; the total follows both", async ({ page }) => {
+  const seen = await signIn(page, { 13: study(13, 3, "draft") });
+  await page.goto("/products/5/footprints/13/edit?step=materials");
+  await expect(page.getByRole("heading", { name: "Materials (A1)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Import BOM" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Add material" }).first().click();
+  await page.getByLabel("Name, row 2").fill("Magnesium");
+  await page.getByLabel("Quantity, row 2").fill("5");
+  await page.getByLabel("Factor, row 2").click();
+  await page.getByRole("option", { name: /Aluminium, primary .* Test 2024 · 2 kg\/kg/ }).click();
+  // 1010 kg + 5 kg at 2 kg/kg, plus 500 kg plant energy.
+  await expect(page.getByLabel("Running total")).toContainText("2,530");
+  await expect.poll(() => seen.some((r) => r.path === "/inputs" && (r.body as { inputs: unknown[] }).inputs.length === 2)).toBe(true);
+
+  // Licensed factors say the value is hidden.
+  await page.getByLabel("Factor, row 2").click();
+  await expect(page.getByRole("option", { name: /Copper cathode .* ecoinvent 2023 · value hidden \(licensed\)/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: /Next: Inbound transport/ }).click();
+  await page.getByRole("button", { name: "Add leg" }).first().click();
+  await page.getByLabel("Material, leg 1").selectOption("Aluminium ingot");
+  await expect(page.getByRole("cell", { name: "1.01 t" })).toBeVisible();
+  await page.getByLabel("Distance, leg 1").fill("100");
+  await page.getByLabel("Factor, leg 1").click();
+  await expect(page.getByRole("option", { name: /Van/ })).toHaveCount(0);
+  await page.getByRole("option", { name: /HGV, average laden · DEFRA 2024/ }).click();
+  // + 1.01 t × 100 km × 0.1 = 10.1 kg.
+  await expect(page.getByLabel("Running total")).toContainText("2,540.1");
 });

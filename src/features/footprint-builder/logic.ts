@@ -291,3 +291,63 @@ export function checklist(study: Pick<Study, "product">, lines: Line[], book: Fa
 }
 
 export const canCalculate = (items: CheckItem[]) => items.every((i) => i.done || !i.blocking);
+
+// ------------------------------------------------------------- lines ---
+
+export const LINE_UNITS = ["kg", "t", "g", "unit", "m", "m2", "kWh", "L"];
+
+/** Unit options for a line: the usual ones plus whatever it already uses. */
+export const unitOptions = (current: string) => (LINE_UNITS.includes(current) || !current ? LINE_UNITS : [current, ...LINE_UNITS]).map((u) => ({ value: u, label: u }));
+
+/** Tonnes for a mass quantity, or null when the unit isn't a mass. */
+export function massInTonnes(qty: number | null, unit: string): number | null {
+  const f = MASS_TO_KG[unit.trim().toLowerCase()];
+  return qty == null || f === undefined ? null : (qty * f) / 1000;
+}
+
+/**
+ * A transport leg named after a material carries that material's mass, so
+ * editing the quantity in step 2 moves the leg's payload too.
+ */
+export function syncPayloads(lines: Line[]): Line[] {
+  const mass = new Map<string, number>();
+  for (const l of lines) {
+    if (l.stage !== "A1") continue;
+    const t = massInTonnes(l.quantity, l.unit);
+    const k = l.name.trim().toLowerCase();
+    if (t !== null && k) mass.set(k, (mass.get(k) ?? 0) + t);
+  }
+  let changed = false;
+  const out = lines.map((l) => {
+    if (l.stage !== "A2") return l;
+    const t = mass.get(l.name.trim().toLowerCase());
+    if (t === undefined || t === l.payload_t) return l;
+    changed = true;
+    return { ...l, payload_t: t };
+  });
+  return changed ? out : lines;
+}
+
+/** Divides every material quantity by the process yield, so masses include losses. */
+export function applyYield(lines: Line[], yieldPct: number): Line[] {
+  if (!(yieldPct > 0 && yieldPct <= 100)) return lines;
+  return lines.map((l) => (l.stage === "A1" && l.quantity != null ? { ...l, quantity: Number((l.quantity / (yieldPct / 100)).toPrecision(12)) } : l));
+}
+
+export type PickerFactor = {
+  id: number;
+  name: string;
+  geography: string | null;
+  unit: string;
+  value: number | null;
+  source: string | null;
+  year: number | null;
+  recycled?: boolean;
+};
+
+/** Picker label: always the source and year; a hidden licensed value says so. */
+export function factorLabel(f: PickerFactor): string {
+  const origin = [f.source, f.year].filter((v) => v != null && v !== "").join(" ");
+  const value = f.value === null ? "value hidden (licensed)" : `${fmtKg(f.value)} kg/${f.unit}`;
+  return [f.name, f.geography, origin || "No source", value].filter(Boolean).join(" · ");
+}

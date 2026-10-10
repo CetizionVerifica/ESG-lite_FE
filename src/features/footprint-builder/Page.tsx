@@ -1,25 +1,46 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, CloudOff, Loader2, Package } from "lucide-react";
 import { Button, Callout, EmptyState, Modal, PageHeader, Skeleton, Stepper, panel, useToast, useUnsavedGuard, withoutParams, type Step } from "../../ui";
-import { errorMessage, useAllocationPreview, useCalculate, useMaterialFactors, useSaveInputs, useSaveScope, useStudy } from "./api";
+import { useAuth } from "../../context/AuthContext";
+import { errorMessage, useAllocationPreview, useCalculate, useFreightFactors, useMaterialFactors, useSaveInputs, useSaveScope, useStudy } from "./api";
+import { LineDrawer } from "./components/LineDrawer";
+import { MaterialsStep } from "./components/MaterialsStep";
+import { TransportStep } from "./components/TransportStep";
 import { ScopeStep } from "./components/ScopeStep";
 import { TotalRail } from "./components/TotalRail";
 import { type SaveState, useAutosave } from "./hooks/useAutosave";
 import {
   type FactorBook,
+  type InputStage,
   type Line,
+  type PickerFactor,
   type ScopeFields,
   type Study,
   canCalculate,
   checklist,
+  applyYield,
+  blankLine,
   lineProblem,
   periodText,
   periodYear,
   runningTotal,
   savableInputs,
+  syncPayloads,
   toLines,
 } from "./logic";
+
+type SiteWithCategories = { site_id: number; categories?: { category_id: number; scope?: string | null }[] };
+
+/** Scope 3 categories of the study's site: where its freight (tonne.km) factors live. */
+function useScope3Categories(siteId: number | null): number[] {
+  const { user } = useAuth();
+  return useMemo(() => {
+    const sites = ((user?.sites as SiteWithCategories[] | undefined) ?? []).concat(user?.site ? [user.site as SiteWithCategories] : []);
+    const site = sites.find((x) => x.site_id === siteId);
+    return (site?.categories ?? []).filter((c) => /3/.test(c.scope ?? "")).map((c) => c.category_id);
+  }, [user, siteId]);
+}
 
 const STEPS: Step[] = [
   { id: "scope", label: "Scope" },
@@ -165,7 +186,9 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
   );
   const initialLines = useMemo(() => toLines(study.inputs), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [scope, setScope] = useState<ScopeFields>(initialScope);
-  const [lines] = useState<Line[]>(initialLines);
+  const [lines, setLinesRaw] = useState<Line[]>(initialLines);
+  const setLines = useCallback((fn: (ls: Line[]) => Line[]) => setLinesRaw((ls) => syncPayloads(fn(ls))), []);
+  const [detailKey, setDetailKey] = useState<string | null>(null);
 
   const saveScope = useSaveScope(study.pcf_study_id);
   const saveInputs = useSaveInputs(study.pcf_study_id);
@@ -181,13 +204,40 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
   const linesSave = useAutosave(savable, initialSavable.rows, (v) => saveInputs.mutateAsync(v));
 
   const factors = useMaterialFactors();
-  const book = useMemo<FactorBook>(
-    () => ({
-      material: new Map((factors.data ?? []).map((f) => [f.material_factor_id, { unit: f.unit, value: f.value_kgco2e }])),
-      transport: new Map(),
-    }),
+  const freight = useFreightFactors(study.site?.site_id ?? null, useScope3Categories(study.site?.site_id ?? null));
+  const materialPicker = useMemo<PickerFactor[]>(
+    () =>
+      (factors.data ?? []).map((f) => ({
+        id: f.material_factor_id,
+        name: f.name,
+        geography: f.geography,
+        unit: f.unit,
+        value: f.value_kgco2e,
+        source: f.source,
+        year: f.source_year,
+        recycled: f.recycled_variant,
+      })),
     [factors.data],
   );
+  const book = useMemo<FactorBook>(
+    () => ({
+      material: new Map(materialPicker.map((f) => [f.id, { unit: f.unit, value: f.value }])),
+      transport: new Map((freight.data ?? []).map((f) => [f.id, { unit: f.unit, value: f.value }])),
+    }),
+    [materialPicker, freight.data],
+  );
+
+  const changeLine = useCallback((key: string, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l))), [setLines]);
+  const addLine = (stage: InputStage) => setLines((ls) => [...ls, blankLine(stage)]);
+  const removeLine = (line: Line) => {
+    const at = lines.findIndex((l) => l.key === line.key);
+    setLines((ls) => ls.filter((l) => l.key !== line.key));
+    toast({
+      title: `Removed ${line.name || "the line"}.`,
+      action: { label: "Undo", onClick: () => setLines((ls) => [...ls.slice(0, at), line, ...ls.slice(at)]) },
+    });
+  };
+  const byStage = (...stages: InputStage[]) => lines.filter((l) => stages.includes(l.stage));
   const preview = useAllocationPreview(study.pcf_study_id, {});
   const total = useMemo(() => runningTotal(lines, book, preview.data?.a3_energy_kg_per_unit ?? null), [lines, book, preview.data]);
   const items = useMemo(() => checklist(study, lines, book, preview.data ?? null), [study, lines, book, preview.data]);
@@ -241,6 +291,36 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
         <div className="min-w-0 space-y-4">
           {step.id === "scope" ? (
             <ScopeStep study={study} scope={scope} onChange={(patch) => setScope((s) => ({ ...s, ...patch }))} />
+          ) : step.id === "materials" ? (
+            <MaterialsStep
+              lines={byStage("A1")}
+              factors={materialPicker}
+              factorsLoading={factors.isPending}
+              factorsError={factors.isError}
+              book={book}
+              unitLabel={unitLabel}
+              onAdd={() => addLine("A1")}
+              onChange={changeLine}
+              onRemove={removeLine}
+              onDetails={(l) => setDetailKey(l.key)}
+              onApplyYield={(pct) => {
+                setLines((ls) => applyYield(ls, pct));
+                toast({ title: `Scaled the materials for a ${pct}% yield.` });
+              }}
+            />
+          ) : step.id === "transport" ? (
+            <TransportStep
+              legs={byStage("A2")}
+              materials={byStage("A1")}
+              factors={freight.data ?? []}
+              factorsLoading={freight.isPending}
+              factorsError={freight.isError}
+              book={book}
+              siteName={study.site?.name ?? "the plant"}
+              onAdd={() => addLine("A2")}
+              onChange={changeLine}
+              onRemove={removeLine}
+            />
           ) : (
             <section className={`${panel} p-6`} aria-labelledby="step-title">
               <h2 id="step-title" className="text-base font-semibold text-ink">
@@ -271,6 +351,8 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
           onCalculate={onCalculate}
         />
       </div>
+
+      <LineDrawer line={lines.find((l) => l.key === detailKey) ?? null} factors={materialPicker} onChange={changeLine} onClose={() => setDetailKey(null)} />
 
       <Modal
         open={blocker.state === "blocked"}

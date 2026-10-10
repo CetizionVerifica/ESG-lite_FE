@@ -1,4 +1,5 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryObserverResult, keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { getMaterialFactors } from "../../services/materialFactorService";
 import {
   type KeyValues,
@@ -12,7 +13,7 @@ import {
   updatePcfStudy,
 } from "../../services/pcfService";
 import { getProductsBySite } from "../../services/productService";
-import type { AllocationPreview, InputRow, ScopeFields, Study } from "./logic";
+import type { AllocationPreview, InputRow, PickerFactor, ScopeFields, Study } from "./logic";
 
 export const keys = {
   all: ["footprint-builder"] as const,
@@ -21,6 +22,7 @@ export const keys = {
   factors: () => ["material-factors", "list"] as const,
   studies: (siteId: number, productId: number) => [...keys.all, "studies", siteId, productId] as const,
   products: (siteId: number) => ["products", "site", siteId] as const,
+  freight: (siteId: number, categoryId: number) => [...keys.all, "freight", siteId, categoryId] as const,
 };
 
 const isConflict = (e: unknown) => (e as { response?: { status?: number } })?.response?.status === 409;
@@ -123,5 +125,48 @@ export function useSubmit(id: number) {
       void qc.invalidateQueries({ queryKey: keys.study(id) });
       void qc.invalidateQueries({ queryKey: ["product-footprints"] });
     },
+  });
+}
+
+type EmissionFactorRow = {
+  emission_factor_id: number;
+  emission_category_name?: string | null;
+  denominator_unit?: string | null;
+  factor_value: number | string;
+  source?: string | null;
+  year?: number | null;
+  category?: { category_name?: string } | null;
+};
+
+const toFreight = (rows: QueryObserverResult<PickerFactor[]>[]) => ({
+  data: rows.every((r) => r.data !== undefined) ? rows.flatMap((r) => r.data as PickerFactor[]) : undefined,
+  isPending: rows.some((r) => r.isPending),
+  isError: rows.some((r) => r.isError),
+});
+
+/**
+ * The site's existing freight factors per tonne.km (DEFRA rows), from its
+ * Scope 3 categories. A transport leg may only use these (E1 checks the site's company).
+ */
+export function useFreightFactors(siteId: number | null, categoryIds: number[]) {
+  return useQueries({
+    queries: categoryIds.map((categoryId) => ({
+      queryKey: keys.freight(siteId ?? 0, categoryId),
+      enabled: !!siteId,
+      staleTime: 5 * 60_000,
+      queryFn: async (): Promise<PickerFactor[]> =>
+        asList<EmissionFactorRow>(await getUserEmissionFactorsBySiteAndCategory(siteId!, categoryId))
+          .filter((f) => (f.denominator_unit ?? "").trim().toLowerCase() === "tonne.km")
+          .map((f) => ({
+            id: f.emission_factor_id,
+            name: f.emission_category_name || f.category?.category_name || `Factor ${f.emission_factor_id}`,
+            geography: null,
+            unit: "tonne.km",
+            value: Number(f.factor_value),
+            source: f.source ?? null,
+            year: f.year ?? null,
+          })),
+    })),
+    combine: toFreight,
   });
 }

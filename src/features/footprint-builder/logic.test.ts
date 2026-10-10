@@ -11,6 +11,10 @@ import {
   runningTotal,
   savableInputs,
   stageParts,
+  syncPayloads,
+  applyYield,
+  factorLabel,
+  massInTonnes,
 } from "./logic";
 
 const book: FactorBook = {
@@ -153,5 +157,36 @@ describe("checklist", () => {
   it("calls a line licensed only when its value is hidden", () => {
     const items = checklist({ product }, [line({ material_factor_id: 4 }), line({ unit: "m" })], book, preview);
     expect(items.find((i) => i.id === "priced")?.label).toBe("2 lines not in the running total yet");
+  });
+});
+
+describe("line helpers", () => {
+  it("keeps a leg's payload in step with the material it carries", () => {
+    const a1 = line({ key: "a", name: "Aluminium ingot", quantity: 1010, unit: "kg" });
+    const leg = { ...blankLine("A2"), key: "b", name: "aluminium ingot", distance_km: 100, emission_factor_id: 10 };
+    const synced = syncPayloads([a1, leg]);
+    expect(synced[1].payload_t).toBeCloseTo(1.01, 10);
+    expect(syncPayloads(synced)).toBe(synced);
+    const other = { ...leg, name: "Sea leg" };
+    expect(syncPayloads([a1, other])[1].payload_t).toBeNull();
+  });
+
+  it("scales material quantities by the process yield", () => {
+    const out = applyYield([line({ quantity: 97 }), line({ stage: "A3_packaging", quantity: 1 })], 97);
+    expect(out[0].quantity).toBe(100);
+    expect(out[1].quantity).toBe(1);
+    expect(applyYield([line({ quantity: 5 })], 0)[0].quantity).toBe(5);
+  });
+
+  it("labels factors with source and year and masks licensed values", () => {
+    expect(factorLabel({ id: 1, name: "Aluminium", geography: "GLO", unit: "kg", value: 2, source: "Test", year: 2024 })).toBe("Aluminium · GLO · Test 2024 · 2 kg/kg");
+    expect(factorLabel({ id: 2, name: "Copper", geography: null, unit: "kg", value: null, source: "ecoinvent", year: 2023 })).toBe(
+      "Copper · ecoinvent 2023 · value hidden (licensed)",
+    );
+  });
+
+  it("converts mass units to tonnes only", () => {
+    expect(massInTonnes(1500, "kg")).toBe(1.5);
+    expect(massInTonnes(2, "unit")).toBeNull();
   });
 });
