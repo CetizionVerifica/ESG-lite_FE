@@ -8,7 +8,10 @@ const isBlank = (raw: Record<string, unknown>) => Object.values(raw).every((v) =
 /** First worksheet of an .xlsx/.xls/.csv file: header row and data rows (blank rows dropped). */
 export async function readSheet(file: File): Promise<Sheet> {
   // raw values keep Excel dates as serial numbers, as the old upload read them.
-  const book = XLSX.read(await file.arrayBuffer(), { type: "array" });
+  // For CSV, raw also stops SheetJS reading "03-04-2027" as a US date: the cell
+  // stays text and parseDateToMonthYear reads it day first.
+  const csv = /\.csv$/i.test(file.name) || file.type === "text/csv";
+  const book = XLSX.read(await file.arrayBuffer(), { type: "array", ...(csv ? { raw: true } : {}) });
   const first = book.SheetNames[0];
   if (!first) return { headers: [], rows: [] };
   const ws = book.Sheets[first];

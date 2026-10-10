@@ -203,8 +203,12 @@ test("an uploaded sheet is reviewed, fixed and uploaded, with failures shown by 
 
   // Fix row 4 in the grid.
   await drawer.getByLabel("Row 4 quantity").fill("10");
+  // October would repeat row 2 (same product and month), so it stays blocked.
   await drawer.getByLabel("Row 4 start").fill("2025-10-01");
   await drawer.getByLabel("Row 4 end").fill("2025-10-31");
+  await expect(drawer.getByTestId("review-row-4")).toContainText("Same product and period as row 2");
+  await drawer.getByLabel("Row 4 start").fill("2025-11-01");
+  await drawer.getByLabel("Row 4 end").fill("2025-11-30");
   await expect(counts).toContainText("Valid 3");
   await drawer.getByRole("button", { name: "Upload 3 rows" }).click();
 
@@ -216,7 +220,7 @@ test("an uploaded sheet is reviewed, fixed and uploaded, with failures shown by 
   expect(bulk.entries).toEqual([
     { product_id: 10, site_id: 1, quantity: 4300, unit: "t", start_date: "2025-10-01", end_date: "2025-10-31" },
     { product_id: 11, site_id: 1, quantity: 12, unit: "km", start_date: "2025-10-01", end_date: "2025-10-31" },
-    { product_id: 10, site_id: 1, quantity: 10, unit: "t", start_date: "2025-10-01", end_date: "2025-10-31" },
+    { product_id: 10, site_id: 1, quantity: 10, unit: "t", start_date: "2025-11-01", end_date: "2025-11-30" },
   ]);
   await drawer.getByRole("button", { name: "Upload another" }).click();
   await expect(drawer.locator('input[type="file"]')).toBeAttached();

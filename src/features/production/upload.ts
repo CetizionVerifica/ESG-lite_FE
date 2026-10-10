@@ -1,4 +1,5 @@
 import type { Product } from "../../services/productService";
+import { rangesOverlap, unitsMatchExact } from "../../ui";
 import { monthRange } from "./logic";
 
 /**
@@ -172,18 +173,39 @@ export function toReview(parsed: ParsedRow[], products: Product[], siteName: str
 
 export type RowErrors = Partial<Record<"product" | "quantity" | "unit" | "start" | "end", string>>;
 
-export function rowErrors(r: ReviewRow): RowErrors {
+/**
+ * Problems on one row. The unit must be the product's own (as in the add
+ * drawer), so intensity never mixes units for one product.
+ */
+export function rowErrors(r: ReviewRow, products: Product[] = []): RowErrors {
   const e: RowErrors = {};
+  const product = products.find((p) => p.product_id === r.productId);
   if (!r.productId) e.product = "Choose a product";
   if (r.quantity === null || !(r.quantity > 0)) e.quantity = "Quantity must be above 0";
   if (!r.unit.trim()) e.unit = "Unit is required";
+  else if (product?.unit && !unitsMatchExact(product.unit, r.unit.trim())) e.unit = `Use ${product.unit}, the unit ${product.name} is measured in`;
   if (!r.start) e.start = r.dateText ? `Couldn't read "${r.dateText}"; pick the start` : "Pick the start date";
   if (!r.end) e.end = "Pick the end date";
   else if (r.start && r.end < r.start) e.end = "End is before the start";
   return e;
 }
 
-export const isValidRow = (r: ReviewRow) => Object.keys(rowErrors(r)).length === 0;
+/**
+ * Errors for every row, including a row whose product and dates overlap an
+ * earlier row of the same sheet (it would be counted twice).
+ */
+export function sheetErrors(rows: ReviewRow[], products: Product[]): Map<number, RowErrors> {
+  const out = new Map<number, RowErrors>();
+  rows.forEach((r, i) => {
+    const e = rowErrors(r, products);
+    if (!e.start && !e.end && r.productId) {
+      const earlier = rows.slice(0, i).find((o) => o.productId === r.productId && o.start && o.end && rangesOverlap(o.start, o.end, r.start, r.end));
+      if (earlier) e.start = `Same product and period as row ${earlier.line}; remove one`;
+    }
+    out.set(r.line, e);
+  });
+  return out;
+}
 
 export function bulkEntries(rows: ReviewRow[], siteId: number) {
   return rows.map((r) => ({

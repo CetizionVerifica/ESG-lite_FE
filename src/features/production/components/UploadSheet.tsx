@@ -24,12 +24,12 @@ import {
   MAX_FILE_BYTES,
   type ParsedRow,
   type ReviewRow,
+  type RowErrors,
   bulkEntries,
   failedLines,
   headerProblem,
-  isValidRow,
   parseRows,
-  rowErrors,
+  sheetErrors,
   toReview,
 } from "../upload";
 
@@ -124,7 +124,8 @@ export function UploadSheet({
   const updateRow = (line: number, patch: Partial<ReviewRow>) => setRows((rs) => rs.map((r) => (r.line === line ? { ...r, ...patch } : r)));
   const removeRow = (line: number) => setRows((rs) => rs.filter((r) => r.line !== line));
 
-  const ready = rows.filter(isValidRow);
+  const errors = useMemo(() => sheetErrors(rows, siteProducts), [rows, siteProducts]);
+  const ready = rows.filter((r) => Object.keys(errors.get(r.line) ?? {}).length === 0);
   const needsFix = rows.length - ready.length;
 
   const submit = () => {
@@ -226,7 +227,7 @@ export function UploadSheet({
                 None of the sheet's products are set up for {site?.name ?? "this site"}. Check the product names against the list your admin set up.
               </Callout>
             ) : (
-              <ReviewGrid rows={rows} productOptions={productOptions} existing={existing} siteId={siteId} onChange={updateRow} onRemove={removeRow} />
+              <ReviewGrid rows={rows} errors={errors} productOptions={productOptions} existing={existing} siteId={siteId} onChange={updateRow} onRemove={removeRow} />
             )}
             {needsFix > 0 && ready.length > 0 && (
               <p className="text-sm text-muted">
@@ -236,7 +237,7 @@ export function UploadSheet({
             {excluded.length > 0 && <ExcludedTable rows={excluded} />}
             {bulk.isError && (
               <p role="alert" className="rounded-control bg-bad-soft px-3 py-2 text-sm text-bad">
-                {errorMessage(bulk.error, "The upload failed. Nothing was saved; try again.")}
+                {uploadFailure(bulk.error)}
               </p>
             )}
           </div>
@@ -280,8 +281,15 @@ export function UploadSheet({
   );
 }
 
+/** A refused upload saved nothing; one that got no answer may have been saved, so retrying could duplicate it. */
+function uploadFailure(e: unknown): string {
+  if ((e as { response?: unknown })?.response) return errorMessage(e, "The upload failed. Nothing was saved; try again.");
+  return "The server didn't answer, so the upload may or may not have gone through. Close this and check the table before uploading again.";
+}
+
 function ReviewGrid({
   rows,
+  errors,
   productOptions,
   existing,
   siteId,
@@ -289,6 +297,7 @@ function ReviewGrid({
   onRemove,
 }: {
   rows: ReviewRow[];
+  errors: Map<number, RowErrors>;
   productOptions: { value: number; label: string }[];
   existing: ProductionRow[];
   siteId: number | null;
@@ -313,7 +322,7 @@ function ReviewGrid({
         </thead>
         <tbody>
           {rows.map((r) => {
-            const e = rowErrors(r);
+            const e = errors.get(r.line) ?? {};
             const problems = Object.keys(e);
             const clash = overlapsFor(existing, { siteId, productId: r.productId, start: r.start, end: r.end })[0];
             const label = (what: string) => `Row ${r.line} ${what}`;
