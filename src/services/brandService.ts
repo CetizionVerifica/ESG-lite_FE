@@ -15,6 +15,9 @@ export interface Brand {
   defaultLook?: "classic" | "light" | "night";
   /** B1: optional Scope 3 chart colour; null = derived. */
   scope3Colour?: string | null;
+  /** The client's colour-guideline file (PDF or image) and its original name. */
+  guidelineUrl?: string | null;
+  guidelineName?: string | null;
   /** ISO time of the last save (absent for a company without a brand row). */
   updatedAt?: string;
 }
@@ -38,10 +41,10 @@ export const getMyBrand = async (): Promise<MyBrand> => {
   return res.data;
 };
 
-/** Fields PUT /brands/:companyId accepts; logoOnDarkUrl may only be null (removes the dark logo). */
+/** Fields PUT /brands/:companyId accepts; logoOnDarkUrl / guidelineUrl may only be null (removes that file). */
 export type BrandUpdate = Partial<
   Pick<Brand, "name" | "primary" | "accent" | "coverFrom" | "coverTo" | "defaultLook" | "scope3Colour">
-> & { logoOnDarkUrl?: null };
+> & { logoOnDarkUrl?: null; guidelineUrl?: null };
 
 // Upsert name + colors (hex validated server-side).
 export const saveBrand = async (companyId: number, data: BrandUpdate) => {
@@ -64,6 +67,16 @@ export const uploadBrandDarkLogo = async (companyId: number, file: File) => {
   const form = new FormData();
   form.append("logo", file);
   const res = await api.post(`/brands/${companyId}/logo-dark`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+};
+
+// Upload the client's colour-guideline file (PDF or image) → stored on R2 as guidelineUrl.
+export const uploadBrandGuideline = async (companyId: number, file: File) => {
+  const form = new FormData();
+  form.append("guideline", file);
+  const res = await api.post(`/brands/${companyId}/guideline`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return res.data;
