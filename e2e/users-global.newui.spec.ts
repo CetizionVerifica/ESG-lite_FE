@@ -26,13 +26,14 @@ function makeUsers() {
     { user_id: 4, name: "Omar", last_name: "Saleh", email: "omar@example.com", role: "User", site: null, sites: [SITES[0]], categories: [FUEL], last_login_at: null },
     { user_id: 5, name: "Mia", last_name: "Khan", email: "mia@example.com", role: "Manager", site: null, sites: [SITES[0], SITES[1]], categories: [FUEL, POWER, TRAVEL], last_login_at: new Date().toISOString() },
     { user_id: 6, name: "Ravi", email: "ravi@example.com", role: "Admin", site: SITES[2], sites: [], categories: [], last_login_at: null },
+    { user_id: 1, name: "Sam", last_name: "Staff", email: "sam@example.com", role: "Superadmin", site: null, sites: [], categories: [], last_login_at: null },
   ];
 }
 
 async function signIn(page: Page) {
   let users = makeUsers();
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
-  const me = { name: "Sam Staff", email: "sam@example.com" };
+  const me = { user_id: 1, name: "Sam", last_name: "Staff", email: "sam@example.com" };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Superadmin");
@@ -107,7 +108,7 @@ test("a superadmin filters people and adds a user with a temporary password", as
   await page.goto("/users");
   await expect(page).toHaveURL(/\/setup\/users/);
   const table = usersTable(page);
-  await expect(table.getByRole("row")).toHaveCount(4);
+  await expect(table.getByRole("row")).toHaveCount(5);
   const omar = table.getByRole("row", { name: /Omar Saleh/ });
   await expect(omar).toContainText("Midal Cables");
   await expect(omar).toContainText("Hidd");
@@ -122,7 +123,7 @@ test("a superadmin filters people and adds a user with a temporary password", as
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/role=Admin/);
   await expect(table.getByRole("row")).toHaveCount(2);
-  await expect(page.getByTestId("setup-summary")).toHaveText("1 person of 3");
+  await expect(page.getByTestId("setup-summary")).toHaveText("1 person of 4");
   await page.getByRole("button", { name: /Clear all/ }).click();
 
   // Add user: email, role, client and sites are required.
@@ -185,14 +186,28 @@ test("a superadmin demotes a manager, sends a reset link and sees why someone ca
 
   await page.getByRole("button", { name: "Actions for Omar Saleh" }).click();
   await page.getByRole("menuitem", { name: "Remove…" }).click();
-  const confirm = page.getByRole("alertdialog", { name: "Remove Omar Saleh?" });
-  await confirm.getByRole("button", { name: "Remove" }).click();
+  const confirm = page.getByRole("alertdialog", { name: 'Delete user "omar@example.com"?' });
+  const del = confirm.getByRole("button", { name: "Delete user" });
+  await expect(del).toBeDisabled();
+  await confirm.getByLabel(/Type omar@example.com to confirm/).fill("omar@example.com");
+  await del.click();
   await expect(confirm.getByText(/history in ESGLite, so they can't be removed/)).toBeVisible();
   await confirm.getByRole("button", { name: "Cancel" }).click();
 
   await page.getByRole("button", { name: "Actions for Ravi" }).click();
   await page.getByRole("menuitem", { name: "Remove…" }).click();
-  await page.getByRole("alertdialog", { name: "Remove Ravi?" }).getByRole("button", { name: "Remove" }).click();
+  const ravi = page.getByRole("alertdialog", { name: 'Delete user "ravi@example.com"?' });
+  await ravi.getByLabel(/Type ravi@example.com to confirm/).fill("ravi@example.com");
+  await ravi.getByRole("button", { name: "Delete user" }).click();
   await expect(page.getByText("Ravi removed")).toBeVisible();
-  await expect(usersTable(page).getByRole("row")).toHaveCount(3);
+  await expect(usersTable(page).getByRole("row")).toHaveCount(4);
+
+  // Their own row: no Remove, and the role is locked.
+  await page.getByRole("button", { name: "Actions for Sam Staff" }).click();
+  await expect(page.getByRole("menuitem", { name: "Edit" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Remove…" })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Edit" }).click();
+  const self = page.getByRole("dialog", { name: "Sam Staff" });
+  await expect(self.getByLabel("Role")).toBeDisabled();
+  await expect(self.getByRole("button", { name: "Remove" })).toHaveCount(0);
 });

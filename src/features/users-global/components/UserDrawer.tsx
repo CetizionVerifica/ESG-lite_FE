@@ -34,6 +34,8 @@ type Props = {
   companies: { data: Company[]; loading: boolean };
   sites: { data: Site[]; loading: boolean };
   saving: boolean;
+  /** Editing their own account: role locked, no Remove. */
+  isSelf?: boolean;
   /** Server error from the last save. */
   error: string | null;
   onClose: () => void;
@@ -44,7 +46,7 @@ type Props = {
 
 const ROLE_HELP: Record<Role, string> = {
   Superadmin: "Runs ESGLite for every client. No client or sites.",
-  Admin: "Manages one client. A home site is optional.",
+  Admin: "Manages one client, from the site picked below.",
   Manager: "Reviews and approves data for the sites picked below.",
   User: "Enters data for the sites and categories picked below.",
 };
@@ -108,9 +110,11 @@ export function UserDrawer(props: Props) {
           <div className="flex w-full flex-wrap items-center gap-2">
             {!creating && (
               <>
-                <Button variant="danger" onClick={props.onRemove} disabled={props.saving}>
-                  Remove
-                </Button>
+                {!props.isSelf && (
+                  <Button variant="danger" onClick={props.onRemove} disabled={props.saving}>
+                    Remove
+                  </Button>
+                )}
                 <Button variant="ghost" onClick={props.onReset} disabled={props.saving}>
                   Send reset link
                 </Button>
@@ -169,7 +173,8 @@ export function UserDrawer(props: Props) {
               value={draft.role}
               onChange={(v) => setRole(isRole(v) ? v : null)}
               options={ROLES.map((r) => ({ value: r, label: r }))}
-              help={draft.role ? ROLE_HELP[draft.role] : undefined}
+              help={props.isSelf ? "You can't change your own role." : draft.role ? ROLE_HELP[draft.role] : undefined}
+              disabled={props.isSelf}
               error={fieldError("role")}
             />
             {lost.length > 0 && (
@@ -198,8 +203,11 @@ export function UserDrawer(props: Props) {
 
             {draft.role === "Admin" && (
               <Select<number>
-                label="Home site"
-                placeholder="No home site"
+                label="Site"
+                required
+                help="An admin's client comes from this site."
+                placeholder="Choose a site"
+                error={fieldError("site_ids")}
                 value={draft.site_ids[0] ?? null}
                 onChange={(v) => setSites(v === null ? [] : [v])}
                 options={clientSites.map((s) => ({ value: s.site_id, label: s.name }))}

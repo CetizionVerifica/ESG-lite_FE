@@ -1,11 +1,13 @@
 import { MoreHorizontal } from "lucide-react";
-import { Button, Menu, Tooltip } from "../../../ui";
+import { Button, Menu, type MenuEntry, Tooltip } from "../../../ui";
 import type { UserRow } from "../logic";
 
 export type RowActions = {
   edit: (row: UserRow) => void;
   reset: (row: UserRow) => void;
   remove: (row: UserRow) => void;
+  /** The signed-in person: no Remove on their own row. */
+  isSelf: (row: UserRow) => boolean;
 };
 
 /** First item, then "+N" with the rest in a tooltip. */
@@ -36,8 +38,9 @@ export function RowMenu({ row, actions }: { row: UserRow; actions: RowActions })
         items={[
           { label: "Edit", onSelect: () => actions.edit(row) },
           { label: "Send reset link", onSelect: () => actions.reset(row) },
-          { kind: "separator" },
-          { label: "Remove…", danger: true, onSelect: () => actions.remove(row) },
+          ...(actions.isSelf(row)
+            ? []
+            : ([{ kind: "separator" }, { label: "Remove…", danger: true, onSelect: () => actions.remove(row) }] as MenuEntry[])),
         ]}
         trigger={(t) => (
           <Button {...t} size="sm" variant="ghost" aria-label={label}>

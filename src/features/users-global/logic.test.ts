@@ -79,7 +79,8 @@ describe("validate", () => {
     expect(validate({ ...emptyDraft(), email: "a@b.co", role: "Admin" })).toEqual({ company_id: "Choose the client this person works for." });
     expect(validate({ ...emptyDraft(1), email: "a@b.co", role: "Manager" })).toEqual({ site_ids: "Choose at least one site." });
     expect(validate({ ...emptyDraft(1), email: "a@b.co", role: "User", site_ids: [1] })).toEqual({ category_ids: "Choose at least one category this person can enter." });
-    expect(validate({ ...emptyDraft(1), email: "a@b.co", role: "Admin" })).toEqual({});
+    expect(validate({ ...emptyDraft(1), email: "a@b.co", role: "Admin" })).toEqual({ site_ids: "Choose the site this admin belongs to." });
+    expect(validate({ ...emptyDraft(1), email: "a@b.co", role: "Admin", site_ids: [2] })).toEqual({});
   });
 });
 
@@ -112,7 +113,7 @@ describe("toPayload", () => {
     const d = { ...emptyDraft(1), name: " Lee ", email: " lee@x.io ", role: "User" as const, site_ids: [1], category_ids: [1, 2] };
     expect(toPayload(d, null)).toEqual({ name: "Lee", email: "lee@x.io", role: "User", site_ids: [1], category_ids: [1, 2] });
   });
-  it("creates an Admin with an optional home site", () => {
+  it("creates an Admin with their site", () => {
     expect(toPayload({ ...emptyDraft(1), email: "a@x.io", role: "Admin", site_ids: [2] }, null)).toEqual({ email: "a@x.io", role: "Admin", site_id: 2 });
   });
   it("sends only changed fields on edit", () => {

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Copy, SearchX, Users } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
 import {
   Button,
@@ -11,6 +12,7 @@ import {
   type FilterDef,
   Modal,
   SetupListPage,
+  TypedDeleteModal,
   useFilterParams,
   useToast,
   withoutParams,
@@ -28,6 +30,7 @@ const OPEN = "open";
 export default function UsersGlobalPage() {
   const { toast } = useToast();
   const { clientId } = useClientContext();
+  const { user: me } = useAuth();
   const [params, setParams] = useSearchParams();
   const [filters, setFilters] = useFilterParams(FILTER_KEYS);
 
@@ -130,7 +133,9 @@ export default function UsersGlobalPage() {
     { key: "site", label: "Site", options: siteOptions },
   ];
 
-  const columns = userColumns({ edit: (r) => setOpen(String(r.user_id)), reset: sendReset, remove: startRemove });
+  // The signed-in person can't remove themselves or change their own role.
+  const isSelf = (r: UserRow | null) => !!r && !!me && (me.user_id === r.user_id || (!me.user_id && me.email === r.email));
+  const columns = userColumns({ edit: (r) => setOpen(String(r.user_id)), reset: sendReset, remove: startRemove, isSelf });
   const filtered = !!filters.q.trim() || clientIds.length > 0 || roles.length > 0 || siteIds.length > 0;
   const clearFilters = () => setParams((p) => writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS), { replace: true });
   const empty =
@@ -200,24 +205,23 @@ export default function UsersGlobalPage() {
         error={saveErr}
         onClose={() => setOpen(null)}
         onSave={onSave}
+        isSelf={isSelf(openRow)}
         onRemove={() => openRow && startRemove(openRow)}
         onReset={() => openRow && sendReset(openRow)}
       />
-      <Modal
-        open={!!removing}
-        onClose={() => setRemoving(null)}
-        tone="destructive"
-        title={removing ? `Remove ${removing.displayName}?` : "Remove"}
-        description={
-          removing ? (
-            <>
-              <span className="font-medium text-ink">{removing.email}</span> can no longer sign in. People who entered or reviewed data can't be removed; change their role or sites instead.
-            </>
-          ) : undefined
-        }
-        error={removeErr}
-        primaryAction={{ label: "Remove", onClick: onRemove, loading: remove.isPending }}
-      />
+      {removing && (
+        <TypedDeleteModal
+          key={removing.user_id}
+          open
+          noun="user"
+          name={removing.email}
+          cascades={[`${removing.displayName}'s account and sign-in`, "Their notifications"]}
+          deleting={remove.isPending}
+          error={removeErr}
+          onClose={() => setRemoving(null)}
+          onConfirm={onRemove}
+        />
+      )}
       <Modal
         open={!!created}
         onClose={() => setCreated(null)}

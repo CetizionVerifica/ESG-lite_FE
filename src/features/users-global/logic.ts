@@ -39,7 +39,7 @@ export function isRole(value: unknown): value is Role {
   return typeof value === "string" && (ROLES as readonly string[]).includes(value);
 }
 
-/** Manager and User work on several sites; Admin has at most one; Superadmin none. */
+/** Manager and User work on several sites; Admin has exactly one; Superadmin none. */
 export const multiSite = (role: Role | null) => role === "Manager" || role === "User";
 
 export function personName(u: Pick<User, "name" | "last_name" | "email">): string {
@@ -137,6 +137,8 @@ export function validate(d: UserDraft): Partial<Record<DraftField, string>> {
   if (!d.role) e.role = "Choose a role.";
   if (d.role && d.role !== "Superadmin" && d.company_id === null) e.company_id = "Choose the client this person works for.";
   if (multiSite(d.role) && d.site_ids.length === 0) e.site_ids = "Choose at least one site.";
+  // Users have no client link of their own: an Admin's client is their site's.
+  if (d.role === "Admin" && d.company_id !== null && d.site_ids.length === 0) e.site_ids = "Choose the site this admin belongs to.";
   if (d.role === "User" && d.site_ids.length > 0 && d.category_ids.length === 0) e.category_ids = "Choose at least one category this person can enter.";
   return e;
 }
