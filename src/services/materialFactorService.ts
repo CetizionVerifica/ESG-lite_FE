@@ -48,3 +48,9 @@ export const importMaterialFactors = async (data: { company_id?: number | null; 
   const response = await api.post("/pcf/material-factors/import", data);
   return response.data;
 };
+
+/** Validates an import without saving: every invalid row and every row already in the library. */
+export const checkMaterialFactorImport = async (data: { company_id?: number | null; rows: MaterialFactorBody[] }) => {
+  const response = await api.post("/pcf/material-factors/import?dry_run=1", data);
+  return response.data;
+};

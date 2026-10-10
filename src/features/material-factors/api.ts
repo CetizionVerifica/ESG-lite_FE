@@ -6,6 +6,7 @@ import {
   deleteMaterialFactor,
   getMaterialFactor,
   getMaterialFactors,
+  checkMaterialFactorImport,
   importMaterialFactors,
   updateMaterialFactor,
 } from "../../services/materialFactorService";
@@ -82,3 +83,16 @@ export function useImportFactors() {
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
   });
 }
+
+type ImportBody = { company_id?: number | null; rows: MaterialFactorBody[] };
+
+/** Dry run of an import, re-run whenever the mapped rows change. Kept out of `keys.all` so a finished import doesn't re-check. */
+export const useImportCheck = (body: ImportBody, enabled: boolean) =>
+  useQuery<{ valid: boolean; errors: ImportError[] }>({
+    queryKey: ["material-factors-import-check", body],
+    queryFn: () => checkMaterialFactorImport(body),
+    enabled,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });

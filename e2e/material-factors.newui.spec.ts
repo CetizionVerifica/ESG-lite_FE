@@ -62,10 +62,20 @@ async function signIn(page: Page, role: "Superadmin" | "Manager") {
     (url) => url.port !== "4174",
     (route) => {
       const request = route.request();
-      const path = new URL(request.url()).pathname;
+      const url = new URL(request.url());
+      const path = url.pathname;
       const method = request.method();
       const json = (body: unknown, status = 200) => route.fulfill({ status, json: body });
       const body = method === "GET" || method === "DELETE" ? null : (request.postDataJSON() as Record<string, unknown>);
+      // The import dry run is a check, not a write.
+      if (url.searchParams.get("dry_run") === "1") {
+        const rows = body!.rows as Record<string, unknown>[];
+        const errors = rows.flatMap((r, index) => {
+          const dup = factors.find((f) => f.name.toLowerCase() === String(r.name).toLowerCase());
+          return dup ? [{ index, message: "A factor with this name, geography and year already exists", existing_id: dup.material_factor_id }] : [];
+        });
+        return json({ valid: errors.length === 0, rows: rows.length, errors });
+      }
       if (method !== "GET") calls.push({ method, path, body });
 
       if (path.endsWith("/auth/me")) return json({ role, user });
@@ -147,7 +157,7 @@ test("a superadmin filters, hits a duplicate, and imports a sheet", async ({ pag
   const csv = ["Material,Group,Unit,kgCO2e,Region,Source,Year", "Wooden drum,packaging,unit,38.5,,DEFRA,2024", "Steel wire,steel,kg,2.3,GLO,worldsteel,2022", ","].join("\n");
   await imp.locator('input[type="file"]').setInputFiles({ name: "factors.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
   await expect(imp.getByLabel("Name")).toHaveValue("Material");
-  await expect(imp.getByText("All 2 rows look complete.", { exact: false })).toBeVisible();
+  await expect(imp.getByText("All 2 rows are ready to import.")).toBeVisible();
   await imp.getByRole("button", { name: "Import 2 factors" }).click();
   await expect(imp.getByText("Imported 2 factors.", { exact: false })).toBeVisible();
   expect(calls.at(-1)).toMatchObject({

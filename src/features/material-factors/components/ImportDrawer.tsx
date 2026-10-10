@@ -2,7 +2,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { CheckCircle2, Download } from "lucide-react";
 import { Button, Callout, Combobox, Drawer, FileDrop, type FileDropItem, Select, Stepper } from "../../../ui";
 import type { MaterialFactorBody } from "../../../services/materialFactorService";
-import { type ImportError, errorMessage, importErrors, useImportFactors } from "../api";
+import { type ImportError, errorMessage, importErrors, useImportCheck, useImportFactors } from "../api";
 import { type Company, type Mapping, type Role, SHEET_FIELDS, detectMapping, missingRequired, toRow } from "../logic";
 import { type Sheet, downloadTemplate, readSheet } from "../sheet";
 
@@ -74,12 +74,16 @@ export function ImportDrawer(props: Props) {
   const missing = missingRequired(mapping);
   const withProblems = parsed.filter((p) => p.problems.length);
   const serverErrors = importErrors(run.error);
-  const canImport = !!sheet && missing.length === 0 && withProblems.length === 0 && !run.isPending;
+  const body = useMemo(
+    () => ({ ...(props.role === "Superadmin" ? { company_id: companyId } : {}), rows: parsed.map((p): MaterialFactorBody => p.row) }),
+    [props.role, companyId, parsed],
+  );
+  const clientOk = !!sheet && missing.length === 0 && withProblems.length === 0;
+  // The server dry run also finds rows already in the library. If it can't run, the import itself still checks everything.
+  const check = useImportCheck(body, clientOk && step === 1);
+  const canImport = clientOk && !run.isPending && (check.data ? check.data.valid : !!check.error);
 
-  const submit = () => {
-    const rows: MaterialFactorBody[] = parsed.map((p) => p.row);
-    run.mutate({ ...(props.role === "Superadmin" ? { company_id: companyId } : {}), rows }, { onSuccess: () => setStep(2) });
-  };
+  const submit = () => run.mutate(body, { onSuccess: () => setStep(2) });
 
   const companyOptions = [{ value: 0, label: "Global library" }, ...props.companies.map((c) => ({ value: c.company_id, label: c.name }))];
   const headerOptions = (sheet?.headers ?? []).map((h) => ({ value: h, label: h }));
@@ -178,7 +182,24 @@ export function ImportDrawer(props: Props) {
                     <RowList items={withProblems.map((p) => ({ line: p.line, text: p.problems.join("; ") }))} />
                   </Callout>
                 ) : (
-                  <p className="text-sm text-muted">All {parsed.length} rows look complete. The library checks for duplicates when you import.</p>
+                  <p className="text-sm text-muted" role="status">
+                    {check.isFetching
+                      ? `All ${parsed.length} rows look complete. Checking them against the library…`
+                      : check.data?.valid
+                        ? `All ${parsed.length} rows are ready to import.`
+                        : check.data
+                          ? `Some rows can't be imported yet.`
+                          : `All ${parsed.length} rows look complete. The library checks for duplicates when you import.`}
+                  </p>
+                )}
+                {!check.isFetching && check.data && !check.data.valid && (
+                  <ServerErrors
+                    title="Fix these rows before importing"
+                    errors={check.data.errors}
+                    lines={parsed.map((p) => p.line)}
+                    fallback=""
+                    onOpenExisting={props.onOpenExisting}
+                  />
                 )}
                 <Preview rows={parsed.slice(0, PREVIEW_ROWS).map((p) => p.row)} />
                 {parsed.length > PREVIEW_ROWS && <p className="text-xs text-muted">Showing the first {PREVIEW_ROWS} of {parsed.length} rows.</p>}
@@ -218,10 +239,11 @@ function RowList({ items }: { items: { line: number; text: string; action?: Reac
   );
 }
 
-function ServerErrors(props: { errors: ImportError[]; lines: number[]; fallback: string; onOpenExisting: (id: number) => void }) {
-  if (!props.errors.length) return <Callout tone="warn" title="Nothing was imported">{props.fallback}</Callout>;
+function ServerErrors(props: { title?: string; errors: ImportError[]; lines: number[]; fallback: string; onOpenExisting: (id: number) => void }) {
+  const title = props.title ?? "Nothing was imported";
+  if (!props.errors.length) return <Callout tone="warn" title={title}>{props.fallback}</Callout>;
   return (
-    <Callout tone="warn" title="Nothing was imported">
+    <Callout tone="warn" title={title}>
       <RowList
         items={props.errors.map((e) => ({
           line: props.lines[e.index] ?? e.index + 2,
