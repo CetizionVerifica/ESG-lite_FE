@@ -11,6 +11,8 @@ export type ChoicesEditorProps = {
   title?: ReactNode;
   /** Line under the title; null hides it. */
   help?: ReactNode | null;
+  /** Saved choices keep their label too (form choices: paths and factor rules use labels). */
+  lockSavedLabels?: boolean;
 };
 
 /**
@@ -18,7 +20,7 @@ export type ChoicesEditorProps = {
  * choice's stored value follows its label until edited under "Show stored
  * values"; a saved choice's stored value is read-only, since entries use it.
  */
-export function ChoicesEditor({ choices, onChange, errors, title = "Choices", help = "Each form can override these for its own site." }: ChoicesEditorProps) {
+export function ChoicesEditor({ choices, onChange, errors, title = "Choices", help = "Each form can override these for its own site.", lockSavedLabels = false }: ChoicesEditorProps) {
   const titleId = useId();
   const [showValues, setShowValues] = useState(() => choices.some((c) => c.value !== slugify(c.label)));
   const update = (key: string, p: Partial<Pick<ChoiceDraft, "label" | "value">>) =>
@@ -40,10 +42,11 @@ export function ChoicesEditor({ choices, onChange, errors, title = "Choices", he
           {showValues ? "Hide stored values" : "Show stored values"}
         </Button>
       </div>
-      {(help || (showValues && choices.some((c) => c.original !== undefined))) && (
+      {(help || ((showValues || lockSavedLabels) && choices.some((c) => c.original !== undefined))) && (
         <p className="text-xs text-muted">
           {help}
-          {showValues && choices.some((c) => c.original !== undefined) && " Saved choices keep their stored value because entries already use it."}
+          {showValues && !lockSavedLabels && choices.some((c) => c.original !== undefined) && " Saved choices keep their stored value because entries already use it."}
+          {lockSavedLabels && choices.some((c) => c.original !== undefined) && " Saved choices keep their label and stored value: entries, choice paths and factor matches use them."}
         </p>
       )}
       {choices.length === 0 && <p className="rounded-control border border-dashed border-line px-3 py-3 text-sm text-muted">No choices yet. Add the first one.</p>}
@@ -57,12 +60,14 @@ export function ChoicesEditor({ choices, onChange, errors, title = "Choices", he
                 <span className="mt-2 w-5 shrink-0 text-right text-xs text-muted font-num">{i + 1}</span>
                 <div className={cn("grid flex-1 gap-1.5", showValues && "sm:grid-cols-2")}>
                   <input
-                    className={cn(inputBase, "h-9")}
+                    className={cn(inputBase, "h-9", lockSavedLabels && c.original !== undefined && "bg-tint text-muted")}
                     value={c.label}
                     placeholder="Label, e.g. Recycled"
                     aria-label={`Choice ${i + 1} label`}
                     aria-invalid={err ? true : undefined}
                     aria-describedby={err ? errId : undefined}
+                    readOnly={lockSavedLabels && c.original !== undefined}
+                    title={lockSavedLabels && c.original !== undefined ? "Choice paths and factor matches use this label, so it can't change here." : undefined}
                     onChange={(e) => update(c.key, { label: e.target.value })}
                   />
                   {showValues && (

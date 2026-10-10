@@ -6,12 +6,14 @@ import { type BuilderDraft, EXTRA_TYPES, type ExtraFieldDefinition, extraFieldEr
 export type ExtraTabProps = {
   draft: BuilderDraft;
   onChange: (update: (d: BuilderDraft) => BuilderDraft) => void;
+  /** Keys of the extra details saved before this edit; their keys never follow the label. */
+  savedKeys: ReadonlySet<string>;
 };
 
 const splitList = (text: string) => text.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
 
 /** Supplementary fields (PO number, equipment…) saved with the entry but not used in the calculation. */
-export function ExtraTab({ draft, onChange }: ExtraTabProps) {
+export function ExtraTab({ draft, onChange, savedKeys }: ExtraTabProps) {
   const errors = extraFieldErrors(draft.extraFields);
   const update = (i: number, patch: Partial<ExtraFieldDefinition>) =>
     onChange((d) => ({
@@ -19,8 +21,8 @@ export function ExtraTab({ draft, onChange }: ExtraTabProps) {
       extraFields: d.extraFields.map((f, j) => {
         if (j !== i) return f;
         const next = { ...f, ...patch };
-        // The key follows the label until someone edits the key.
-        if (patch.label !== undefined && (!f.key || f.key === keyFromLabel(f.label))) next.key = keyFromLabel(patch.label);
+        // A new detail's key follows its label until someone edits the key; saved entries use a saved key.
+        if (patch.label !== undefined && !savedKeys.has(f.key) && (!f.key || f.key === keyFromLabel(f.label))) next.key = keyFromLabel(patch.label);
         return next;
       }),
     }));
@@ -40,6 +42,7 @@ export function ExtraTab({ draft, onChange }: ExtraTabProps) {
                 value={f.key}
                 onChange={(v) => update(i, { key: v.toLowerCase().replace(/[^a-z0-9_]/g, "_") })}
                 className="font-mono"
+                help={savedKeys.has(f.key) ? "Saved entries use this key; changing it asks before saving." : undefined}
                 error={errors[i] && errors[i] !== "Enter a label." && errors[i] !== "Add at least one choice." ? errors[i] : undefined}
               />
               <Select<ExtraFieldDefinition["type"]> label="Type" value={f.type} onChange={(v) => v && update(i, { type: v })} options={EXTRA_TYPES} />

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, X } from "lucide-react";
 import { Badge, Combobox, TextField, cn, focusRing, inputBase } from "../../../../ui";
-import { type BuilderDraft, type ColumnEntity, addField, fieldNameError, fieldTitle, moveField, removeField, renameField } from "../../builder";
+import { type BuilderDraft, type ColumnEntity, type LibraryName, addField, fieldNameError, fieldTitle, moveField, removeField, renameField } from "../../builder";
 import { typeLabel } from "../../logic";
 
 export type FieldsTabProps = {
@@ -49,7 +49,7 @@ export function FieldsTab({ draft, onChange, library, libraryLoading }: FieldsTa
                     <span className="font-medium text-ink">{fieldTitle(f.column_name)}</span>
                     <Badge tone="neutral">{typeLabel(f.column_type)}</Badge>
                   </div>
-                  {advanced && <KeyInput draft={draft} field={f} onCommit={(name) => onChange((d) => renameField(d, f.pk_id, name))} />}
+                  {advanced && <KeyInput draft={draft} field={f} library={library} onCommit={(name) => onChange((d) => renameField(d, f.pk_id, name))} />}
                 </div>
                 <div className="flex items-center">
                   <button type="button" aria-label={`Move ${fieldTitle(f.column_name)} up`} disabled={i === 0} onClick={() => onChange((d) => moveField(d, i, i - 1))} className={cn("rounded-control p-1.5 text-muted hover:bg-tint disabled:opacity-30", focusRing)}>
@@ -96,9 +96,9 @@ export function FieldsTab({ draft, onChange, library, libraryLoading }: FieldsTa
 }
 
 /** A field's key, committed on blur or Enter once valid (so a half-typed key never collides with another). */
-function KeyInput({ draft, field, onCommit }: { draft: BuilderDraft; field: ColumnEntity; onCommit: (name: string) => void }) {
+function KeyInput({ draft, field, library, onCommit }: { draft: BuilderDraft; field: ColumnEntity; library: LibraryName[]; onCommit: (name: string) => void }) {
   const [text, setText] = useState(field.column_name);
-  const err = fieldNameError(draft, field.pk_id, text);
+  const err = fieldNameError(draft, field.pk_id, text, library);
   const was = draft.originalNames[field.pk_id];
   const commit = () => {
     if (!err && text.trim() !== field.column_name) onCommit(text.trim());

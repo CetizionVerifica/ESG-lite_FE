@@ -233,6 +233,8 @@ test("form builder: edits show in the preview and save in one request", async ({
   await page.getByRole("tab", { name: "Choices" }).click();
   await page.getByLabel("Field", { exact: true }).selectOption("vehicle");
   const road = page.locator('[data-branch="Road"]');
+  // Saved choices keep their label: choice paths and factor rules use it.
+  await expect(road.getByLabel("Choice 1 label")).toHaveAttribute("readonly", "");
   await road.getByRole("button", { name: "Add choice" }).click();
   await road.getByLabel("Choice 3 label").fill("Pickup truck");
   await preview.getByLabel("Mode").selectOption("road");

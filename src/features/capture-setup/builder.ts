@@ -162,22 +162,44 @@ export function renameMap(d: BuilderDraft): Record<string, string> {
   return out;
 }
 
-export function fieldNameError(d: BuilderDraft, pkId: number, name: string): string | null {
+export type LibraryName = { pk_id: number; column_name: string };
+
+/**
+ * A field key must be unique in the form. A changed key also can't take a
+ * name the form's fields had when the builder opened (swaps and chains break
+ * the backend's entry migration) or another library column's name.
+ */
+export function fieldNameError(d: BuilderDraft, pkId: number, name: string, library: LibraryName[] = []): string | null {
   const n = name.trim();
   if (!n) return "Enter a key.";
   if (!/^[A-Za-z0-9_ ]+$/.test(n)) return "Use letters, numbers, spaces or _.";
-  if (d.fields.some((f) => f.pk_id !== pkId && f.column_name.toLowerCase() === n.toLowerCase())) return "Another field has this key.";
+  const same = (other: string) => other.toLowerCase() === n.toLowerCase();
+  if (d.fields.some((f) => f.pk_id !== pkId && same(f.column_name))) return "Another field has this key.";
+  const was = d.originalNames[pkId];
+  if (was !== undefined && same(was)) return null;
+  if (Object.entries(d.originalNames).some(([id, other]) => Number(id) !== pkId && same(other)))
+    return "Another field of this form used this key. Save once, then rename.";
+  if (library.some((c) => c.pk_id !== pkId && same(c.column_name))) return "Another library column has this name.";
   return null;
 }
 
-export type SavedRemovals = { fields: string[]; choices: { field: string; labels: string[] }[] };
+export type SavedRemovals = {
+  fields: string[];
+  choices: { field: string; labels: string[] }[];
+  /** Saved extra details whose key changed or that were removed. */
+  extras: string[];
+  extraChoices: { detail: string; choices: string[] }[];
+};
 
 /**
  * What a save drops that saved entries may still use: fields taken off the
- * form, and choices (plain or dependent) that existed when the builder opened.
+ * form, choices (plain or dependent) that existed when the builder opened,
+ * dependent choices a changed parent hides, and saved extra-detail keys or choices.
  */
 export function savedRemovals(initial: BuilderDraft, d: BuilderDraft): SavedRemovals {
   const nameNow = new Map(d.fields.map((f) => [f.pk_id, f.column_name]));
+  const pkThen = new Map(initial.fields.map((f) => [f.column_name, f.pk_id]));
+  const pkNow = new Map(d.fields.map((f) => [f.column_name, f.pk_id]));
   const fields = initial.fields.filter((f) => !nameNow.has(f.pk_id)).map((f) => fieldTitle(f.column_name));
   const choices: SavedRemovals["choices"] = [];
   const missing = (before: DropdownOptionValue[] | undefined, after: DropdownOptionValue[] | undefined) => {
@@ -188,14 +210,34 @@ export function savedRemovals(initial: BuilderDraft, d: BuilderDraft): SavedRemo
     const now = nameNow.get(f.pk_id);
     if (now === undefined) continue;
     const gone = [...missing(initial.options[f.column_name], d.options[now])];
+    const parentThen = initial.dependencies[f.column_name];
+    const parentNow = d.dependencies[now];
+    const sameParent = (parentThen ? pkThen.get(parentThen) : undefined) === (parentNow ? pkNow.get(parentNow) : undefined);
     for (const [branch, list] of Object.entries(initial.dependentOptions[f.column_name] ?? {})) {
-      gone.push(...missing(list, d.dependentOptions[now]?.[branch]));
+      // A new or removed parent hides every saved branch.
+      gone.push(...(sameParent ? missing(list, d.dependentOptions[now]?.[branch]) : list));
     }
     const labels = [...new Set(gone.map((o) => o.label))];
     if (labels.length) choices.push({ field: fieldTitle(now), labels });
   }
-  return { fields, choices };
+  const extrasNow = new Map(d.extraFields.map((x) => [x.key.trim(), x]));
+  const extras: string[] = [];
+  const extraChoices: SavedRemovals["extraChoices"] = [];
+  for (const x of initial.extraFields) {
+    const now = extrasNow.get(x.key);
+    if (!now) {
+      extras.push(x.label || x.key);
+      continue;
+    }
+    const kept = new Set(now.type === "select" ? (now.options ?? []).map((o) => o.trim()) : []);
+    const lost = x.type === "select" ? (x.options ?? []).filter((o) => o.trim() && !kept.has(o.trim())) : [];
+    if (lost.length) extraChoices.push({ detail: now.label || x.label, choices: lost });
+  }
+  return { fields, choices, extras, extraChoices };
 }
+
+/** True when a save removes something saved entries may use. */
+export const hasRemovals = (r: SavedRemovals) => r.fields.length + r.choices.length + r.extras.length + r.extraChoices.length > 0;
 
 // ─── Choices and dependencies ────────────────────────────────────────────────
 
@@ -478,26 +520,23 @@ export function describeMethod(d: BuilderDraft, key: string): string {
 export type BuilderTab = "fields" | "choices" | "match" | "extra" | "calculation";
 export type BuilderIssue = { tab: BuilderTab; message: string };
 
-export function validateBuilder(d: BuilderDraft): BuilderIssue[] {
+export function validateBuilder(d: BuilderDraft, library: LibraryName[] = []): BuilderIssue[] {
   const issues: BuilderIssue[] = [];
   if (!d.name.trim()) issues.push({ tab: "fields", message: "Enter a form name." });
   for (const f of d.fields) {
-    const err = fieldNameError(d, f.pk_id, f.column_name);
+    const err = fieldNameError(d, f.pk_id, f.column_name, library);
     if (err) issues.push({ tab: "fields", message: `${fieldTitle(f.column_name) || "A field"}: ${err}` });
   }
   for (const f of d.fields.filter(isSelect)) {
-    const list = d.dependencies[f.column_name] ? null : (d.options[f.column_name] ?? []);
-    const ids = new Set<string>();
-    for (const o of list ?? []) {
-      if (!String(o.id).trim() || !o.label.trim()) {
-        issues.push({ tab: "choices", message: `${fieldTitle(f.column_name)}: every choice needs a label and a stored value.` });
+    const lists = d.dependencies[f.column_name]
+      ? Object.entries(d.dependentOptions[f.column_name] ?? {}).map(([key, list]) => ({ where: ` under ${plainPath(key)}`, list }))
+      : [{ where: "", list: d.options[f.column_name] ?? [] }];
+    for (const { where, list } of lists) {
+      const issue = choiceListIssue(list);
+      if (issue) {
+        issues.push({ tab: "choices", message: `${fieldTitle(f.column_name)}${where}: ${issue}` });
         break;
       }
-      if (ids.has(String(o.id))) {
-        issues.push({ tab: "choices", message: `${fieldTitle(f.column_name)}: stored value "${o.id}" is used twice.` });
-        break;
-      }
-      ids.add(String(o.id));
     }
   }
   const extra = extraFieldErrors(d.extraFields);
@@ -515,6 +554,16 @@ export function validateBuilder(d: BuilderDraft): BuilderIssue[] {
     }
   }
   return issues;
+}
+
+function choiceListIssue(list: DropdownOptionValue[]): string | null {
+  const ids = new Set<string>();
+  for (const o of list) {
+    if (!String(o.id).trim() || !o.label.trim()) return "every choice needs a label and a stored value.";
+    if (ids.has(String(o.id))) return `stored value "${o.id}" is used twice.`;
+    ids.add(String(o.id));
+  }
+  return null;
 }
 
 function describeKey(d: BuilderDraft, key: string): string {
@@ -541,7 +590,7 @@ export function toUpdatePayload(d: BuilderDraft): UpdatePayload {
   const column_options: Record<string, DropdownOptionValue[]> = {};
   for (const f of d.fields) {
     const list = d.options[f.column_name];
-    if (list) column_options[String(f.pk_id)] = list.map((o) => ({ id: typeof o.id === "string" ? o.id.trim() : o.id, label: o.label.trim() }));
+    if (list) column_options[String(f.pk_id)] = list.map((o) => ({ id: o.id, label: o.label.trim() }));
   }
   const renames = renameMap(d);
   return {

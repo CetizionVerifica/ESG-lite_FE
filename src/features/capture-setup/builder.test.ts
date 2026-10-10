@@ -6,6 +6,7 @@ import {
   describeMethod,
   draftFromConfig,
   extraFieldErrors,
+  fieldNameError,
   fieldTitle,
   generateMappings,
   isDirty,
@@ -162,7 +163,7 @@ describe("calculation", () => {
 describe("saved removals", () => {
   it("lists removed fields and saved choices, following renames", () => {
     const d0 = draftFromConfig(transport);
-    expect(savedRemovals(d0, d0)).toEqual({ fields: [], choices: [] });
+    expect(savedRemovals(d0, d0)).toEqual({ fields: [], choices: [], extras: [], extraChoices: [] });
     let d = renameField(d0, 1, "transport_mode");
     d = setOptions(d, "transport_mode", [{ id: "road", label: "Road (truck)" }]);
     d = setBranchChoices(d, "fuel", "Road|HGV", [{ id: "diesel", label: "Diesel" }]);
@@ -173,7 +174,45 @@ describe("saved removals", () => {
         { field: "Transport mode", labels: ["Rail"] },
         { field: "Fuel", labels: ["LNG"] },
       ],
+      extras: [],
+      extraChoices: [],
     });
+  });
+
+  it("counts dependent choices a changed parent hides, and saved extra details", () => {
+    const d0 = draftFromConfig({
+      ...transport,
+      extra_fields: [
+        { key: "po_number", label: "PO number", type: "text", required: false },
+        { key: "grade", label: "Grade", type: "select", required: false, options: ["A", "B"] },
+      ],
+    });
+    let d = setParent(d0, "fuel", null);
+    d = { ...d, extraFields: [{ ...d.extraFields[0], key: "po" }, { ...d.extraFields[1], options: ["A"] }] };
+    const r = savedRemovals(d0, d);
+    expect(r.choices).toEqual([{ field: "Fuel", labels: ["Diesel", "LNG"] }]);
+    expect(r.extras).toEqual(["PO number"]);
+    expect(r.extraChoices).toEqual([{ detail: "Grade", choices: ["B"] }]);
+  });
+});
+
+describe("field keys", () => {
+  it("rejects swaps, chains and library names for a changed key", () => {
+    const d0 = draftFromConfig(transport);
+    expect(fieldNameError(d0, 2, "vehicle")).toBeNull();
+    expect(fieldNameError(d0, 2, "mode")).toBe("Another field has this key.");
+    const removed = removeField(d0, 1);
+    expect(fieldNameError(removed, 2, "mode")).toMatch(/used this key/);
+    expect(fieldNameError(d0, 2, "truck", [{ pk_id: 99, column_name: "Truck" }])).toMatch(/library column/);
+    expect(fieldNameError(d0, 2, "truck", [{ pk_id: 2, column_name: "truck" }])).toBeNull();
+  });
+
+  it("checks dependent branch lists and keeps saved ids as they are", () => {
+    const d0 = draftFromConfig(transport);
+    const dup = setBranchChoices(d0, "vehicle", "Road", [{ id: "van", label: "Van" }, { id: "van", label: "Van 2" }]);
+    expect(validateBuilder(dup).map((i) => i.message)).toContain('Vehicle under Road: stored value "van" is used twice.');
+    const spaced = setOptions(d0, "mode", [{ id: " road ", label: "Road" }]);
+    expect(toUpdatePayload(spaced).column_options["1"]).toEqual([{ id: " road ", label: "Road" }]);
   });
 });
 

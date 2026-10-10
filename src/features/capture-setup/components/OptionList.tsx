@@ -37,6 +37,7 @@ export function OptionList({ value, onChange, title, help = null }: OptionListPr
       choices={drafts}
       title={title}
       help={help}
+      lockSavedLabels
       errors={rowErrors(drafts)}
       onChange={(next) => {
         setDrafts(next);

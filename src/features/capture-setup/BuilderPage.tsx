@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { FileQuestion, Save } from "lucide-react";
 import { Button, Callout, EmptyState, Modal, PageHeader, SkeletonText, TabPanel, Tabs, cn, panel, useToast, useUnsavedGuard } from "../../ui";
 import { useFactorNames, useForm, useLibrary, useSaveForm } from "./api";
-import { type BuilderDraft, type BuilderTab, type SourceConfig, draftFromConfig, isDirty, renameMap, savedRemovals, toUpdatePayload, validateBuilder } from "./builder";
+import { type BuilderDraft, type BuilderTab, type SourceConfig, draftFromConfig, hasRemovals, isDirty, renameMap, savedRemovals, toUpdatePayload, validateBuilder } from "./builder";
 import { CalcTab } from "./components/builder/CalcTab";
 import { ChoicesTab } from "./components/builder/ChoicesTab";
 import { ExtraTab } from "./components/builder/ExtraTab";
@@ -82,10 +82,13 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
 
   const dirty = isDirty(draft, initial);
   const blocker = useUnsavedGuard(dirty && !save.isPending);
-  const issues = validateBuilder(draft);
+  const issues = validateBuilder(draft, library.data ?? []);
   const renames = renameMap(draft);
   const removals = savedRemovals(initial, draft);
-  const removes = removals.fields.length + removals.choices.length > 0;
+  const removes = hasRemovals(removals);
+  const savedExtraKeys = useMemo(() => new Set(initial.extraFields.map((x) => x.key)), [initial]);
+  // Bumped on Discard so tabs with local text state start again from the saved form.
+  const [resetKey, setResetKey] = useState(0);
   const update = (fn: (d: BuilderDraft) => BuilderDraft) => setDraft((d) => fn(d));
 
   const doSave = () => {
@@ -119,7 +122,19 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
         title={draft.name.trim() || source.config_name}
         description={where || undefined}
         primaryAction={{ label: dirty ? "Save form" : "Saved", onClick: onSave, icon: <Save aria-hidden className="size-4" />, disabled: !dirty, loading: save.isPending }}
-        secondaryActions={dirty ? [{ label: "Discard changes", onClick: () => setDraft(initial) }] : []}
+        secondaryActions={
+          dirty
+            ? [
+                {
+                  label: "Discard changes",
+                  onClick: () => {
+                    setDraft(initial);
+                    setResetKey((k) => k + 1);
+                  },
+                },
+              ]
+            : []
+        }
       />
       {saveErr && (
         <Callout tone="warn" title="Not saved" onDismiss={() => setSaveErr(null)}>
@@ -140,7 +155,7 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
         </Callout>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]">
+      <div key={resetKey} className="grid gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]">
         <div className={cn(panel, "min-w-0 p-4")}>
           <Tabs<BuilderTab>
             label="Form builder"
@@ -166,7 +181,7 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
             />
           </TabPanel>
           <TabPanel idBase="builder" value="extra" current={tab}>
-            <ExtraTab draft={draft} onChange={update} />
+            <ExtraTab draft={draft} onChange={update} savedKeys={savedExtraKeys} />
           </TabPanel>
           <TabPanel idBase="builder" value="calculation" current={tab}>
             <CalcTab draft={draft} onChange={update} />
@@ -190,6 +205,8 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
               : null,
             removals.fields.length ? `Removed ${removals.fields.length === 1 ? "field" : "fields"}: ${removals.fields.join(", ")}.` : null,
             ...removals.choices.map((c) => `${c.field} no longer offers ${c.labels.map((l) => `"${l}"`).join(", ")}.`),
+            removals.extras.length ? `Extra details renamed or removed: ${removals.extras.join(", ")}.` : null,
+            ...removals.extraChoices.map((c) => `${c.detail} no longer offers ${c.choices.map((l) => `"${l}"`).join(", ")}.`),
             removes ? "Entries and factor matches that already use them keep the old values." : null,
           ]
             .filter(Boolean)
