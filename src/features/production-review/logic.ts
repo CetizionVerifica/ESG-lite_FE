@@ -1,9 +1,7 @@
 import type { ProductionData, ProductionDataStatus } from "../../services/productionDataService";
-import { formatNumber, isStatus } from "../../ui";
+import { MONTH_SHORT as MONTHS, formatNumber, isStatus, productionPeriodText as periodText } from "../../ui";
 
 export type ProductionRow = ProductionData;
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** "2025-01-31T00:00:00Z" → [2025, 0, 31], read as a calendar date (no time zone shift). */
 function ymd(value: string): [number, number, number] {
@@ -11,20 +9,9 @@ function ymd(value: string): [number, number, number] {
   return [y, m - 1, d];
 }
 
-/** "Jan 1 – Jan 31, 2025"; the start year is shown only when it differs. */
-export function periodText(start: string, end: string): string {
-  const [sy, sm, sd] = ymd(start);
-  const [ey, em, ed] = ymd(end);
-  const from = `${MONTHS[sm]} ${sd}${sy !== ey ? `, ${sy}` : ""}`;
-  return `${from} – ${MONTHS[em]} ${ed}, ${ey}`;
-}
-
-/** "Feb 1–15" or "Jan 20 – Feb 5" (overlap chips; year left out). */
-export function shortRange(start: string, end: string): string {
-  const [, sm, sd] = ymd(start);
-  const [, em, ed] = ymd(end);
-  return sm === em ? `${MONTHS[sm]} ${sd}–${ed}` : `${MONTHS[sm]} ${sd} – ${MONTHS[em]} ${ed}`;
-}
+// Shared with P05 (src/ui/productionRecords.ts).
+export { periodText };
+export { shortRange, overlapsById } from "../../ui";
 
 /** Month name for intensity text: "Sep 2025", or "Jan – Mar 2025" for longer periods. */
 export function monthsText(start: string, end: string): string {
@@ -40,31 +27,6 @@ export function asStatus(value: string | undefined): ProductionDataStatus | null
 
 export function effectiveStatus(row: ProductionRow, optimistic: ReadonlyMap<number, ProductionDataStatus>): ProductionDataStatus {
   return optimistic.get(row.production_id) ?? row.status;
-}
-
-/**
- * Other records of the same product on the same site whose dates overlap this
- * one. Rejected records don't count (they never reach intensity). Returns, per
- * record id, the overlapping records' date ranges.
- */
-export function overlapsById(rows: ProductionRow[]): Map<number, string[]> {
-  const out = new Map<number, string[]>();
-  const live = rows.filter((r) => r.status !== "rejected");
-  const groups = new Map<string, ProductionRow[]>();
-  for (const r of live) {
-    const key = `${r.site?.site_id}:${r.product?.product_id}`;
-    groups.set(key, [...(groups.get(key) ?? []), r]);
-  }
-  for (const group of groups.values()) {
-    for (const a of group)
-      for (const b of group) {
-        if (a.production_id === b.production_id) continue;
-        if (a.start_date.slice(0, 10) <= b.end_date.slice(0, 10) && b.start_date.slice(0, 10) <= a.end_date.slice(0, 10)) {
-          out.set(a.production_id, [...(out.get(a.production_id) ?? []), shortRange(b.start_date, b.end_date)]);
-        }
-      }
-  }
-  return out;
 }
 
 /** Search over product, site, submitter, unit and notes. */
