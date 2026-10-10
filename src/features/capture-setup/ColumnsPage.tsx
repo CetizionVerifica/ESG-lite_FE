@@ -4,7 +4,7 @@ import { Columns3, Plus, SearchX } from "lucide-react";
 import { Button, type Column, DataTable, EMPTY_FILTERS, EmptyState, FilterBar, type FilterDef, Modal, PageHeader, useFilterParams, useToast } from "../../ui";
 import { useDeleteColumn, useForms, useLibrary, useSaveColumn } from "./api";
 import { ColumnDrawer } from "./components/ColumnDrawer";
-import { COLUMN_TYPES, type ColumnDraft, type ColumnRow, type ColumnUse, blockingForms, buildColumnRows, columnUsage, errorMessage, matchesColumn } from "./logic";
+import { COLUMN_TYPES, type ColumnDraft, type ColumnRow, type ColumnUse, blockingForms, buildColumnRows, columnUsage, errorMessage, formPath, matchesColumn } from "./logic";
 
 const FILTER_KEYS = ["type"];
 const OPEN = "open";
@@ -201,8 +201,7 @@ export default function ColumnsPage() {
           <ul className="max-h-60 space-y-1 overflow-auto" data-testid="blocking-forms">
             {blocked.forms.map((f) => (
               <li key={f.id}>
-                {/* The form builder arrives in part 2; until then forms are edited on the legacy page. */}
-                <Link to="/capture/forms" className="text-sm text-brand-text underline-offset-2 hover:underline">
+                <Link to={formPath(f.id)} className="text-sm text-brand-text underline-offset-2 hover:underline">
                   {f.name}
                 </Link>
               </li>
