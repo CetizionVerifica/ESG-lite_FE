@@ -1,5 +1,5 @@
-import { type ReactNode, useEffect } from "react";
-import { Navigate, useLocation, useRouteError, useSearchParams } from "react-router-dom";
+import type { ReactNode } from "react";
+import { Navigate, useLocation, useRouteError } from "react-router-dom";
 import { RotateCw } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
@@ -73,21 +73,6 @@ export function LegacyRedirectRoute({ redirect }: { redirect: LegacyRedirect }) 
   const { search, hash } = useLocation();
   const { clientId } = useClientContext();
   return <Navigate to={resolveLegacyRedirect(redirect, search, hash, clientId)} replace />;
-}
-
-/** Picks a view by a query param, e.g. /setup/reference?tab=units. */
-export function QueryTabSwitch({ param, views, fallback }: { param: string; views: Record<string, ReactNode>; fallback: string }) {
-  const [params, setParams] = useSearchParams();
-  const value = params.get(param);
-  const valid = value !== null && value in views;
-  useEffect(() => {
-    if (!valid) {
-      const next = new URLSearchParams(params);
-      next.set(param, fallback);
-      setParams(next, { replace: true });
-    }
-  }, [valid, params, param, fallback, setParams]);
-  return <>{views[valid ? value : fallback]}</>;
 }
 
 /** Inline error for a page that crashed; the shell around it keeps working. */
