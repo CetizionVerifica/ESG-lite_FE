@@ -32,7 +32,7 @@ Every component: token colours only, keyboard accessible, has loading/empty/erro
 | `PoweredBy` | "Powered by PlanetPulse ESGLite" mark | Sign-in, report cover, email footer |
 
 ## Number formatting (one util, `src/ui/format.ts`)
-- Emissions: `tCO₂e` with thousands separators; < 1 t shows `kgCO₂e`; 1 decimal for intensity.
+- Emissions: `tCO₂e` with thousands separators; never converted to `kgCO₂e` (below 1 t: up to 3 decimals, e.g. `0.71 tCO₂e`); 1 decimal for intensity.
 - Deltas: `▼ 4.8%` good when lower; never red/green without the arrow.
 - Dates: `Sep 2025`, `CY 2025`, `FY 2025-26` (respects `year_type`).
 
