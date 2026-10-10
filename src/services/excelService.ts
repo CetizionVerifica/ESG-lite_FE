@@ -20,13 +20,21 @@ export interface PreviewRowsResponse {
 }
 
 export interface ImportResponse {
+  /** Rows saved, not counting FERA twins (newer AI service). */
   inserted: number;
   skipped: number;
   total_rows: number;
   upload_batch_id?: string | null;
-  /** Each skipped row: data row number (1 = first under the header), category, reason. Capped at 1000. */
+  /** Newer AI service only: each skipped row with its data row number (1 = first under the header), category and reason. Capped at 1000. */
   skipped_rows?: { row: number; emission_category: string | null; reason: string }[];
+  /** Rows outside the chosen categories, and FERA twins saved. */
+  not_selected?: number;
+  fera_inserted?: number;
 }
+
+/** Shown when the AI service refuses a second import of the same file (HTTP 409). */
+export const ALREADY_IMPORTED_MESSAGE =
+  "This file has already been imported, or is being imported now. Upload a new file to import more rows.";
 
 export async function uploadExcelGetHeaders(file: File): Promise<UploadHeadersResponse> {
   const formData = new FormData();
@@ -127,7 +135,9 @@ export async function importAllRows(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error?.detail || "Import failed.");
+    const detail = typeof error?.detail === "string" ? error.detail : null;
+    if (response.status === 409) throw new Error(detail || ALREADY_IMPORTED_MESSAGE);
+    throw new Error(detail || "Import failed.");
   }
 
   return response.json();
