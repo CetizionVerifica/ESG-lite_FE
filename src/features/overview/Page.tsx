@@ -33,7 +33,6 @@ import {
   attentionItems,
   categoryBars,
   defaultPeriod,
-  headerText,
   insightText,
   lastYearCaption,
   listLink,
@@ -96,7 +95,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
     return [...map].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sites, ctx.siteIds]);
 
-  const header = headerText(sites[0]?.company?.name ?? null, ctx.siteIds.length, sites.length, period, fyStartMonth);
+  const title = periodLabel(period, fyStartMonth);
   const chips = (
     <ContextChips
       chips={["site", "category", "period"]}
@@ -196,14 +195,14 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={header.title} context={chips} />
+      <PageHeader title={title} context={chips} />
 
       <KpiStrip items={kpis} loading={overview.isPending} error={err(overview)} onRetry={() => overview.refetch()} />
 
       {nothingApproved && (
         <Callout
           tone="info"
-          title={`Nothing approved for ${header.title} yet.`}
+          title={`Nothing approved for ${title} yet.`}
           action={
             k.pending_count > 0 ? (
               <Button size="sm" onClick={() => navigate(links.approvalsInPeriod)}>
