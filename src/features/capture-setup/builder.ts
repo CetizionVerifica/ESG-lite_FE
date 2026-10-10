@@ -170,6 +170,33 @@ export function fieldNameError(d: BuilderDraft, pkId: number, name: string): str
   return null;
 }
 
+export type SavedRemovals = { fields: string[]; choices: { field: string; labels: string[] }[] };
+
+/**
+ * What a save drops that saved entries may still use: fields taken off the
+ * form, and choices (plain or dependent) that existed when the builder opened.
+ */
+export function savedRemovals(initial: BuilderDraft, d: BuilderDraft): SavedRemovals {
+  const nameNow = new Map(d.fields.map((f) => [f.pk_id, f.column_name]));
+  const fields = initial.fields.filter((f) => !nameNow.has(f.pk_id)).map((f) => fieldTitle(f.column_name));
+  const choices: SavedRemovals["choices"] = [];
+  const missing = (before: DropdownOptionValue[] | undefined, after: DropdownOptionValue[] | undefined) => {
+    const kept = new Set((after ?? []).map((o) => String(o.id)));
+    return (before ?? []).filter((o) => !kept.has(String(o.id)));
+  };
+  for (const f of initial.fields) {
+    const now = nameNow.get(f.pk_id);
+    if (now === undefined) continue;
+    const gone = [...missing(initial.options[f.column_name], d.options[now])];
+    for (const [branch, list] of Object.entries(initial.dependentOptions[f.column_name] ?? {})) {
+      gone.push(...missing(list, d.dependentOptions[now]?.[branch]));
+    }
+    const labels = [...new Set(gone.map((o) => o.label))];
+    if (labels.length) choices.push({ field: fieldTitle(now), labels });
+  }
+  return { fields, choices };
+}
+
 // ─── Choices and dependencies ────────────────────────────────────────────────
 
 export const setOptions = (d: BuilderDraft, field: string, list: DropdownOptionValue[]): BuilderDraft => ({ ...d, options: { ...d.options, [field]: list } });

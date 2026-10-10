@@ -244,7 +244,13 @@ test("form builder: edits show in the preview and save in one request", async ({
   await expect(leave).toBeVisible();
   await leave.getByRole("button", { name: "Stay" }).click();
 
+  // Removing a saved choice asks before saving.
+  await page.locator('[data-branch="Boat"]').getByRole("button", { name: "Remove choice Ferry" }).click();
+
   await page.getByRole("button", { name: "Save form" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Save changes that affect saved entries?" });
+  await expect(confirm).toContainText('Vehicle no longer offers "Ferry".');
+  await confirm.getByRole("button", { name: "Save form" }).click();
   await expect(page.getByText('Form "Hidd transport" saved')).toBeVisible();
   const body = calls.find((c) => c.method === "PUT")?.body as Record<string, unknown>;
   expect(body.column_ids).toEqual([1, 2, 4, 102]);
@@ -254,6 +260,7 @@ test("form builder: edits show in the preview and save in one request", async ({
     { id: "hgv", label: "HGV" },
     { id: "pickup_truck", label: "Pickup truck" },
   ]);
+  expect((body.dependent_options as Record<string, Record<string, unknown[]>>).vehicle.Boat).toEqual([]);
   expect(body.rename_map).toBeUndefined();
   await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
 });

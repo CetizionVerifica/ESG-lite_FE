@@ -17,6 +17,9 @@ import {
   removeField,
   renameField,
   renameMap,
+  savedRemovals,
+  setBranchChoices,
+  setOptions,
   setCalcMode,
   setMethodField,
   setParent,
@@ -153,6 +156,24 @@ describe("calculation", () => {
 
   it("describes per-unit rules", () => {
     expect(describeMethod(draftFromConfig(transport), "tonne.km")).toBe("When the unit is tonne.km, multiply Weight × Distance, in tonne.km.");
+  });
+});
+
+describe("saved removals", () => {
+  it("lists removed fields and saved choices, following renames", () => {
+    const d0 = draftFromConfig(transport);
+    expect(savedRemovals(d0, d0)).toEqual({ fields: [], choices: [] });
+    let d = renameField(d0, 1, "transport_mode");
+    d = setOptions(d, "transport_mode", [{ id: "road", label: "Road (truck)" }]);
+    d = setBranchChoices(d, "fuel", "Road|HGV", [{ id: "diesel", label: "Diesel" }]);
+    d = removeField(d, 5);
+    expect(savedRemovals(d0, d)).toEqual({
+      fields: ["Weight"],
+      choices: [
+        { field: "Transport mode", labels: ["Rail"] },
+        { field: "Fuel", labels: ["LNG"] },
+      ],
+    });
   });
 });
 

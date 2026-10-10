@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { FileQuestion, Save } from "lucide-react";
 import { Button, Callout, EmptyState, Modal, PageHeader, SkeletonText, TabPanel, Tabs, cn, panel, useToast, useUnsavedGuard } from "../../ui";
 import { useFactorNames, useForm, useLibrary, useSaveForm } from "./api";
-import { type BuilderDraft, type BuilderTab, type SourceConfig, draftFromConfig, isDirty, renameMap, toUpdatePayload, validateBuilder } from "./builder";
+import { type BuilderDraft, type BuilderTab, type SourceConfig, draftFromConfig, isDirty, renameMap, savedRemovals, toUpdatePayload, validateBuilder } from "./builder";
 import { CalcTab } from "./components/builder/CalcTab";
 import { ChoicesTab } from "./components/builder/ChoicesTab";
 import { ExtraTab } from "./components/builder/ExtraTab";
@@ -84,6 +84,8 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
   const blocker = useUnsavedGuard(dirty && !save.isPending);
   const issues = validateBuilder(draft);
   const renames = renameMap(draft);
+  const removals = savedRemovals(initial, draft);
+  const removes = removals.fields.length + removals.choices.length > 0;
   const update = (fn: (d: BuilderDraft) => BuilderDraft) => setDraft((d) => fn(d));
 
   const doSave = () => {
@@ -104,7 +106,7 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
       setTab(issues[0].tab);
       return;
     }
-    if (Object.keys(renames).length) setConfirmRename(true);
+    if (Object.keys(renames).length || removes) setConfirmRename(true);
     else doSave();
   };
 
@@ -178,10 +180,20 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
       {confirmRename && (
         <Modal
           open
-          title="Change field keys?"
-          description={`${Object.entries(renames)
-            .map(([a, b]) => `"${a}" becomes "${b}"`)
-            .join(", ")}. Saved entries for ${where || "this form"} are updated to the new ${Object.keys(renames).length === 1 ? "key" : "keys"}.`}
+          tone={removes ? "destructive" : undefined}
+          title={removes ? "Save changes that affect saved entries?" : "Change field keys?"}
+          description={[
+            Object.keys(renames).length
+              ? `${Object.entries(renames)
+                  .map(([a, b]) => `"${a}" becomes "${b}"`)
+                  .join(", ")}. Saved entries for ${where || "this form"} are updated to the new ${Object.keys(renames).length === 1 ? "key" : "keys"}.`
+              : null,
+            removals.fields.length ? `Removed ${removals.fields.length === 1 ? "field" : "fields"}: ${removals.fields.join(", ")}.` : null,
+            ...removals.choices.map((c) => `${c.field} no longer offers ${c.labels.map((l) => `"${l}"`).join(", ")}.`),
+            removes ? "Entries and factor matches that already use them keep the old values." : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
           primaryAction={{
             label: "Save form",
             onClick: () => {
