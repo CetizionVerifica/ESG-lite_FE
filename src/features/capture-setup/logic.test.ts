@@ -10,7 +10,9 @@ import {
   calculationLabel,
   columnUsage,
   draftFrom,
+  choiceId,
   editChoice,
+  savedChoice,
   removedChoices,
   hasErrors,
   matchesColumn,
@@ -122,7 +124,9 @@ describe("columns library", () => {
     const saved = draftFrom({ ...fuelType, dropdown_options: [{ id: "diesel", label: "Diesel" }, { id: 7, label: "LPG" }] });
     const renamed = saved.choices.map((c) => editChoice(c, { label: `${c.label} (road)` }));
     expect(renamed.map((c) => c.value)).toEqual(["diesel", "7"]);
-    // A saved stored value is read-only.
+    // A saved stored value is read-only, and goes back exactly as stored.
+    expect(choiceId(savedChoice({ id: " road ", label: "Road" }))).toBe(" road ");
+    expect(editChoice(savedChoice({ id: "x", label: "X" }), { label: "Y" }, true).label).toBe("X");
     expect(editChoice(renamed[0], { value: "dsl" }).value).toBe("diesel");
     expect(toPayload({ ...saved, choices: renamed }).dropdown_options).toEqual([
       { id: "diesel", label: "Diesel (road)" },
