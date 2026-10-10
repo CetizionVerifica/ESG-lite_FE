@@ -1,23 +1,17 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Bell, CheckCircle, Clock, RotateCw, XCircle } from "lucide-react";
+import { Bell, Check, RotateCw } from "lucide-react";
 import { useNotifications } from "../../../context/NotificationContext";
 import type { NotificationItem } from "../../../services/notificationService";
+import { NotificationIcon, timeAgo, useToast } from "../../../ui";
 import { useDismiss } from "../hooks/useDismiss";
 import { useLatestNotifications, useMarkRead } from "../hooks/useShellQueries";
-import { timeAgo } from "../timeAgo";
 import { chromeIconButton, focusRing } from "./styles";
 
-// Status colours are fixed tokens; the icon carries the meaning too.
-function typeIcon(type: string) {
-  if (type.includes("APPROVED")) return <CheckCircle size={16} aria-hidden className="text-(--t-good)" />;
-  if (type.includes("REJECTED")) return <XCircle size={16} aria-hidden className="text-(--t-bad)" />;
-  if (type.includes("REMINDER")) return <Clock size={16} aria-hidden className="text-(--t-warn)" />;
-  if (type.includes("ESCALATION")) return <AlertTriangle size={16} aria-hidden className="text-(--t-warn)" />;
-  return <Bell size={16} aria-hidden className="text-(--t-info)" />;
-}
-
-/** Bell + popover with the last 8 notifications. Badge count comes from NotificationContext. */
+/**
+ * Bell + popover with the last 8 unread notifications (mark one or all, "See all"),
+ * and a 5s toast when a new one arrives. Badge count comes from NotificationContext.
+ */
 export default function BellPopover() {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -28,6 +22,16 @@ export default function BellPopover() {
   const latest = useLatestNotifications(open);
   const markRead = useMarkRead();
   const { refetch } = latest;
+  const { toast } = useToast();
+  const toasted = useRef<number | null>(null);
+
+  // New-notification toast, once per notification, as today's top bar does.
+  useEffect(() => {
+    if (!latestNotification || toasted.current === latestNotification.id) return;
+    toasted.current = latestNotification.id;
+    const { title, message, link } = latestNotification;
+    toast({ title, description: message, duration: 5000, action: link ? { label: "Open", onClick: () => navigate(link) } : undefined });
+  }, [latestNotification, toast, navigate]);
 
   const close = (refocus: boolean) => {
     setOpen(false);
@@ -111,13 +115,13 @@ export default function BellPopover() {
             ) : (
               <ul>
                 {latest.data.map((n) => (
-                  <li key={n.id}>
+                  <li key={n.id} className={`flex items-start ${n.read ? "" : "bg-(--t-info-soft)"}`}>
                     <button
                       type="button"
                       onClick={() => openItem(n)}
-                      className={`flex w-full gap-3 px-4 py-3 text-left hover:bg-(--t-tint) focus-visible:bg-(--t-tint) ${focusRing} ${n.read ? "" : "bg-(--t-info-soft)"}`}
+                      className={`flex min-w-0 flex-1 gap-3 py-3 pl-4 pr-2 text-left hover:bg-(--t-tint) focus-visible:bg-(--t-tint) ${focusRing}`}
                     >
-                      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-(--r-md) bg-(--t-panel)">{typeIcon(n.type)}</span>
+                      <NotificationIcon type={n.type} tile className="mt-0.5" />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
                           <span className="truncate text-[13px] font-semibold">{n.title}</span>
@@ -127,6 +131,18 @@ export default function BellPopover() {
                         <span className="mt-1 block text-[11px] text-(--t-muted)">{timeAgo(n.created_at)}</span>
                       </span>
                     </button>
+                    {!n.read && (
+                      <button
+                        type="button"
+                        aria-label={`Mark "${n.title}" as read`}
+                        title="Mark as read"
+                        disabled={markRead.isPending}
+                        onClick={() => markRead.mutate(n.id)}
+                        className={`mr-2 mt-3 rounded-(--r-sm) p-1.5 text-(--t-muted) hover:bg-(--t-tint) hover:text-(--t-ink) ${focusRing}`}
+                      >
+                        <Check size={16} aria-hidden />
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

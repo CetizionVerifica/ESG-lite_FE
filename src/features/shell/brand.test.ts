@@ -4,7 +4,7 @@ import { PLATFORM_BRAND, brandForUser, pickLogo } from "./brand";
 import { previewVars } from "./hooks/usePreviewStyle";
 import { initials, shellUser } from "./account";
 import { nextIndex } from "./menuKeys";
-import { timeAgo } from "./timeAgo";
+import { timeAgo } from "../../ui/timeAgo";
 
 describe("logo slot", () => {
   const brand = { name: "Midal Cables", logoUrl: "light.png", logoOnDarkUrl: "dark.png" };
