@@ -1,7 +1,7 @@
 import { pdf } from "@react-pdf/renderer";
 import type { ThemePack } from "../../../theme";
 import { pdfTheme } from "../../../theme";
-import { getBrand } from "../../../services/brandService";
+import { getBrand } from "../api";
 import type { EdeReportResponse } from "../../../services/reportService";
 import type { ReportPeriod } from "../../../ui";
 import { edeFigures, pdfFileName, reportSites, siteColorIndex } from "../logic";
