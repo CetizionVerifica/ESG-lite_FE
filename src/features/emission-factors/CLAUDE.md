@@ -22,3 +22,11 @@ Stepper in a wide drawer:
 
 ## Rules
 Category filter on the list shows only the selected site's categories (consistent with forms). Single delete has confirm; success toasts (today commented out). Factor "year" explainer: "Entries for 2025 use 2024 factors" (matches P03 rule).
+
+## Status (P22 ships in 3 parts)
+- **1/3 (#108):** Factors tab (server pagination 50, Client/Site/Category/Year filters in the URL, bulk delete), add/edit drawer, single delete with confirm, Imports tab. Needs ESG-lite #73 (`company_id` and `year` on `GET /admin/emission-factors`, `company_id` on `/batches`) merged first.
+- Imports tab shows two lists, because the two records aren't linked: **Imported factors** (backend `upload_batch_id` groups; "Delete batch" removes their factors) and **Uploaded sheets** (AI service `emission_factor_uploads`, read-only, file opens in a new tab). Deleting sheet records isn't offered.
+- Client filter narrows Site; Site narrows Category; changing one clears the ones below it. A chosen site replaces the client in the query.
+- Year options run from next year back to 2015 (no distinct-years endpoint).
+- **2/3:** Import factors stepper, simple-sheet path (browser parse → preview → result).
+- **3/3:** AI read path (check layout, map to categories), old page, `EmissionFactorList.tsx` and `SmartUploadModal.tsx` deleted.
