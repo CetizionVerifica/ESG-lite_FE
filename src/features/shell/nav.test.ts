@@ -21,7 +21,7 @@ describe("nav labels (final copy from the F2 spec)", () => {
       "Console",
       "Clients ▾ (Companies, Onboard client, Brand themes)",
       "Setup ▾ (Sites, Users, Countries, Categories, Units, Products)",
-      "Factors ▾ (Emission factors, Category mappings, Thresholds)",
+      "Factors ▾ (Emission factors, Category mappings, Thresholds, Material factors)",
       "Capture ▾ (Columns, Data-entry forms, Bulk upload)",
       "Reports ▾ (GHG, EDE)",
     ]));
@@ -49,5 +49,10 @@ describe("isActiveLink", () => {
     expect(isActiveLink("/clients", "/clients/new", "")).toBe(false);
     expect(isActiveLink("/clients", "/clients/3/brand", "")).toBe(false);
     expect(isActiveLink("/clients", "/clients/3", "")).toBe(true);
+  });
+  it("lights only the matching Factors page", () => {
+    expect(isActiveLink("/factors", "/factors", "")).toBe(true);
+    expect(isActiveLink("/factors", "/factors/materials", "")).toBe(false);
+    expect(isActiveLink("/factors/materials", "/factors/materials", "")).toBe(true);
   });
 });

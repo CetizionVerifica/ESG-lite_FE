@@ -60,6 +60,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Emission factors", "/factors"),
       link("Category mappings", "/factors/mappings"),
       link("Thresholds", "/factors/thresholds"),
+      link("Material factors", "/factors/materials"),
     ]),
     group("Capture", [
       link("Columns", "/capture/columns"),
@@ -110,9 +111,10 @@ export function isActiveLink(to: string, pathname: string, search: string): bool
   return matches;
 }
 
-// "/clients" must not light up on "/clients/new" or a client's brand page,
-// which have their own nav items.
+// "/clients" must not light up on "/clients/new" or a client's brand page, and
+// "/factors" not on the other Factors pages; they have their own nav items.
 function hasMoreSpecificSibling(path: string, pathname: string): boolean {
+  if (path === "/factors") return true;
   return path === "/clients" && (pathname === "/clients/new" || /^\/clients\/[^/]+\/brand$/.test(pathname));
 }
 

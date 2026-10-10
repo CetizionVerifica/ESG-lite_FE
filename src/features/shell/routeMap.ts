@@ -74,6 +74,8 @@ export const SHELL_ROUTES = [
   { id: "products", path: "/setup/products", title: "Products", crumb: ["Setup", "Products"], roles: ["Superadmin"], spec: "P25" },
   { id: "emission-factors", path: "/factors", title: "Emission factors", crumb: ["Factors", "Emission factors"], roles: ["Superadmin"], spec: "P22" },
   { id: "category-mappings", path: "/factors/mappings", title: "Category mappings", crumb: ["Factors", "Category mappings"], roles: ["Superadmin"], spec: "P23" },
+  // Managers see the global library and add their own (supplier) factors; no nav item, PCF pages link here.
+  { id: "material-factors", path: "/factors/materials", title: "Material factors", crumb: ["Factors", "Material factors"], roles: ["Manager", "Superadmin"], spec: "C04" },
   { id: "thresholds", path: "/factors/thresholds", title: "Thresholds", crumb: ["Factors", "Thresholds"], roles: ["Superadmin"], spec: "P26" },
   { id: "capture-columns", path: "/capture/columns", title: "Columns", crumb: ["Capture", "Columns"], roles: ["Superadmin"], spec: "P24" },
   { id: "capture-forms", path: "/capture/forms", title: "Data-entry forms", crumb: ["Capture", "Data-entry forms"], roles: ["Superadmin"], spec: "P24" },
