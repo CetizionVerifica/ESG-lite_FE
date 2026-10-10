@@ -25,6 +25,7 @@ const SITES: Site[] = [
   { site_id: 1, name: "Hidd", company: COMPANIES[0] },
   { site_id: 2, name: "Askar", company: COMPANIES[0] },
   { site_id: 3, name: "Pune", company: COMPANIES[1] },
+  { site_id: 4, name: "Nashik", company: COMPANIES[1] },
 ];
 const UNITS = [{ unit_id: 1, unit_name: "kWh", site: { site_id: 1 }, category: { category_id: 1 } }];
 
@@ -194,6 +195,12 @@ test("a superadmin sees recent production, moves a product with a warning and de
   await expect(drawer.getByText("100.50")).toBeVisible();
 
   await drawer.getByRole("tab", { name: /Details/ }).click();
+  // Only the product's own client's sites are offered.
+  const box = page.getByRole("combobox", { name: "Site" });
+  await box.click();
+  await box.fill("Pun");
+  await expect(page.getByRole("option", { name: /Pune/ })).toHaveCount(0);
+  await box.press("Escape");
   await pick(page, "Site", "Askar · Midal Cables");
   await expect(drawer.getByText("Its 3 production records move with it.", { exact: false })).toBeVisible();
   await drawer.getByRole("button", { name: "Save" }).click();
@@ -213,4 +220,16 @@ test("a superadmin sees recent production, moves a product with a warning and de
   await expect(page.getByText('Product "Aluminium rod" deleted')).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ method: "DELETE", path: expect.stringMatching(/\/admin\/products\/1$/) });
   await expect(productsTable(page).getByRole("row")).toHaveCount(2);
+});
+
+test("moving a product with no records says nothing else changes", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/setup/products?open=2");
+  const drawer = page.getByRole("dialog", { name: "Biscuits" });
+  await pick(page, "Site", "Nashik · Gulf Foods");
+  await expect(drawer.getByText("It has no production records yet, so nothing else changes.")).toBeVisible();
+  await drawer.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText('Product "Biscuits" saved')).toBeVisible();
+  await expect(page.getByText("moved with it")).toHaveCount(0);
+  expect(calls.at(-1)).toEqual({ method: "PUT", path: expect.stringMatching(/\/admin\/products\/2$/), body: { site_id: 4 } });
 });

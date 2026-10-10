@@ -45,6 +45,17 @@ export function siteOptions(sites: SiteRef[], clientIds: number[]): { value: str
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
+/**
+ * Sites the drawer's picker offers: every site for a new product; for an
+ * existing one only its own client's sites, since the backend refuses a move
+ * to another client. A product whose client isn't known keeps every site.
+ */
+export function pickableSites(sites: SiteRef[], product: Product | null): SiteRef[] {
+  const client = product?.site?.company?.company_id;
+  if (!product || !client) return sites;
+  return sites.filter((s) => s.company?.company_id === client || s.site_id === product.site?.site_id);
+}
+
 /** "Hidd · Midal Cables" so same-named sites of two clients can be told apart. */
 export function siteLabel(s: SiteRef): string {
   return s.company?.name ? `${s.name} · ${s.company.name}` : s.name;
@@ -110,7 +121,8 @@ export function movesSite(d: ProductDraft, p: Product | null): boolean {
 
 /** True when the default unit changes on a product that already has records (they keep their own units). */
 export function changesUnitWithRecords(d: ProductDraft, p: Product | null): boolean {
-  return !!p && (p.production_count ?? 0) > 0 && d.unit.trim().toLowerCase() !== (p.unit ?? "").trim().toLowerCase();
+  // An unknown count (backend without the counts) may hide records, so it counts as some.
+  return !!p && (p.production_count == null || p.production_count > 0) && d.unit.trim().toLowerCase() !== (p.unit ?? "").trim().toLowerCase();
 }
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;

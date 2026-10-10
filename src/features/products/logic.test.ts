@@ -9,6 +9,7 @@ import {
   isDirty,
   matchesFilters,
   movesSite,
+  pickableSites,
   quantity,
   recordStatus,
   siteLabel,
@@ -63,6 +64,12 @@ describe("site options and labels", () => {
       { value: "3", label: "Pune" },
     ]);
     expect(siteOptions([hidd, pune, askar], [2]).map((o) => o.label)).toEqual(["Pune"]);
+  });
+  it("offers an existing product only its own client's sites", () => {
+    expect(pickableSites([hidd, askar, pune], null)).toEqual([hidd, askar, pune]);
+    expect(pickableSites([hidd, askar, pune], product)).toEqual([hidd, askar]);
+    const noClient = { ...product, site: { site_id: 1, name: "Hidd" } };
+    expect(pickableSites([hidd, askar, pune], noClient)).toEqual([hidd, askar, pune]);
   });
   it("names the client next to the site", () => {
     expect(siteLabel(hidd)).toBe("Hidd · Midal Cables");
@@ -120,6 +127,8 @@ describe("form", () => {
     expect(changesUnitWithRecords({ ...d, unit: "TONNES" }, product)).toBe(false);
     expect(changesUnitWithRecords({ ...d, unit: "kg" }, product)).toBe(true);
     expect(changesUnitWithRecords({ ...d, unit: "kg" }, { ...product, production_count: 0 })).toBe(false);
+    // A backend without the counts may hide records.
+    expect(changesUnitWithRecords({ ...d, unit: "kg" }, { ...product, production_count: undefined })).toBe(true);
   });
 });
 

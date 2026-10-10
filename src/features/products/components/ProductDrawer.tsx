@@ -28,6 +28,7 @@ import {
   emptyDraft,
   isDirty,
   movesSite,
+  pickableSites,
   quantity,
   recordCount,
   recordStatus,
@@ -205,11 +206,15 @@ function DetailsTab({
   const listId = useId();
   const suggestions = useMemo(() => unitSuggestions(products, units, draft.site_id), [products, units, draft.site_id]);
   const siteOptions = useMemo(
-    () => [...sites.data].sort((a, b) => siteLabel(a).localeCompare(siteLabel(b))).map((s) => ({ value: s.site_id, label: siteLabel(s) })),
-    [sites.data],
+    () =>
+      pickableSites(sites.data, row)
+        .sort((a, b) => siteLabel(a).localeCompare(siteLabel(b)))
+        .map((s) => ({ value: s.site_id, label: siteLabel(s) })),
+    [sites.data, row],
   );
   const target = sites.data.find((s) => s.site_id === draft.site_id);
-  const records = row?.production_count ?? 0;
+  // null: the backend didn't send a count, so records may exist.
+  const records = row?.production_count ?? null;
 
   return (
     <div className="grid gap-4">
@@ -223,17 +228,21 @@ function DetailsTab({
         options={siteOptions}
         loading={sites.loading}
         error={error("site_id")}
-        help="The site whose output this is. Its production counts toward that site's emission intensity."
+        help={
+          row
+            ? "The site whose output this is. A product can move only to another site of the same client."
+            : "The site whose output this is. Its production counts toward that site's emission intensity."
+        }
       />
       {movesSite(draft, row) && (
         <Callout tone="warn" title={`Moving this product to ${target?.name ?? "another site"}`}>
-          {records > 0 ? (
-            <>
-              Its {recordCount(records)} move with it. Emission intensity and reports change for both {row!.site?.name ?? "the old site"} and{" "}
-              {target?.name ?? "the new site"}, and product footprints that used these records are marked out of date.
-            </>
-          ) : (
+          {records === 0 ? (
             <>It has no production records yet, so nothing else changes.</>
+          ) : (
+            <>
+              {records === null ? "Its production records" : `Its ${recordCount(records)}`} move with it. Emission intensity and reports change for both{" "}
+              {row!.site?.name ?? "the old site"} and {target?.name ?? "the new site"}, and product footprints that used these records are marked out of date.
+            </>
           )}
         </Callout>
       )}

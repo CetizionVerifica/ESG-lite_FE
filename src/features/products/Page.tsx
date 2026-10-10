@@ -43,12 +43,10 @@ export default function ProductsPage() {
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   const all = useMemo(() => products.data ?? [], [products.data]);
-  const clientIds = toIds(filters.filters.client);
-  const siteIds = toIds(filters.filters.site);
-  const rows = useMemo(
-    () => all.filter((p) => matchesFilters(p, { q: filters.q, clientIds: toIds(filters.filters.client), siteIds: toIds(filters.filters.site) })),
-    [all, filters],
-  );
+  // Memoised on the URL values so the row filter below only re-runs when they change.
+  const clientIds = useMemo(() => toIds(filters.filters.client), [filters.filters.client]);
+  const siteIds = useMemo(() => toIds(filters.filters.site), [filters.filters.site]);
+  const rows = useMemo(() => all.filter((p) => matchesFilters(p, { q: filters.q, clientIds, siteIds })), [all, filters.q, clientIds, siteIds]);
 
   // The drawer lives in the URL (?open=new | ?open=<product id>) so a product can be linked to.
   const openParam = params.get(OPEN);
@@ -108,7 +106,7 @@ export default function ProductsPage() {
     () => (companies.data ?? []).map((c) => ({ value: String(c.company_id), label: c.name })).sort((a, b) => a.label.localeCompare(b.label)),
     [companies.data],
   );
-  const siteFilterOptions = useMemo(() => siteOptions(sites.data ?? [], toIds(filters.filters.client)), [sites.data, filters.filters.client]);
+  const siteFilterOptions = useMemo(() => siteOptions(sites.data ?? [], clientIds), [sites.data, clientIds]);
   const filterDefs: FilterDef[] = [
     { key: "client", label: "Client", multiple: false, options: companyOptions },
     { key: "site", label: "Site", options: siteFilterOptions },
