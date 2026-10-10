@@ -1,5 +1,6 @@
 import { buildTheme, contrastReport, packFromBrand } from "../../theme";
 import type { Brand } from "../../services/brandService";
+import type { ConsoleActivity, ConsoleSummary } from "../../services/consoleService";
 
 // Shapes of the admin list endpoints, trimmed to what the Console reads.
 export interface ConsoleCompany {
@@ -80,6 +81,8 @@ export interface ClientRow {
   completeness: number | null;
   gaps: Gap[];
   brand: Brand | undefined;
+  /** Entries entered this month and pending; undefined when the summary didn't load. */
+  month?: { entries: number; pending: number };
 }
 
 export interface ConsoleData {
@@ -228,9 +231,45 @@ export function setupGaps(rows: ClientRow[]): Gap[] {
 
 export interface Activity {
   id: string;
+  kind: ConsoleActivity["kind"];
   when: string;
   title: string;
   detail: string;
+}
+
+/** Entries this month per client from the summary, onto the client rows. */
+export function withMonth(rows: ClientRow[], summary: ConsoleSummary | undefined): ClientRow[] {
+  if (!summary) return rows;
+  const byId = new Map(summary.clients.map((c) => [c.company_id, c]));
+  return rows.map((r) => {
+    const c = byId.get(r.id);
+    return { ...r, month: { entries: c?.entries_this_month ?? 0, pending: c?.pending_this_month ?? 0 } };
+  });
+}
+
+/** One upload batch can cover several sites and categories, so the batch id alone repeats. */
+const batchKey = (prefix: string, a: ConsoleActivity, i: number) =>
+  a.batch_id ? `${prefix}-${a.batch_id}-${a.site_id ?? ""}-${a.category_name ?? ""}` : `${prefix}-${i}`;
+
+/** The summary's activity (bulk uploads, factor uploads, onboarding) as list items. */
+export function summaryActivity(items: ConsoleActivity[]): Activity[] {
+  return items.map((a, i) => {
+    const where = [a.company_name, a.site_name, a.category_name].filter(Boolean).join(" · ");
+    if (a.kind === "onboarding") {
+      return { id: `onboarding-${a.company_id ?? i}`, kind: a.kind, when: a.at, title: `Client onboarded · ${a.company_name ?? "Unnamed"}`, detail: "New client" };
+    }
+    if (a.kind === "bulk_upload") {
+      const pending = a.pending ? `, ${a.pending} pending` : "";
+      return {
+        id: batchKey("bulk", a, i),
+        kind: a.kind,
+        when: a.at,
+        title: `Bulk upload · ${plural(a.rows ?? 0, "entry", "entries")}${pending}`,
+        detail: [where, a.by].filter(Boolean).join(" · "),
+      };
+    }
+    return { id: batchKey("factors", a, i), kind: a.kind, when: a.at, title: `Factor upload · ${plural(a.rows ?? 0, "factor")}`, detail: where };
+  });
 }
 
 /** Recent factor uploads, newest first, with the client each site belongs to. */
@@ -240,7 +279,8 @@ export function recentActivity(batches: FactorBatch[], sites: ConsoleSite[], lim
     .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())
     .slice(0, limit)
     .map((b) => ({
-      id: b.upload_batch_id,
+      id: `${b.upload_batch_id}-${b.site_id}-${b.category_id}`,
+      kind: "factor_upload" as const,
       when: b.uploaded_at,
       title: `Factor upload · ${plural(b.count, "factor")}`,
       detail: [clientOf.get(b.site_id), b.site_name, b.category_name].filter(Boolean).join(" · "),

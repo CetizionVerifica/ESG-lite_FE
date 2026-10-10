@@ -11,6 +11,7 @@ import {
   useFactorTotal,
   useFactorYears,
   useSites,
+  useSummary,
   useThresholds,
   useUnits,
   useUsers,
@@ -18,7 +19,7 @@ import {
 import { RecentActivity } from "./components/RecentActivity";
 import { SetupGaps } from "./components/SetupGaps";
 import { clientColumns } from "./components/columns";
-import { type ClientRow, buildClientRows, recentActivity, setupGaps } from "./logic";
+import { type ClientRow, buildClientRows, recentActivity, setupGaps, summaryActivity, withMonth } from "./logic";
 
 /** P16 `/console`: which clients are healthy, which are stuck in setup, and what needs PlanetPulse staff today. */
 export default function ConsolePage() {
@@ -29,7 +30,9 @@ export default function ConsolePage() {
   const configs = useColumnConfigs();
   const units = useUnits();
   const thresholds = useThresholds();
-  const batches = useFactorBatches();
+  const summary = useSummary();
+  // An older backend has no /admin/console: fall back to factor uploads only.
+  const batches = useFactorBatches(summary.isError);
   const factorTotal = useFactorTotal();
 
   const siteIds = useMemo(() => (sites.data ?? []).map((s) => s.site_id), [sites.data]);
@@ -57,18 +60,23 @@ export default function ConsolePage() {
           }),
     [loading, coreError, companies.data, sites.data, users.data, configs.data, units.data, thresholds.data, factorYears.years, brands.brands],
   );
+  const tableRows = useMemo(() => withMonth(rows, summary.data), [rows, summary.data]);
   const gaps = useMemo(() => setupGaps(rows), [rows]);
-  const activity = useMemo(() => recentActivity(batches.data ?? [], sites.data ?? []), [batches.data, sites.data]);
-  const columns = useMemo(() => clientColumns(), []);
+  const activity = useMemo(
+    () => (summary.data ? summaryActivity(summary.data.activity) : recentActivity(batches.data ?? [], sites.data ?? [])),
+    [summary.data, batches.data, sites.data],
+  );
+  const columns = useMemo(() => clientColumns({ month: !!summary.data }), [summary.data]);
 
   const activeClients = (companies.data ?? []).filter((c) => c.status !== false).length;
   const kpis: Kpi[] = [
     { label: "Clients (active)", value: companies.data ? activeClients : null, primary: true, hint: companies.data ? `${companies.data.length} in total` : undefined },
     { label: "Sites", value: sites.data?.length },
     { label: "Users", value: users.data ? users.data.filter((u) => u.role !== "Superadmin").length : null },
-    { label: "Emission factors", value: factorTotal.data ?? null },
-    // No admin endpoint counts entries across clients yet (proposed GET /admin/console).
-    { label: "Entries this month", value: null, hint: "Not available yet" },
+    { label: "Emission factors", value: summary.data?.totals.emission_factors ?? factorTotal.data ?? null },
+    summary.data
+      ? { label: "Entries this month", value: summary.data.totals.entries_this_month, hint: `${summary.data.totals.pending_entries} pending review` }
+      : { label: "Entries this month", value: null, hint: summary.isPending ? undefined : "Couldn't load" },
   ];
   const retryCore = () => core.forEach((q) => q.error && void q.refetch());
   const partial = factorYears.failed + brands.failed;
@@ -95,7 +103,7 @@ export default function ConsolePage() {
         <div className="min-w-0 lg:col-span-2">
           <DataTable<ClientRow>
             label="Clients"
-            rows={rows}
+            rows={tableRows}
             columns={columns}
             getRowId={(r) => r.id}
             rowLabel={(r) => r.name}
@@ -119,7 +127,12 @@ export default function ConsolePage() {
         </div>
         <div className="min-w-0 space-y-4">
           <SetupGaps gaps={gaps} loading={loading && !coreError} error={!!coreError} partial={partial > 0} onRetry={retryCore} />
-          <RecentActivity items={activity} loading={batches.isPending} error={!!batches.error} onRetry={() => void batches.refetch()} />
+          <RecentActivity
+            items={activity}
+            loading={summary.isPending || (summary.isError && batches.isPending)}
+            error={summary.isError && !!batches.error}
+            onRetry={() => void (summary.isError ? Promise.all([summary.refetch(), batches.refetch()]) : summary.refetch())}
+          />
         </div>
       </div>
     </div>

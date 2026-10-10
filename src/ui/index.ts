@@ -60,3 +60,5 @@ export { typedNameMatches, withoutParams } from "./setupList";
 export * from "./reportFilterModel";
 export { ReportFilters, type ReportFiltersProps } from "./ReportFilters";
 export { useDebounced } from "./hooks/useDebounced";
+export { productionPeriodText, shortRange, rangesOverlap, overlapsById, overlapsFor } from "./productionRecords";
+export { OverlapChip } from "./OverlapChip";
