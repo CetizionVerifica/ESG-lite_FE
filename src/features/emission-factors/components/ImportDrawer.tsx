@@ -1,61 +1,49 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { CheckCircle2, FileSpreadsheet, Sparkles } from "lucide-react";
-import {
-  Badge,
-  Button,
-  Callout,
-  type Column,
-  DataTable,
-  Drawer,
-  EmptyState,
-  FileDrop,
-  type FileDropItem,
-  Modal,
-  Select,
-  Stepper,
-  TextField,
-  cn,
-  focusRing,
-  inputBase,
-} from "../../../ui";
-import { errorMessage, useImportFactors } from "../api";
+import { Button, Drawer, Modal, Stepper } from "../../../ui";
+import { errorMessage, useImportFactors, useReAnalyze, useReadSheet } from "../api";
 import {
   type CategoryMap,
+  type Columns,
   type ImportRow,
   type JobResult,
-  SHEET_ACCEPT,
-  SHEET_MAX,
+  type ParseResult,
   type Target,
+  detectedColumns,
   distinctYears,
-  formTargets,
+  groupsOf,
+  initialMap,
+  needsValueColumn,
   parseSimpleRows,
   planUpload,
   previewRows,
   rowProblem,
-  totals,
+  rowsFromParse,
+  schemaOverride,
 } from "../importLogic";
 import { type Category, type Company, type Site, categoriesFor } from "../logic";
+import { LayoutStep, MapStep, type Mode, PreviewStep, ResultStep, UploadStep } from "./ImportSteps";
 
-type Mode = "simple" | "ai";
-const STEPS = [
-  { id: "upload", label: "Upload", description: "Choose the sheet" },
-  { id: "preview", label: "Preview", description: "Check and edit rows" },
-  { id: "result", label: "Result", description: "What was saved" },
-];
+type StepId = "upload" | "layout" | "map" | "preview" | "result";
+const STEP_LABEL: Record<StepId, { label: string; description: string }> = {
+  upload: { label: "Upload", description: "Target and sheet" },
+  layout: { label: "Check layout", description: "Sheet and columns" },
+  map: { label: "Map to categories", description: "One per group" },
+  preview: { label: "Preview", description: "Check and edit rows" },
+  result: { label: "Result", description: "What was saved" },
+};
+const FLOW: Record<Mode, StepId[]> = { simple: ["upload", "preview", "result"], ai: ["upload", "layout", "map", "preview", "result"] };
 
 type Props = {
-  open: boolean;
   onClose: () => void;
   sites: Site[];
   companies: Company[];
   categories: Category[];
-  /** Client and site from the page filters. */
+  /** Client, site and category from the page filters. */
   defaults: { clientId: number | null; siteId: number | null; categoryId: number | null };
 };
 
-/** Reads the first sheet of a workbook into header-keyed rows. */
-async function readSheet(file: File): Promise<Record<string, unknown>[]> {
+/** First sheet of a workbook as header-keyed rows (simple sheets only). */
+async function readFirstSheet(file: File): Promise<Record<string, unknown>[]> {
   const XLSX = await import("xlsx");
   const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
   const first = wb.SheetNames[0];
@@ -63,25 +51,33 @@ async function readSheet(file: File): Promise<Record<string, unknown>[]> {
 }
 
 /**
- * Import factors: Upload → Preview → Result. Simple sheets are read in the
- * browser; the AI path (Check layout, Map to categories) arrives in P22 3/3.
- * Mount it fresh for each import so it starts empty.
+ * Import factors, one entry point for every kind of sheet. Simple sheets:
+ * Upload → Preview → Result, read in the browser. Anything else: Upload →
+ * Check layout → Map to categories → Preview → Result, read by the AI
+ * service. Mount it fresh for each import.
  */
-export function ImportDrawer({ open, onClose, sites, companies, categories, defaults }: Props) {
-  const [step, setStep] = useState(0);
+export function ImportDrawer({ onClose, sites, companies, categories, defaults }: Props) {
   const [mode, setMode] = useState<Mode>("simple");
+  const [step, setStep] = useState<StepId>("upload");
   const [file, setFile] = useState<File | null>(null);
-  const [reading, setReading] = useState(false);
   const [readError, setReadError] = useState<string | null>(null);
+  const [readingSimple, setReadingSimple] = useState(false);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [rows, setRows] = useState<ImportRow[]>([]);
 
-  // Target: a site id, or "client:<id>" for every site of a client that reports the category.
   const [clientId, setClientId] = useState<number | null>(defaults.clientId ?? sites.find((s) => s.site_id === defaults.siteId)?.company?.company_id ?? null);
   const [targetValue, setTargetValue] = useState<string | null>(defaults.siteId ? String(defaults.siteId) : null);
-  const [categoryId, setCategoryId] = useState<number | null>(defaults.categoryId);
-  const [filter, setFilter] = useState<{ year: number | null; q: string }>({ year: null, q: "" });
-  const [touched, setTouched] = useState(false);
+  const [map, setMap] = useState<CategoryMap>({ "": defaults.categoryId });
+
+  // AI path
+  const [parse, setParse] = useState<ParseResult | null>(null);
+  const [sheet, setSheet] = useState<string | null>(null);
+  const [columns, setColumns] = useState<Columns>({ name: null, value: null, unit: null, source: null });
+  const read = useReadSheet();
+  const reAnalyze = useReAnalyze();
+
+  const [filter, setFilter] = useState<{ group: string | null; year: number | null; q: string }>({ group: null, year: null, q: "" });
+  const [touched, setTouched] = useState<Partial<Record<StepId, boolean>>>({});
   const [results, setResults] = useState<JobResult[] | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const save = useImportFactors();
@@ -96,354 +92,248 @@ export function ImportDrawer({ open, onClose, sites, companies, categories, defa
       ? { kind: "site", siteId: Number(targetValue) }
       : null;
   const targetSiteId = target?.kind === "site" ? target.siteId : null;
-  const categoryOptions = useMemo(() => {
-    // A client-wide import may use any category; sites that don't report it are skipped and listed.
-    const list = categoriesFor(targetSiteId, sites, categories);
-    return list.map((c) => ({ value: c.category_id, label: c.category_name }));
-  }, [targetSiteId, sites, categories]);
-
-  const map: CategoryMap = { "": categoryId };
-  const plan = target ? planUpload(rows, map, target, sites, categories) : null;
-  const included = rows.filter((r) => !r.excluded);
-  const invalid = included.filter((r) => rowProblem(r));
-  const shown = previewRows(rows, { group: null, ...filter });
-  const years = distinctYears(rows);
+  // One site: its own categories. All of a client's sites: any category (sites without it are skipped and listed).
+  const allowed = useMemo(() => categoriesFor(targetSiteId, sites, categories), [targetSiteId, sites, categories]);
+  const categoryOptions = allowed.map((c) => ({ value: c.category_id, label: c.category_name }));
+  const dbCategories = allowed.map((c) => ({ id: c.category_id, name: c.category_name }));
   const catName = (id: number) => categories.find((c) => c.category_id === id)?.category_name ?? `Category ${id}`;
+
+  const plan = target ? planUpload(rows, map, target, sites, categories) : null;
+  const groups = parse ? groupsOf(parse) : [""];
+  const invalid = rows.filter((r) => !r.excluded && rowProblem(r));
+  const flow = FLOW[mode];
+  const index = flow.indexOf(step);
 
   const dirty = !!file && !results;
   const close = () => (dirty && !save.isPending ? setConfirmClose(true) : onClose());
+  const touch = (s: StepId) => setTouched((t) => ({ ...t, [s]: true }));
 
-  const onFile = (files: File[]) => {
-    const f = files[0];
-    if (!f) return;
-    setFile(f);
-    setReadError(null);
-    setParseErrors([]);
+  const resetRead = () => {
     setRows([]);
+    setParse(null);
+    setParseErrors([]);
+    setReadError(null);
+    read.reset();
+    reAnalyze.reset();
+  };
+
+  const applyParse = (p: ParseResult, keepMap: boolean) => {
+    setParse(p);
+    setSheet(p.selected_sheet ?? p.sheet_names[0] ?? null);
+    setColumns(detectedColumns(p.schema_detected));
+    setRows(rowsFromParse(p));
+    setFilter({ group: null, year: null, q: "" });
+    const fresh = initialMap(p, allowed.map((c) => c.category_id));
+    // Re-analyzing keeps choices already made for groups that still exist.
+    setMap(keepMap ? Object.fromEntries(Object.keys(fresh).map((g) => [g, map[g] ?? fresh[g]])) : fresh);
   };
 
   const readFile = async () => {
-    if (!file) return;
-    setReading(true);
+    touch("upload");
+    if (!file || !target) return;
     setReadError(null);
+    if (mode === "ai") {
+      read.mutate(
+        { file, categories: dbCategories },
+        {
+          onSuccess: (p) => {
+            if (!p.factors.length && !p.available_columns.length) {
+              setReadError("The AI found no factors in this workbook.");
+              return;
+            }
+            applyParse(p, false);
+            setStep("layout");
+          },
+          onError: (e) => setReadError(errorMessage(e, "The AI service couldn't read this file. Try again, or use a simple sheet.")),
+        },
+      );
+      return;
+    }
+    setReadingSimple(true);
     try {
-      const json = await readSheet(file);
+      const json = await readFirstSheet(file);
       const parsed = parseSimpleRows(json);
       if (!json.length) setReadError("The first sheet is empty.");
       else if (!parsed.rows.length) setReadError("No row has both a year and a factor. Check the headers: year, factor_value, unit, source, emission_category_name.");
       setRows(parsed.rows);
       setParseErrors(parsed.errors);
-      if (parsed.rows.length) setStep(1);
+      if (parsed.rows.length) setStep("preview");
     } catch {
       setReadError("This file couldn't be read as an Excel workbook. Save it as .xlsx and try again.");
     } finally {
-      setReading(false);
+      setReadingSimple(false);
     }
   };
 
-  const update = (key: string, patch: Partial<ImportRow>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const runReAnalyze = (nextSheet?: string) => {
+    if (!parse?.upload_id) return;
+    const override = nextSheet ? null : schemaOverride(parse.schema_detected, columns, parse.available_columns);
+    if (!nextSheet && !override) return;
+    reAnalyze.mutate(
+      { uploadId: parse.upload_id, sheet: nextSheet ?? sheet ?? undefined, override, categories: dbCategories },
+      { onSuccess: (p) => applyParse(p, true) },
+    );
+  };
 
-  const targetError = touched && !target ? "Choose a site, or all of a client's sites." : undefined;
-  const categoryError = touched && !categoryId ? "Choose the category these factors belong to." : undefined;
-  const canSave = !!target && !!categoryId && !!plan && plan.rowCount > 0 && invalid.length === 0;
+  const columnsChanged = !!parse && !!schemaOverride(parse.schema_detected, columns, parse.available_columns);
+  const columnsMissing = !!parse && (columns.name === null || (needsValueColumn(parse.schema_detected) && columns.value === null));
+  const mappedCount = groups.filter((g) => map[g]).length;
+  const mapError = touched.map && mappedCount === 0 ? (groups.length > 1 ? "Map at least one group to a category." : "Choose the category these factors belong to.") : undefined;
+  const simpleCategoryError = touched.preview && mode === "simple" && !map[""] ? "Choose the category these factors belong to." : undefined;
+  const canSave = !!target && mappedCount > 0 && !!plan && plan.rowCount > 0 && invalid.length === 0;
 
   const onSave = () => {
-    setTouched(true);
+    touch("preview");
     if (!canSave || !plan) return;
     save.mutate(
-      { plan, categoryName: catName },
+      { plan, categoryName: catName, uploadId: parse?.upload_id ?? null, siteId: targetSiteId },
       {
         onSuccess: (res) => {
           setResults(res);
-          setStep(2);
+          setStep("result");
         },
       },
     );
   };
 
-  const numberCell = (r: ImportRow, field: "year" | "factor_value", label: string) => (
-    <input
-      type="text"
-      inputMode="decimal"
-      aria-label={`${label}, row ${r.key.slice(1)}`}
-      defaultValue={String(r[field])}
-      disabled={r.excluded}
-      onBlur={(e) => {
-        const n = field === "year" ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
-        update(r.key, { [field]: Number.isFinite(n) ? n : NaN });
-      }}
-      className={cn(inputBase, "h-8 w-24 px-2 font-num", focusRing)}
-    />
-  );
-  const textCell = (r: ImportRow, field: "emission_category_name" | "denominator_unit" | "source", label: string, width: string) => (
-    <input
-      type="text"
-      aria-label={`${label}, row ${r.key.slice(1)}`}
-      value={r[field]}
-      disabled={r.excluded}
-      onChange={(e) => update(r.key, { [field]: e.target.value })}
-      className={cn(inputBase, "h-8 px-2", width, focusRing)}
-    />
-  );
-  const previewColumns: Column<ImportRow>[] = [
-    {
-      id: "include",
-      header: "Include",
-      hideable: false,
-      width: "4.5rem",
-      value: (r) => (r.excluded ? "No" : "Yes"),
-      cell: (r) => (
-        <input
-          type="checkbox"
-          aria-label={`Include row ${r.key.slice(1)}`}
-          checked={!r.excluded}
-          onChange={(e) => update(r.key, { excluded: !e.target.checked })}
-          className={cn("size-4 accent-brand", focusRing)}
-        />
-      ),
-    },
-    { id: "name", header: "Emission category name", hideable: false, value: (r) => r.emission_category_name, cell: (r) => textCell(r, "emission_category_name", "Name", "w-48") },
-    { id: "year", header: "Year", hideable: false, value: (r) => r.year, cell: (r) => numberCell(r, "year", "Year") },
-    { id: "factor", header: "Factor", hideable: false, value: (r) => r.factor_value, cell: (r) => numberCell(r, "factor_value", "Factor") },
-    { id: "unit", header: "Unit", value: (r) => r.denominator_unit, cell: (r) => textCell(r, "denominator_unit", "Unit", "w-24") },
-    { id: "source", header: "Source", value: (r) => r.source, cell: (r) => textCell(r, "source", "Source", "w-36") },
-    {
-      id: "problem",
-      header: "",
-      hideable: false,
-      width: "8rem",
-      value: (r) => (r.excluded ? null : rowProblem(r)),
-      cell: (r) => {
-        const p = r.excluded ? null : rowProblem(r);
-        return p ? <span className="text-xs text-bad">{p}</span> : null;
-      },
-    },
-  ];
-
-  const sum = results ? totals(results) : null;
-  const forms = results ? formTargets(results) : [];
-
-  const footer =
-    step === 0 ? (
+  const back = () => setStep(flow[Math.max(0, index - 1)]);
+  let footer: React.ReactNode;
+  if (step === "upload") {
+    footer = (
       <div className="flex w-full justify-end gap-2">
         <Button onClick={close}>Cancel</Button>
-        <Button variant="primary" onClick={() => void readFile()} disabled={!file || mode !== "simple" || reading} loading={reading}>
-          Read sheet
+        <Button variant="primary" onClick={() => void readFile()} disabled={!file || read.isPending || readingSimple} loading={read.isPending || readingSimple}>
+          {mode === "ai" ? "Read with AI" : "Read sheet"}
         </Button>
       </div>
-    ) : step === 1 ? (
+    );
+  } else if (step === "layout") {
+    footer = (
+      <div className="flex w-full flex-wrap justify-end gap-2">
+        <Button onClick={back}>Back</Button>
+        <Button
+          variant="primary"
+          onClick={() => setStep("map")}
+          disabled={columnsChanged || columnsMissing || reAnalyze.isPending || rows.length === 0}
+          title={columnsChanged ? "Re-analyze to apply the column changes first" : undefined}
+        >
+          Continue
+        </Button>
+      </div>
+    );
+  } else if (step === "map") {
+    footer = (
+      <div className="flex w-full justify-end gap-2">
+        <Button onClick={back}>Back</Button>
+        <Button
+          variant="primary"
+          onClick={() => {
+            touch("map");
+            if (mappedCount > 0) setStep("preview");
+          }}
+        >
+          Continue
+        </Button>
+      </div>
+    );
+  } else if (step === "preview") {
+    footer = (
       <div className="flex w-full flex-wrap items-center gap-2">
-        <Button onClick={() => setStep(0)} disabled={save.isPending}>
+        <Button onClick={back} disabled={save.isPending}>
           Back
         </Button>
         <span className="text-sm text-muted" data-testid="import-count">
-          {plan && target ? `${plan.rowCount} ${plan.rowCount === 1 ? "factor" : "factors"} to save` : `${included.length} of ${rows.length} rows included`}
+          {plan && mappedCount > 0 ? `${plan.rowCount} ${plan.rowCount === 1 ? "factor" : "factors"} to save` : `${rows.filter((r) => !r.excluded).length} of ${rows.length} rows included`}
         </span>
-        <Button variant="primary" className="ml-auto" onClick={onSave} loading={save.isPending} disabled={save.isPending || (touched && !canSave)}>
+        <Button variant="primary" className="ml-auto" onClick={onSave} loading={save.isPending} disabled={save.isPending || (!!touched.preview && !canSave)}>
           Save factors
         </Button>
       </div>
-    ) : (
+    );
+  } else {
+    footer = (
       <div className="flex w-full justify-end">
         <Button variant="primary" onClick={onClose}>
           Done
         </Button>
       </div>
     );
+  }
 
   return (
     <>
-      <Drawer open={open} size="lg" onClose={close} title="Import factors" subtitle="Upload a sheet, check the rows, then save." footer={footer}>
+      <Drawer open size="lg" onClose={close} title="Import factors" subtitle="Upload a sheet, check the rows, then save." footer={footer}>
         <div className="space-y-5">
-          <Stepper steps={STEPS} current={step} completed={STEPS.slice(0, step).map((s) => s.id)} label="Import steps" />
-
-          {step === 0 && (
-            <div className="space-y-4">
-              <fieldset className="space-y-2">
-                <legend className="mb-1 text-sm font-medium text-ink">What kind of sheet is it?</legend>
-                <label className={cn("flex cursor-pointer gap-3 rounded-control border p-3", mode === "simple" ? "border-accent bg-tint" : "border-line")}>
-                  <input type="radio" name="ef-mode" checked={mode === "simple"} onChange={() => setMode("simple")} className={cn("mt-0.5 size-4 accent-brand", focusRing)} />
-                  <span>
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-ink">
-                      <FileSpreadsheet aria-hidden className="size-4" /> Simple sheet
-                    </span>
-                    <span className="block text-xs text-muted">One row per factor with columns year, factor_value, unit, source and emission_category_name. Read in your browser.</span>
-                  </span>
-                </label>
-                <label className={cn("flex gap-3 rounded-control border border-line p-3 opacity-60")}>
-                  <input type="radio" name="ef-mode" disabled checked={mode === "ai"} onChange={() => setMode("ai")} className="mt-0.5 size-4" />
-                  <span>
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-ink">
-                      <Sparkles aria-hidden className="size-4" /> Any other layout (AI read)
-                    </span>
-                    <span className="block text-xs text-muted">DEFRA-style workbooks with sub-columns or groups. Coming in the next update.</span>
-                  </span>
-                </label>
-              </fieldset>
-              <FileDrop
-                label="Sheet"
-                help=".xlsx or .xls, up to 10 MB. Only the first sheet is read."
-                accept={SHEET_ACCEPT}
-                maxSize={SHEET_MAX}
-                multiple={false}
-                items={file ? [{ id: "sheet", file } satisfies FileDropItem] : []}
-                onAdd={onFile}
-                onRemove={() => {
-                  setFile(null);
-                  setRows([]);
-                  setReadError(null);
-                }}
-              />
-              {readError && (
-                <Callout tone="warn" title="Couldn't read the sheet">
-                  {readError}
-                </Callout>
-              )}
-            </div>
+          <Stepper
+            steps={flow.map((id) => ({ id, ...STEP_LABEL[id] }))}
+            current={index}
+            completed={flow.slice(0, index)}
+            label="Import steps"
+          />
+          {step === "upload" && (
+            <UploadStep
+              mode={mode}
+              onMode={(m) => {
+                setMode(m);
+                resetRead();
+              }}
+              file={file}
+              onFile={(f) => {
+                setFile(f);
+                resetRead();
+              }}
+              companies={companies}
+              clientId={clientId}
+              onClient={(id) => {
+                setClientId(id);
+                setTargetValue(null);
+              }}
+              clientSites={clientSites}
+              target={targetValue}
+              onTarget={(v) => {
+                setTargetValue(v);
+                // A site may not report categories already chosen.
+                if (v && !v.startsWith("client:")) {
+                  const own = new Set((sites.find((s) => s.site_id === Number(v))?.categories ?? []).map((c) => c.category_id));
+                  setMap((m) => Object.fromEntries(Object.entries(m).map(([g, id]) => [g, id && own.has(id) ? id : null])));
+                }
+              }}
+              targetError={touched.upload && !target ? "Choose a site, or all of a client's sites." : undefined}
+              error={readError}
+            />
           )}
-
-          {step === 1 && (
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Select<number>
-                  label="Client"
-                  placeholder="Any client"
-                  value={clientId}
-                  onChange={(v) => {
-                    setClientId(v);
-                    setTargetValue(null);
-                  }}
-                  options={[...companies].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ value: c.company_id, label: c.name }))}
-                />
-                <Select<string>
-                  label="Save to"
-                  required
-                  placeholder="Choose a site"
-                  value={targetValue}
-                  onChange={(v) => {
-                    setTargetValue(v);
-                    if (v && !v.startsWith("client:") && categoryId) {
-                      const s = sites.find((x) => x.site_id === Number(v));
-                      if (s && !(s.categories ?? []).some((c) => c.category_id === categoryId)) setCategoryId(null);
-                    }
-                  }}
-                  options={[
-                    ...(clientId ? [{ value: `client:${clientId}`, label: `All sites of ${companies.find((c) => c.company_id === clientId)?.name ?? "this client"}` }] : []),
-                    ...clientSites.map((s) => ({ value: String(s.site_id), label: clientId ? s.name : `${s.name} · ${s.company?.name ?? ""}` })),
-                  ]}
-                  error={targetError}
-                />
-                <Select<number>
-                  label="Category"
-                  required
-                  placeholder="Choose a category"
-                  value={categoryId}
-                  onChange={setCategoryId}
-                  options={categoryOptions}
-                  emptyText="This site reports no categories"
-                  error={categoryError}
-                />
-              </div>
-              {parseErrors.length > 0 && (
-                <Callout tone="warn" title={`${parseErrors.length} ${parseErrors.length === 1 ? "row was" : "rows were"} left out`}>
-                  <ul className="list-disc pl-5">
-                    {parseErrors.slice(0, 5).map((e) => (
-                      <li key={e}>{e}</li>
-                    ))}
-                    {parseErrors.length > 5 && <li>and {parseErrors.length - 5} more.</li>}
-                  </ul>
-                </Callout>
-              )}
-              {plan && plan.notAssigned.length > 0 && (
-                <Callout tone="info" title="Some sites don't report this category">
-                  These are skipped: {plan.notAssigned.map((n) => n.site).join(", ")}.
-                </Callout>
-              )}
-              {save.error && (
-                <Callout tone="warn" title="Nothing was saved">
-                  {errorMessage(save.error, "Try again.")}
-                </Callout>
-              )}
-              <div className="flex flex-wrap items-end gap-3">
-                <Select<number>
-                  label="Year"
-                  placeholder="All years"
-                  value={filter.year}
-                  onChange={(v) => setFilter((f) => ({ ...f, year: v }))}
-                  options={years.map((y) => ({ value: y, label: String(y) }))}
-                  className="w-36"
-                />
-                <TextField label="Search rows" value={filter.q} onChange={(v) => setFilter((f) => ({ ...f, q: v }))} className="w-60" />
-              </div>
-              <p className="text-xs text-muted">Factors that already exist for the same site, category, year and name are skipped.</p>
-              <DataTable<ImportRow>
-                label="Rows to import"
-                rows={shown}
-                columns={previewColumns}
-                getRowId={(r) => r.key}
-                rowLabel={(r) => r.emission_category_name || `Row ${r.key.slice(1)}`}
-                empty={<EmptyState icon={FileSpreadsheet} title="No rows match." />}
-                pagination={{ mode: "client", pageSize: 50 }}
-                maxHeight="50vh"
-              />
-              {invalid.length > 0 && (
-                <p role="alert" className="text-sm text-bad">
-                  Fix or exclude {invalid.length} {invalid.length === 1 ? "row" : "rows"} before saving.
-                </p>
-              )}
-            </div>
+          {step === "layout" && parse && (
+            <LayoutStep
+              parse={parse}
+              sheet={sheet}
+              onSheet={(s) => {
+                setSheet(s);
+                runReAnalyze(s);
+              }}
+              columns={columns}
+              onColumns={setColumns}
+              busy={reAnalyze.isPending}
+              error={reAnalyze.error ? errorMessage(reAnalyze.error, "The AI service didn't answer. Try again.") : null}
+              onReAnalyze={() => runReAnalyze()}
+            />
           )}
-
-          {step === 2 && results && sum && (
-            <div className="space-y-4">
-              <Callout tone={sum.failed ? "warn" : "brand"} title={`${sum.created} ${sum.created === 1 ? "factor" : "factors"} added, ${sum.skipped} skipped`}>
-                {sum.skipped > 0 && "Skipped factors already existed for that site, category, year and name. "}
-                {sum.failed > 0 && `${sum.failed} ${sum.failed === 1 ? "site" : "sites"} failed; the others were saved.`}
-              </Callout>
-              <ul className="divide-y divide-line rounded-control border border-line" aria-label="Saved per site">
-                {results.map((r) => (
-                  <li key={`${r.siteId}-${r.categoryId}`} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-                    <span className="font-medium text-ink">{r.site}</span>
-                    <span className="text-muted">{r.category}</span>
-                    <span className="ml-auto flex items-center gap-2">
-                      {r.error ? (
-                        <Badge tone="bad">{r.error}</Badge>
-                      ) : (
-                        <>
-                          <Badge tone="good">{r.created} added</Badge>
-                          {r.skipped > 0 && <Badge tone="neutral">{r.skipped} skipped</Badge>}
-                        </>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {plan && plan.notAssigned.length > 0 && (
-                <Callout tone="info" title="Not saved to these sites">
-                  They don't report the category: {plan.notAssigned.map((n) => `${n.site} (${n.category})`).join(", ")}. Add it to them on the Sites page, then import again.
-                </Callout>
-              )}
-              {forms.length > 0 && (
-                <div className="space-y-2 rounded-control border border-line p-3">
-                  <p className="flex items-center gap-1.5 text-sm font-medium text-ink">
-                    <CheckCircle2 aria-hidden className="size-4 text-good" /> Generate data-entry forms for these categories
-                  </p>
-                  <ul className="flex flex-wrap gap-2">
-                    {forms.map((f) => (
-                      <li key={`${f.siteId}-${f.categoryId}`}>
-                        <Link
-                          to={`/capture/forms?site=${f.siteId}&category=${f.categoryId}&generate=1`}
-                          className={cn("inline-flex rounded-chip border border-line px-2.5 py-1 text-sm text-brand hover:bg-tint", focusRing)}
-                        >
-                          {f.site} · {f.category}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+          {step === "map" && parse && <MapStep parse={parse} rows={rows} map={map} onMap={setMap} categories={categoryOptions} error={mapError} />}
+          {step === "preview" && (
+            <PreviewStep
+              rows={rows}
+              shown={previewRows(rows, filter)}
+              update={(key, patch) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)))}
+              filter={filter}
+              onFilter={setFilter}
+              groups={groups.filter(Boolean)}
+              years={distinctYears(rows)}
+              category={mode === "simple" ? { value: map[""] ?? null, onChange: (v) => setMap({ "": v }), options: categoryOptions, error: simpleCategoryError } : undefined}
+              parseErrors={parseErrors}
+              plan={mappedCount > 0 ? plan : null}
+              saveError={save.error ? errorMessage(save.error, "Try again.") : null}
+            />
           )}
+          {step === "result" && results && <ResultStep results={results} plan={plan} />}
         </div>
       </Drawer>
       <Modal

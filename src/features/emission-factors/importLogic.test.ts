@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { type ImportRow, type JobResult, distinctYears, formTargets, parseSimpleRows, planUpload, previewRows, rowProblem, totals } from "./importLogic";
+import {
+  type ImportRow,
+  type JobResult,
+  type ParseResult,
+  detectedColumns,
+  distinctYears,
+  formTargets,
+  groupsOf,
+  initialMap,
+  needsValueColumn,
+  parseSimpleRows,
+  planUpload,
+  previewRows,
+  rowProblem,
+  rowsFromParse,
+  schemaOverride,
+  totals,
+} from "./importLogic";
 import type { Site } from "./logic";
 
 const cat = (id: number, name: string) => ({ category_id: id, category_name: name, scope: "Scope 1" });
@@ -93,5 +110,68 @@ describe("result", () => {
     const results = [r("Hidd", 1, 3), r("Sitra", 2, 0), r("Pune", 3, 0, "Site not found")];
     expect(totals(results)).toEqual({ created: 3, skipped: 3, failed: 1 });
     expect(formTargets(results)).toEqual([{ siteId: 1, site: "Hidd", categoryId: 1, category: "Fuel" }]);
+  });
+});
+
+describe("AI read", () => {
+  const schema = {
+    layout_type: "simple",
+    descriptor_columns: [{ column_index: 0, header_name: "Activity" }],
+    unit_column: { column_index: 2, header_name: "Unit" },
+    source_column: null,
+    years: [{ year: 2024, value_column: 3 }],
+  };
+  const columns = [
+    { column_index: 0, header_name: "Activity", sample_values: ["Diesel"] },
+    { column_index: 1, header_name: "Fuel", sample_values: ["Gas oil"] },
+    { column_index: 2, header_name: "Unit", sample_values: ["litres"] },
+    { column_index: 3, header_name: "kg CO2e", sample_values: ["2.68"] },
+  ];
+  const parse = (over: Partial<ParseResult> = {}): ParseResult => ({
+    factors: [
+      { year: 2024, factor_value: 2.68, denominator_unit: "litres", emission_category_name: "Fuels - Diesel", parent_category: "Fuels" },
+      { year: 2024, factor_value: 0.2, denominator_unit: null, emission_category_name: "Bio - Wood", parent_category: "Bio" },
+    ],
+    schema_detected: schema,
+    warnings: [],
+    available_years: [2024],
+    parent_categories: ["Fuels", "Bio"],
+    category_suggestions: [
+      { parent_category: "Fuels", suggested_category_id: 1, suggested_category_name: "Fuel", confidence: "high" },
+      { parent_category: "Bio", suggested_category_id: 3, suggested_category_name: "Electricity", confidence: "low" },
+    ],
+    upload_id: 9,
+    sheet_names: ["2024"],
+    available_columns: columns,
+    ...over,
+  });
+
+  it("keeps groups only when the sheet has more than one", () => {
+    expect(rowsFromParse(parse()).map((r) => [r.key, r.group, r.denominator_unit])).toEqual([
+      ["a1", "Fuels", "litres"],
+      ["a2", "Bio", ""],
+    ]);
+    expect(rowsFromParse(parse({ parent_categories: ["Fuels"] }))[0].group).toBeNull();
+    expect(groupsOf(parse({ parent_categories: [] }))).toEqual([""]);
+  });
+  it("takes high and medium suggestions the target allows", () => {
+    expect(initialMap(parse(), [1, 3])).toEqual({ Fuels: 1, Bio: null });
+    expect(initialMap(parse(), [3])).toEqual({ Fuels: null, Bio: null });
+    expect(initialMap(parse({ parent_categories: ["Fuels"] }), [1])).toEqual({ "": 1 });
+  });
+  it("builds an override only when columns change, and column 0 counts", () => {
+    const d = detectedColumns(schema);
+    expect(d).toEqual({ name: 0, value: 3, unit: 2, source: null });
+    expect(schemaOverride(schema, d, columns)).toBeNull();
+    const o = schemaOverride(schema, { ...d, name: 1, source: 0 }, columns)!;
+    expect(o.descriptor_columns).toEqual([{ column_index: 1, header_name: "Fuel" }]);
+    expect(o.source_column).toEqual({ column_index: 0, header_name: "Activity" });
+    expect(o.years).toEqual([{ year: 2024, value_column: 3 }]);
+  });
+  it("sub-column layouts read one column per year, so no factor column is needed", () => {
+    const sub = { ...schema, layout_type: "sub_columns", years: [{ year: 2024, value_column: null, primary_sub_column: "Total" }] };
+    expect(needsValueColumn(sub)).toBe(false);
+    expect(detectedColumns(sub).value).toBeNull();
+    expect(schemaOverride(sub, { ...detectedColumns(sub), unit: null }, columns)!.years).toEqual(sub.years);
   });
 });

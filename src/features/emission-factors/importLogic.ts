@@ -195,3 +195,110 @@ export function formTargets(results: JobResult[]): { siteId: number; site: strin
 
 export const SHEET_ACCEPT = [".xlsx", ".xls"];
 export const SHEET_MAX = 10 * 1024 * 1024;
+
+// ---------------------------------------------------------------------------
+// AI read (python_AI_service /v1/emission-factors/parse-excel)
+// ---------------------------------------------------------------------------
+
+export type ParsedFactor = {
+  year: number;
+  factor_value: number;
+  denominator_unit?: string | null;
+  source?: string | null;
+  emission_category_name?: string | null;
+  parent_category?: string | null;
+};
+export type Suggestion = { parent_category: string; suggested_category_id: number | null; suggested_category_name: string | null; confidence: "high" | "medium" | "low" };
+export type ColumnRef = { column_index: number; header_name: string };
+export type SheetColumn = ColumnRef & { sample_values: string[] };
+export type Schema = {
+  layout_type: string;
+  descriptor_columns: ColumnRef[];
+  unit_column?: ColumnRef | null;
+  source_column?: ColumnRef | null;
+  years: { year: number; value_column?: number | null; sub_columns?: unknown; primary_sub_column?: string | null; disposal_columns?: unknown }[];
+  [key: string]: unknown;
+};
+export type ParseResult = {
+  factors: ParsedFactor[];
+  schema_detected: Schema;
+  warnings: string[];
+  available_years: number[];
+  parent_categories: string[];
+  category_suggestions?: Suggestion[];
+  upload_id?: number | null;
+  sheet_names: string[];
+  selected_sheet?: string | null;
+  available_columns: SheetColumn[];
+};
+
+/** Groups only matter when the sheet has more than one; otherwise everything is one group (""). */
+export function groupsOf(p: ParseResult): string[] {
+  return p.parent_categories.length > 1 ? p.parent_categories : [""];
+}
+
+export function rowsFromParse(p: ParseResult): ImportRow[] {
+  const grouped = p.parent_categories.length > 1;
+  return p.factors.map((f, i) => ({
+    key: `a${i + 1}`,
+    year: f.year,
+    factor_value: f.factor_value,
+    denominator_unit: f.denominator_unit ?? "",
+    source: f.source ?? "",
+    emission_category_name: f.emission_category_name ?? "",
+    group: grouped ? (f.parent_category ?? "") : null,
+    excluded: false,
+  }));
+}
+
+/** Starts each group on the AI's suggestion when it is high or medium confidence. */
+export function initialMap(p: ParseResult, allowed: number[]): CategoryMap {
+  const groups = groupsOf(p);
+  const map: CategoryMap = Object.fromEntries(groups.map((g) => [g, null]));
+  for (const s of p.category_suggestions ?? []) {
+    if (s.suggested_category_id === null || s.confidence === "low" || !allowed.includes(s.suggested_category_id)) continue;
+    const key = groups.length > 1 ? s.parent_category : "";
+    if (key in map) map[key] = s.suggested_category_id;
+  }
+  return map;
+}
+
+export function suggestionFor(p: ParseResult, group: string): Suggestion | undefined {
+  const list = p.category_suggestions ?? [];
+  return groupsOf(p).length > 1 ? list.find((s) => s.parent_category === group) : list[0];
+}
+
+export type Columns = { name: number | null; value: number | null; unit: number | null; source: number | null };
+
+/** The columns the AI picked. A factor column only exists for simple layouts; others read one per year. */
+export function detectedColumns(s: Schema): Columns {
+  return {
+    name: s.descriptor_columns?.[0]?.column_index ?? null,
+    value: s.layout_type === "simple" ? (s.years?.[0]?.value_column ?? null) : null,
+    unit: s.unit_column?.column_index ?? null,
+    source: s.source_column?.column_index ?? null,
+  };
+}
+
+export function needsValueColumn(s: Schema): boolean {
+  return s.layout_type === "simple";
+}
+
+/**
+ * Schema override for re-analyze, or null when the columns are what the AI
+ * found. Column 0 is a real column (the old modal treated it as "none").
+ */
+export function schemaOverride(s: Schema, c: Columns, columns: SheetColumn[]): Schema | null {
+  const d = detectedColumns(s);
+  if (d.name === c.name && d.value === c.value && d.unit === c.unit && d.source === c.source) return null;
+  if (c.name === null) return null;
+  const ref = (i: number | null, fallback: string): ColumnRef | null =>
+    i === null ? null : { column_index: i, header_name: columns.find((x) => x.column_index === i)?.header_name ?? fallback };
+  return {
+    ...s,
+    descriptor_columns: [ref(c.name, "Category")!],
+    unit_column: ref(c.unit, "Unit"),
+    source_column: ref(c.source, "Source"),
+    years: c.value === null ? s.years : s.years.map((y) => ({ ...y, value_column: c.value })),
+  };
+}

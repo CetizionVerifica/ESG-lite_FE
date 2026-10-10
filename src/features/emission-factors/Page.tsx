@@ -318,7 +318,6 @@ export default function EmissionFactorsPage() {
       {importOpen && (
         <ImportDrawer
           key={importing}
-          open
           onClose={() => setImportOpen(false)}
           sites={allSites}
           companies={companies.data ?? []}
