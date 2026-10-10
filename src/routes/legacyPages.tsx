@@ -48,6 +48,7 @@ export const legacyPages: Record<ShellRouteId, ReactNode> = {
   "ghg-report": placeholder("ghg-report"),
   "ede-report": placeholder("ede-report"),
   targets: <Legacy.Sbti />,
+  "product-footprints": placeholder("product-footprints"),
   pcf: placeholder("pcf"),
   notifications: placeholder("notifications"),
   settings: placeholder("settings"),

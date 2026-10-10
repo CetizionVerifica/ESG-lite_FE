@@ -23,9 +23,10 @@ const pages = collectModulePages(moduleRouteFiles, legacyPages);
 const shellRoutes: RouteObject[] = SHELL_ROUTES.flatMap((route) => {
   const element = <RoleGuard route={route}>{pages[route.id]}</RoleGuard>;
   const handle: ShellHandle = { shellRoute: route };
-  // "/products/*" must also claim "/products" itself: an exact legacy path
-  // outranks a splat in React Router.
-  const paths = route.path.endsWith("/*") ? [route.path.slice(0, -2), route.path] : [route.path];
+  // "/products/*" must also claim "/products" itself (an exact legacy path
+  // outranks a splat in React Router), unless a shell route owns that path.
+  const bare = route.path.slice(0, -2);
+  const paths = route.path.endsWith("/*") && !SHELL_ROUTES.some((r) => r.path === bare) ? [bare, route.path] : [route.path];
   return paths.map((path) => ({ path, element, handle, errorElement: <PageErrorPage /> }));
 });
 
