@@ -1,5 +1,4 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 import { getReportingCalendar } from "../../services/companyService";
 import { type GhgReportDetailsResponse, type GhgReportTablesResponse, getGhgReportDetails, getGhgReportTables } from "../../services/ghgreportService";
 import { getSites } from "../../services/siteService";
@@ -14,15 +13,7 @@ export const keys = {
   adminSites: ["admin", "sites"] as const,
 };
 
-/** `value`, once it has stopped changing for `ms`. */
-export function useDebounced<T>(value: T, ms: number): T {
-  const [settled, setSettled] = useState(value);
-  useEffect(() => {
-    const id = window.setTimeout(() => setSettled(value), ms);
-    return () => window.clearTimeout(id);
-  }, [value, ms]);
-  return settled;
-}
+export { useDebounced } from "../../ui";
 
 /** The company's FY start month (backend-owned); April until it arrives or if it can't be read. */
 export function useFyStartMonth(): number {
