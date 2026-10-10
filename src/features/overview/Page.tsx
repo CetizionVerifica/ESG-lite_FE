@@ -126,6 +126,8 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
 
   const k = data?.kpis;
   const nothingApproved = !!k && k.approved_count === 0;
+  // As the approvals list counts them (FERA twins of a pending entry fold into it).
+  const waiting = k ? (k.pending_review_count ?? k.pending_count) : 0;
   const lyCaption = lastYearCaption(data?.last_year);
   const lyNet = lyCaption ? data?.last_year?.kpis.net : null;
   const err = (q: { isError: boolean }) => (q.isError ? LOAD_ERROR : null);
@@ -204,15 +206,15 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
           tone="info"
           title={`Nothing approved for ${title} yet.`}
           action={
-            k.pending_count > 0 ? (
+            waiting > 0 ? (
               <Button size="sm" onClick={() => navigate(links.approvalsInPeriod)}>
                 Review entries
               </Button>
             ) : undefined
           }
         >
-          {k.pending_count > 0
-            ? `${k.pending_count} ${k.pending_count === 1 ? "entry" : "entries"} from this period ${k.pending_count === 1 ? "is" : "are"} waiting for you.`
+          {waiting > 0
+            ? `${waiting} ${waiting === 1 ? "entry" : "entries"} from this period ${waiting === 1 ? "is" : "are"} waiting for you.`
             : "No entries from this period are waiting for approval."}
         </Callout>
       )}

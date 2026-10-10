@@ -45,16 +45,26 @@ export function AdminStep({ draft, set, error }: StepProps) {
         <TextField label="Contact name" required value={draft.contactPerson} onChange={(v) => set("contactPerson", v)} error={error("contactPerson")} autoComplete="off" />
         <TextField label="Email" type="email" required value={draft.email} onChange={(v) => set("email", v)} error={error("email")} autoComplete="off" />
         <TextField label="Phone" type="tel" value={draft.phoneNumber} onChange={(v) => set("phoneNumber", v)} />
-        <TextField
-          label="Password"
-          type="password"
-          required
-          help={`At least ${PASSWORD_MIN} characters. Share it with the admin safely; they can change it in Settings.`}
-          value={draft.password}
-          onChange={(v) => set("password", v)}
-          error={error("password")}
-          autoComplete="new-password"
+        <Toggle
+          className="sm:col-span-2"
+          label="Sign-in"
+          inlineLabel="Email an invite so the admin chooses their own password"
+          help={draft.sendInvite ? "The invite link works for 7 days. You can send a new one from the client's People tab." : undefined}
+          checked={draft.sendInvite}
+          onChange={(v) => set("sendInvite", v)}
         />
+        {!draft.sendInvite && (
+          <TextField
+            label="Password"
+            type="password"
+            required
+            help={`At least ${PASSWORD_MIN} characters. Share it with the admin safely; they can change it in Settings.`}
+            value={draft.password}
+            onChange={(v) => set("password", v)}
+            error={error("password")}
+            autoComplete="new-password"
+          />
+        )}
       </div>
     </div>
   );
@@ -258,7 +268,7 @@ export function ReviewStep({ draft, onEdit }: { draft: OnboardDraft; onEdit: (st
         ["Name", draft.contactPerson],
         ["Email", draft.email],
         ["Phone", draft.phoneNumber],
-        ["Password", "•".repeat(Math.min(draft.password.length, 12))],
+        draft.sendInvite ? ["Sign-in", "Invite by email"] : ["Password", "•".repeat(Math.min(draft.password.length, 12))],
       ])}
       {section("Access", 2, [["ESG-Mitra", draft.esgMitraAccess ? "On" : "Off"]])}
       {section(

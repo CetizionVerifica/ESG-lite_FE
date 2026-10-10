@@ -1,6 +1,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { getColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
+import { getColumnConfigsBySiteAndCategory, getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { fetchPreviewRows, fetchUniqueCategories, importAllRows, uploadExcelGetHeaders } from "../../services/excelService";
+import { type HistoricalArgs, previewHistoricalImport, runHistoricalImport } from "../../services/historicalImportService";
+
+export type { HistoricalPlanRow, HistoricalResult } from "../../services/historicalImportService";
 import { getSites } from "../../services/siteService";
 import type { ColumnConfig } from "../../lib/emissions";
 import type { ImportResult, PreviewRow } from "./logic";
@@ -33,15 +36,23 @@ function asList<T>(data: unknown, key: string): T[] {
   return Array.isArray(inner) ? (inner as T[]) : [];
 }
 
-export const useSites = () =>
-  useQuery<Site[]>({ queryKey: keys.sites(), queryFn: async () => asList<Site>(await getSites(), "sites"), staleTime: 5 * 60_000 });
+/** Every site, for a Superadmin. Contributors use their own sites from the signed-in user instead. */
+export const useSites = (enabled = true) =>
+  useQuery<Site[]>({ queryKey: keys.sites(), enabled, queryFn: async () => asList<Site>(await getSites(), "sites"), staleTime: 5 * 60_000 });
 
-/** The entry form for site × category; its columns decide what the sheet maps onto. Null when none is set up. */
-export function useFormConfig(siteId: number | null, categoryId: number | null) {
+/**
+ * The entry form for site × category; its columns decide what the sheet maps
+ * onto. Null when none is set up. Contributors read it through the /user
+ * endpoint, which checks the site is theirs.
+ */
+export function useFormConfig(siteId: number | null, categoryId: number | null, contributor = false) {
   return useQuery<ColumnConfig | null>({
-    queryKey: keys.form(siteId, categoryId),
+    queryKey: [...keys.form(siteId, categoryId), contributor],
     enabled: siteId !== null && categoryId !== null,
-    queryFn: async () => asList<ColumnConfig>(await getColumnConfigsBySiteAndCategory(siteId as number, categoryId as number), "columnConfigs")[0] ?? null,
+    queryFn: async () => {
+      const load = contributor ? getUserColumnConfigsBySiteAndCategory : getColumnConfigsBySiteAndCategory;
+      return asList<ColumnConfig>(await load(siteId as number, categoryId as number), "columnConfigs")[0] ?? null;
+    },
   });
 }
 
@@ -98,3 +109,9 @@ export function useImportRows(onDone: (result: ImportResult) => void, onFail: (m
     onError: (e) => onFail(errorMessage(e, "The import didn't finish. Nothing was saved, so you can try again.")),
   });
 }
+
+/** Historical import: what it would do, without saving. */
+export const useHistoricalPreview = () => useMutation({ mutationFn: (a: HistoricalArgs) => previewHistoricalImport(a) });
+
+/** Historical import: saves the rows and invites new people. */
+export const useHistoricalImport = () => useMutation({ mutationFn: (a: HistoricalArgs) => runHistoricalImport(a) });
