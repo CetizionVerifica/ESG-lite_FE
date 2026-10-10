@@ -1,6 +1,6 @@
 import { useCallback, useId, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { FlaskConical, Plus, SearchX } from "lucide-react";
+import { FlaskConical, Plus, SearchX, Upload } from "lucide-react";
 import {
   Button,
   DataTable,
@@ -33,6 +33,7 @@ import {
   useUserNames,
 } from "./api";
 import { FactorDrawer } from "./components/FactorDrawer";
+import { ImportDrawer } from "./components/ImportDrawer";
 import { ImportsTab } from "./components/ImportsTab";
 import { factorColumns } from "./components/columns";
 import {
@@ -107,6 +108,9 @@ export default function EmissionFactorsPage() {
     { kind: "one"; row: Factor } | { kind: "many"; ids: number[] } | { kind: "batch"; batch: Batch } | null
   >(null);
   const [confirmErr, setConfirmErr] = useState<string | null>(null);
+  // Counts imports opened, so each one mounts a fresh drawer.
+  const [importing, setImporting] = useState(0);
+  const [importOpen, setImportOpen] = useState(false);
 
   const openDrawer = useCallback(
     (value: Factor | "new" | null) => {
@@ -233,7 +237,11 @@ export default function EmissionFactorsPage() {
       <PageHeader
         title="Emission factors"
         description="Factors used to turn activity data into emissions, per site, category and year."
-        primaryAction={{ label: "Add factor", onClick: () => openDrawer("new"), icon: <Plus aria-hidden className="size-4" /> }}
+        primaryAction={{ label: "Import factors", onClick: () => {
+          setImporting((n) => n + 1);
+          setImportOpen(true);
+        }, icon: <Upload aria-hidden className="size-4" /> }}
+        secondaryActions={[{ label: "Add factor", onClick: () => openDrawer("new"), icon: <Plus aria-hidden className="size-4" /> }]}
       />
       <FilterBar
         filters={filterDefs}
@@ -307,6 +315,17 @@ export default function EmissionFactorsPage() {
         onEdit={() => setSaveErr(null)}
         onDelete={() => editing && editing !== "new" && askDelete({ kind: "one", row: editing })}
       />
+      {importOpen && (
+        <ImportDrawer
+          key={importing}
+          open
+          onClose={() => setImportOpen(false)}
+          sites={allSites}
+          companies={companies.data ?? []}
+          categories={categories.data ?? []}
+          defaults={{ clientId, siteId, categoryId }}
+        />
+      )}
       <Modal
         open={!!confirm}
         onClose={() => !deleting && setConfirm(null)}

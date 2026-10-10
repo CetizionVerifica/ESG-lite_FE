@@ -1,4 +1,5 @@
 import { type Page, expect, test } from "@playwright/test";
+import * as XLSX from "xlsx";
 
 /**
  * P22 Emission factors smoke tests (VITE_NEW_UI=1 server). The admin and AI
@@ -86,6 +87,10 @@ async function signIn(page: Page) {
       if (path.endsWith("/v1/emission-factors/uploads")) return json(UPLOADS);
       if (path.endsWith("/admin/emission-factors/batches")) return json(BATCHES);
 
+      if (path.endsWith("/admin/emission-factors/bulk") && method === "POST") {
+        const sent = (request.postDataJSON() as { factors: unknown[] }).factors;
+        return json({ created: sent.length - 1, skipped: 1 }, 201);
+      }
       const one = /\/admin\/emission-factors\/(\d+)$/.exec(path);
       const body = request.postDataJSON() as Record<string, never> | null;
       if (one && method === "DELETE") {
@@ -229,4 +234,59 @@ test("a superadmin edits a factor, deletes it after confirming, and sees imports
   await batchConfirm.getByRole("button", { name: "Delete batch" }).click();
   await expect(page.getByText("1 imported factor deleted")).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ method: "DELETE", path: expect.stringMatching(/\/admin\/emission-factors\/batch\/b-1$/) });
+});
+
+function sheet(rows: Record<string, unknown>[]): Buffer {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Factors");
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+}
+
+test("a superadmin imports a simple sheet to all of a client's sites", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/factors?client=1");
+  await page.getByRole("button", { name: "Import factors" }).click();
+  const drawer = page.getByRole("dialog", { name: "Import factors" });
+  await drawer.locator('input[type="file"]').setInputFiles({
+    name: "factors.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: sheet([
+      { year: 2024, factor_value: 2.68, unit: "litre", source: "DEFRA", emission_category_name: "Diesel" },
+      { year: 2024, factor_value: 2.31, unit: "litre", source: "DEFRA", emission_category_name: "Petrol" },
+      { year: 2023, factor_value: 9, unit: "kg", source: "Old", emission_category_name: "Coal" },
+      { year: 2024 },
+    ]),
+  });
+  await drawer.getByRole("button", { name: "Read sheet" }).click();
+
+  // Preview: the bad row is reported, the target is required.
+  await expect(drawer.getByText("1 row was left out")).toBeVisible();
+  await expect(drawer.getByRole("table", { name: "Rows to import" }).getByRole("row")).toHaveCount(4);
+  await drawer.getByRole("button", { name: "Save factors" }).click();
+  await expect(drawer.getByText("Choose a site, or all of a client's sites.")).toBeVisible();
+  expect(calls).toHaveLength(0);
+
+  await drawer.getByRole("combobox", { name: "Save to" }).selectOption({ label: "All sites of Midal Cables" });
+  await drawer.getByRole("combobox", { name: "Category" }).selectOption({ label: "Fuel" });
+  await drawer.getByRole("checkbox", { name: "Include row 4" }).uncheck();
+  await drawer.getByRole("textbox", { name: "Source, row 3" }).fill("DEFRA 2024");
+  await expect(drawer.getByTestId("import-count")).toHaveText("2 factors to save");
+  await drawer.getByRole("button", { name: "Save factors" }).click();
+
+  // Result: only Hidd reports Fuel; Pune belongs to another client and isn't listed.
+  await expect(drawer.getByText("1 factor added, 1 skipped")).toBeVisible();
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({
+    method: "POST",
+    path: expect.stringMatching(/\/admin\/emission-factors\/bulk$/),
+    body: {
+      factors: [
+        { site_id: 1, category_id: 1, year: 2024, factor_value: 2.68, denominator_unit: "litre", source: "DEFRA", emission_category_name: "Diesel", global_category_name: "Diesel" },
+        { site_id: 1, category_id: 1, year: 2024, factor_value: 2.31, denominator_unit: "litre", source: "DEFRA 2024", emission_category_name: "Petrol", global_category_name: "Petrol" },
+      ],
+    },
+  });
+  await expect(drawer.getByRole("link", { name: "Hidd · Fuel" })).toHaveAttribute("href", "/capture/forms?site=1&category=1&generate=1");
+  await drawer.getByRole("button", { name: "Done" }).click();
+  await expect(drawer).toHaveCount(0);
 });

@@ -3,6 +3,7 @@ import { getCategories } from "../../services/categoryService";
 import { getCompanies } from "../../services/companyService";
 import { getEmissionFactorUploads } from "../../services/emissionFactorParseService";
 import {
+  bulkCreateEmissionFactors,
   bulkDeleteEmissionFactors,
   createEmissionFactor,
   deleteEmissionFactor,
@@ -13,6 +14,7 @@ import {
 } from "../../services/emissionFactorService";
 import { getSites } from "../../services/siteService";
 import { getUsers } from "../../services/userService";
+import type { JobResult, UploadPlan } from "./importLogic";
 import type { Batch, Category, Company, FactorPage, FactorPayload, ListParams, Site, UploadRecord } from "./logic";
 
 export const keys = {
@@ -108,5 +110,29 @@ export function useRemoveBatch() {
   return useMutation({
     mutationFn: (batchId: string) => deleteEmissionFactorsByBatch(batchId),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
+}
+
+/**
+ * Saves an import plan: one bulk call per site and category, one after the
+ * other so a failure names its site and the rest still go through.
+ */
+export function useImportFactors() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ plan, categoryName }: { plan: UploadPlan; categoryName: (id: number) => string }): Promise<JobResult[]> => {
+      const results: JobResult[] = [];
+      for (const job of plan.jobs) {
+        const base = { site: job.site.name, siteId: job.site.site_id, category: categoryName(job.categoryId), categoryId: job.categoryId };
+        try {
+          const res = (await bulkCreateEmissionFactors(job.factors)) as { created?: number; skipped?: number };
+          results.push({ ...base, created: res.created ?? 0, skipped: res.skipped ?? 0, error: null });
+        } catch (e) {
+          results.push({ ...base, created: 0, skipped: 0, error: errorMessage(e, "The server didn't save these.") });
+        }
+      }
+      return results;
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.all }),
   });
 }
