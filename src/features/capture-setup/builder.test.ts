@@ -213,6 +213,8 @@ describe("field keys", () => {
     expect(validateBuilder(dup).map((i) => i.message)).toContain('Vehicle under Road: stored value "van" is used twice.');
     const spaced = setOptions(d0, "mode", [{ id: " road ", label: "Road" }]);
     expect(toUpdatePayload(spaced).column_options["1"]).toEqual([{ id: " road ", label: "Road" }]);
+    const spacedLabel = setOptions(d0, "mode", [{ id: "air", label: " Air " }]);
+    expect(toUpdatePayload(spacedLabel).column_options["1"]).toEqual([{ id: "air", label: " Air " }]);
   });
 });
 

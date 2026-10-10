@@ -590,7 +590,7 @@ export function toUpdatePayload(d: BuilderDraft): UpdatePayload {
   const column_options: Record<string, DropdownOptionValue[]> = {};
   for (const f of d.fields) {
     const list = d.options[f.column_name];
-    if (list) column_options[String(f.pk_id)] = list.map((o) => ({ id: o.id, label: o.label.trim() }));
+    if (list) column_options[String(f.pk_id)] = list.map((o) => ({ id: o.id, label: o.label }));
   }
   const renames = renameMap(d);
   return {

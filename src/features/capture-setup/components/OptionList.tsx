@@ -12,7 +12,7 @@ export type OptionListProps = {
   saved?: DropdownOptionValue[];
 };
 
-const toOptions = (drafts: ChoiceDraft[]): DropdownOptionValue[] => drafts.map((c) => ({ id: choiceId(c), label: c.label.trim() }));
+const toOptions = (drafts: ChoiceDraft[]): DropdownOptionValue[] => drafts.map((c) => ({ id: choiceId(c), label: c.original !== undefined ? c.label : c.label.trim() }));
 
 function rowErrors(drafts: ChoiceDraft[]): Record<string, string> {
   const out: Record<string, string> = {};
