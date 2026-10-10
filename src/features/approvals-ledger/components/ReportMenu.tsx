@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronDown, FileSpreadsheet } from "lucide-react";
 import { exportMonthlyEmissions, exportYearEmissions } from "../../../services/emissionService";
 import { Button, Menu, type MenuEntry, type Period, useToast } from "../../../ui";
+import { useFyStartMonth } from "../../../lib/fiscalYear";
 import { errorMessage } from "../api";
 import { type ReportOption, reportOptions } from "../logic";
 
@@ -9,7 +10,7 @@ import { type ReportOption, reportOptions } from "../logic";
 export function ReportMenu({ siteIds, categoryId, period }: { siteIds: number[]; categoryId: number | null; period: Period | null }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
-  const options = reportOptions(period);
+  const options = reportOptions(period, useFyStartMonth());
 
   const run = async (o: ReportOption) => {
     setBusy(true);

@@ -45,7 +45,8 @@ export function parsePeriod(value: string | null | undefined): Period | null {
     return month >= 1 && month <= 12 ? { kind: "month", year: Number(m[1]), month } : null;
   }
   if ((m = /^(\d{4})-Q([1-4])$/i.exec(v))) return { kind: "quarter", year: Number(m[1]), quarter: Number(m[2]) };
-  if ((m = /^CY(\d{4})$/i.exec(v))) return { kind: "cy", year: Number(m[1]) };
+  // A bare year ("2025", as in a hand-typed or older link) is the calendar year.
+  if ((m = /^(?:CY)?(\d{4})$/i.exec(v))) return { kind: "cy", year: Number(m[1]) };
   if ((m = /^FY(\d{4})$/i.exec(v))) return { kind: "fy", startYear: Number(m[1]) };
   if ((m = /^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/.exec(v))) {
     const [from, to] = [m[1], m[2]];

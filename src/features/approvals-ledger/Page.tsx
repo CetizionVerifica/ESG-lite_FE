@@ -45,6 +45,7 @@ import {
   useReviewMutations,
   useStatusCounts,
 } from "./api";
+import { feraCategoryIds } from "../../lib/emissions/pendingCount";
 import { BatchesView } from "./components/BatchesView";
 import { ReportMenu } from "./components/ReportMenu";
 import { RecordDrawer } from "./components/RecordDrawer";
@@ -96,7 +97,11 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
     for (const s of inScope) for (const c of s.categories ?? []) byId.set(c.category_id, c.category_name);
     return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sites, ctx.siteIds]);
-  const counts = useStatusCounts(ctx.siteIds);
+  const feraIds = useMemo(
+    () => feraCategoryIds(ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)) : sites),
+    [sites, ctx.siteIds],
+  );
+  const counts = useStatusCounts(ctx.siteIds, feraIds);
   // No site chip = all of the manager's sites; batches must always be scoped (the endpoint isn't).
   const scopeSites = useMemo(() => (ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)), [ctx.siteIds, sites]);
   const batches = useBatches(scopeSites, ctx.categoryId);
