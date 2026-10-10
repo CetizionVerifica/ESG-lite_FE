@@ -8,7 +8,6 @@ import type {
   CalculationSpec,
   ColumnEntity,
   EmissionCalculationResult,
-  EmissionCategoryMapping,
   EmissionFactor,
   MethodCalculation,
   ModalRow,
@@ -58,7 +57,6 @@ export interface EmissionCalcInput {
   targetYear?: number;
   columns?: ColumnEntity[];
   selectColumnNames?: string[];
-  emissionCategoryMapping?: EmissionCategoryMapping;
   // Use the raw activity value when no unit conversion exists (FERA factors
   // already account for the fuel's energy content).
   fallbackToRaw?: boolean;
@@ -66,10 +64,13 @@ export interface EmissionCalcInput {
 }
 
 // Find the factor for an emission category in the target year: by
-// emission_category_name, then global_category_name, then the company
-// category name the mapping points from, then a trim + case-insensitive match.
+// emission_category_name, then global_category_name, then a trim +
+// case-insensitive match. This follows the backend's save-time matcher
+// (findEmissionFactorForCategory in ESG-lite src/utils/findEmissionFactor.ts),
+// which never looks up the client's own category name, so neither does the
+// preview: a factor named that way would show a figure the entry never gets.
 export const findEmissionFactor = (
-  { emissionFactors, targetYear, emissionCategoryMapping }: EmissionCalcInput,
+  { emissionFactors, targetYear }: EmissionCalcInput,
   emissionCategory: string,
 ): EmissionFactor | undefined => {
   // No category yet (dropdowns not all chosen): there is nothing to match.
@@ -84,14 +85,6 @@ export const findEmissionFactor = (
 
   const byGlobal = emissionFactors.find((f) => f.global_category_name === emissionCategory && yearMatch(f));
   if (byGlobal) return byGlobal;
-
-  if (emissionCategoryMapping) {
-    const companyCatName = Object.entries(emissionCategoryMapping).find(([, value]) => value === emissionCategory)?.[0];
-    if (companyCatName && companyCatName !== emissionCategory) {
-      const byCompany = emissionFactors.find((f) => f.emission_category_name === companyCatName && yearMatch(f));
-      if (byCompany) return byCompany;
-    }
-  }
 
   // Normalized match guards against whitespace/casing drift between factor
   // names and the submitted value.

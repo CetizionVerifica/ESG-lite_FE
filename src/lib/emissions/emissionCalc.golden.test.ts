@@ -39,7 +39,6 @@ const makeCalc = (o: Options) =>
     targetYear: o.targetYear,
     columns: o.columns,
     selectColumnNames: o.selectColumnNames,
-    emissionCategoryMapping: o.mapping,
     fallbackToRaw: o.fallbackToRaw,
     calculationSpec: o.spec,
   });
@@ -124,13 +123,12 @@ describe("Context 1 · Bahrain × Stationary combustion · monthly 2025-09", () 
       ),
     ).toMatchSnapshot();
   });
-  it("a company category name resolves through the mapping when the factor still carries it", () => {
-    expect(
-      run(
-        { factors: [ef("Company LPG", 1500, "litre", 2024)], targetYear, mapping: { "Company LPG": "LPG" } },
-        [{ id: 1, emission_category: "LPG", quantity: "10", activity_data_unit: "litre" }],
-      ),
-    ).toMatchSnapshot();
+  it("a factor named with the client's own category name is not used, as the backend never matches it", () => {
+    const [out] = run(
+      { factors: [ef("Company LPG", 1500, "litre", 2024)], targetYear, mapping: { "Company LPG": "LPG" } },
+      [{ id: 1, emission_category: "LPG", quantity: "10", activity_data_unit: "litre" }],
+    );
+    expect(out.factorId).toBeNull();
   });
   it("without a target year every year's factor is a candidate (first one wins)", () => {
     expect(
