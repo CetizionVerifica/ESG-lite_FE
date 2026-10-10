@@ -194,14 +194,14 @@ test("a superadmin imports a sheet and deletes mappings in bulk", async ({ page 
   await drawer.locator('input[type="file"]').setInputFiles({ name: "mappings.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("PK") });
   await drawer.getByRole("button", { name: "Read sheet" }).click();
 
-  await expect(drawer.getByTestId("import-summary")).toHaveText("1 of 2 match existing factors · 1 can't be added");
+  await expect(drawer.getByTestId("import-summary")).toHaveText("1 of 2 match existing factors · 1 only at some sites · 1 can't be added");
   await expect(drawer.getByText("Row 5 was empty and skipped.")).toBeVisible();
   const sheet = drawer.getByRole("table", { name: "Rows read from the sheet" });
   await expect(sheet.getByRole("row").nth(1)).toContainText("Already mapped");
   await expect(sheet.getByRole("row").nth(3)).toContainText("No factor");
   // Fix the third row's name inline: it now matches.
   await drawer.getByLabel("Global factor name, row 3").fill("Diesel");
-  await expect(drawer.getByTestId("import-summary")).toHaveText("2 of 2 match existing factors · 1 can't be added");
+  await expect(drawer.getByTestId("import-summary")).toHaveText("2 of 2 match existing factors · 2 only at some sites · 1 can't be added");
   await expect(drawer.getByTestId("import-target")).toHaveText(/Adding to Midal Cables · .+ · All sites/);
   await drawer.getByRole("button", { name: "Add 2 mappings" }).click();
 
