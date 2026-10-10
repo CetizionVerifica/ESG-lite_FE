@@ -112,17 +112,35 @@ export const isFera = (row: EmissionData) => row.category?.category_name?.toLowe
 /**
  * FERA (fuel- and energy-related) rows ride on their parent: they are hidden
  * from the list and shown as "+X tCO₂e" on the parent, unless the user is
- * looking at the FERA category itself.
+ * looking at the FERA category itself. A FERA row that waits for review while
+ * its parent doesn't (an edit can send a twin back for review) needs its own
+ * decision and stays a row of its own.
+ *
+ * A pending FERA row whose parent isn't on this page is shown on its own only
+ * when the API says the parent isn't pending (`fera_partner_status`). A
+ * pending parent on another page, or outside the filters, carries the
+ * decision: approving it approves the twin too, and approving the twin alone
+ * would approve a parent the reviewer never saw.
  */
 export function mergeFera<T extends EmissionData>(rows: T[], showFera: boolean): { rows: T[]; feraOf: Map<number, T> } {
-  const fera = rows.filter(isFera);
   const feraOf = new Map<number, T>();
+  const folded = new Set<number>();
   for (const row of rows) {
     if (isFera(row)) continue;
-    const linked = fera.find((f) => f.pk_id === row.fera_linked_id || f.fera_linked_id === row.pk_id);
-    if (linked) feraOf.set(row.pk_id, linked);
+    const linked = rows.find((f) => isFera(f) && (f.pk_id === row.fera_linked_id || f.fera_linked_id === row.pk_id));
+    if (!linked || (linked.status === "pending" && row.status !== "pending")) continue;
+    feraOf.set(row.pk_id, linked);
+    folded.add(linked.pk_id);
   }
-  return { rows: showFera ? rows : rows.filter((r) => !isFera(r)), feraOf };
+  const partnerElsewhere = (r: T) =>
+    r.status === "pending" &&
+    !rows.some((p) => !isFera(p) && (p.pk_id === r.fera_linked_id || p.fera_linked_id === r.pk_id)) &&
+    // undefined: an API without the field; hide as before rather than risk it.
+    (r.fera_partner_status === undefined || r.fera_partner_status === "pending");
+  return {
+    rows: showFera ? rows : rows.filter((r) => !isFera(r) || (!folded.has(r.pk_id) && !partnerElsewhere(r))),
+    feraOf,
+  };
 }
 
 // ── Activity data ───────────────────────────────────────────────────────────
