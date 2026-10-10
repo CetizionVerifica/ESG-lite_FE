@@ -36,7 +36,8 @@ type Props = {
   comparisons: RowComparison[];
   factorYear: number;
   reportingYear: number;
-  classicHref: string;
+  /** Bulk upload (P27) for this site, category and period. */
+  bulkUploadHref: string;
   evidence: RowEvidence;
   onBack: () => void;
   onNext: () => void;
@@ -129,6 +130,13 @@ export function EnterRows(p: Props) {
           { value: "bill", label: <span className="inline-flex items-center gap-1">Start from a bill <Sparkles aria-hidden className="size-3.5" /></span> },
         ]}
       />
+      <p className="text-xs text-muted">
+        Have a spreadsheet?{" "}
+        <Link className="font-medium text-brand-text underline" to={p.bulkUploadHref}>
+          Upload it in bulk
+        </Link>{" "}
+        for this site and category.
+      </p>
 
       <TabPanel idBase="add-data-source" value="bill" current={tab} keepMounted>
         <FromBill
@@ -144,13 +152,6 @@ export function EnterRows(p: Props) {
           onReading={(delta) => setReading((n) => n + delta)}
           renderRow={(row, index) => renderRow(row, index, true)}
         />
-        <p className="mt-3 text-xs text-muted">
-          Bulk upload from a spreadsheet is still on the{" "}
-          <Link className="font-medium text-brand-text underline" to={p.classicHref}>
-            current Add data page
-          </Link>
-          .
-        </p>
       </TabPanel>
 
       <TabPanel idBase="add-data-source" value="manual" current={tab}>

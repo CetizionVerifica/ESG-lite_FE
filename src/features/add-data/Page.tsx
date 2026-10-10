@@ -7,7 +7,7 @@ import { useEmissionCalc } from "./hooks/useEmissionCalc";
 import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
 import { useRowEvidence } from "./hooks/useRowEvidence";
 import { billGroups, billOf } from "./logic/bill";
-import { buildPayload, comparison, entryFactorYear, entryPeriodLabel, formatEntryPeriodParam, parseEntryPeriod, previousPeriod, rowIssue, type EntryPeriod } from "./logic/entry";
+import { buildPayload, comparison, entryDate, entryFactorYear, entryPeriodLabel, formatEntryPeriodParam, parseEntryPeriod, previousPeriod, rowIssue, type EntryPeriod } from "./logic/entry";
 import { formColumns, toFormModel } from "./logic/form";
 import { entryCategories, feraCategoryOf, sitesOf, userIdOf } from "./logic/sites";
 import { ChooseContext } from "./steps/ChooseContext";
@@ -111,7 +111,11 @@ export default function AddDataPage() {
   });
 
   const periodLabel = period ? entryPeriodLabel(period) : "";
-  const classicHref = `/data/new/classic${params.toString() ? `?${params.toString()}` : ""}`;
+  // Rows without their own date are filed in the month the period ends, as here.
+  const bulkUploadHref =
+    contextReady && period
+      ? `/capture/upload?${new URLSearchParams({ site: String(site.site_id), category: String(category.category_id), period: entryDate(period).slice(0, 7) })}`
+      : "/capture/upload";
 
   let body;
   if (sites.length === 0) {
@@ -167,7 +171,7 @@ export default function AddDataPage() {
         comparisons={comparisons}
         factorYear={factorYear as number}
         reportingYear={(factorYear as number) + 1}
-        classicHref={classicHref}
+        bulkUploadHref={bulkUploadHref}
         evidence={evidence}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}

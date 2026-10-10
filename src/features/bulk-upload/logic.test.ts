@@ -4,6 +4,7 @@ import {
   DATE_KEY,
   autoMap,
   buildFields,
+  contributorSites,
   fileProblem,
   findCategoryColumn,
   findValueColumn,
@@ -18,6 +19,8 @@ import {
   toggleSkip,
   unmapped,
 } from "./logic";
+import { historicalFileProblem, historicalSkippedMatrix, monthLabel } from "./historical";
+import type { HistoricalResult } from "./api";
 
 const col = (pk_id: number, column_name: string, column_type = "text"): ColumnEntity => ({ pk_id, column_name, column_type });
 
@@ -146,5 +149,34 @@ describe("files and dates", () => {
     const big = new File(["a"], "rows.csv");
     Object.defineProperty(big, "size", { value: 101 * 1024 * 1024 });
     expect(fileProblem(big)).toMatch(/100 MB/);
+  });
+});
+
+describe("contributorSites", () => {
+  it("reads user.sites, falls back to user.site, and leaves FERA out", () => {
+    const cats = [
+      { category_id: 1, category_name: "Fuel" },
+      { category_id: 5, category_name: "FERA" },
+    ];
+    const sites = contributorSites({ sites: [{ site_id: 2, name: "Hidd", company: { company_id: 1, name: "Midal" }, categories: cats }] });
+    expect(sites).toEqual([{ site_id: 2, name: "Hidd", company: { company_id: 1, name: "Midal" }, categories: [cats[0]] }]);
+    expect(contributorSites({ site: { site_id: 3, name: "Pune" } })).toEqual([{ site_id: 3, name: "Pune", company: null, categories: [] }]);
+    expect(contributorSites(null)).toEqual([]);
+  });
+});
+
+describe("historical import", () => {
+  it("labels months, checks files and lists skipped rows", () => {
+    expect(monthLabel("2019-01")).toBe("Jan 2019");
+    expect(monthLabel(null)).toBe("");
+    expect(historicalFileProblem(new File(["a"], "old.xls"))).toBeNull();
+    expect(historicalFileProblem(new File(["a"], "old.csv"))).toMatch(/xlsx/);
+    const result = {
+      dryRun: false as const,
+      summary: {} as HistoricalResult["summary"],
+      skippedRows: [{ row: 3, period: null, reason: "Year or month is missing or not recognised." }],
+    };
+    expect(historicalSkippedMatrix(result)).toEqual([["Row", "Month", "Reason"], ["3", "", "Year or month is missing or not recognised."]]);
+    expect(historicalSkippedMatrix({ ...result, skippedRows: [] })).toBeNull();
   });
 });
