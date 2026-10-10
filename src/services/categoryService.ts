@@ -25,6 +25,8 @@ export const updateCategory = async (
   data: {
     category_name?: string;
     scope?: string | null;
+    /** Replaces the category's site assignment when sent. */
+    site_ids?: (string | number)[];
   }
 ) => {
   const response = await api.put(`/admin/categories/${id}`, data);
