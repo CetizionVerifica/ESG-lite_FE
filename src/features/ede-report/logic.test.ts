@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EdeReportResponse } from "../../services/reportService";
 import {
   edeFigures,
+  intensityGrid,
   intensitySeries,
   intensitySites,
   monthlyGrid,
@@ -180,5 +181,40 @@ describe("pdfFileName", () => {
   it("follows EDE_Report_{company}_{period}.pdf", () => {
     expect(pdfFileName("Midal Cables W.L.L.", year)).toBe("EDE_Report_Midal_Cables_W_L_L_CY_2025.pdf");
     expect(pdfFileName(undefined, june)).toBe("EDE_Report_Company_June_2025.pdf");
+  });
+});
+
+describe("intensityGrid", () => {
+  const row = (siteId: number, siteName: string, month: string, production: number, unit: string) => ({
+    month,
+    siteId,
+    siteName,
+    emissions: 2,
+    production,
+    intensity: production > 0 ? 2 / production : 0,
+    unit,
+  });
+  const sites = [
+    { siteId: 1, siteName: "Askar" },
+    { siteId: 2, siteName: "Hidd" },
+    { siteId: 3, siteName: "Sitra" },
+  ];
+  it("groups sites by production unit, so each chart's axis has one unit", () => {
+    const d = normalize({
+      intensityMonthly: [row(1, "Askar", "2025-01", 4, "t"), row(2, "Hidd", "2025-03", 8, "km"), row(3, "Sitra", "2025-01", 2, "t")],
+    });
+    const g = intensityGrid(d, year, sites);
+    expect(g.groups.map((x) => [x.unit, x.rows.map((r) => r.site.siteName)])).toEqual([
+      ["t", ["Askar", "Sitra"]],
+      ["km", ["Hidd"]],
+    ]);
+    expect(g.months).toHaveLength(12);
+    const hidd = g.groups[1].rows[0].values;
+    expect(hidd[2]).toBe(0.25);
+    expect(hidd[0]).toBeNull();
+  });
+  it("leaves out sites without production", () => {
+    const d = normalize({ intensityMonthly: [row(1, "Askar", "2025-01", 0, "t"), row(2, "Hidd", "2025-01", 5, "t")] });
+    expect(intensityGrid(d, year, sites).groups.flatMap((x) => x.rows.map((r) => r.site.siteName))).toEqual(["Hidd"]);
   });
 });
