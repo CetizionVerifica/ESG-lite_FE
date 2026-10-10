@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { FileQuestion, Save } from "lucide-react";
 import { Button, Callout, EmptyState, Modal, PageHeader, SkeletonText, TabPanel, Tabs, cn, panel, useToast, useUnsavedGuard } from "../../ui";
-import { useFactorNames, useForm, useLibrary, useSaveForm } from "./api";
+import { useFactorNames, useForm, useLibrary, useSaveForm, useTestSetup } from "./api";
 import { type BuilderDraft, type BuilderTab, type SourceConfig, draftFromConfig, hasRemovals, isDirty, renameMap, savedRemovals, toUpdatePayload, validateBuilder } from "./builder";
 import { CalcTab } from "./components/builder/CalcTab";
 import { ChoicesTab } from "./components/builder/ChoicesTab";
@@ -10,6 +10,7 @@ import { ExtraTab } from "./components/builder/ExtraTab";
 import { FieldsTab } from "./components/builder/FieldsTab";
 import { MatchTab } from "./components/builder/MatchTab";
 import { Preview } from "./components/builder/Preview";
+import { TestTab } from "./components/builder/TestTab";
 import { errorMessage } from "./logic";
 
 const TABS: { value: BuilderTab; label: string }[] = [
@@ -18,6 +19,7 @@ const TABS: { value: BuilderTab; label: string }[] = [
   { value: "match", label: "Factor match" },
   { value: "extra", label: "Extra details" },
   { value: "calculation", label: "Calculation" },
+  { value: "test", label: "Test" },
 ];
 const isTab = (v: string | null): v is BuilderTab => TABS.some((t) => t.value === v);
 
@@ -79,6 +81,7 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
   const library = useLibrary();
   const factors = useFactorNames(source.category?.category_id, source.site?.site_id);
   const save = useSaveForm(id);
+  const testSetup = useTestSetup(tab === "test" ? source.site?.site_id : null, source.category?.category_id);
 
   const dirty = isDirty(draft, initial);
   const blocker = useUnsavedGuard(dirty && !save.isPending);
@@ -190,6 +193,16 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
           </TabPanel>
           <TabPanel idBase="builder" value="calculation" current={tab}>
             <CalcTab draft={draft} onChange={update} />
+          </TabPanel>
+          <TabPanel idBase="builder" value="test" current={tab}>
+            <TestTab
+              draft={draft}
+              formId={id}
+              setup={testSetup.data}
+              loading={testSetup.isPending && testSetup.fetchStatus !== "idle"}
+              error={testSetup.isError}
+              onRetry={() => void testSetup.refetch()}
+            />
           </TabPanel>
         </div>
         <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
