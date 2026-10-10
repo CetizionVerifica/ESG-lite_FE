@@ -8,14 +8,16 @@ export interface ClientOption {
 }
 
 export const shellKeys = {
-  latestNotifications: ["shell", "notifications", "latest"] as const,
+  // Under "notifications" so the Notifications page (P13) refreshes the bell too.
+  latestNotifications: ["notifications", "latest"] as const,
   clients: ["shell", "clients"] as const,
   brand: (companyId: number) => ["shell", "brand", companyId] as const,
 };
 
 export const POPOVER_SIZE = 8;
 
-export const fetchLatestNotifications = async () => (await getNotifications(1, POPOVER_SIZE)).notifications;
+/** The bell lists the latest unread ones (P13). */
+export const fetchLatestNotifications = async () => (await getNotifications(1, POPOVER_SIZE, true)).notifications;
 
 export async function fetchClients(): Promise<ClientOption[]> {
   const data = await getCompanies();
