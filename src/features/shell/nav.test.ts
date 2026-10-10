@@ -22,7 +22,7 @@ describe("nav labels (final copy from the F2 spec)", () => {
       "Clients ▾ (Companies, Onboard client, Brand themes)",
       "Setup ▾ (Sites, Users, Countries, Categories, Units, Products)",
       "Factors ▾ (Emission factors, Category mappings, Thresholds, Material factors)",
-      "Capture ▾ (Columns, Column configs, Bulk upload)",
+      "Capture ▾ (Columns, Data-entry forms, Bulk upload)",
       "Reports ▾ (GHG, EDE)",
     ]));
   it("is empty when signed out", () => expect(navFor(null)).toEqual([]));

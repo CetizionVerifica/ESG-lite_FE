@@ -16,6 +16,11 @@ describe("period URL values", () => {
     expect(periodLabel(period)).toBe(label);
   });
 
+  it("reads a bare year as the calendar year", () => {
+    expect(parsePeriod("2025")).toEqual({ kind: "cy", year: 2025 });
+    expect(serializePeriod({ kind: "cy", year: 2025 })).toBe("CY2025");
+  });
+
   it.each(["", "2025-13", "2025-Q5", "FY25", "2025-02-30_2025-03-01", "2025-06-30_2025-01-01", "junk"])(
     "rejects %j",
     (value) => expect(parsePeriod(value)).toBeNull(),

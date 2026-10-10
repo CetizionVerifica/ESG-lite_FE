@@ -64,7 +64,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     ]),
     group("Capture", [
       link("Columns", "/capture/columns"),
-      link("Column configs", "/capture/forms"),
+      link("Data-entry forms", "/capture/forms"),
       link("Bulk upload", "/capture/upload"),
     ]),
     group("Reports", [link("GHG", "/reports/ghg"), link("EDE", "/reports/ede")]),
