@@ -21,7 +21,6 @@ interface UploadResult {
     createdUsers: string[];
     site: { id: number; name: string };
     category: { id: number; name: string };
-    defaultPassword?: string;
   };
 }
 
@@ -298,9 +297,9 @@ const UploadPage = () => {
                     <span className="font-medium">User Emails:</span>{" "}
                     {result.summary.createdUsers.join(", ")}
                   </p>
-                  <p className="text-orange-600">
-                    <span className="font-medium">Default Password:</span>{" "}
-                    {result.summary.defaultPassword}
+                  <p>
+                    New users set their own password with "Forgot password" on
+                    the sign-in page.
                   </p>
                 </>
               )}
