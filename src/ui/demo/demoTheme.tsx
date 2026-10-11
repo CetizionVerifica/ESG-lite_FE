@@ -22,7 +22,6 @@ export function DemoThemeScope({ theme, children }: { theme: DemoTheme; children
       look,
       resolvedAppearance,
       tokens: buildTheme(pack, look, resolvedAppearance),
-      isDark: resolvedAppearance === "dark",
       theme: resolvedAppearance,
     };
   }, [theme, app]);
@@ -35,8 +34,8 @@ export function DemoThemeScope({ theme, children }: { theme: DemoTheme; children
       root.dataset.look = look;
       root.dataset.pack = pack;
     };
-    apply(toCssVars(value.tokens), value.isDark, value.look, value.pack.id);
-    return () => apply(toCssVars(app.tokens), app.isDark, app.look, app.pack.id);
+    apply(toCssVars(value.tokens), value.resolvedAppearance === "dark", value.look, value.pack.id);
+    return () => apply(toCssVars(app.tokens), app.resolvedAppearance === "dark", app.look, app.pack.id);
   }, [value, app]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

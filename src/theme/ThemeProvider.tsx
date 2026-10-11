@@ -159,7 +159,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       tokens,
       resolvedAppearance,
       statusClashes: statusClashes(pack),
-      isDark: resolvedAppearance === "dark",
       theme: resolvedAppearance,
       toggleTheme: () => void setAppearance(resolvedAppearance === "dark" ? "light" : "dark"),
     }),
