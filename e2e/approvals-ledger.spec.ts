@@ -10,7 +10,8 @@ type Row = {
   pk_id: number;
   status: "pending" | "approved" | "rejected";
   activity_data: Record<string, unknown>;
-  total_emission: number;
+  // The API sends numeric columns as strings, e.g. "0.8040".
+  total_emission: string;
   category: { category_id: number; category_name: string; scope: string | null };
   review_comment?: string;
 };
@@ -28,7 +29,7 @@ function makeRows(): Row[] {
     pk_id: n,
     status: "pending",
     activity_data: { fuel_type: "1", quantity: String(100 * n), emission_category: "Diesel (average biofuel blend)" },
-    total_emission: 0.268 * n,
+    total_emission: (0.268 * n).toFixed(4),
     category: diesel,
   }));
 }
@@ -173,6 +174,7 @@ test("a row opens in the drawer with its calculation", async ({ page }) => {
   await expect(drawer.getByTestId("calculation")).toContainText("per litre");
   await expect(drawer).toContainText("DEFRA");
   await expect(drawer).toContainText("No documents attached.");
+  await expect(drawer).toContainText("0.804 tCO₂e");
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
 });
