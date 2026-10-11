@@ -1,6 +1,6 @@
 /**
- * F2 route map: every path of the redesigned app, who may open it, and the
- * old paths that redirect to it while VITE_NEW_UI is on.
+ * F2 route map: every path of the app, who may open it, and the old paths
+ * that redirect to it.
  * Source: src/features/shell/CLAUDE.md ("Route map" and "Navigation per role").
  */
 
@@ -37,8 +37,6 @@ export const SHELL_ROUTES = [
   // Contributor (User)
   { id: "my-month", path: "/my-month", title: "My month", crumb: ["My month"], roles: ["User"], spec: "P02" },
   { id: "add-data", path: "/data/new", title: "Add data", crumb: ["Add data"], roles: ["User"], spec: "P03" },
-  // Today's Add data page, kept for bills and bulk upload until P03-B/C move them; removed with it in P03-C.
-  { id: "add-data-classic", path: "/data/new/classic", title: "Add data (current page)", crumb: ["Add data", "Current page"], roles: ["User"], spec: "P03" },
   { id: "my-entries", path: "/data/mine", title: "My entries", crumb: ["My entries"], roles: ["User"], spec: "P04" },
   { id: "production", path: "/production", title: "Production", crumb: ["Production"], roles: ["User"], spec: "P05" },
 
@@ -110,7 +108,8 @@ export function homeFor(role: Role | null): string | null {
 export const CLIENT_ID = ":clientId";
 
 /**
- * Old path → new path, active only with VITE_NEW_UI on. Kept for one release.
+ * Old path → new path, so bookmarks from the old UI keep working. Kept for
+ * one release.
  * A target containing CLIENT_ID needs a selected client; without one it
  * falls back to `fallback`.
  */
@@ -148,6 +147,7 @@ export const LEGACY_REDIRECTS: readonly LegacyRedirect[] = [
   { from: "/manage-columns", to: "/capture/columns" },
   { from: "/column-config", to: "/capture/forms" },
   { from: "/upload-data", to: "/capture/upload" },
+  { from: "/data/new/classic", to: "/data/new" },
 ];
 
 /** Fills CLIENT_ID; returns `fallback` (or null) when no client is selected. */
