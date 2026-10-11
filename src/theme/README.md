@@ -26,7 +26,7 @@ The only place in new code where raw colour values may appear. Everything else r
 | `packs.ts` | `ThemePack` type, PlanetPulse pack, `packFromBrand()`, the four stored brands (companies 1, 2, 3, 6) |
 | `buildTheme.ts` | `buildTheme(pack, look, appearance)` → every colour token; contrast gate, status-hue rule |
 | `ThemeProvider.tsx` | Picks the pack after login, resolves look × appearance, writes the tokens on `<html>` |
-| `useTheme.ts` | `useTheme()` → `{ appearance, setAppearance, look, pack, tokens }` (`isDark` deprecated) |
+| `useTheme.ts` | `useTheme()` → `{ appearance, setAppearance, look, pack, tokens }` |
 | `session.ts` | Pure helpers: company id from the session user, pack choice, stored appearance |
 | `chartTheme.ts` | `useChartTheme()` → ECharts theme object from the current tokens (`theme.scopes` for Scope 1/2/3) |
 | `pdfTheme.ts` | `pdfTheme(brand)` → print colours for @react-pdf, always the Light look |
@@ -39,8 +39,6 @@ The only place in new code where raw colour values may appear. Everything else r
 - Appearance (`light | dark | system`) is stored in `localStorage.appearance`; the legacy `theme` key is migrated once.
   A dark appearance always renders the Night look.
 - `<html>` carries every `--t-*` value inline plus `data-pack`, `data-look`, and the legacy `dark` class.
-- `src/context/ThemeContext.tsx` is a deprecated re-export so legacy pages keep working; `isDark` stays until the
-  last page migrates.
 
 ## Engine rules in short
 

@@ -1,7 +1,7 @@
 /**
  * Golden snapshots of the Add data emission calculation.
  *
- * These pin what the legacy page (pages/UserDataEntry) computes TODAY for a
+ * These pin what the legacy page (pages/UserDataEntry, deleted in M3) computed for a
  * set of site × category contexts, so moving the logic can be proven to
  * change nothing: the snapshot file was written against the old hook before
  * the move and must stay byte-identical. A deliberate calculation change

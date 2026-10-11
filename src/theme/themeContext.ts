@@ -21,8 +21,6 @@ export interface ThemeContextValue {
   resolvedAppearance: ResolvedAppearance;
   /** Statuses whose hue is close to the brand's (F1 rule 6). */
   statusClashes: StatusName[];
-  /** @deprecated Use tokens (bg-panel, text-ink, …) instead. Removed once no page reads it. */
-  isDark: boolean;
   /** @deprecated Use appearance. */
   theme: ResolvedAppearance;
   /** @deprecated Use setAppearance. */

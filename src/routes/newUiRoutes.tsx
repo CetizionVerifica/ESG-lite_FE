@@ -9,13 +9,12 @@ import { type ModuleRoutesFile, collectModulePages } from "./pageRegistry";
 import ProtectedRoute from "./ProtectedRoute";
 
 /**
- * Routes for the redesigned app. Mounted in front of the legacy routes only
- * when VITE_NEW_UI is on (see withNewUiRoutes in src/lib/featureFlags.ts).
+ * Routes of the app.
  *
  * Each module registers its shell pages in src/features/<module>/routes.tsx
  * (`export const pages: ModulePages`), picked up here by glob, so page PRs
- * don't touch this file. Routes without a module yet show today's page or a
- * placeholder from ./legacyPages.
+ * don't touch this file. Routes without a module yet show a placeholder from
+ * ./legacyPages.
  */
 const moduleRouteFiles = import.meta.glob<ModuleRoutesFile>("../features/*/routes.tsx", { eager: true });
 const pages = collectModulePages(moduleRouteFiles, legacyPages);
