@@ -11,7 +11,7 @@
 ## Data
 - Context: `user.sites`, `site.categories` (filtered by `user_categories`), reporting mode lock (`reporting_period` monthly/yearly, `year_type` CY/FY; backend `services/reportingPeriod.ts`).
 - Form definition: `ColumnConfig` for site×category (`columns`, `column_options`, `column_dependencies`, `dependent_options`, `emission_category_mapping`, `extra_fields`, `calculation`).
-- Factors: `getUserEmissionFactorsBySiteAndCategory(year-1)`; units `getUserUnitsBySiteAndCategory`; mappings `getMappingsByCompany`; FERA factors.
+- Factors: `getUserEmissionFactorsBySiteAndCategory` with no year (all years; the calc tries year-1 first, then falls back like the backend save); units `getUserUnitsBySiteAndCategory`; mappings `getMappingsByCompany`; FERA factors.
 - Compare: `getPeriodTotal` (approved vs entered) + company `Threshold`.
 - Save: `createEmission` / `updateEmission`; 409 duplicate → force replace. Documents `documentService`.
 - AI (python_AI_service): `POST /v1/invoices/upload` → `InvoiceData`, `CategorySuggestion` (confidence), `EmissionReady`, validation; `GET /v1/invoices`, reuse/re-extract; distance: `distanceService`, `routingService`, `POST /v1/sea-route`.
@@ -48,7 +48,7 @@ Step 1 · What are you reporting?           Step 2 · Enter values              
   1. Emission category: auto chip when mapping resolves ("Diesel · Global: Diesel (avg biofuel blend)"), else select.
   2. Activity fields from ColumnConfig; dependent selects show "Select {parent} first"; composite units (passenger.km) show `mult × dist`; distance fields have a **Calculate distance** button opening `DistanceDrawer`.
   3. More details (collapsed if optional): extra fields.
-  4. Result line (right-aligned, mono): `1,600 L × 2.68 kg/L = 4.29 tCO₂e`, factor source and year visible, "factor year 2024 used for 2025 data" note (makes the hidden year-1 rule explicit).
+  4. Result line (right-aligned, mono): `1,600 L × 2.68 kg/L = 4.29 tCO₂e`, factor source and year visible, "factor year 2024 used for 2025 data" note (makes the hidden year-1 rule explicit), or "no 2024 factor; 2023 used for 2025 data" when the save falls back to another year.
   5. Comparison chip: "▲ 6% vs Aug (threshold 5%)" warn, or "▼ 3% vs Aug" neutral.
   + Add row, duplicate row, remove row. Evidence: `FileDrop` per row or for all rows.
 - **Start from a bill ✨** (AI): drop one or more PDFs/images → progress with stages → split view: bill viewer left, extracted entries right grouped by invoice (vendor, number, date, amount). Each field shows an **AI** chip; category suggestion shows confidence; < 60% in warn tint; validation warnings in a callout ("Total doesn't match line items by 357,621"). The bill is attached as evidence automatically (B8). Uses the **same row component** as manual entry, so validation, period mode and FERA all apply (fixes today: invoice save skipped validation and ignored yearly mode).
