@@ -8,7 +8,9 @@ import {
   ChartFrame,
   FilterBar,
   GLOSSARY,
+  GLOSSARY_LOCALES,
   InfoTerm,
+  LOCALE_NAMES,
   KpiStrip,
   Menu,
   ScopeBar,
@@ -16,7 +18,9 @@ import {
   TabPanel,
   Tabs,
   Tooltip,
+  setGlossaryLocale,
   useFilterParams,
+  useGlossaryLocale,
   useToast,
 } from "..";
 import { DemoSection, Variant } from "./DemoSection";
@@ -240,8 +244,15 @@ export function FilterBarDemo() {
 }
 
 export function GlossaryDemo() {
+  const locale = useGlossaryLocale();
   return (
     <DemoSection id="glossary" title="InfoTerm and the glossary">
+      <SegmentedControl
+        label="Info icon language"
+        value={locale}
+        onChange={setGlossaryLocale}
+        options={GLOSSARY_LOCALES.map((l) => ({ value: l, label: LOCALE_NAMES[l] }))}
+      />
       <p className="text-sm text-ink">
         Hover, focus or tap the icon: <InfoTerm>Scope 1</InfoTerm>, <InfoTerm>tCO₂e</InfoTerm>, <InfoTerm>FERA</InfoTerm>, approval{" "}
         <InfoTerm id="status">status</InfoTerm>.

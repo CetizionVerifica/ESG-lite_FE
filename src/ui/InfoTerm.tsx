@@ -3,6 +3,8 @@ import { Info } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import { cn } from "./cn";
 import { GLOSSARY, findTerm, type GlossaryEntry, type TermKey } from "./glossary";
+import { localeDir, useGlossaryLocale, type GlossaryLocale } from "./glossaryLocale";
+import { ASK_LABEL, GLOSSARY_TRANSLATIONS } from "./glossaryTranslations";
 import { focusRing } from "./styles";
 
 export type InfoTipProps = {
@@ -15,34 +17,40 @@ export type InfoTipProps = {
   className?: string;
 };
 
-function resolve(id: TermKey | undefined, definition: string | undefined, label: string | undefined): GlossaryEntry | null {
+function resolve(id: TermKey | undefined, definition: string | undefined, label: string | undefined, locale: GlossaryLocale): GlossaryEntry | null {
   if (definition) return { term: label ?? "", definition };
-  return id ? GLOSSARY[id] : null;
+  if (!id) return null;
+  if (locale !== "en") return GLOSSARY_TRANSLATIONS[locale][id];
+  return { ...GLOSSARY[id], term: label ?? GLOSSARY[id].term };
 }
 
 /**
  * Highlighted "i" button that explains a term. Hover, keyboard focus or a tap shows the
  * definition; Esc or a tap elsewhere hides it. The visible dot is small, the hit area is 32px.
+ * Glossary definitions follow the info-icon language from the account menu (one-off ones stay as given).
  */
 export function InfoTip({ id, definition, label, side, className }: InfoTipProps) {
-  const entry = resolve(id, definition, label);
+  const chosen = useGlossaryLocale();
+  const locale: GlossaryLocale = definition ? "en" : chosen;
+  const entry = resolve(id, definition, label, locale);
   if (!entry) return null;
-  const name = label ?? entry.term;
+  const name = entry.term;
   return (
     <Tooltip
       side={side}
       toggleOnClick
       className="max-w-72 px-2.5 py-1.5 leading-snug"
       content={
-        <>
+        <span lang={locale} dir={localeDir(locale)} className="block text-start">
           {name && <span className="font-semibold">{name}: </span>}
           {entry.definition}
-        </>
+        </span>
       }
     >
       <button
         type="button"
-        aria-label={name ? `What is ${name}?` : "What does this mean?"}
+        aria-label={ASK_LABEL[locale](name)}
+        lang={locale === "en" ? undefined : locale}
         data-info-term={id}
         // Inside clickable rows (DataTable onRowClick) the tap is for the tip, not the row.
         onClick={(e) => e.stopPropagation()}

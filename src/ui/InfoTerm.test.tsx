@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InfoTerm, InfoTip } from "./InfoTerm";
 import { GLOSSARY, findTerm, glossaryEntry } from "./glossary";
+import { LOCALE_STORAGE_KEY, resetGlossaryLocaleForTests, setGlossaryLocale } from "./glossaryLocale";
+import { GLOSSARY_TRANSLATIONS } from "./glossaryTranslations";
 import { KpiStrip } from "./KpiStrip";
 import { DataTable } from "./table";
 import { TextField } from "./fields";
@@ -135,5 +137,44 @@ describe("shared components pick up glossary terms", () => {
     expect(screen.getByRole("button", { name: /^tCO₂e/ })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Emission factor" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "What is Emission factor?" })).toBeTruthy();
+  });
+});
+
+describe("info icon language", () => {
+  afterEach(() => {
+    act(() => setGlossaryLocale("en"));
+    window.localStorage.clear();
+    resetGlossaryLocaleForTests();
+  });
+
+  it("shows Arabic right-to-left and Spanish definitions, and remembers the choice", async () => {
+    const user = userEvent.setup();
+    render(<InfoTip id="scope1" label="Scope 1" />);
+    act(() => setGlossaryLocale("ar"));
+    await user.tab();
+    const tip = screen.getByRole("tooltip");
+    expect(tip.textContent).toContain(GLOSSARY_TRANSLATIONS.ar.scope1.definition);
+    expect(tip.querySelector("[dir=rtl][lang=ar]")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "ما معنى النطاق 1؟" })).toBeTruthy();
+    act(() => setGlossaryLocale("es"));
+    expect(screen.getByRole("tooltip").textContent).toBe(`Alcance 1: ${GLOSSARY_TRANSLATIONS.es.scope1.definition}`);
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("es");
+    resetGlossaryLocaleForTests();
+    cleanup();
+    render(<InfoTip id="fera" />);
+    expect(screen.getByRole("button", { name: /^¿Qué es Actividades/ })).toBeTruthy();
+  });
+
+  it("keeps one-off definitions as written", async () => {
+    const user = userEvent.setup();
+    act(() => setGlossaryLocale("ar"));
+    render(<InfoTip label="Net zero" definition="Cut, then remove the rest." />);
+    await user.tab();
+    expect(screen.getByRole("tooltip").textContent).toBe("Net zero: Cut, then remove the rest.");
+  });
+
+  it("has every translated definition at 160 characters or less", () => {
+    for (const table of Object.values(GLOSSARY_TRANSLATIONS))
+      for (const [id, t] of Object.entries(table)) expect(t.definition.length, id).toBeLessThanOrEqual(160);
   });
 });
