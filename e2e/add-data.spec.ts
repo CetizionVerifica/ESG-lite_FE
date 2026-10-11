@@ -392,7 +392,7 @@ test("typed rows ask before leaving the page", async ({ page }) => {
   await page.goto("/data/new?site=4&category=9&period=2025-09");
   const row = page.getByRole("region", { name: "Row 1" });
   await row.getByLabel("Quantity").fill("10");
-  await page.getByRole("link", { name: "My month" }).first().click();
+  await page.getByRole("link", { name: "Current Month" }).first().click();
   const dialog = page.getByRole("dialog", { name: "Leave with rows not sent?" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Stay" }).click();

@@ -26,7 +26,7 @@
 ## Navigation per role (labels are final copy)
 | Role | Top-level items |
 |---|---|
-| **User** (contributor) | My month · Add data · My entries · Production |
+| **User** (contributor) | Current Month · Add data · My entries · Production |
 | **Manager** | Overview · Data ▾ (Approvals, Emissions ledger, Production data) · Reports ▾ (GHG report, EDE report) · Targets (SBTi) · **Products (PCF)** · Team |
 | **Admin** (company admin) | Users · (Settings in avatar menu) |
 | **Superadmin** | Console · Clients ▾ (Companies, Onboard client, Brand themes) · Setup ▾ (Sites, Users, Countries, Categories, Units, Products) · Factors ▾ (Emission factors, Category mappings, Thresholds, Material factors) · Capture ▾ (Columns, Column configs, Bulk upload) · Reports ▾ (GHG, EDE) |
