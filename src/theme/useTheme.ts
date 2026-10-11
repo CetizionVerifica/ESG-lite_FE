@@ -2,7 +2,7 @@ import { useContext } from "react";
 import { ThemeContext } from "./themeContext";
 import type { ThemeContextValue } from "./themeContext";
 
-/** Current theme: `{ appearance, setAppearance, look, pack, tokens }` (+ deprecated `isDark`). */
+/** Current theme: `{ appearance, setAppearance, look, pack, tokens }`. */
 export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
   if (!ctx) {

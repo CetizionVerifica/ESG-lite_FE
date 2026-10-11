@@ -16,4 +16,4 @@ src/features/<module>/
 - Register the module's pages in its own `routes.tsx`, keyed by shell route id from `src/features/shell/routeMap.ts`, e.g.
   `export const pages: ModulePages = { sites: <Page /> }` with `const Page = lazy(() => import("./Page"))`.
   `src/routes/newUiRoutes.tsx` picks every `routes.tsx` up by glob and it overrides the route's entry in
-  `src/routes/legacyPages.tsx`, so a page PR edits neither file. They mount only when `VITE_NEW_UI=1`.
+  `src/routes/legacyPages.tsx`, so a page PR edits neither file.

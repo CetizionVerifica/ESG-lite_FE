@@ -38,4 +38,4 @@ Filters visible without hover; rejected rows can be fixed and resubmitted in the
 - Edit lives in `components/EditEntryForm.tsx` inside the drawer, shown for pending and rejected entries.
 - Uses the shared form and calc in `src/lib/emissions` and `DynamicField` from `src/ui`.
 - Saving calls `updateEmission` and refreshes the table; errors show inline in the drawer.
-- The old `pages/UserEmissionsPage.tsx` stays for the flag-off app until VITE_NEW_UI is removed (same as P01 and P07).
+- The old `pages/UserEmissionsPage.tsx` was deleted in the M3 switch PR.
