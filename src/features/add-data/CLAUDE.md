@@ -84,7 +84,7 @@ Below the stepper (or as a tab "Already entered for Sep (4)") a compact `DataTab
 - Duplicates: one `DuplicateDialog` at Review that lists each 409 conflict, with Skip / Replace per row and "apply to all".
 - Existing entries: a compact table of entries already saved for site × category × period, with status, tCO₂e and actions. Rejected rows show the reason and a "Fix" action that loads the row into step 2.
 - Per-row evidence: `FileDrop` on a typed row, uploaded through `documentService` after save. An unsaved-rows guard on navigation.
-- Route switch: `/data-entry` and the legacy entry routes redirect to `/data/new`; `pages/UserDataEntry/*`, `UserDataEntryPage.tsx` and `/data/new/classic` are deleted, once nothing that is still needed lives only there (bulk upload is checked first).
+- Route switch: `/data-entry` and the legacy entry routes redirect to `/data/new`; `pages/UserDataEntry/*` and `UserDataEntryPage.tsx` were deleted in the M3 switch PR, and `/data/new/classic` now redirects to `/data/new`.
 
 ### P03-C as built (2026-10-09)
 - Distance: `logic/distance.ts` (which column takes a distance, count × distance product, per-mode result), `components/DistanceInput.tsx`, `components/distance/*` (drawer, location field, route map). Road and sea use the backend's `/user/emissions/calculate-distance`; rail is the road corridor (else straight line × 1.2); sea falls back to straight-line nautical miles. Shared geo helpers moved to `src/lib/geo/` (old `src/utils` and `services/routingService` paths re-export them).
