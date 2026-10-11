@@ -72,7 +72,7 @@ export function ledgerColumns({
         return (
           <span className="flex flex-col items-end leading-tight">
             <span>{formatNumber(Number(r.total_emission), 3)}</span>
-            {fera && <span className="text-xs text-muted">+{formatEmissions(fera.total_emission)} FERA</span>}
+            {fera && <span className="text-xs text-muted">+{formatEmissions(Number(fera.total_emission))} FERA</span>}
           </span>
         );
       },

@@ -112,7 +112,7 @@ export function RecordDrawer({
 function Body({ row, fera }: { row: LedgerRow; fera: LedgerRow | undefined }) {
   const config = useColumnConfig(row.site?.site_id, row.category?.category_id);
   const fields = activityFields(row, config.data ?? undefined);
-  const total = emissionsParts(row.total_emission);
+  const total = emissionsParts(Number(row.total_emission));
 
   return (
     <div className="space-y-6">
@@ -142,7 +142,7 @@ function Body({ row, fera }: { row: LedgerRow; fera: LedgerRow | undefined }) {
             {row.activity_data_unit && <Row label="Unit">{row.activity_data_unit}</Row>}
             {fera && (
               <Row label="FERA (fuel- and energy-related)">
-                <span className="font-num tabular-nums">+{formatEmissions(fera.total_emission)}</span>
+                <span className="font-num tabular-nums">+{formatEmissions(Number(fera.total_emission))}</span>
               </Row>
             )}
             {fields.length === 0 && <p className="text-sm text-muted">No activity values were entered.</p>}
@@ -180,7 +180,7 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
         <span>{factor ? `${formatNumber(factor.factor_value, 6)} per ${factor.denominator_unit}` : "factor unknown"}</span>
         <span aria-hidden className="text-muted">=</span>
         <span className="sr-only">equals</span>
-        <span className="font-semibold">{formatEmissions(row.total_emission)}</span>
+        <span className="font-semibold">{formatEmissions(Number(row.total_emission))}</span>
       </div>
       {factor ? (
         <p className="text-sm text-muted">
