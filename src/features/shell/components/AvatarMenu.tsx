@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { APPEARANCES, type ShellUser, initials } from "../account";
 import type { Appearance } from "../../../theme";
-import { GLOSSARY_LOCALES, LOCALE_NAMES, Menu, setGlossaryLocale, useGlossaryLocale, type MenuEntry } from "../../../ui";
+import { GLOSSARY_LOCALES, LOCALE_NAMES, Menu, infoLanguageEnabled, setGlossaryLocale, useGlossaryLocale, type MenuEntry } from "../../../ui";
 import { chromeIconButton } from "./styles";
 
 interface AvatarMenuProps {
@@ -32,13 +32,18 @@ export default function AvatarMenu({ user, appearance, onAppearance, onSignOut }
       checked: appearance === a.value,
       onSelect: () => onAppearance(a.value),
     })),
-    { kind: "separator" },
-    { kind: "heading", content: <div className="text-[11px] font-semibold uppercase tracking-wide text-(--t-muted)">Info icon language</div> },
-    ...GLOSSARY_LOCALES.map((l) => ({
-      label: LOCALE_NAMES[l],
-      checked: infoLocale === l,
-      onSelect: () => setGlossaryLocale(l),
-    })),
+    // Hidden until the Arabic and Spanish definitions are checked (VITE_INFO_LANGUAGE=1 shows it).
+    ...(infoLanguageEnabled()
+      ? ([
+          { kind: "separator" },
+          { kind: "heading", content: <div className="text-[11px] font-semibold uppercase tracking-wide text-(--t-muted)">Info icon language</div> },
+          ...GLOSSARY_LOCALES.map((l) => ({
+            label: LOCALE_NAMES[l],
+            checked: infoLocale === l,
+            onSelect: () => setGlossaryLocale(l),
+          })),
+        ] satisfies MenuEntry[])
+      : []),
     { kind: "separator" },
     { label: "Settings", onSelect: () => navigate("/settings") },
     { label: "Sign out", onSelect: onSignOut },

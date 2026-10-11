@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InfoTerm, InfoTip } from "./InfoTerm";
 import { GLOSSARY, findTerm, glossaryEntry } from "./glossary";
-import { LOCALE_STORAGE_KEY, resetGlossaryLocaleForTests, setGlossaryLocale } from "./glossaryLocale";
+import { LOCALE_STORAGE_KEY, infoLanguageEnabled, resetGlossaryLocaleForTests, setGlossaryLocale } from "./glossaryLocale";
 import { GLOSSARY_TRANSLATIONS } from "./glossaryTranslations";
 import { KpiStrip } from "./KpiStrip";
 import { DataTable } from "./table";
@@ -142,10 +142,23 @@ describe("shared components pick up glossary terms", () => {
 });
 
 describe("info icon language", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_INFO_LANGUAGE", "1");
+  });
   afterEach(() => {
     act(() => setGlossaryLocale("en"));
     window.localStorage.clear();
     resetGlossaryLocaleForTests();
+    vi.unstubAllEnvs();
+  });
+
+  it("stays English while the switch is off, even with a saved choice", () => {
+    vi.stubEnv("VITE_INFO_LANGUAGE", "");
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "ar");
+    resetGlossaryLocaleForTests();
+    expect(infoLanguageEnabled()).toBe(false);
+    render(<InfoTip id="scope1" />);
+    expect(screen.getByRole("button", { name: "What is Scope 1?" })).toBeTruthy();
   });
 
   it("shows Arabic right-to-left and Spanish definitions, and remembers the choice", async () => {

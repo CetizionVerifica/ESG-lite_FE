@@ -3,7 +3,13 @@ import { useSyncExternalStore } from "react";
 /**
  * Language of the info-icon definitions only (the rest of the app stays English).
  * Chosen in the account menu and saved on this device; English until someone picks another.
+ * Off by default: the Arabic and Spanish text waits for a native-speaker check (Shyam, 2026-10-11).
+ * Set VITE_INFO_LANGUAGE=1 to show the choice; while off every info icon is English.
  */
+export function infoLanguageEnabled(): boolean {
+  return import.meta.env.VITE_INFO_LANGUAGE === "1";
+}
+
 export const GLOSSARY_LOCALES = ["en", "ar", "es"] as const;
 export type GlossaryLocale = (typeof GLOSSARY_LOCALES)[number];
 
@@ -25,6 +31,7 @@ let listeners: Array<() => void> = [];
 let current: GlossaryLocale | null = null;
 
 function read(): GlossaryLocale {
+  if (!infoLanguageEnabled()) return "en";
   if (current) return current;
   let stored: string | null = null;
   try {
