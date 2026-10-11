@@ -306,21 +306,37 @@ export function massInTonnes(qty: number | null, unit: string): number | null {
 }
 
 /**
- * A transport leg named after a material carries that material's mass, so
- * editing the quantity in step 2 moves the leg's payload too.
+ * Legs whose mass follows a material line, with that mass in tonnes. A leg
+ * follows a material only when exactly one material line and exactly one leg
+ * share its name and the material's quantity is a mass; two suppliers of one
+ * material, or a split shipment, keep their own typed masses.
  */
-export function syncPayloads(lines: Line[]): Line[] {
-  const mass = new Map<string, number>();
-  for (const l of lines) {
-    if (l.stage !== "A1") continue;
-    const t = massInTonnes(l.quantity, l.unit);
-    const k = l.name.trim().toLowerCase();
-    if (t !== null && k) mass.set(k, (mass.get(k) ?? 0) + t);
+export function linkedPayloads(lines: Line[]): Map<string, number> {
+  const count = (stage: InputStage) => {
+    const m = new Map<string, Line[]>();
+    for (const l of lines) {
+      const k = l.name.trim().toLowerCase();
+      if (l.stage === stage && k) m.set(k, [...(m.get(k) ?? []), l]);
+    }
+    return m;
+  };
+  const materials = count("A1");
+  const out = new Map<string, number>();
+  for (const [k, legs] of count("A2")) {
+    const mats = materials.get(k);
+    if (legs.length !== 1 || mats?.length !== 1) continue;
+    const t = massInTonnes(mats[0].quantity, mats[0].unit);
+    if (t !== null) out.set(legs[0].key, t);
   }
+  return out;
+}
+
+/** Keeps each linked leg's payload equal to its material's mass, so editing a quantity moves the leg too. */
+export function syncPayloads(lines: Line[]): Line[] {
+  const linked = linkedPayloads(lines);
   let changed = false;
   const out = lines.map((l) => {
-    if (l.stage !== "A2") return l;
-    const t = mass.get(l.name.trim().toLowerCase());
+    const t = linked.get(l.key);
     if (t === undefined || t === l.payload_t) return l;
     changed = true;
     return { ...l, payload_t: t };
@@ -331,7 +347,8 @@ export function syncPayloads(lines: Line[]): Line[] {
 /** Divides every material quantity by the process yield, so masses include losses. */
 export function applyYield(lines: Line[], yieldPct: number): Line[] {
   if (!(yieldPct > 0 && yieldPct <= 100)) return lines;
-  return lines.map((l) => (l.stage === "A1" && l.quantity != null ? { ...l, quantity: Number((l.quantity / (yieldPct / 100)).toPrecision(12)) } : l));
+  // Only masses scale: a count of units (a reel, a label) doesn't grow with process losses.
+  return lines.map((l) => (l.stage === "A1" && l.quantity != null && massInTonnes(l.quantity, l.unit) !== null ? { ...l, quantity: Number((l.quantity / (yieldPct / 100)).toPrecision(12)) } : l));
 }
 
 export type PickerFactor = {

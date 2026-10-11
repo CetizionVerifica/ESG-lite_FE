@@ -20,6 +20,7 @@ import {
   canCalculate,
   checklist,
   applyYield,
+  linkedPayloads,
   blankLine,
   lineProblem,
   periodText,
@@ -219,6 +220,8 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
       })),
     [factors.data],
   );
+  const tonneKmLibrary = useMemo(() => materialPicker.filter((f) => f.unit.trim().toLowerCase() === "tonne.km"), [materialPicker]);
+  const linked = useMemo(() => linkedPayloads(lines), [lines]);
   const book = useMemo<FactorBook>(
     () => ({
       material: new Map(materialPicker.map((f) => [f.id, { unit: f.unit, value: f.value }])),
@@ -313,6 +316,8 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
               legs={byStage("A2")}
               materials={byStage("A1")}
               factors={freight.data ?? []}
+              libraryFactors={tonneKmLibrary}
+              linked={linked}
               factorsLoading={freight.isPending}
               factorsError={freight.isError}
               book={book}

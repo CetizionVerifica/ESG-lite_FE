@@ -6,6 +6,10 @@ type Props = {
   legs: Line[];
   materials: Line[];
   factors: PickerFactor[];
+  /** tonne.km factors from the material library, used like the server does when a site has no freight factor. */
+  libraryFactors: PickerFactor[];
+  /** Legs whose mass follows their material (see linkedPayloads). */
+  linked: ReadonlyMap<string, number>;
   factorsLoading: boolean;
   factorsError: boolean;
   book: FactorBook;
@@ -25,14 +29,23 @@ const OTHER = "__other";
 const cell = "px-2 py-2 align-top";
 
 /** Step 3: one inbound leg per material, priced per tonne.km from the site's freight factors. */
-export function TransportStep({ legs, materials, factors, factorsLoading, factorsError, book, siteName, onAdd, onChange, onRemove }: Props) {
+export function TransportStep({ legs, materials, factors, libraryFactors, linked, factorsLoading, factorsError, book, siteName, onAdd, onChange, onRemove }: Props) {
   const names = [...new Set(materials.map((m) => m.name.trim()).filter(Boolean))];
-  const linked = (l: Line) => names.some((n) => n.toLowerCase() === l.name.trim().toLowerCase());
-  const options = factors.map((f) => ({ value: f.id, label: factorLabel(f) }));
+  const named = (l: Line) => names.some((n) => n.toLowerCase() === l.name.trim().toLowerCase());
+  // Site freight factors are emission_factor_id, library ones material_factor_id; the prefix keeps them apart.
+  const options = [
+    ...factors.map((f) => ({ value: `ef-${f.id}`, label: factorLabel(f) })),
+    ...libraryFactors.map((f) => ({ value: `mf-${f.id}`, label: `${factorLabel(f)} · library` })),
+  ];
+  const factorValue = (l: Line) => (l.emission_factor_id != null ? `ef-${l.emission_factor_id}` : l.material_factor_id != null ? `mf-${l.material_factor_id}` : null);
+  const pickFactor = (l: Line, v: string | null) => {
+    const id = v ? Number(v.slice(3)) : null;
+    onChange(l.key, { emission_factor_id: v?.startsWith("ef-") ? id : null, material_factor_id: v?.startsWith("mf-") ? id : null });
+  };
   const pickMaterial = (l: Line, name: string | null) => {
     if (!name || name === OTHER) return onChange(l.key, { name: "" });
     const m = materials.find((x) => x.name.trim() === name);
-    onChange(l.key, { name, payload_t: m ? massInTonnes(m.quantity, m.unit) : l.payload_t, origin_country: l.origin_country ?? m?.origin_country ?? null });
+    onChange(l.key, { name, payload_t: (m && massInTonnes(m.quantity, m.unit)) ?? l.payload_t, origin_country: l.origin_country ?? m?.origin_country ?? null });
   };
 
   return (
@@ -53,7 +66,9 @@ export function TransportStep({ legs, materials, factors, factorsLoading, factor
 
       {factorsError && <p className="text-sm text-bad">Couldn't load the site's freight factors. Reload to try again.</p>}
       {!factorsLoading && !factorsError && factors.length === 0 && (
-        <p className="text-sm text-muted">This site has no freight factors per tonne.km yet. Ask your admin to add them in Emission factors.</p>
+        <p className="text-sm text-muted">
+          This site has no freight factors per tonne.km yet{libraryFactors.length ? ", so only the material library's tonne.km factors are listed" : ""}. Ask your admin to add them in Emission factors.
+        </p>
       )}
 
       {legs.length === 0 ? (
@@ -77,7 +92,8 @@ export function TransportStep({ legs, materials, factors, factorsLoading, factor
             <tbody>
               {legs.map((l, i) => {
                 const n = i + 1;
-                const isLinked = linked(l);
+                const isNamed = named(l);
+                const isLinked = linked.has(l.key);
                 const priced = priceLine(l, book);
                 const materialOptions = [...names.map((v) => ({ value: v, label: v })), { value: OTHER, label: "Other (type a name)" }];
                 return (
@@ -86,11 +102,11 @@ export function TransportStep({ legs, materials, factors, factorsLoading, factor
                       <Select
                         label={`Material, leg ${n}`}
                         hideLabel
-                        value={isLinked ? names.find((v) => v.toLowerCase() === l.name.trim().toLowerCase())! : OTHER}
+                        value={isNamed ? names.find((v) => v.toLowerCase() === l.name.trim().toLowerCase())! : OTHER}
                         options={materialOptions}
                         onChange={(v) => pickMaterial(l, v)}
                       />
-                      {!isLinked && (
+                      {!isNamed && (
                         <TextField label={`Leg name, leg ${n}`} hideLabel className="mt-2" value={l.name} onChange={(v) => onChange(l.key, { name: v })} placeholder="What is carried" />
                       )}
                     </td>
@@ -105,7 +121,7 @@ export function TransportStep({ legs, materials, factors, factorsLoading, factor
                     </td>
                     <td className={cn(cell, "w-32")}>
                       {isLinked ? (
-                        <p className="pt-2 tabular-nums text-ink">{l.payload_t == null ? "Not a mass" : `${fmtKg(l.payload_t)} t`}</p>
+                        <p className="pt-2 tabular-nums text-ink">{`${fmtKg(linked.get(l.key)!)} t`}</p>
                       ) : (
                         <NumberField label={`Mass, leg ${n}`} hideLabel unit="t" value={l.payload_t} min={0} onChange={(v) => onChange(l.key, { payload_t: v })} />
                       )}
@@ -114,12 +130,12 @@ export function TransportStep({ legs, materials, factors, factorsLoading, factor
                       <Combobox
                         label={`Factor, leg ${n}`}
                         hideLabel
-                        value={l.emission_factor_id}
+                        value={factorValue(l)}
                         options={options}
-                        onChange={(v) => onChange(l.key, { emission_factor_id: v })}
+                        onChange={(v) => pickFactor(l, v)}
                         placeholder="Search freight factors…"
                         loading={factorsLoading}
-                        emptyText="No tonne.km factors at this site"
+                        emptyText="No tonne.km factors"
                       />
                     </td>
                     <td className={cn(cell, "pt-4 text-right tabular-nums")}>
