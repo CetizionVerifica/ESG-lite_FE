@@ -43,7 +43,7 @@ function Row({ siteId, category, month }: { siteId: number; category: MyMonthCat
           category.status !== "covered" && <StatusPill status={category.status} />
         )}
         <span className="w-24 whitespace-nowrap text-right font-num text-sm tabular-nums text-ink">
-          {category.status === "pending" || category.status === "approved" ? formatEmissions(category.total_emission) : ""}
+          {category.status === "pending" || category.status === "approved" ? formatEmissions(Number(category.total_emission)) : ""}
         </span>
         {todo ? (
           <Link
