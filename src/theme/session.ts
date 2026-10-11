@@ -5,7 +5,7 @@ import { PLANETPULSE, packFromBrand } from "./packs";
 import type { Appearance, BrandLike, ResolvedAppearance, ThemePack } from "./packs";
 
 export const APPEARANCE_KEY = "appearance";
-/** Key the legacy ThemeContext wrote ("light" | "dark"); read once to migrate. */
+/** Key the old UI's ThemeContext wrote ("light" | "dark"); read once to migrate. */
 export const LEGACY_THEME_KEY = "theme";
 
 const SUPERADMIN = "Superadmin";

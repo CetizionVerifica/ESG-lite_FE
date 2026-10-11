@@ -5,7 +5,7 @@
 
 ## Why this module exists
 Today colour and dark mode are switched by hand: **553 `isDark ? … : …` ternaries** across `src/`
-(`src/context/ThemeContext.tsx` only toggles a `dark` class and exposes `isDark`). Brand colours
+(the old `src/context/ThemeContext.tsx` only toggled a `dark` class and exposed `isDark`; both were removed at M3). Brand colours
 (`Brand` entity) are used only inside report PDFs. The redesign needs one place where a client's
 two brand colours become a full, accessible theme for the whole app.
 
@@ -57,9 +57,9 @@ good `#16794c` / `#4ccf8f`, warn `#9a6300` / `#f0b955`, bad `#b4321f` / `#f38b7a
 ## Implementation shape (for the developer, not code yet)
 - `src/theme/tokens.css` – static tokens + PlanetPulse defaults on `:root`.
 - `src/theme/buildTheme.ts` – pure function `(brand, look, appearance) → Record<token, value>`; unit-tested.
-- `src/theme/ThemeProvider.tsx` – replaces `context/ThemeContext.tsx`; fetches `getBrand(companyId)`
+- `src/theme/ThemeProvider.tsx` – replaced `context/ThemeContext.tsx` (deleted at M3); fetches `getBrand(companyId)`
   after login, applies vars on `<html>`, keeps `useTheme()` returning `{ appearance, setAppearance, look, pack }`.
-  Keep `isDark` as a deprecated alias during migration only.
+  The deprecated `isDark` alias was removed at M3.
 - Tailwind v4: map tokens with `@theme` so classes read `bg-panel text-ink border-line`, not `bg-slate-800`.
 - ECharts: one `useChartTheme()` hook that returns an ECharts theme object built from the same tokens.
 - `@react-pdf` reports: `pdfTheme(brand)` returns print colours (always light look).
