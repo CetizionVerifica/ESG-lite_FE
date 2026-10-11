@@ -15,7 +15,7 @@ Today: 3 steps (decorative intro → filters → results); every change means "B
 
 ## Layout
 ```
-PageHeader "GHG report"  crumb "{Company}"
+PageHeader "GHG report"
   chips: Sites ▾  Categories ▾  Calendar [CY|FY]  Frequency [Year|Quarter|Month]  Year ▾  (Quarter/Month ▾)
   actions: [Download branded PDF] (primary) · ⋯ (Quick PDF, Export tables XLSX)
 "Comparing {sel} with {prev}" note

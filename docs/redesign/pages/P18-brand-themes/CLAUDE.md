@@ -12,7 +12,7 @@
 
 ## Layout
 ```
-PageHeader "Brand theme · {Client}"  crumb Clients › {Client}   status: "Unsaved changes" · actions: Reset · Save theme
+PageHeader "Brand theme · {Client}"   status: "Unsaved changes" · actions: Reset · Save theme
 ┌ Editor (380px) ────────────────┐ ┌ Live preview (fills) ─────────────────────────────┐
 │ Display name                   │ │ Look: [Classic][Light][Night]   Screen: [Overview] │
 │ Logo (light bg)  FileDrop      │ │        [Sign in][Report cover][Email]               │

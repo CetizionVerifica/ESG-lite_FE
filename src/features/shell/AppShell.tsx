@@ -135,7 +135,7 @@ export default function AppShell() {
         inputLabel="Search pages"
       />
       <main id="main" tabIndex={-1} className="mx-auto max-w-[1440px] px-4 pb-10 outline-none sm:px-6">
-        <ContextBar route={route} showClientSwitcher={clientScoped} onClientPicked={onClientPicked} />
+        <ContextBar showClientSwitcher={clientScoped} onClientPicked={onClientPicked} />
         <Suspense fallback={<PageSkeleton />}>
           <Outlet />
         </Suspense>

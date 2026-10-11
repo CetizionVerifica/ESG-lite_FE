@@ -14,7 +14,7 @@
 ┌ top bar 52px (--t-chrome) ─────────────────────────────────────────────────────┐
 │ [client logo] │ Overview  Data▾  Reports▾  Targets  Setup▾ │ ⌘K search │ 🔔 │ avatar▾ │
 └──────────────────────────────────────────────────────────────────────────────────┘
-│ page header: breadcrumb · title · period/site context · primary action        │
+│ page header: title · period/site context · primary action (no breadcrumb)     │
 │ page body (max-width 1440, 24px gutters)                                       │
 ```
 - Logo slot uses `logoOnDarkUrl` in Classic/Night, `logoUrl` in Light. Falls back to company name.
@@ -61,7 +61,7 @@ Superadmin gets a **client switcher** in the page header that sets the company c
 `RootRedirect` sends: User → `/my-month`, Manager → `/overview`, Admin → `/users`, Superadmin → `/console`.
 
 ## Page frame contract (every page)
-- `<PageHeader title crumb actions context />` — one primary button max, top right.
+- `<PageHeader title actions context />` — one primary button max, top right. No breadcrumb or eyebrow label above the title: the top nav already shows where you are.
 - Context chips (Period, Site, Category) live in the header, not in a sidebar, and persist in the URL query.
 - Loading = skeleton of the final layout, never a full-page spinner. Empty = `<EmptyState>` with one action.
 - Errors = inline banner with retry; toasts only for completed actions.

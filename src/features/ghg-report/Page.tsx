@@ -230,11 +230,9 @@ export default function GhgReportPage() {
   };
   const ready = !!figures && !figures.empty && !tables.isFetching;
 
-  const company = sites[0]?.company?.name;
   const header = (context?: ReactNode, actions = false) => (
     <PageHeader
       title="GHG report"
-      crumb={company ? [{ label: company }] : undefined}
       context={context}
       primaryAction={
         actions

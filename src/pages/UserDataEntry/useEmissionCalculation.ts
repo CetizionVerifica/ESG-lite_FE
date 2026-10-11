@@ -11,7 +11,9 @@ export const useEmissionCalculation = (
   targetYear?: number,
   columns?: ColumnEntity[],
   selectColumnNames?: string[],
-  emissionCategoryMapping?: EmissionCategoryMapping,
+  // Kept for the call signature; the save-time matcher never uses the
+  // client's own category name, so the preview doesn't either.
+  _emissionCategoryMapping?: EmissionCategoryMapping,
   fallbackToRaw?: boolean,
   calculationSpec?: CalculationSpec | null
 ) =>
@@ -20,7 +22,6 @@ export const useEmissionCalculation = (
     targetYear,
     columns,
     selectColumnNames,
-    emissionCategoryMapping,
     fallbackToRaw,
     calculationSpec,
   });

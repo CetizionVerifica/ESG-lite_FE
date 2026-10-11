@@ -16,7 +16,7 @@
 
 ## Layout (desktop)
 ```
-PageHeader: crumb "{Company} · {sites} · {period}"  title "{period label}"
+PageHeader: title "{period label}"
             context chips: [Sites ▾] [Category ▾]   period segmented: Month | Quarter | CY | FY | Compare
 ┌ KpiStrip ───────────────────────────────────────────────────────────────────┐
 │ Net emissions (wide) │ Intensity │ Saved (renewables) │ Gross by scope (ScopeBar) │

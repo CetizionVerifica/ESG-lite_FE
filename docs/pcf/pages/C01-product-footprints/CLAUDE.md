@@ -8,7 +8,7 @@
 
 ## Layout (desktop)
 ```
-PageHeader: crumb "{Company} · Products"  title "Product footprints"   context: [Site ▾] [Year ▾]
+PageHeader: title "Product footprints"   context: [Site ▾] [Year ▾]
             primary: "New footprint"
 ┌ KpiStrip ───────────────────────────────────────────────────────────────────────┐
 │ Products footprinted 4 of 6 │ Production covered 92% │ Plant energy allocated 96% │ Primary data share 38% │

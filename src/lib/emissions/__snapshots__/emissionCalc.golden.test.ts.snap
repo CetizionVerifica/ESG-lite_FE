@@ -1,25 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > a company category name resolves through the mapping when the factor still carries it 1`] = `
-[
-  {
-    "activity": 10,
-    "expectedUnit": "litre",
-    "factorId": 15,
-    "result": {
-      "status": "ok",
-      "value": 15,
-    },
-    "row": {
-      "activity_data_unit": "litre",
-      "emission_category": "LPG",
-      "id": 1,
-      "quantity": "10",
-    },
-  },
-]
-`;
-
 exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matches the golden outputs 1`] = `
 [
   {

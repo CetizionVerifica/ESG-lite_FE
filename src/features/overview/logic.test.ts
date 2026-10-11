@@ -11,7 +11,6 @@ import {
   categoryBars,
   combinedIntensity,
   defaultPeriod,
-  headerText,
   insightText,
   lastYearCaption,
   listLink,
@@ -180,12 +179,6 @@ describe("links and text", () => {
       { month: "Yearly filing (all categories)", gross: 5, saved: null, net: null },
     ]);
     expect(trendTable([], 0)).toEqual([]);
-  });
-
-  it("titles the page with the period and names the sites in the crumb", () => {
-    expect(headerText("Midal", 0, 3, { kind: "cy", year: 2025 })).toEqual({ title: "CY 2025", crumb: "Midal · All sites" });
-    expect(headerText(null, 1, 3, { kind: "month", year: 2025, month: 9 })).toEqual({ title: "Sep 2025", crumb: "1 site" });
-    expect(headerText("Midal", 2, 3, { kind: "fy", startYear: 2025 }).crumb).toBe("Midal · 2 sites");
   });
 });
 

@@ -1,6 +1,6 @@
 import type { OverviewCategory, OverviewLastYear, OverviewMonth, OverviewSite, SubmissionUser } from "../../services/overviewService";
 import { fyBothYears } from "../../lib/fiscalYear";
-import { DEFAULT_FY_START_MONTH, MONTH_SHORT, type Period, type PeriodKind, periodContaining, periodLabel, serializePeriod } from "../../ui";
+import { MONTH_SHORT, type Period, type PeriodKind, periodContaining, serializePeriod } from "../../ui";
 
 /** Period kinds the overview offers; B4 has no custom ranges. */
 export const PERIOD_KINDS: PeriodKind[] = ["month", "quarter", "cy", "fy"];
@@ -217,12 +217,6 @@ export function attentionItems(input: {
       tone: "info",
     });
   return items;
-}
-
-/** Page title and crumb pieces. */
-export function headerText(company: string | null, siteCount: number, totalSites: number, period: Period, fyStartMonth = DEFAULT_FY_START_MONTH) {
-  const sites = siteCount === 0 || siteCount === totalSites ? (totalSites === 1 ? "1 site" : "All sites") : siteCount === 1 ? "1 site" : `${siteCount} sites`;
-  return { title: periodLabel(period, fyStartMonth), crumb: [company, sites].filter(Boolean).join(" · ") };
 }
 
 // ── Lower tabs ──────────────────────────────────────────────────────────────

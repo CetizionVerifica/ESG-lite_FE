@@ -17,7 +17,7 @@ export interface ShellRoute {
   /** React Router path, absolute. */
   path: string;
   title: string;
-  /** Breadcrumb shown above the page, ending with the page itself. */
+  /** Page trail, ending with the page itself. Route metadata only; not rendered above the title. */
   crumb: string[];
   roles: readonly Role[];
   /** Page spec that will replace the placeholder (docs/redesign/pages, docs/pcf). */
@@ -50,6 +50,9 @@ export const SHELL_ROUTES = [
   { id: "ede-report", path: "/reports/ede", title: "EDE report", crumb: ["Reports", "EDE report"], roles: ["Manager", "Superadmin"], spec: "P11", clientContext: true },
   { id: "targets", path: "/targets", title: "Targets (SBTi)", crumb: ["Targets (SBTi)"], roles: ["Manager"], spec: "P12" },
   // PCF slot, owned by the Product carbon footprint plan (docs/pcf/).
+  { id: "product-footprints", path: "/products", title: "Product footprints", crumb: ["Products (PCF)"], roles: ["Manager"], spec: "C01", roleRedirect: { Superadmin: "/setup/products" } },
+  { id: "footprint-new", path: "/products/new", title: "New footprint", crumb: ["Products (PCF)", "New footprint"], roles: ["Manager"], spec: "C02", roleRedirect: { Superadmin: "/setup/products" } },
+  { id: "footprint-builder", path: "/products/:productId/footprints/:studyId/edit", title: "Footprint builder", crumb: ["Products (PCF)", "Footprint builder"], roles: ["Manager"], spec: "C02", roleRedirect: { Superadmin: "/setup/products" } },
   { id: "pcf", path: "/products/*", title: "Products (PCF)", crumb: ["Products (PCF)"], roles: ["Manager"], spec: "C01–C06", roleRedirect: { Superadmin: "/setup/products" } },
 
   // Everyone

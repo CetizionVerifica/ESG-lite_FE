@@ -14,7 +14,7 @@
 
 ## Layout
 ```
-PageHeader "September 2025"  crumb "{Site}"   month switcher ‹ ›   primary: Add data
+PageHeader "September 2025"   month switcher ‹ ›   primary: Add data
 Due banner: "Due in 4 days (Oct 10). 6 of 9 categories done."  progress bar
 ┌ Sent back to you (rejected) ─────────────────────────────┐  (only if any)
 │ Diesel · "Wrong unit, should be litres"  · Manager · [Fix] │

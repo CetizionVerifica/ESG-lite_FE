@@ -79,7 +79,6 @@ export default function AddDataPage() {
   const calcInput = {
     targetYear: factorYear ?? undefined,
     columns: model?.columns,
-    emissionCategoryMapping: model?.mapping,
   };
   const calc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec });
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.

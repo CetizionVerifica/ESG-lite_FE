@@ -8,7 +8,6 @@ import type {
   CalculationSpec,
   ColumnEntity,
   EmissionCalculationResult,
-  EmissionCategoryMapping,
   EmissionFactor,
   MethodCalculation,
   ModalRow,
@@ -58,18 +57,25 @@ export interface EmissionCalcInput {
   targetYear?: number;
   columns?: ColumnEntity[];
   selectColumnNames?: string[];
-  emissionCategoryMapping?: EmissionCategoryMapping;
   // Use the raw activity value when no unit conversion exists (FERA factors
   // already account for the fuel's energy content).
   fallbackToRaw?: boolean;
   calculationSpec?: CalculationSpec | null;
 }
 
-// Find the factor for an emission category in the target year: by
-// emission_category_name, then global_category_name, then the company
-// category name the mapping points from, then a trim + case-insensitive match.
+// Find the factor for an emission category, in the backend's save-time order
+// (findEmissionFactorForCategory in ESG-lite src/utils/findEmissionFactor.ts):
+//   1. exact emission_category_name in the target year
+//   2. exact global_category_name in the target year
+//   3. exact emission_category_name, any year (newest first)
+//   4. exact global_category_name, any year (newest first)
+//   5. trim + case-insensitive match on either name: the target year, else
+//      the newest
+// The backend never looks up the client's own category name, so neither
+// does the preview: a factor named that way would show a figure the entry
+// never gets. Without a target year, every year counts for steps 1-2.
 export const findEmissionFactor = (
-  { emissionFactors, targetYear, emissionCategoryMapping }: EmissionCalcInput,
+  { emissionFactors, targetYear }: EmissionCalcInput,
   emissionCategory: string,
 ): EmissionFactor | undefined => {
   // No category yet (dropdowns not all chosen): there is nothing to match.
@@ -78,29 +84,24 @@ export const findEmissionFactor = (
   if (!emissionCategory || !emissionCategory.trim()) return undefined;
 
   const yearMatch = (f: EmissionFactor) => targetYear === undefined || f.year === targetYear;
+  const newest = (matches: EmissionFactor[]) =>
+    matches.reduce<EmissionFactor | undefined>((best, f) => (!best || f.year > best.year ? f : best), undefined);
 
-  const byName = emissionFactors.find((f) => f.emission_category_name === emissionCategory && yearMatch(f));
-  if (byName) return byName;
-
-  const byGlobal = emissionFactors.find((f) => f.global_category_name === emissionCategory && yearMatch(f));
-  if (byGlobal) return byGlobal;
-
-  if (emissionCategoryMapping) {
-    const companyCatName = Object.entries(emissionCategoryMapping).find(([, value]) => value === emissionCategory)?.[0];
-    if (companyCatName && companyCatName !== emissionCategory) {
-      const byCompany = emissionFactors.find((f) => f.emission_category_name === companyCatName && yearMatch(f));
-      if (byCompany) return byCompany;
-    }
-  }
+  const byName = (f: EmissionFactor) => f.emission_category_name === emissionCategory;
+  const byGlobal = (f: EmissionFactor) => f.global_category_name === emissionCategory;
+  const exact =
+    emissionFactors.find((f) => byName(f) && yearMatch(f)) ||
+    emissionFactors.find((f) => byGlobal(f) && yearMatch(f)) ||
+    newest(emissionFactors.filter(byName)) ||
+    newest(emissionFactors.filter(byGlobal));
+  if (exact) return exact;
 
   // Normalized match guards against whitespace/casing drift between factor
   // names and the submitted value.
   const target = emissionCategory.trim().toLowerCase();
   const norm = (s?: string) => (s ?? "").trim().toLowerCase();
-  return (
-    emissionFactors.find((f) => norm(f.emission_category_name) === target && yearMatch(f)) ||
-    emissionFactors.find((f) => norm(f.global_category_name) === target && yearMatch(f))
-  );
+  const loose = emissionFactors.filter((f) => norm(f.emission_category_name) === target || norm(f.global_category_name) === target);
+  return loose.find(yearMatch) ?? newest(loose);
 };
 
 export const expectedUnitFor = (input: EmissionCalcInput, emissionCategory: string): string | null =>

@@ -94,7 +94,8 @@ test("signed-out deep link goes to the login", async ({ page }) => {
 
 test("menus open and move with the keyboard, Esc closes", async ({ page }) => {
   await signIn(page, "Manager");
-  await page.goto("/products");
+  // C03 still shows the PCF placeholder under /products/*.
+  await page.goto("/products/12");
   await expect(page.getByRole("heading", { name: "Products (PCF)" })).toBeVisible();
   const data = mainNav(page).getByRole("button", { name: "Data" });
   await data.focus();

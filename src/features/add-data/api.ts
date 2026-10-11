@@ -22,7 +22,11 @@ import { periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPerio
 import { entriesQuery, entryInPeriod, type SavedEntry } from "./logic/existing";
 import type { ColumnConfig, EmissionFactor } from "./types";
 
-/** Everything the form needs for one site × category × factor year. */
+/**
+ * Everything the form needs for one site × category. Factors come for every
+ * year: when the factor year has none, the backend saves with the newest
+ * other year, and the preview has to see those factors to say so.
+ */
 export interface EntrySetup {
   config: ColumnConfig | null;
   factors: EmissionFactor[];
@@ -43,20 +47,20 @@ export function useEntrySetup(args: {
 }) {
   const { siteId, categoryId, factorYear, companyId, feraCategoryId } = args;
   return useQuery({
-    queryKey: ["add-data", "setup", siteId, categoryId, factorYear, companyId, feraCategoryId],
+    queryKey: ["add-data", "setup", siteId, categoryId, companyId, feraCategoryId],
     enabled: siteId !== null && categoryId !== null && factorYear !== null,
     queryFn: async (): Promise<EntrySetup> => {
       const site = siteId as number;
       const category = categoryId as number;
       const [configs, factors, units, mappings, fera] = await Promise.all([
         getUserColumnConfigsBySiteAndCategory(site, category) as Promise<ColumnConfig[]>,
-        getUserEmissionFactorsBySiteAndCategory(site, category, factorYear as number) as Promise<EmissionFactor[]>,
+        getUserEmissionFactorsBySiteAndCategory(site, category) as Promise<EmissionFactor[]>,
         getUserUnitsBySiteAndCategory(site, category) as Promise<UnitData[]>,
         // Optional extras: the form still works without them.
         companyId ? getMappingsByCompany(companyId, site, category).catch(() => []) : Promise.resolve([]),
         feraCategoryId
           ? Promise.all([
-              getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId, factorYear as number).catch(() => []),
+              getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId).catch(() => []),
               getUserUnitsBySiteAndCategory(site, feraCategoryId).catch(() => []),
             ])
           : Promise.resolve([[], []] as [EmissionFactor[], UnitData[]]),

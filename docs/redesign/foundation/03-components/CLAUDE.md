@@ -7,7 +7,7 @@ Every component: token colours only, keyboard accessible, has loading/empty/erro
 
 | Component | Purpose | Key props / behaviour |
 |---|---|---|
-| `PageHeader` | Title, breadcrumb, context chips, actions | `title`, `crumb[]`, `context` (period/site), `primaryAction`, `secondaryActions[]` |
+| `PageHeader` | Title, context chips, actions (no breadcrumb) | `title`, `context` (period/site), `primaryAction`, `secondaryActions[]` |
 | `ContextChips` | Period / Site / Category / Scope selectors | Synced to URL query; period supports Month, Quarter, CY, FY, custom |
 | `KpiStrip` | One row of 3–5 figures in one panel | Primary KPI wider; delta with ▲▼ and fixed good/bad colour; unit in small text |
 | `ScopeBar` | Stacked Scope 1/2/3 bar + legend | Uses `--t-s1/2/3` only |
@@ -32,7 +32,7 @@ Every component: token colours only, keyboard accessible, has loading/empty/erro
 | `PoweredBy` | "Powered by PlanetPulse ESGLite" mark | Sign-in, report cover, email footer |
 
 ## Number formatting (one util, `src/ui/format.ts`)
-- Emissions: `tCO₂e` with thousands separators; < 1 t shows `kgCO₂e`; 1 decimal for intensity.
+- Emissions: `tCO₂e` with thousands separators; never converted to `kgCO₂e` (below 1 t: up to 3 decimals, e.g. `0.71 tCO₂e`); 1 decimal for intensity.
 - Deltas: `▼ 4.8%` good when lower; never red/green without the arrow.
 - Dates: `Sep 2025`, `CY 2025`, `FY 2025-26` (respects `year_type`).
 
