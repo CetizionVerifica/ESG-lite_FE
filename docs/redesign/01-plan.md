@@ -5,7 +5,7 @@ Goal: rebuild the ESGLite UI on one token-based design system where PlanetPulse 
 ## How the work is cut
 - **Foundation first, pages in parallel.** Nothing page-level starts until F1 tokens and F3's core components (DataTable, Drawer, PageHeader, Field set, StatusPill) are merged.
 - **Strangler migration.** New pages live under `src/features/<module>/` and are switched on per route. Old pages stay until their replacement passes acceptance; old routes redirect.
-- **One PR per spec section**, ≤ ~600 changed lines, behind a feature flag `VITE_NEW_UI=1` (or per-role flag) until the phase ships.
+- **One PR per spec section**, ≤ ~600 changed lines, behind a feature flag `VITE_NEW_UI=1` (or per-role flag) until the phase ships. The flag was removed at M3 (2026-10-11), when the new UI became the only UI.
 - **No backend change is required to start.** Items B1–B8 in the entity map are additive and can land in parallel; specs say which screens degrade gracefully without them.
 
 ## Phases and workstreams
