@@ -2,6 +2,7 @@ import { EmptyState } from "./EmptyState";
 import { Skeleton } from "./Skeleton";
 import { cn } from "./cn";
 import { formatEmissions, formatPercent } from "./format";
+import { AutoInfoTip } from "./InfoTerm";
 
 export type ScopeTotals = { scope1: number; scope2: number; scope3: number };
 
@@ -47,6 +48,7 @@ export function ScopeBar({ totals, loading, hideLegend, className }: ScopeBarPro
             <li key={p.key} className="flex items-center gap-1.5">
               <span aria-hidden className={cn("size-2.5 rounded-full", p.fill)} />
               <span className="text-muted">{p.label}</span>
+              <AutoInfoTip label={p.label} />
               <span className="font-num tabular-nums text-ink">{formatEmissions(p.value)}</span>
               <span className="font-num text-xs tabular-nums text-muted">{formatPercent(p.pct, 0)}</span>
             </li>

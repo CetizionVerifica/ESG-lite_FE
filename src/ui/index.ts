@@ -20,6 +20,8 @@ export { Badge, type BadgeTone } from "./Badge";
 export { Avatar } from "./Avatar";
 export { initials } from "./initials";
 export { Tooltip, type TooltipProps } from "./Tooltip";
+export { InfoTip, InfoTerm, AutoInfoTip, type InfoTipProps, type InfoTermProps } from "./InfoTerm";
+export { GLOSSARY, findTerm, glossaryEntry, type GlossaryEntry, type TermKey } from "./glossary";
 export { Tabs, TabPanel, type TabItem, type TabsProps } from "./Tabs";
 export { SegmentedControl, type SegmentedControlProps, type SegmentedOption } from "./SegmentedControl";
 export { Menu, type MenuDivider, type MenuEntry, type MenuItem, type MenuProps } from "./Menu";

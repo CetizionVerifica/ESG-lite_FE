@@ -7,6 +7,8 @@ import {
   Callout,
   ChartFrame,
   FilterBar,
+  GLOSSARY,
+  InfoTerm,
   KpiStrip,
   Menu,
   ScopeBar,
@@ -233,6 +235,25 @@ export function FilterBarDemo() {
       <Variant label="Loading options">
         <FilterBar value={value} onChange={() => {}} loading search={false} filters={[{ key: "submitter", label: "Submitted by", options: [] }]} />
       </Variant>
+    </DemoSection>
+  );
+}
+
+export function GlossaryDemo() {
+  return (
+    <DemoSection id="glossary" title="InfoTerm and the glossary">
+      <p className="text-sm text-ink">
+        Hover, focus or tap the icon: <InfoTerm>Scope 1</InfoTerm>, <InfoTerm>tCO₂e</InfoTerm>, <InfoTerm>FERA</InfoTerm>, approval{" "}
+        <InfoTerm term="status">status</InfoTerm>.
+      </p>
+      <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+        {Object.entries(GLOSSARY).map(([key, entry]) => (
+          <div key={key}>
+            <dt className="font-medium text-ink">{entry.term}</dt>
+            <dd className="text-muted">{entry.definition}</dd>
+          </div>
+        ))}
+      </dl>
     </DemoSection>
   );
 }

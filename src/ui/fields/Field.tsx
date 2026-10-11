@@ -1,6 +1,8 @@
 import { useId, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "../cn";
+import { AutoInfoTip } from "../InfoTerm";
+import { findTerm } from "../glossary";
 
 export type FieldControlProps = {
   id: string;
@@ -53,10 +55,19 @@ export function Field({ label, help, error, required, loading, disabled, hideLab
   );
   const labelClass = cn("mb-1 block text-sm font-medium text-ink", hideLabel && "sr-only");
   const Wrapper = group ? "fieldset" : "div";
+  const term = findTerm(label);
 
   return (
     <Wrapper className={cn("min-w-0", className)}>
-      {group ? <legend className={labelClass}>{labelContent}</legend> : (
+      {group ? <legend className={labelClass}>{labelContent}</legend> : term && !hideLabel ? (
+        // The info button sits beside the label, not inside it, so it isn't part of the control's name.
+        <div className="mb-1 flex items-center gap-1.5">
+          <label htmlFor={controlId} className="block text-sm font-medium text-ink">
+            {labelContent}
+          </label>
+          <AutoInfoTip label={label} />
+        </div>
+      ) : (
         <label htmlFor={controlId} className={labelClass}>
           {labelContent}
         </label>

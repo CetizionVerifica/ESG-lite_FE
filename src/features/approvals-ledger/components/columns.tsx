@@ -81,6 +81,7 @@ export function ledgerColumns({
     {
       id: "status",
       header: "Status",
+      info: "status",
       value: (r) => statusOf(r),
       sortable: true,
       cell: (r) => <StatusPill status={statusOf(r)} size="sm" />,

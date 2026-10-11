@@ -14,6 +14,7 @@ import {
   type FilterDef,
   type Kpi,
   KpiStrip,
+  InfoTerm,
   PageHeader,
   type Period,
   cn,
@@ -146,7 +147,11 @@ export default function ProductFootprintsPage() {
   const header = (
     <PageHeader
       title="Product footprints"
-      description={`Cradle-to-gate footprints per product for ${year}.`}
+      description={
+        <>
+          <InfoTerm>Cradle-to-gate</InfoTerm> footprints per product for {year}.
+        </>
+      }
       context={
         <ContextChips
           chips={["site", "period"]}
