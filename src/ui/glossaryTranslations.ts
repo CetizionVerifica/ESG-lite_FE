@@ -13,7 +13,7 @@ export const GLOSSARY_TRANSLATIONS: Record<Exclude<GlossaryLocale, "en">, Record
   ar: {
     scope1: {
       term: "النطاق 1",
-      definition: "الانبعاثات المباشرة من مصادر تملكها الشركة أو تتحكم فيها، مثل الوقود المحروق في الغلايات والمولدات ومركبات الشركة.",
+      definition: "الانبعاثات المباشرة من مصادر تملكها الشركة أو تتحكم فيها، مثل الوقود المحروق في الغلايات والمولدات والمركبات، وتسرب غازات التبريد.",
     },
     scope2: {
       term: "النطاق 2",
@@ -93,7 +93,7 @@ export const GLOSSARY_TRANSLATIONS: Record<Exclude<GlossaryLocale, "en">, Record
     },
     pcf: {
       term: "البصمة الكربونية للمنتج (PCF)",
-      definition: "انبعاثات وحدة واحدة من المنتج، من المواد الخام حتى خروجه من بوابة المصنع.",
+      definition: "انبعاثات وحدة معلنة واحدة من المنتج. في ESGLite: من المواد الخام حتى بوابة المصنع.",
     },
     cradleToGate: {
       term: "من المهد إلى البوابة",
@@ -151,7 +151,7 @@ export const GLOSSARY_TRANSLATIONS: Record<Exclude<GlossaryLocale, "en">, Record
   es: {
     scope1: {
       term: "Alcance 1",
-      definition: "Emisiones directas de fuentes que su empresa posee o controla, como el combustible quemado en calderas, generadores y vehículos de la empresa.",
+      definition: "Emisiones directas de fuentes que su empresa posee o controla, como el combustible quemado en calderas, generadores y vehículos, y las fugas de refrigerantes.",
     },
     scope2: {
       term: "Alcance 2",
@@ -231,7 +231,7 @@ export const GLOSSARY_TRANSLATIONS: Record<Exclude<GlossaryLocale, "en">, Record
     },
     pcf: {
       term: "Huella de carbono del producto (PCF)",
-      definition: "Las emisiones de una unidad de producto, desde las materias primas hasta la salida de la fábrica.",
+      definition: "Las emisiones de una unidad declarada de un producto. En ESGLite: desde las materias primas hasta la puerta de la fábrica.",
     },
     cradleToGate: {
       term: "De la cuna a la puerta",

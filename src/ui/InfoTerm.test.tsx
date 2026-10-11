@@ -9,6 +9,7 @@ import { GLOSSARY_TRANSLATIONS } from "./glossaryTranslations";
 import { KpiStrip } from "./KpiStrip";
 import { DataTable } from "./table";
 import { TextField } from "./fields";
+import { Drawer } from "./Drawer";
 
 afterEach(cleanup);
 
@@ -176,5 +177,31 @@ describe("info icon language", () => {
   it("has every translated definition at 160 characters or less", () => {
     for (const table of Object.values(GLOSSARY_TRANSLATIONS))
       for (const [id, t] of Object.entries(table)) expect(t.definition.length, id).toBeLessThanOrEqual(160);
+  });
+});
+
+describe("InfoTip inside overlays and with a mouse", () => {
+  it("Esc closes only the tip, not the Drawer around it; a second Esc closes the Drawer", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(
+      <Drawer open onClose={onClose} title="Edit factor">
+        <TextField label="Emission factor" value="" onChange={() => {}} />
+      </Drawer>,
+    );
+    act(() => screen.getByRole("button", { name: "What is Emission factor?" }).focus());
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays open when a mouse clicks after hovering", async () => {
+    const user = userEvent.setup();
+    render(<InfoTip id="scope2" />);
+    await user.click(screen.getByRole("button"));
+    expect(screen.getByRole("tooltip")).toBeTruthy();
   });
 });

@@ -18,7 +18,7 @@ export type GlossaryEntry = {
 export const GLOSSARY = {
   scope1: {
     term: "Scope 1",
-    definition: "Direct emissions from sources your company owns or controls, such as fuel burned in boilers, generators and company vehicles.",
+    definition: "Direct emissions from sources your company owns or controls, such as fuel burned in boilers, generators and vehicles, and refrigerant leaks.",
   },
   scope2: {
     term: "Scope 2",
@@ -113,7 +113,7 @@ export const GLOSSARY = {
   pcf: {
     term: "PCF",
     aliases: ["Product carbon footprint", "Product footprints", "Product footprint"],
-    definition: "Product carbon footprint: the emissions of one unit of a product, from raw materials up to the factory gate.",
+    definition: "Product carbon footprint: the emissions of one declared unit of a product. In ESGLite: from raw materials to the factory gate.",
   },
   cradleToGate: {
     term: "Cradle-to-gate",

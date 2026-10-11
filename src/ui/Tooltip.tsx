@@ -32,6 +32,7 @@ export function Tooltip({ content, children, side = "top", toggleOnClick, classN
   const tipRef = useRef<HTMLSpanElement>(null);
   // Open state when the pointer went down, so a tap that also focuses the child doesn't open and close at once.
   const openAtPointerDown = useRef<boolean | null>(null);
+  const mouseDown = useRef(false);
   const show = () => setOpen(true);
   const hide = () => setOpen(false);
 
@@ -86,15 +87,19 @@ export function Tooltip({ content, children, side = "top", toggleOnClick, classN
   const describedBy = [own["aria-describedby"], open ? id : undefined].filter(Boolean).join(" ") || undefined;
   const clickProps = toggleOnClick
     ? {
-        onPointerDown: (e: unknown) => {
+        onPointerDown: (e: { pointerType?: string }) => {
           own.onPointerDown?.(e);
           openAtPointerDown.current = open;
+          mouseDown.current = e.pointerType === "mouse";
         },
         onClick: (e: unknown) => {
           own.onClick?.(e);
           const was = openAtPointerDown.current ?? open;
+          const mouse = mouseDown.current;
           openAtPointerDown.current = null;
-          setOpen(!was);
+          mouseDown.current = false;
+          // A mouse click lands after hover already opened the tip: keep it open. Touch and keyboard toggle.
+          setOpen(mouse ? true : !was);
         },
       }
     : {};
@@ -117,9 +122,14 @@ export function Tooltip({ content, children, side = "top", toggleOnClick, classN
           own.onBlur?.(e);
           hide();
         },
-        onKeyDown: (e: { key: string }) => {
+        onKeyDown: (e: { key: string; preventDefault: () => void; stopPropagation: () => void }) => {
           own.onKeyDown?.(e);
-          if (e.key === "Escape") hide();
+          if (e.key === "Escape" && open) {
+            // Only the tip closes, not a Drawer or Modal around it.
+            e.preventDefault();
+            e.stopPropagation();
+            hide();
+          }
         },
         ...clickProps,
       })}
