@@ -22,7 +22,7 @@ const group = (label: string, items: NavLinkItem[]): NavGroupItem => ({ kind: "g
 
 export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   User: [
-    link("My month", "/my-month"),
+    link("Current Month", "/my-month"),
     link("Add data", "/data/new"),
     link("My entries", "/data/mine"),
     link("Production", "/production"),

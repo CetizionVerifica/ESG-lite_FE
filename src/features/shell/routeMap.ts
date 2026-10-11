@@ -35,7 +35,7 @@ const ALL: readonly Role[] = ROLES;
 
 export const SHELL_ROUTES = [
   // Contributor (User)
-  { id: "my-month", path: "/my-month", title: "My month", crumb: ["My month"], roles: ["User"], spec: "P02" },
+  { id: "my-month", path: "/my-month", title: "Current Month", crumb: ["Current Month"], roles: ["User"], spec: "P02" },
   { id: "add-data", path: "/data/new", title: "Add data", crumb: ["Add data"], roles: ["User"], spec: "P03" },
   { id: "my-entries", path: "/data/mine", title: "My entries", crumb: ["My entries"], roles: ["User"], spec: "P04" },
   { id: "production", path: "/production", title: "Production", crumb: ["Production"], roles: ["User"], spec: "P05" },

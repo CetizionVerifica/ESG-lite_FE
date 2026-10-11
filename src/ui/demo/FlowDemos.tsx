@@ -61,7 +61,7 @@ const AUDIT: AuditLogEntry[] = [
 ];
 
 const COMMANDS: PaletteCommand[] = [
-  { id: "r:/my-month", label: "My month", group: "Pages", keywords: "home" },
+  { id: "r:/my-month", label: "Current Month", group: "Pages", keywords: "home" },
   { id: "r:/add-data", label: "Add data", group: "Pages", keywords: "entry bill" },
   { id: "r:/approvals", label: "Approvals", group: "Data", keywords: "review pending" },
   { id: "r:/reports/ghg", label: "GHG report", group: "Reports", keywords: "inventory" },
