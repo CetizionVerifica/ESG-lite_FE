@@ -1,6 +1,7 @@
 /**
  * Plain-language definitions of ESG and app terms, shown by InfoTerm / InfoTip.
- * One sentence or two, no jargon inside a definition. Add a term here once and every
+ * Keys are stable ids shared with the i18n termbase (/mnt/project-files/i18n/01-glossary.md); never rename one
+ * when wording changes. Definitions stay at or under 160 characters, no jargon inside a definition. Add a term here once and every
  * KPI label, table header, chart title, field label or page title with that exact
  * text (or an alias) gets the info icon.
  */
@@ -10,7 +11,7 @@ export type GlossaryEntry = {
   /** Other UI spellings that mean the same term (matched case-insensitively). */
   aliases?: string[];
   definition: string;
-  /** Only shown where a page asks for it (InfoTerm term="…"), never matched from a label automatically. */
+  /** Only shown where a page asks for it (InfoTerm id="…"), never matched from a label automatically. */
   manual?: boolean;
 };
 
@@ -61,7 +62,7 @@ export const GLOSSARY = {
     term: "Intensity",
     aliases: ["Emission intensity"],
     definition:
-      "Emissions per unit of production, for example tCO₂e per tonne of product. It shows efficiency, so periods can be compared even when output changes. Uses approved data only.",
+      "Emissions per unit of production, such as tCO₂e per tonne of product. It lets you compare periods even when output changes. Uses approved data only.",
   },
   gross: {
     term: "Gross",
@@ -83,7 +84,7 @@ export const GLOSSARY = {
   fera: {
     term: "FERA",
     definition:
-      "Fuel- and energy-related activities: emissions from producing and delivering the fuel and electricity you use, plus grid losses. Counted in Scope 3 and added automatically when you save a fuel or electricity entry.",
+      "Fuel- and energy-related activities: emissions from producing and delivering the fuel and power you use. Scope 3, added automatically on save.",
   },
   threshold: {
     term: "Threshold",
@@ -105,7 +106,7 @@ export const GLOSSARY = {
     aliases: ["Target pathway"],
     definition: "The year-by-year emissions a target allows, from the base year down to the target year.",
   },
-  ede: {
+  edeReport: {
     term: "EDE report",
     definition: "Emissions Data Entry report: an operational view of approved data by site and month, with renewables and intensity.",
   },
@@ -152,27 +153,27 @@ export const GLOSSARY = {
     term: "Status",
     definition: "Pending: waiting for a reviewer. Approved: checked and counted in reports. Rejected: sent back with a reason to fix. Only approved data counts in totals.",
   },
-  pending: {
+  "status.pending": {
     manual: true,
     term: "Pending",
     definition: "Submitted and waiting for a reviewer. Pending data is not counted in reports yet.",
   },
-  approved: {
+  "status.approved": {
     manual: true,
     term: "Approved",
     definition: "Checked by a reviewer and counted in totals and reports.",
   },
-  rejected: {
+  "status.rejected": {
     manual: true,
     term: "Rejected",
     definition: "Sent back by a reviewer with a reason. Fix it and submit again; it isn't counted until approved.",
   },
-  missing: {
+  "status.missing": {
     manual: true,
     term: "Missing",
     definition: "Nothing has been entered yet for this category and period.",
   },
-  draft: {
+  "status.draft": {
     manual: true,
     term: "Draft",
     definition: "Saved but not submitted. Only you can see it until you submit it for review.",

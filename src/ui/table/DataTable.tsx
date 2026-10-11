@@ -312,7 +312,7 @@ export function DataTable<T>({
                         c.header
                       )}
                       {/* Beside the sort button, not inside it: no nested buttons. */}
-                      {c.info ? <InfoTip term={c.info} side="bottom" /> : c.info !== false && <AutoInfoTip label={c.header} side="bottom" />}
+                      {c.info ? <InfoTip id={c.info} side="bottom" /> : c.info !== false && <AutoInfoTip label={c.header} side="bottom" />}
                     </span>
                   </th>
                 );

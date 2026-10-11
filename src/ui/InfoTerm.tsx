@@ -6,8 +6,8 @@ import { GLOSSARY, findTerm, type GlossaryEntry, type TermKey } from "./glossary
 import { focusRing } from "./styles";
 
 export type InfoTipProps = {
-  /** Glossary key. Or pass `definition` (with `label`) for a one-off explanation. */
-  term?: TermKey;
+  /** Glossary id. Or pass `definition` (with `label`) for a one-off explanation. */
+  id?: TermKey;
   definition?: string;
   /** Term name for the button's accessible name and the tip heading. Defaults to the glossary term. */
   label?: string;
@@ -15,17 +15,17 @@ export type InfoTipProps = {
   className?: string;
 };
 
-function resolve(term: TermKey | undefined, definition: string | undefined, label: string | undefined): GlossaryEntry | null {
+function resolve(id: TermKey | undefined, definition: string | undefined, label: string | undefined): GlossaryEntry | null {
   if (definition) return { term: label ?? "", definition };
-  return term ? GLOSSARY[term] : null;
+  return id ? GLOSSARY[id] : null;
 }
 
 /**
  * Highlighted "i" button that explains a term. Hover, keyboard focus or a tap shows the
  * definition; Esc or a tap elsewhere hides it. The visible dot is small, the hit area is 32px.
  */
-export function InfoTip({ term, definition, label, side, className }: InfoTipProps) {
-  const entry = resolve(term, definition, label);
+export function InfoTip({ id, definition, label, side, className }: InfoTipProps) {
+  const entry = resolve(id, definition, label);
   if (!entry) return null;
   const name = label ?? entry.term;
   return (
@@ -43,7 +43,7 @@ export function InfoTip({ term, definition, label, side, className }: InfoTipPro
       <button
         type="button"
         aria-label={name ? `What is ${name}?` : "What does this mean?"}
-        data-info-term={term}
+        data-info-term={id}
         // Inside clickable rows (DataTable onRowClick) the tap is for the tip, not the row.
         onClick={(e) => e.stopPropagation()}
         className={cn(
@@ -61,20 +61,20 @@ export function InfoTip({ term, definition, label, side, className }: InfoTipPro
 }
 
 export type InfoTermProps = Omit<InfoTipProps, "label"> & {
-  /** The visible term. When `term` is omitted and this is a string, it is looked up in the glossary. */
+  /** The visible term. When `id` is omitted and this is a string, it is looked up in the glossary. */
   children: ReactNode;
   className?: string;
 };
 
 /** A term followed by its InfoTip. Renders just the text when nothing in the glossary matches. */
-export function InfoTerm({ children, term, definition, side, className }: InfoTermProps) {
-  const key = term ?? findTerm(children) ?? undefined;
+export function InfoTerm({ children, id, definition, side, className }: InfoTermProps) {
+  const key = id ?? findTerm(children) ?? undefined;
   const label = typeof children === "string" ? children : undefined;
   if (!key && !definition) return <>{children}</>;
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
       <span className="min-w-0">{children}</span>
-      <InfoTip term={key} definition={definition} label={label} side={side} />
+      <InfoTip id={key} definition={definition} label={label} side={side} />
     </span>
   );
 }
@@ -82,5 +82,5 @@ export function InfoTerm({ children, term, definition, side, className }: InfoTe
 /** InfoTip for a label that matches a glossary term, else nothing. Shared components use it after their own labels. */
 export function AutoInfoTip({ label, side, className }: { label: unknown; side?: "top" | "bottom"; className?: string }) {
   const key = findTerm(label);
-  return key ? <InfoTip term={key} label={label as string} side={side} className={className} /> : null;
+  return key ? <InfoTip id={key} label={label as string} side={side} className={className} /> : null;
 }

@@ -244,7 +244,7 @@ export function GlossaryDemo() {
     <DemoSection id="glossary" title="InfoTerm and the glossary">
       <p className="text-sm text-ink">
         Hover, focus or tap the icon: <InfoTerm>Scope 1</InfoTerm>, <InfoTerm>tCO₂e</InfoTerm>, <InfoTerm>FERA</InfoTerm>, approval{" "}
-        <InfoTerm term="status">status</InfoTerm>.
+        <InfoTerm id="status">status</InfoTerm>.
       </p>
       <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
         {Object.entries(GLOSSARY).map(([key, entry]) => (

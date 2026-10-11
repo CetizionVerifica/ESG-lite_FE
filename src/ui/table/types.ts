@@ -23,6 +23,6 @@ export type Column<T> = {
   defaultHidden?: boolean;
   /** CSS width, e.g. "8rem". */
   width?: string;
-  /** Glossary term explained by an info icon in the header. Defaults to a term matching `header`; false hides it. */
+  /** Glossary id explained by an info icon in the header. Defaults to a term matching `header`; false hides it. */
   info?: TermKey | false;
 };

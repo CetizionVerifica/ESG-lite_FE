@@ -37,7 +37,7 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | `Tabs`, `TabPanel` | `Tabs.tsx` | ARIA tabs, arrow keys/Home/End, counts |
 | `SegmentedControl` | `SegmentedControl.tsx` | radiogroup with roving focus |
 | `Tooltip` | `Tooltip.tsx` | hover + focus (+ tap with `toggleOnClick`), Esc hides; portal, stays in the viewport; short hints only |
-| `InfoTip`, `InfoTerm`, `GLOSSARY` | `InfoTerm.tsx`, `glossary.ts` | highlighted info icon with a plain-language definition. KpiStrip labels, DataTable headers (or `info:` on a column), ChartFrame title/unit, Field labels, ScopeBar and PageHeader titles that match a glossary term get it automatically; add new terms to `glossary.ts` |
+| `InfoTip`, `InfoTerm`, `GLOSSARY` | `InfoTerm.tsx`, `glossary.ts` | `<InfoTip id="scope1" />`; ids are shared with the i18n termbase. Highlighted info icon with a plain-language definition. KpiStrip labels, DataTable headers (or `info:` on a column), ChartFrame title/unit, Field labels, ScopeBar and PageHeader titles that match a glossary term get it automatically; add new terms to `glossary.ts` |
 | `Menu` | `Menu.tsx` | action menu: arrows, Enter, Esc returns focus; `danger`, radio (`checked`) and `current` items, separators and headings |
 | `Avatar`, `Badge` | `Avatar.tsx`, `Badge.tsx` | initials fallback; neutral/brand/info/good/warn/bad badges |
 | `Stepper` | `Stepper.tsx` | steps, `current`, `completed`, `canJump` rule (default: done steps + the next open one); "Step 2 of 3" on phones |

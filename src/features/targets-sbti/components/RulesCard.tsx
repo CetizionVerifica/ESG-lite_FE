@@ -17,7 +17,7 @@ export function RulesCard(props: { rules: Rule[] | null; loading: boolean; error
         <h2 id="sbti-rules" className="text-sm font-semibold text-ink">
           SBTi rules check
         </h2>
-        <InfoTip term="sbti" />
+        <InfoTip id="sbti" />
       </div>
       <p className="mt-0.5 text-xs text-muted">Based on approved base-year emissions for the chosen sites.</p>
       <div className="mt-3">

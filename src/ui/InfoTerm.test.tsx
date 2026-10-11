@@ -23,13 +23,13 @@ describe("glossary", () => {
   it("never auto-matches manual entries such as status words", () => {
     expect(findTerm("Status")).toBeNull();
     expect(findTerm("Pending")).toBeNull();
-    expect(glossaryEntry("pending")?.term).toBe("Pending");
+    expect(glossaryEntry("status.pending")?.term).toBe("Pending");
   });
 
   it("has one short, plain definition per term and no duplicate spellings", () => {
     const seen = new Set<string>();
     for (const entry of Object.values(GLOSSARY)) {
-      expect(entry.definition.length).toBeLessThanOrEqual(240);
+      expect(entry.definition.length).toBeLessThanOrEqual(160);
       for (const s of [entry.term, ...("aliases" in entry ? entry.aliases : [])]) {
         const k = s.toLowerCase();
         expect(seen.has(k), s).toBe(false);
@@ -42,7 +42,7 @@ describe("glossary", () => {
 describe("InfoTip", () => {
   it("shows the definition on keyboard focus, linked by aria-describedby, and hides on Esc", async () => {
     const user = userEvent.setup();
-    render(<InfoTip term="scope1" />);
+    render(<InfoTip id="scope1" />);
     await user.tab();
     const button = screen.getByRole("button", { name: "What is Scope 1?" });
     const tip = screen.getByRole("tooltip");
@@ -54,7 +54,7 @@ describe("InfoTip", () => {
 
   it("opens on mouse hover and closes when the pointer leaves", async () => {
     const user = userEvent.setup();
-    render(<InfoTip term="fera" />);
+    render(<InfoTip id="fera" />);
     await user.hover(screen.getByRole("button"));
     expect(screen.getByRole("tooltip").textContent).toContain("Fuel- and energy-related");
     await user.unhover(screen.getByRole("button"));
@@ -64,7 +64,7 @@ describe("InfoTip", () => {
   it("toggles on tap without opening and closing at once, and closes on a tap elsewhere", () => {
     render(
       <div>
-        <InfoTip term="intensity" />
+        <InfoTip id="intensity" />
         <p>outside</p>
       </div>,
     );
@@ -82,7 +82,7 @@ describe("InfoTip", () => {
     const onRow = vi.fn();
     render(
       <div onClick={onRow}>
-        <InfoTip term="tco2e" />
+        <InfoTip id="tco2e" />
       </div>,
     );
     fireEvent.click(screen.getByRole("button"));
