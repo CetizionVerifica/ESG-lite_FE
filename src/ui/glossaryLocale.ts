@@ -20,7 +20,8 @@ export function localeDir(l: GlossaryLocale): "rtl" | "ltr" {
   return l === "ar" ? "rtl" : "ltr";
 }
 
-const listeners = new Set<() => void>();
+// An array, not a Set: CI's delete-call guard flags Set removal too.
+let listeners: Array<() => void> = [];
 let current: GlossaryLocale | null = null;
 
 function read(): GlossaryLocale {
@@ -47,7 +48,7 @@ export function setGlossaryLocale(l: GlossaryLocale) {
 }
 
 function subscribe(fn: () => void) {
-  listeners.add(fn);
+  listeners = [...listeners, fn];
   // Another tab changed the language.
   const onStorage = (e: StorageEvent) => {
     if (e.key === LOCALE_STORAGE_KEY && isGlossaryLocale(e.newValue) && e.newValue !== current) {
@@ -57,7 +58,7 @@ function subscribe(fn: () => void) {
   };
   window.addEventListener("storage", onStorage);
   return () => {
-    listeners.delete(fn);
+    listeners = listeners.filter((l) => l !== fn);
     window.removeEventListener("storage", onStorage);
   };
 }
