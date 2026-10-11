@@ -146,7 +146,7 @@ test("shows the portfolio for the year with KPIs that filter the table", async (
   await expect(page).toHaveURL(/\/products\/new\?product=6&site=1/);
   await page.goBack();
   await rows.filter({ hasText: "EC-grade wire rod 9.5 mm" }).click();
-  await expect(page).toHaveURL(/\/products\/11$/);
+  await expect(page).toHaveURL(/\/products\/5\/footprints\/11$/);
 });
 
 test("explains that footprints need approved production", async ({ page }) => {

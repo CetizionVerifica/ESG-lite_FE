@@ -53,6 +53,8 @@ export const SHELL_ROUTES = [
   { id: "product-footprints", path: "/products", title: "Product footprints", crumb: ["Products (PCF)"], roles: ["Manager"], spec: "C01", roleRedirect: { Superadmin: "/setup/products" } },
   { id: "footprint-new", path: "/products/new", title: "New footprint", crumb: ["Products (PCF)", "New footprint"], roles: ["Manager"], spec: "C02", roleRedirect: { Superadmin: "/setup/products" } },
   { id: "footprint-builder", path: "/products/:productId/footprints/:studyId/edit", title: "Footprint builder", crumb: ["Products (PCF)", "Footprint builder"], roles: ["Manager"], spec: "C02", roleRedirect: { Superadmin: "/setup/products" } },
+  { id: "footprint-latest", path: "/products/:productId", title: "Footprint", crumb: ["Products (PCF)", "Footprint"], roles: ["Manager"], spec: "C03", roleRedirect: { Superadmin: "/setup/products" } },
+  { id: "footprint-result", path: "/products/:productId/footprints/:studyId", title: "Footprint", crumb: ["Products (PCF)", "Footprint"], roles: ["Manager"], spec: "C03", roleRedirect: { Superadmin: "/setup/products" } },
   { id: "pcf", path: "/products/*", title: "Products (PCF)", crumb: ["Products (PCF)"], roles: ["Manager"], spec: "C01–C06", roleRedirect: { Superadmin: "/setup/products" } },
 
   // Everyone

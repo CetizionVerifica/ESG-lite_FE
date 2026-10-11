@@ -66,7 +66,7 @@ function defaultYear(now: Date): Period {
 const startLink = (r: FootprintRow) => `/products/new?product=${r.product_id}&site=${r.site_id}`;
 /** A draft opens in the builder (C02); any other version opens its result (C03). */
 const studyLink = (s: { pcf_study_id: number; status: string }, productId: number) =>
-  s.status === "draft" ? `/products/${productId}/footprints/${s.pcf_study_id}/edit` : `/products/${s.pcf_study_id}`;
+  s.status === "draft" ? `/products/${productId}/footprints/${s.pcf_study_id}/edit` : `/products/${productId}/footprints/${s.pcf_study_id}`;
 
 /**
  * C01 `/products`: which products have a footprint a customer can use, which
