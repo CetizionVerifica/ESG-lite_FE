@@ -22,6 +22,10 @@ Left: `Stepper` (6 steps). Centre: step content. Right rail (sticky, 280px): **r
 - A factor shown in the picker always shows its source and year; ecoinvent-licensed values show the source but mask the value for non-PlanetPulse users.
 - Status pills and AI chips follow F1/F3 rules; low confidence lines are warn-tinted and block Calculate until confirmed.
 
+## Not built yet (C02 3/3)
+- Step 4 "Manual % with reason": the reason field is not built; the backend has no field to store it, and key values themselves are not stored yet (they are sent with each preview and Calculate).
+- Step 4 warn callout for pending or missing months in the period: needs a backend (E1) follow-up so allocation-preview reports month coverage; until then only the preview's own blockers and warnings show.
+
 ## Acceptance
 - A Midal rod pilot can be built from a BOM file in under 15 minutes.
 - Running total updates within 300ms of an edit (client-side compute with E1 engine logic shared or mirrored, confirmed server-side on Calculate).

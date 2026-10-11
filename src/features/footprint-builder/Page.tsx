@@ -1,9 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, CloudOff, Loader2, Package } from "lucide-react";
-import { Button, Callout, EmptyState, Modal, PageHeader, Skeleton, Stepper, panel, useToast, useUnsavedGuard, withoutParams, type Step } from "../../ui";
+import { Button, Callout, EmptyState, Modal, PageHeader, Skeleton, Stepper, serializePeriod, useToast, useUnsavedGuard, withoutParams, type Step } from "../../ui";
 import { useAuth } from "../../context/AuthContext";
-import { errorMessage, useAllocationPreview, useCalculate, useFreightFactors, useMaterialFactors, useSaveInputs, useSaveScope, useStudy } from "./api";
+import { errorMessage, useAllocationPreview, useCalculate, useFreightFactors, useMaterialFactors, useSaveInputs, useSaveScope, useStudy, useSubmit } from "./api";
+import { EnergyStep, type KeyValues } from "./components/EnergyStep";
+import { PackagingStep } from "./components/PackagingStep";
+import { ReviewStep } from "./components/ReviewStep";
 import { LineDrawer } from "./components/LineDrawer";
 import { MaterialsStep } from "./components/MaterialsStep";
 import { TransportStep } from "./components/TransportStep";
@@ -11,6 +14,7 @@ import { ScopeStep } from "./components/ScopeStep";
 import { TotalRail } from "./components/TotalRail";
 import { type SaveState, useAutosave } from "./hooks/useAutosave";
 import {
+  type CalcResult,
   type FactorBook,
   type InputStage,
   type Line,
@@ -19,6 +23,7 @@ import {
   type Study,
   canCalculate,
   checklist,
+  emptyKeyValues,
   applyYield,
   linkedPayloads,
   blankLine,
@@ -180,7 +185,7 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
     );
 
   const initialScope = useMemo<ScopeFields>(
-    () => ({ reference_start: study.reference_start, reference_end: study.reference_end, year_type: study.year_type, pcr_tag: study.pcr_tag, notes: study.notes }),
+    () => ({ reference_start: study.reference_start, reference_end: study.reference_end, year_type: study.year_type, pcr_tag: study.pcr_tag, notes: study.notes, allocation_key: study.allocation_key }),
     // The editor owns these from now on; refetches don't overwrite typing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -241,7 +246,10 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
     });
   };
   const byStage = (...stages: InputStage[]) => lines.filter((l) => stages.includes(l.stage));
-  const preview = useAllocationPreview(study.pcf_study_id, {});
+  const [kv, setKv] = useState<KeyValues>(() => emptyKeyValues(scope.allocation_key));
+  // Mass is read from approved production; the other keys need both values typed.
+  const sentKv = scope.allocation_key === "mass" ? {} : scope.allocation_key === "manual" ? { ...kv, key_value_site_total: 100 } : kv;
+  const preview = useAllocationPreview(study.pcf_study_id, sentKv);
   const total = useMemo(() => runningTotal(lines, book, preview.data?.a3_energy_kg_per_unit ?? null), [lines, book, preview.data]);
   const items = useMemo(() => checklist(study, lines, book, preview.data ?? null), [study, lines, book, preview.data]);
 
@@ -255,15 +263,36 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
   };
   const blocker = useUnsavedGuard(scopeSave.dirty || linesSave.dirty || incomplete > 0);
 
+  // What a calculation saw; Submit needs the current state to match it (the server checks too).
+  const fingerprint = JSON.stringify([savable, scope, sentKv]);
+  const [calcPrint, setCalcPrint] = useState<string | null>(() => (study.result ? JSON.stringify([initialSavable.rows, initialScope, {}]) : null));
   const calculate = useCalculate(study.pcf_study_id);
-  const onCalculate = () =>
-    calculate.mutate(
-      {},
-      {
-        onSuccess: () => toast({ tone: "good", title: "Calculated. The draft result is saved." }),
-        onError: (e) => toast({ tone: "bad", title: errorMessage(e, "Couldn't calculate the footprint.") }),
+  const onCalculate = () => {
+    const at = fingerprint;
+    calculate.mutate(sentKv, {
+      onSuccess: () => {
+        setCalcPrint(at);
+        toast({ tone: "good", title: "Calculated. The draft result is saved." });
       },
-    );
+      onError: (e) => toast({ tone: "bad", title: errorMessage(e, "Couldn't calculate the footprint.") }),
+    });
+  };
+  const navigate = useNavigate();
+  const submit = useSubmit(study.pcf_study_id);
+  const onSubmit = () =>
+    submit.mutate(undefined, {
+      onSuccess: () => {
+        toast({ tone: "good", title: "Sent for review." });
+        navigate("/products");
+      },
+      onError: (e) => toast({ tone: "bad", title: errorMessage(e, "Couldn't send the footprint for review.") }),
+    });
+  const waitReason = saveState === "saved" ? null : saveState === "error" ? "Save your changes first." : "Saving your changes…";
+  const productionLink = `/data/production?${new URLSearchParams({
+    site: String(study.site?.site_id ?? ""),
+    period: serializePeriod(scope.year_type === "CY" ? { kind: "cy", year: periodYear(scope) } : { kind: "fy", startYear: periodYear(scope) }),
+    status: "approved",
+  }).toString()}`;
 
   const p = study.product;
   const unitLabel = p?.declared_unit ? `${p.declared_unit_qty ?? 1} ${p.declared_unit}` : "declared unit";
@@ -326,13 +355,52 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
               onChange={changeLine}
               onRemove={removeLine}
             />
+          ) : step.id === "energy" ? (
+            <EnergyStep
+              allocationKey={scope.allocation_key}
+              onKeyChange={(k) => {
+                setScope((x) => ({ ...x, allocation_key: k }));
+                // Values typed for one key mean nothing for another (a site total of 5000 h isn't 100%).
+                setKv(emptyKeyValues(k));
+              }}
+              keyValues={kv}
+              onKeyValues={setKv}
+              preview={preview.data}
+              loading={preview.isFetching}
+              error={preview.error ? errorMessage(preview.error, "Check your connection and try again.") : null}
+              saving={scopeSave.state === "saving"}
+              unitLabel={unitLabel}
+              productionLink={productionLink}
+            />
+          ) : step.id === "packaging" ? (
+            <PackagingStep
+              packaging={byStage("A3_packaging")}
+              waste={byStage("A3_waste")}
+              factors={materialPicker}
+              factorsLoading={factors.isPending}
+              book={book}
+              unitLabel={unitLabel}
+              onAdd={addLine}
+              onChange={changeLine}
+              onRemove={removeLine}
+              onDetails={(l) => setDetailKey(l.key)}
+            />
           ) : (
-            <section className={`${panel} p-6`} aria-labelledby="step-title">
-              <h2 id="step-title" className="text-base font-semibold text-ink">
-                {step.label}
-              </h2>
-              <p className="mt-2 text-sm text-muted">This step is being built and arrives in the next update of the builder.</p>
-            </section>
+            <ReviewStep
+              total={total}
+              lines={lines}
+              unitLabel={unitLabel}
+              plantBlockers={preview.data?.blockers ?? []}
+              calc={calculate.data as CalcResult | undefined}
+              summary={study.result}
+              current={calcPrint === fingerprint}
+              canCalculate={canCalculate(items)}
+              waitReason={waitReason}
+              calculating={calculate.isPending}
+              submitting={submit.isPending}
+              onCalculate={onCalculate}
+              onSubmit={onSubmit}
+            />
           )}
           <div className="flex justify-between gap-2">
             <Button icon={<ArrowLeft aria-hidden className="size-4" />} onClick={() => goTo(stepIndex - 1)} disabled={stepIndex === 0}>
@@ -352,7 +420,7 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
           items={items}
           canCalculate={canCalculate(items)}
           calculating={calculate.isPending}
-          waitReason={saveState === "saved" ? null : saveState === "error" ? "Save your changes first." : "Saving your changes…"}
+          waitReason={waitReason}
           onCalculate={onCalculate}
         />
       </div>

@@ -113,7 +113,8 @@ export function useCalculate(id: number) {
   const qc = useQueryClient();
   return useMutation<unknown, unknown, KeyValues>({
     mutationFn: (kv) => calculatePcfStudy(id, kv),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.study(id) }),
+    // Stays pending until the study (and its result summary) has reloaded, so Review never shows the old totals as current.
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.study(id) }),
   });
 }
 

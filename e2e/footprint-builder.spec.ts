@@ -117,6 +117,22 @@ async function signIn(page: Page, studies: Record<number, ReturnType<typeof stud
         if (!s) return json({ message: "Footprint not found" }, 404);
         seen.push({ method, path: one[2] ?? "", body: req.postDataJSON?.() ?? null });
         if (one[2] === "/allocation-preview") return json(PREVIEW);
+        if (one[2] === "/calculate") {
+          Object.assign(s, { result: { total_kg_per_unit: 2520, by_stage: { A1: 2020, A3_energy: 500 }, hidden_stages: [], primary_data_share_pct: 19.8, dqr_overall: 1.8, warnings: [], is_draft: true, calculated_at: "2026-10-10T08:00:00Z" } });
+          return json({
+            result: {
+              total_kg_per_unit: 2520,
+              by_stage: { A1: 2020, A3_energy: 500 },
+              hidden_stages: [],
+              lines: [{ id: "in-70", stage: "A1", name: "Aluminium ingot", kgco2e_per_unit: 2020, data_type: "secondary", pcf_input_id: 70 }],
+              cut_off: { below_threshold_ids: [], below_threshold_total_pct: 0, within_limit: true },
+              primary_data_share_pct: 19.8,
+              dqr: { technology: 1.8, geography: 1.8, time: 1.8, overall: 1.8 },
+            },
+            warnings: [],
+          });
+        }
+        if (one[2] === "/submit") return json({ ...s, status: "in_review" });
         if (one[2] === "/inputs") return json({ inputs: (req.postDataJSON() as { inputs: unknown[] }).inputs });
         if (method === "PATCH") return json({ ...s, ...(req.postDataJSON() as object) });
         return json(s);
@@ -196,4 +212,44 @@ test("adds a material and its transport leg; the total follows both", async ({ p
   await page.getByRole("option", { name: /HGV, average laden · DEFRA 2024/ }).click();
   // + 1.01 t × 100 km × 0.1 = 10.1 kg.
   await expect(page.getByLabel("Running total")).toContainText("2,540.1");
+});
+
+test("shows the allocated plant energy, then calculates and sends for review", async ({ page }) => {
+  const seen = await signIn(page, { 13: study(13, 3, "draft") });
+  await page.goto("/products/5/footprints/13/edit?step=energy");
+  await expect(page.getByRole("heading", { name: "Plant energy (A3)" })).toBeVisible();
+  const row = page.getByRole("row", { name: /Electricity/ });
+  await expect(row).toContainText("Scope 2");
+  await expect(row).toContainText("50%");
+  await expect(page.getByRole("link", { name: "Review production data" })).toHaveAttribute("href", /\/data\/production\?site=1&period=CY2025&status=approved/);
+
+  await page.getByRole("button", { name: /Next: Packaging/ }).click();
+  await expect(page.getByRole("heading", { name: "Process waste (A3)" })).toBeVisible();
+
+  await page.getByRole("button", { name: /Next: Review/ }).click();
+  await expect(page.getByText("Not calculated yet.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit for review" })).toBeDisabled();
+  await page.getByRole("region", { name: "Review" }).getByRole("button", { name: "Calculate" }).click();
+  await expect(page.getByText(/Calculated .* Nothing has changed since\./)).toBeVisible();
+  await expect(page.getByText("None under 1%")).toBeVisible();
+  await page.getByRole("button", { name: "Submit for review" }).click();
+  await expect(page).toHaveURL(/\/products$/);
+  expect(seen.some((r) => r.path === "/submit")).toBe(true);
+});
+
+test("fits 390px without horizontal page scroll", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await signIn(page, { 13: study(13, 3, "draft") });
+  for (const [step, heading] of [
+    ["materials", "Materials (A1)"],
+    ["transport", "Inbound transport (A2)"],
+    ["energy", "Plant energy (A3)"],
+    ["review", "Review"],
+  ]) {
+    await page.goto(`/products/5/footprints/13/edit?step=${step}`);
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+    if (step === "transport") await page.getByRole("button", { name: "Add leg" }).first().click();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, step).toBeLessThanOrEqual(0);
+  }
 });

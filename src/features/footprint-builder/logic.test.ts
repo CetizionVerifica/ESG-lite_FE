@@ -5,6 +5,7 @@ import {
   blankLine,
   canCalculate,
   checklist,
+  emptyKeyValues,
   lineProblem,
   periodFor,
   priceLine,
@@ -209,5 +210,12 @@ describe("line helpers", () => {
   it("converts mass units to tonnes only", () => {
     expect(massInTonnes(1500, "kg")).toBe(1.5);
     expect(massInTonnes(2, "unit")).toBeNull();
+  });
+});
+
+describe("emptyKeyValues", () => {
+  it("fixes the site total at 100 for Manual % and clears it for other keys", () => {
+    expect(emptyKeyValues("manual")).toEqual({ key_value_product: null, key_value_site_total: 100 });
+    expect(emptyKeyValues("machine_hours")).toEqual({ key_value_product: null, key_value_site_total: null });
   });
 });

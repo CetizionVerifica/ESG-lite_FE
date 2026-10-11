@@ -64,6 +64,9 @@ function defaultYear(now: Date): Period {
 }
 
 const startLink = (r: FootprintRow) => `/products/new?product=${r.product_id}&site=${r.site_id}`;
+/** A draft opens in the builder (C02); any other version opens its result (C03). */
+const studyLink = (s: { pcf_study_id: number; status: string }, productId: number) =>
+  s.status === "draft" ? `/products/${productId}/footprints/${s.pcf_study_id}/edit` : `/products/${s.pcf_study_id}`;
 
 /**
  * C01 `/products`: which products have a footprint a customer can use, which
@@ -282,7 +285,7 @@ export default function ProductFootprintsPage() {
           </Button>
         )}
         pagination={{ mode: "client", pageSize: 50 }}
-        onRowClick={(r) => navigate(r.study ? `/products/${r.study.pcf_study_id}` : startLink(r))}
+        onRowClick={(r) => navigate(r.study ? studyLink(r.study, r.product_id) : startLink(r))}
         exportName="product-footprints"
         storageKey="c01-product-footprints"
         toolbar={

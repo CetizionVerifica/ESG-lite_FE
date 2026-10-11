@@ -74,7 +74,7 @@ export function TransportStep({ legs, materials, factors, libraryFactors, linked
       {legs.length === 0 ? (
         <EmptyState compact title="No transport legs yet." description="Add a leg for each material shipped to the plant." action={<Button onClick={onAdd}>Add leg</Button>} />
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[820px] text-sm">
             <caption className="sr-only">Transport legs</caption>
             <thead className="border-b border-line text-left text-xs text-muted">
