@@ -1,0 +1,94 @@
+import type { ReactNode } from "react";
+import { Info } from "lucide-react";
+import { Tooltip } from "./Tooltip";
+import { cn } from "./cn";
+import { GLOSSARY, findTerm, type GlossaryEntry, type TermKey } from "./glossary";
+import { localeDir, useGlossaryLocale, type GlossaryLocale } from "./glossaryLocale";
+import { ASK_LABEL, GLOSSARY_TRANSLATIONS } from "./glossaryTranslations";
+import { focusRing } from "./styles";
+
+export type InfoTipProps = {
+  /** Glossary id. Or pass `definition` (with `label`) for a one-off explanation. */
+  id?: TermKey;
+  definition?: string;
+  /** Term name for the button's accessible name and the tip heading. Defaults to the glossary term. */
+  label?: string;
+  side?: "top" | "bottom";
+  className?: string;
+};
+
+function resolve(id: TermKey | undefined, definition: string | undefined, label: string | undefined, locale: GlossaryLocale): GlossaryEntry | null {
+  if (definition) return { term: label ?? "", definition };
+  if (!id) return null;
+  if (locale !== "en") return GLOSSARY_TRANSLATIONS[locale][id];
+  return { ...GLOSSARY[id], term: label ?? GLOSSARY[id].term };
+}
+
+/**
+ * Highlighted "i" button that explains a term. Hover, keyboard focus or a tap shows the
+ * definition; Esc or a tap elsewhere hides it. The visible dot is small, the hit area is 32px.
+ * Glossary definitions follow the info-icon language from the account menu (one-off ones stay as given).
+ */
+export function InfoTip({ id, definition, label, side, className }: InfoTipProps) {
+  const chosen = useGlossaryLocale();
+  const locale: GlossaryLocale = definition ? "en" : chosen;
+  const entry = resolve(id, definition, label, locale);
+  if (!entry) return null;
+  const name = entry.term;
+  return (
+    <Tooltip
+      side={side}
+      toggleOnClick
+      className="max-w-72 px-2.5 py-1.5 leading-snug"
+      content={
+        <span lang={locale} dir={localeDir(locale)} className="block text-start">
+          {name && <span className="font-semibold">{name}: </span>}
+          {entry.definition}
+        </span>
+      }
+    >
+      <button
+        type="button"
+        aria-label={ASK_LABEL[locale](name)}
+        lang={locale === "en" ? undefined : locale}
+        data-info-term={id}
+        // Inside clickable rows (DataTable onRowClick) the tap is for the tip, not the row.
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          // Accent tint + ring so it reads as "help here" in every theme; status colours are left alone.
+          "relative inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-full bg-accent/15 align-middle text-accent ring-1 ring-accent/40 transition-colors hover:bg-accent hover:text-panel",
+          "before:absolute before:-inset-2 before:content-['']",
+          focusRing,
+          className,
+        )}
+      >
+        <Info aria-hidden className="size-3" strokeWidth={2.5} />
+      </button>
+    </Tooltip>
+  );
+}
+
+export type InfoTermProps = Omit<InfoTipProps, "label"> & {
+  /** The visible term. When `id` is omitted and this is a string, it is looked up in the glossary. */
+  children: ReactNode;
+  className?: string;
+};
+
+/** A term followed by its InfoTip. Renders just the text when nothing in the glossary matches. */
+export function InfoTerm({ children, id, definition, side, className }: InfoTermProps) {
+  const key = id ?? findTerm(children) ?? undefined;
+  const label = typeof children === "string" ? children : undefined;
+  if (!key && !definition) return <>{children}</>;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5", className)}>
+      <span className="min-w-0">{children}</span>
+      <InfoTip id={key} definition={definition} label={label} side={side} />
+    </span>
+  );
+}
+
+/** InfoTip for a label that matches a glossary term, else nothing. Shared components use it after their own labels. */
+export function AutoInfoTip({ label, side, className }: { label: unknown; side?: "top" | "bottom"; className?: string }) {
+  const key = findTerm(label);
+  return key ? <InfoTip id={key} label={label as string} side={side} className={className} /> : null;
+}

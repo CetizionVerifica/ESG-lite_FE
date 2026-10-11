@@ -9,6 +9,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { SkeletonChart } from "./Skeleton";
 import { cn } from "./cn";
 import { formatNumber } from "./format";
+import { AutoInfoTip } from "./InfoTerm";
 
 export type ChartTableColumn = { id: string; header: string; numeric?: boolean; decimals?: number };
 
@@ -126,10 +127,14 @@ export function ChartFrame({
       <figcaption className="mb-3 flex flex-wrap items-start gap-2">
         {/* Keeps the title readable on phones: the controls wrap below it. */}
         <div className="min-w-[12rem] flex-1">
-          <h3 className="text-sm font-semibold text-ink">
-            {title}
-            {unit && <span className="ml-1.5 text-xs font-normal text-muted">{unit}</span>}
-          </h3>
+          <div className="flex flex-wrap items-center gap-x-1.5">
+            <h3 className="text-sm font-semibold text-ink">
+              {title}
+              {unit && <span className="ml-1.5 text-xs font-normal text-muted">{unit}</span>}
+            </h3>
+            <AutoInfoTip label={title} />
+            <AutoInfoTip label={unit} />
+          </div>
           {subtitle && <div className="mt-0.5 text-xs text-muted">{subtitle}</div>}
         </div>
         {actions}

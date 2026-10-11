@@ -7,6 +7,7 @@ import { SkeletonTableRows } from "../Skeleton";
 import { cn } from "../cn";
 import { formatNumber } from "../format";
 import { focusRing } from "../styles";
+import { AutoInfoTip, InfoTip } from "../InfoTerm";
 import { exportMatrix, type ExportFormat } from "./exportTable";
 import { nextSort, pageCount, paginate, retainSelectedRows, sortRows, toMatrix } from "./tableLogic";
 import type { Column, SortState } from "./types";
@@ -297,18 +298,22 @@ export function DataTable<T>({
                     style={{ width: c.width }}
                     className={cn("h-row whitespace-nowrap px-3 text-xs font-medium text-muted", c.numeric ? "text-right" : "text-left")}
                   >
-                    {c.sortable ? (
-                      <button
-                        type="button"
-                        onClick={() => setSort(nextSort(sort, c.id))}
-                        className={cn("inline-flex items-center gap-1 rounded-chip hover:text-ink", c.numeric && "flex-row-reverse", focusRing)}
-                      >
-                        {c.header}
-                        <SortIcon aria-hidden className={cn("size-3.5", !active && "opacity-40")} />
-                      </button>
-                    ) : (
-                      c.header
-                    )}
+                    <span className={cn("inline-flex items-center gap-1.5 align-middle", c.numeric && "flex-row-reverse")}>
+                      {c.sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => setSort(nextSort(sort, c.id))}
+                          className={cn("inline-flex items-center gap-1 rounded-chip hover:text-ink", c.numeric && "flex-row-reverse", focusRing)}
+                        >
+                          {c.header}
+                          <SortIcon aria-hidden className={cn("size-3.5", !active && "opacity-40")} />
+                        </button>
+                      ) : (
+                        c.header
+                      )}
+                      {/* Beside the sort button, not inside it: no nested buttons. */}
+                      {c.info ? <InfoTip id={c.info} side="bottom" /> : c.info !== false && <AutoInfoTip label={c.header} side="bottom" />}
+                    </span>
                   </th>
                 );
               })}

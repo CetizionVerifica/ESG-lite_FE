@@ -1,5 +1,5 @@
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
-import { Badge, Button, FileDrop, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
+import { Badge, Button, FileDrop, InfoTerm, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
 import { formColumns, isColumnVisible, visibleExtraFields, type FormModel } from "../logic/form";
@@ -210,7 +210,7 @@ export function EntryRow(p: Props) {
           ) : (
             <p className={cn("text-sm", p.showIssue ? "text-bad" : "text-muted")}>{p.issue?.message ?? result.status}</p>
           )}
-          {fera?.value != null && <p className="font-num text-xs text-muted">+ FERA {formatNumber(fera.value, 2)} tCO₂e (added on save)</p>}
+          {fera?.value != null && <p className="font-num text-xs text-muted">+ <InfoTerm>FERA</InfoTerm> {formatNumber(fera.value, 2)} tCO₂e (added on save)</p>}
         </div>
       </footer>
     </section>
