@@ -23,6 +23,7 @@ import {
   type Study,
   canCalculate,
   checklist,
+  emptyKeyValues,
   applyYield,
   linkedPayloads,
   blankLine,
@@ -245,9 +246,9 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
     });
   };
   const byStage = (...stages: InputStage[]) => lines.filter((l) => stages.includes(l.stage));
-  const [kv, setKv] = useState<KeyValues>({ key_value_product: null, key_value_site_total: null });
+  const [kv, setKv] = useState<KeyValues>(() => emptyKeyValues(scope.allocation_key));
   // Mass is read from approved production; the other keys need both values typed.
-  const sentKv = scope.allocation_key === "mass" ? {} : kv;
+  const sentKv = scope.allocation_key === "mass" ? {} : scope.allocation_key === "manual" ? { ...kv, key_value_site_total: 100 } : kv;
   const preview = useAllocationPreview(study.pcf_study_id, sentKv);
   const total = useMemo(() => runningTotal(lines, book, preview.data?.a3_energy_kg_per_unit ?? null), [lines, book, preview.data]);
   const items = useMemo(() => checklist(study, lines, book, preview.data ?? null), [study, lines, book, preview.data]);
@@ -264,7 +265,7 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
 
   // What a calculation saw; Submit needs the current state to match it (the server checks too).
   const fingerprint = JSON.stringify([savable, scope, sentKv]);
-  const [calcPrint, setCalcPrint] = useState<string | null>(() => (study.result ? JSON.stringify([initialSavable, initialScope, {}]) : null));
+  const [calcPrint, setCalcPrint] = useState<string | null>(() => (study.result ? JSON.stringify([initialSavable.rows, initialScope, {}]) : null));
   const calculate = useCalculate(study.pcf_study_id);
   const onCalculate = () => {
     const at = fingerprint;
@@ -357,7 +358,11 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
           ) : step.id === "energy" ? (
             <EnergyStep
               allocationKey={scope.allocation_key}
-              onKeyChange={(k) => setScope((x) => ({ ...x, allocation_key: k }))}
+              onKeyChange={(k) => {
+                setScope((x) => ({ ...x, allocation_key: k }));
+                // Values typed for one key mean nothing for another (a site total of 5000 h isn't 100%).
+                setKv(emptyKeyValues(k));
+              }}
               keyValues={kv}
               onKeyValues={setKv}
               preview={preview.data}

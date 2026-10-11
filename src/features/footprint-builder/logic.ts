@@ -103,6 +103,11 @@ export const ALLOCATION_KEYS: { value: AllocationKey; label: string; help: strin
   { value: "manual", label: "Manual %", help: "A share you set, e.g. from an engineering study." },
 ];
 
+/** Starting key values for an allocation key. Manual % is a share of 100, so its site total is fixed. */
+export function emptyKeyValues(key: AllocationKey): { key_value_product: number | null; key_value_site_total: number | null } {
+  return { key_value_product: null, key_value_site_total: key === "manual" ? 100 : null };
+}
+
 /** The study fields the Scope step edits (PATCH /pcf/studies/:id). */
 export type ScopeFields = Pick<Study, "reference_start" | "reference_end" | "year_type" | "pcr_tag" | "notes" | "allocation_key">;
 
