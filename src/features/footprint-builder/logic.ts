@@ -291,3 +291,80 @@ export function checklist(study: Pick<Study, "product">, lines: Line[], book: Fa
 }
 
 export const canCalculate = (items: CheckItem[]) => items.every((i) => i.done || !i.blocking);
+
+// ------------------------------------------------------------- lines ---
+
+export const LINE_UNITS = ["kg", "t", "g", "unit", "m", "m2", "kWh", "L"];
+
+/** Unit options for a line: the usual ones plus whatever it already uses. */
+export const unitOptions = (current: string) => (LINE_UNITS.includes(current) || !current ? LINE_UNITS : [current, ...LINE_UNITS]).map((u) => ({ value: u, label: u }));
+
+/** Tonnes for a mass quantity, or null when the unit isn't a mass. */
+export function massInTonnes(qty: number | null, unit: string): number | null {
+  const f = MASS_TO_KG[unit.trim().toLowerCase()];
+  return qty == null || f === undefined ? null : (qty * f) / 1000;
+}
+
+/**
+ * Legs whose mass follows a material line, with that mass in tonnes. A leg
+ * follows a material only when exactly one material line and exactly one leg
+ * share its name and the material's quantity is a mass; two suppliers of one
+ * material, or a split shipment, keep their own typed masses.
+ */
+export function linkedPayloads(lines: Line[]): Map<string, number> {
+  const count = (stage: InputStage) => {
+    const m = new Map<string, Line[]>();
+    for (const l of lines) {
+      const k = l.name.trim().toLowerCase();
+      if (l.stage === stage && k) m.set(k, [...(m.get(k) ?? []), l]);
+    }
+    return m;
+  };
+  const materials = count("A1");
+  const out = new Map<string, number>();
+  for (const [k, legs] of count("A2")) {
+    const mats = materials.get(k);
+    if (legs.length !== 1 || mats?.length !== 1) continue;
+    const t = massInTonnes(mats[0].quantity, mats[0].unit);
+    if (t !== null) out.set(legs[0].key, t);
+  }
+  return out;
+}
+
+/** Keeps each linked leg's payload equal to its material's mass, so editing a quantity moves the leg too. */
+export function syncPayloads(lines: Line[]): Line[] {
+  const linked = linkedPayloads(lines);
+  let changed = false;
+  const out = lines.map((l) => {
+    const t = linked.get(l.key);
+    if (t === undefined || t === l.payload_t) return l;
+    changed = true;
+    return { ...l, payload_t: t };
+  });
+  return changed ? out : lines;
+}
+
+/** Divides every material quantity by the process yield, so masses include losses. */
+export function applyYield(lines: Line[], yieldPct: number): Line[] {
+  if (!(yieldPct > 0 && yieldPct <= 100)) return lines;
+  // Only masses scale: a count of units (a reel, a label) doesn't grow with process losses.
+  return lines.map((l) => (l.stage === "A1" && l.quantity != null && massInTonnes(l.quantity, l.unit) !== null ? { ...l, quantity: Number((l.quantity / (yieldPct / 100)).toPrecision(12)) } : l));
+}
+
+export type PickerFactor = {
+  id: number;
+  name: string;
+  geography: string | null;
+  unit: string;
+  value: number | null;
+  source: string | null;
+  year: number | null;
+  recycled?: boolean;
+};
+
+/** Picker label: always the source and year; a hidden licensed value says so. */
+export function factorLabel(f: PickerFactor): string {
+  const origin = [f.source, f.year].filter((v) => v != null && v !== "").join(" ");
+  const value = f.value === null ? "value hidden (licensed)" : `${fmtKg(f.value)} kg/${f.unit}`;
+  return [f.name, f.geography, origin || "No source", value].filter(Boolean).join(" · ");
+}

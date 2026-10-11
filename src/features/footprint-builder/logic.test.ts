@@ -11,6 +11,11 @@ import {
   runningTotal,
   savableInputs,
   stageParts,
+  syncPayloads,
+  linkedPayloads,
+  applyYield,
+  factorLabel,
+  massInTonnes,
 } from "./logic";
 
 const book: FactorBook = {
@@ -153,5 +158,56 @@ describe("checklist", () => {
   it("calls a line licensed only when its value is hidden", () => {
     const items = checklist({ product }, [line({ material_factor_id: 4 }), line({ unit: "m" })], book, preview);
     expect(items.find((i) => i.id === "priced")?.label).toBe("2 lines not in the running total yet");
+  });
+});
+
+describe("line helpers", () => {
+  it("keeps a leg's payload in step with the material it carries", () => {
+    const a1 = line({ key: "a", name: "Aluminium ingot", quantity: 1010, unit: "kg" });
+    const leg = { ...blankLine("A2"), key: "b", name: "aluminium ingot", distance_km: 100, emission_factor_id: 10 };
+    const synced = syncPayloads([a1, leg]);
+    expect(synced[1].payload_t).toBeCloseTo(1.01, 10);
+    expect(syncPayloads(synced)).toBe(synced);
+    const other = { ...leg, name: "Sea leg" };
+    expect(syncPayloads([a1, other])[1].payload_t).toBeNull();
+  });
+
+  it("leaves typed masses alone when a name matches more than one material or leg", () => {
+    const a = line({ key: "a", name: "Ingot", quantity: 600, unit: "kg" });
+    const b = line({ key: "b", name: "Ingot", quantity: 400, unit: "kg" });
+    const leg = { ...blankLine("A2"), key: "l1", name: "Ingot", payload_t: 0.6, distance_km: 100 };
+    expect(syncPayloads([a, b, leg])[2].payload_t).toBe(0.6);
+    const sea = { ...leg, key: "l2", payload_t: 0.7 };
+    const road = { ...leg, key: "l3", payload_t: 0.3 };
+    const split = syncPayloads([a, sea, road]);
+    expect([split[1].payload_t, split[2].payload_t]).toEqual([0.7, 0.3]);
+    expect(linkedPayloads([a, sea, road]).size).toBe(0);
+  });
+
+  it("doesn't link a leg to a material counted in units", () => {
+    const reel = line({ key: "a", name: "Reel", quantity: 1, unit: "unit" });
+    const leg = { ...blankLine("A2"), key: "l", name: "Reel", payload_t: 0.05, distance_km: 10 };
+    expect(linkedPayloads([reel, leg]).size).toBe(0);
+    expect(syncPayloads([reel, leg])[1].payload_t).toBe(0.05);
+  });
+
+  it("scales material quantities by the process yield", () => {
+    const out = applyYield([line({ quantity: 97 }), line({ stage: "A3_packaging", quantity: 1 })], 97);
+    expect(out[0].quantity).toBe(100);
+    expect(out[1].quantity).toBe(1);
+    expect(applyYield([line({ quantity: 5 })], 0)[0].quantity).toBe(5);
+    expect(applyYield([line({ quantity: 2, unit: "unit", material_factor_id: 5 })], 50)[0].quantity).toBe(2);
+  });
+
+  it("labels factors with source and year and masks licensed values", () => {
+    expect(factorLabel({ id: 1, name: "Aluminium", geography: "GLO", unit: "kg", value: 2, source: "Test", year: 2024 })).toBe("Aluminium · GLO · Test 2024 · 2 kg/kg");
+    expect(factorLabel({ id: 2, name: "Copper", geography: null, unit: "kg", value: null, source: "ecoinvent", year: 2023 })).toBe(
+      "Copper · ecoinvent 2023 · value hidden (licensed)",
+    );
+  });
+
+  it("converts mass units to tonnes only", () => {
+    expect(massInTonnes(1500, "kg")).toBe(1.5);
+    expect(massInTonnes(2, "unit")).toBeNull();
   });
 });
