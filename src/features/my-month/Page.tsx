@@ -95,7 +95,7 @@ export default function MyMonthPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={month ? monthTitle(month) : "My month"}
+        title={month ? monthTitle(month) : "Current Month"}
         description={siteLine}
         loading={query.isPending}
         context={monthSwitcher}
