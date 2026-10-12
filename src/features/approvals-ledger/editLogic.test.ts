@@ -188,6 +188,19 @@ describe("initialActivity", () => {
     expect(initialActivity(waste, { "Waste Type": "8", "Disposal Method": "1" }).emission_category).toBe("Process Organic Waste  - Reuse");
   });
 
+  it("falls back to the parent-only key when no full key matches", () => {
+    const parentOnly: ColumnConfig = { ...waste, emission_category_mapping: { "ETP Sludge": "ETP Sludge - any disposal" } };
+    expect(initialActivity(parentOnly, { "Waste Type": "6", "Disposal Method": "5" }).emission_category).toBe("ETP Sludge - any disposal");
+  });
+
+  it("leaves the factor unset when keys differ only in spacing (ambiguous)", () => {
+    const ambiguous: ColumnConfig = {
+      ...waste,
+      emission_category_mapping: { "Process Organic Waste |Reuse": "A", "Process Organic Waste|Reuse ": "B" },
+    };
+    expect(initialActivity(ambiguous, { "Waste Type": "8", "Disposal Method": "1" }).emission_category).toBeUndefined();
+  });
+
   it("keeps a stored category and leaves unresolvable rows empty", () => {
     expect(initialActivity(waste, { "Waste Type": "6", "Disposal Method": "5", emission_category: "Custom" }).emission_category).toBe("Custom");
     expect(initialActivity(waste, { "Waste Type": "6" }).emission_category).toBeUndefined();

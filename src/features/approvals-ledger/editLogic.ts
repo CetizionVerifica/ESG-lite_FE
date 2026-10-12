@@ -101,7 +101,12 @@ export function fieldOptions(config: ColumnConfig | undefined, column: string, a
 export function resolveEmissionCategory(config: ColumnConfig, activity: Activity): string | null {
   const ecm = config.emission_category_mapping ?? {};
   if (Object.keys(ecm).length === 0) return null;
-  const find = (key: string) => ecm[key] ?? Object.entries(ecm).find(([k]) => mapKey(k) === mapKey(key))?.[1] ?? null;
+  const find = (key: string) => {
+    if (ecm[key]) return ecm[key];
+    // Loose match only when it is unambiguous: two keys that differ only in spacing could name different factors.
+    const hits = Object.entries(ecm).filter(([k]) => mapKey(k) === mapKey(key));
+    return hits.length === 1 ? hits[0][1] : null;
+  };
   const deps = config.column_dependencies ?? {};
 
   if (Object.keys(deps).length === 0) {
