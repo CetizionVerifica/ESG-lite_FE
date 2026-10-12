@@ -165,7 +165,7 @@ export function DataTable<T>({
     landedOn.current = highlightId;
     el.scrollIntoView?.({ block: "center" });
     el.focus({ preventScroll: true });
-  });
+  }, [highlightId, pageRows]);
 
   const pageIds = pageRows.map(getRowId);
   const allOnPage = pageIds.length > 0 && pageIds.every((id) => selectedSet.has(id));
@@ -368,7 +368,7 @@ export function DataTable<T>({
               pageRows.map((row) => {
                 const id = getRowId(row);
                 const isSelected = selectedSet.has(id);
-                const isCurrent = highlightId !== undefined && id === highlightId;
+                const isCurrent = highlightId !== undefined && String(id) === String(highlightId);
                 return (
                   <tr
                     key={id}

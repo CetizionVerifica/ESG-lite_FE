@@ -91,5 +91,6 @@ describe("pageOf", () => {
     expect(pageOf(ids, (r) => r.id, "b11", 10)).toBe(1);
     expect(pageOf(ids, (r) => r.id, "b30", 10)).toBe(2);
     expect(pageOf(ids, (r) => r.id, "nope", 10)).toBe(-1);
+    expect(pageOf([{ id: 7 }, { id: 8 }], (r) => r.id, "8", 10)).toBe(0); // a numeric id matches its URL string
   });
 });

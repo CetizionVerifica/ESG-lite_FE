@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  returnPath,
   coverTitle,
   errorMessage,
   errorStatus,
@@ -34,6 +35,19 @@ describe("errors", () => {
   it("reads the status, null when there was no response", () => {
     expect(errorStatus({ response: { status: 404 } })).toBe(404);
     expect(errorStatus(new Error("net"))).toBeNull();
+  });
+});
+
+describe("returnPath", () => {
+  it("goes back to an in-app path, never to a sign-in page or another origin", () => {
+    expect(returnPath("/oauth/consent?request=abc")).toBe("/oauth/consent?request=abc");
+    expect(returnPath("/overview")).toBe("/overview");
+    expect(returnPath("/login")).toBe("/");
+    expect(returnPath("/superadmin/login?x=1")).toBe("/");
+    expect(returnPath("/reset-password")).toBe("/");
+    expect(returnPath("//evil.example/x")).toBe("/");
+    expect(returnPath("https://evil.example")).toBe("/");
+    expect(returnPath(undefined)).toBe("/");
   });
 });
 

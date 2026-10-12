@@ -42,7 +42,8 @@ export function paginate<T>(rows: T[], page: number, pageSize: number): T[] {
 
 /** Zero-based page holding the row with `id` in `rows` (already sorted), or -1 when absent. */
 export function pageOf<T>(rows: T[], getRowId: (row: T) => string | number, id: string | number, pageSize: number): number {
-  const i = rows.findIndex((r) => getRowId(r) === id);
+  const want = String(id);
+  const i = rows.findIndex((r) => String(getRowId(r)) === want);
   return i < 0 ? -1 : Math.floor(i / Math.max(1, pageSize));
 }
 

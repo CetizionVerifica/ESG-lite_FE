@@ -1,11 +1,14 @@
+import { useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Button, EmptyState, Loading, PageHeader, Skeleton, cn, focusRing, panel } from "../../ui";
 import { usePreferences } from "./api";
 import { AppearanceSection } from "./components/AppearanceSection";
+import { ConnectedAppsSection } from "./components/ConnectedAppsSection";
 import { NotificationsSection } from "./components/NotificationsSection";
 import { ProfileSection } from "./components/ProfileSection";
 import { TimezoneSection } from "./components/TimezoneSection";
-import { SECTIONS, type SectionId, profileView, sectionDomId, serverMessage } from "./logic";
+import { type SectionId, profileView, sectionDomId, sectionFromTab, sectionsFor, serverMessage } from "./logic";
 
 function jumpTo(id: SectionId) {
   const el = document.getElementById(sectionDomId(id));
@@ -20,6 +23,14 @@ export default function SettingsPage() {
   const { user, role } = useAuth();
   const prefs = usePreferences();
   const profile = profileView(user, role);
+  const sections = sectionsFor(role);
+  const [params] = useSearchParams();
+  const openOn = sectionFromTab(params.get("tab"), role);
+
+  // `/settings?tab=apps` (from the consent page and Claude docs) lands on that section.
+  useEffect(() => {
+    if (openOn) jumpTo(openOn);
+  }, [openOn]);
 
   return (
     <div className="space-y-5">
@@ -28,7 +39,7 @@ export default function SettingsPage() {
       <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">
         <nav aria-label="Settings sections" className="hidden lg:block">
           <ul className="sticky top-24 space-y-0.5">
-            {SECTIONS.map((s) => (
+            {sections.map((s) => (
               <li key={s.id}>
                 <a
                   href={`#${sectionDomId(s.id)}`}
@@ -67,6 +78,7 @@ export default function SettingsPage() {
               <TimezoneSection saved={prefs.data.timezone ?? null} />
             </>
           )}
+          {role === "Superadmin" && <ConnectedAppsSection />}
         </div>
       </div>
     </div>

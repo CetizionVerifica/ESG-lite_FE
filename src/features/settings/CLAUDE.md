@@ -15,3 +15,6 @@
 
 ## Rules
 Save per section with toast; errors visible (today silent on load and save).
+
+## Connected apps (IM10, 2026-10-12)
+Fifth section, Superadmin only: the apps (Claude) allowed to act for this account, Disconnect, and the connector URL with Copy when nothing is connected. `/settings?tab=apps` lands on it. Spec and as-built notes: `src/features/oauth-consent/CLAUDE.md`.

@@ -1,5 +1,5 @@
 /** Pure helpers for P07 Approvals and Emissions ledger. No React, no requests. */
-import type { EmissionData, EmissionStatus } from "../../services/emissionService";
+import type { BatchChannel, EmissionData, EmissionStatus } from "../../services/emissionService";
 import { fyEndYear, fyStartYearOf } from "../../lib/fiscalYear";
 import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatReportingYear } from "../../ui";
 
@@ -300,4 +300,33 @@ export function reportOptions(period: Period | null, fyStartMonth = DEFAULT_FY_S
     options.push({ kind: "year", label: formatReportingYear(startYear, "FY", fyStartMonth), year: fyEndYear(startYear, fyStartMonth), yearType: "FY" });
   }
   return options;
+}
+
+// ─── Upload batch source (IM10) ─────────────────────────────────────────────
+
+export type BatchSource = "claude" | "bulk" | "api";
+
+/**
+ * Where a batch came from (contract channel → chip). A batch without a
+ * channel, which includes every batch older than the import plans and the
+ * historical imports, is a Bulk upload.
+ */
+export function batchSource(channel: BatchChannel | null | undefined): BatchSource {
+  switch (channel) {
+    case "mcp":
+      return "claude";
+    case "api":
+      return "api";
+    default:
+      return "bulk";
+  }
+}
+
+export const BATCH_SOURCE_LABEL: Record<BatchSource, string> = { claude: "Claude", bulk: "Bulk upload", api: "API" };
+
+export const BATCH_SOURCE_OPTIONS: { value: BatchSource; label: string }[] = (["claude", "bulk", "api"] as BatchSource[]).map((value) => ({ value, label: BATCH_SOURCE_LABEL[value] }));
+
+/** Reads `?source=` for the batches tab; anything unknown means all sources. */
+export function parseBatchSource(value: string | null): BatchSource | null {
+  return value && value in BATCH_SOURCE_LABEL ? (value as BatchSource) : null;
 }

@@ -17,7 +17,13 @@ const brand = { companyId: 3, name: "Glochem", primary: "#a01c2c", accent: "#333
 
 type Sent = { method: string; path: string; body: unknown };
 
-async function signIn(page: Page, role: string, opts: { failPrefs?: boolean } = {}) {
+const grants = [
+  { grant_id: 7, client: { client_id: "c1", client_name: "Claude", client_uri: null, logo_uri: null }, scopes: ["imports:read", "imports:write"], created_at: "2026-10-10T09:00:00Z", last_used_at: "2026-10-12T08:00:00Z", revoked_at: null },
+  { grant_id: 8, client: { client_id: "c2", client_name: "MCP Inspector", client_uri: null, logo_uri: null }, scopes: ["imports:read"], created_at: "2026-10-11T09:00:00Z", last_used_at: null, revoked_at: null },
+];
+
+async function signIn(page: Page, role: string, opts: { failPrefs?: boolean; grants?: typeof grants } = {}) {
+  let live = opts.grants ?? [];
   const sent: Sent[] = [];
   await page.addInitScript(
     ([u, r]) => {
@@ -43,6 +49,12 @@ async function signIn(page: Page, role: string, opts: { failPrefs?: boolean } = 
         return json({ message: "ok" });
       }
       if (url.pathname.endsWith("/auth/forgot-password")) return json({ message: "sent" });
+      const grant = /\/oauth\/grants\/(\d+)$/.exec(url.pathname);
+      if (grant && req.method() === "DELETE") {
+        live = live.filter((g) => g.grant_id !== Number(grant[1]));
+        return json({ message: "Disconnected", grant_id: Number(grant[1]) });
+      }
+      if (url.pathname.endsWith("/oauth/grants")) return json({ grants: live, connector_url: "https://api.esglite.example/mcp" });
       if (url.pathname.endsWith("/auth/me/appearance")) return json({ appearance: req.method() === "PUT" ? "dark" : "system" });
       if (url.pathname.endsWith("/auth/me")) return json({ role, user });
       if (url.pathname.endsWith("/brands/mine")) return json(brand);
@@ -110,4 +122,37 @@ test("an admin sees the uploads toggle; a superadmin is told there are no emails
   await signIn(page, "Superadmin");
   await page.goto("/settings");
   await expect(page.getByText("No email notifications for your role yet")).toBeVisible();
+});
+
+test("a Superadmin sees Connected apps, disconnects Claude and gets the connector URL to add it again", async ({ page }) => {
+  const sent = await signIn(page, "Superadmin", { grants });
+  await page.goto("/settings?tab=apps");
+  const apps = page.getByRole("region", { name: "Connected apps" });
+  await expect(apps).toBeVisible();
+  const list = apps.getByRole("list", { name: "Connected apps" });
+  await expect(list.getByRole("listitem")).toHaveCount(2);
+  await expect(list).toContainText("Claude");
+  await expect(list).toContainText("Read sites, categories and forms · Create entries for review");
+  await expect(list).toContainText("Not used yet");
+
+  await list.getByRole("listitem").filter({ hasText: "MCP Inspector" }).getByRole("button", { name: "Disconnect" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Disconnect MCP Inspector?" });
+  await dialog.getByRole("button", { name: "Disconnect" }).click();
+  await expect(page.getByText("MCP Inspector disconnected")).toBeVisible();
+  await expect(list.getByRole("listitem")).toHaveCount(1);
+  expect(sent).toContainEqual({ method: "DELETE", path: expect.stringMatching(/\/oauth\/grants\/8$/), body: null });
+
+  await list.getByRole("button", { name: "Disconnect" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Disconnect" }).click();
+  await expect(apps.getByText("No apps connected")).toBeVisible();
+  await expect(apps.getByLabel("Connector URL")).toHaveText("https://api.esglite.example/mcp");
+  await expect(apps.getByRole("button", { name: "Copy" })).toBeVisible();
+});
+
+test("other roles never see Connected apps", async ({ page }) => {
+  await signIn(page, "Manager", { grants });
+  await page.goto("/settings?tab=apps");
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Connected apps" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Connected apps" })).toHaveCount(0);
 });
