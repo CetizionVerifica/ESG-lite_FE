@@ -30,3 +30,8 @@ Left: `Stepper` (6 steps). Centre: step content. Right rail (sticky, 280px): **r
 - A Midal rod pilot can be built from a BOM file in under 15 minutes.
 - Running total updates within 300ms of an edit (client-side compute with E1 engine logic shared or mirrored, confirmed server-side on Calculate).
 - Matches screen "Builder" in the previews artifact.
+
+## Built (E2 2/2, 2026-10-12)
+- Step 2 "Import BOM" (`components/BomImportDrawer.tsx`): xlsx, csv or pdf → `POST /v1/pcf/parse-bom` with the study id, the batch size the file's quantities cover and the product's mass per unit; the detected columns can be changed (the file is re-read), the lines preview with an AI chip, confidence, reason and warnings; "Add N lines" appends them as AI-suggested inputs (`ai.ts` `linesFromBom`, confidence 0–100 → 0–1). Under 60% they stay warn-tinted and block Calculate until confirmed in the table. The raw file is kept as evidence by the AI service; the drawer names it.
+- Step 2 "Suggest factors" (`components/SuggestFactorsDrawer.tsx`): the lines without a factor or supplier footprint and the C04 library (recycled variants left out) go to `POST /v1/pcf/match-factors` with the site name as the geography hint; each line gets its suggestions with confidence and reason, the first one preselected, unmatched lines left for the person. "Apply" sets the factor and marks the line AI-suggested with that confidence.
+- If the AI service can't be reached, both drawers say so and the step works as before (by hand).

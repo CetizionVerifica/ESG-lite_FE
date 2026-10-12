@@ -7,8 +7,11 @@ import { errorMessage, useAllocationPreview, useCalculate, useFreightFactors, us
 import { EnergyStep, type KeyValues } from "./components/EnergyStep";
 import { PackagingStep } from "./components/PackagingStep";
 import { ReviewStep } from "./components/ReviewStep";
+import { BomImportDrawer } from "./components/BomImportDrawer";
 import { LineDrawer } from "./components/LineDrawer";
 import { MaterialsStep } from "./components/MaterialsStep";
+import { SuggestFactorsDrawer } from "./components/SuggestFactorsDrawer";
+import { applyPicks, needsFactor } from "./ai";
 import { TransportStep } from "./components/TransportStep";
 import { ScopeStep } from "./components/ScopeStep";
 import { TotalRail } from "./components/TotalRail";
@@ -28,6 +31,7 @@ import {
   linkedPayloads,
   blankLine,
   lineProblem,
+  needsConfirm,
   periodText,
   periodYear,
   runningTotal,
@@ -195,6 +199,8 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
   const [lines, setLinesRaw] = useState<Line[]>(initialLines);
   const setLines = useCallback((fn: (ls: Line[]) => Line[]) => setLinesRaw((ls) => syncPayloads(fn(ls))), []);
   const [detailKey, setDetailKey] = useState<string | null>(null);
+  const [bomOpen, setBomOpen] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
 
   const saveScope = useSaveScope(study.pcf_study_id);
   const saveInputs = useSaveInputs(study.pcf_study_id);
@@ -339,6 +345,9 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
                 setLines((ls) => applyYield(ls, pct));
                 toast({ title: `Scaled the materials for a ${pct}% yield.` });
               }}
+              onImportBom={() => setBomOpen(true)}
+              onSuggest={() => setSuggestOpen(true)}
+              suggestCount={lines.filter(needsFactor).length}
             />
           ) : step.id === "transport" ? (
             <TransportStep
@@ -426,6 +435,29 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
       </div>
 
       <LineDrawer line={lines.find((l) => l.key === detailKey) ?? null} factors={materialPicker} onChange={changeLine} onClose={() => setDetailKey(null)} />
+      <BomImportDrawer
+        open={bomOpen}
+        studyId={study.pcf_study_id}
+        massPerUnitKg={study.product?.mass_per_unit_kg ?? null}
+        unitLabel={unitLabel}
+        onClose={() => setBomOpen(false)}
+        onImport={(added, fileName) => {
+          setLines((ls) => [...ls, ...added]);
+          const low = added.filter(needsConfirm).length;
+          toast({ title: `Added ${added.length} ${added.length === 1 ? "line" : "lines"} from ${fileName}.`, description: low ? `Confirm the ${low} marked AI ${low === 1 ? "line" : "lines"} before Calculate.` : undefined });
+        }}
+      />
+      <SuggestFactorsDrawer
+        open={suggestOpen}
+        lines={lines}
+        factors={factors.data ?? []}
+        geographyHint={study.site?.name ?? null}
+        onClose={() => setSuggestOpen(false)}
+        onApply={(picks) => {
+          setLines((ls) => applyPicks(ls, picks));
+          toast({ title: `Applied ${picks.length} suggested ${picks.length === 1 ? "factor" : "factors"}.` });
+        }}
+      />
 
       <Modal
         open={blocker.state === "blocked"}

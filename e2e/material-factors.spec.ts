@@ -66,6 +66,44 @@ async function signIn(page: Page, role: "Superadmin" | "Manager") {
       const path = url.pathname;
       const method = request.method();
       const json = (body: unknown, status = 200) => route.fulfill({ status, json: body });
+      // The AI sheet reader (E2). Uploads are multipart, so answer before the JSON body is read.
+      if (path.endsWith("/v1/pcf/material-factors/parse-excel")) {
+        calls.push({ method, path, body: null });
+        const data = request.postData() ?? "";
+        if (data.includes("Raced row")) return json({ detail: "AI service down" }, 503);
+        const personMapping = /name="mapping"\r?\n\r?\n(\{[^\r\n]*\})/.exec(data)?.[1];
+        const mapping = personMapping ? (JSON.parse(personMapping) as Record<string, string | null>) : null;
+        const header = (field: string, def: string | null) => (mapping ? mapping[field] : def);
+        const col = (field: string, def: string | null, by: "header" | "ai" = "header", confidence = 95) => {
+          const h = header(field, def);
+          return h ? { [field]: { header: h, confidence, reason: by === "ai" ? "Values look like factors" : `Header “${h}” is the ${field} column`, by } } : {};
+        };
+        const valueCol = header("value_kgco2e", "kgCO2e");
+        const rows = valueCol
+          ? [
+              { line: 2, values: { name: "Wooden drum", material_group: "packaging", unit: "unit", value_kgco2e: 38.5, geography: null, source: "DEFRA", source_year: 2024 }, confidence: 95, reason: "Row 2", warnings: [], problems: [] },
+              { line: 3, values: { name: "Steel wire", material_group: "steel", unit: "kg", value_kgco2e: 2.3, geography: "GLO", source: "worldsteel", source_year: 2022 }, confidence: 95, reason: "Row 3", warnings: [], problems: [] },
+            ]
+          : [
+              { line: 2, values: { name: "Wooden drum", material_group: "packaging", unit: "unit", value_kgco2e: null }, confidence: 40, reason: "No value column", warnings: [], problems: ["Value must be a number of 0 or more"] },
+              { line: 3, values: { name: "Steel wire", material_group: "steel", unit: "kg", value_kgco2e: null }, confidence: 40, reason: "No value column", warnings: [], problems: ["Value must be a number of 0 or more"] },
+            ];
+        return json({
+          file_name: "factors.csv",
+          sheet_names: [],
+          sheet_name: null,
+          header_line: 1,
+          headers: ["Material", "Group", "Unit", "kgCO2e", "Region", "Source", "Year"],
+          mapping: { ...col("name", "Material"), ...col("material_group", "Group"), ...col("unit", "Unit"), ...col("value_kgco2e", "kgCO2e", "ai", 72), ...col("geography", "Region"), ...col("source", "Source"), ...col("source_year", "Year") },
+          sheet_unit: null,
+          rows,
+          total_rows: 2,
+          rows_with_problems: valueCol ? 0 : 2,
+          low_confidence_rows: valueCol ? 0 : 2,
+          warnings: [],
+          ai_used: true,
+        });
+      }
       const body = method === "GET" || method === "DELETE" ? null : (request.postDataJSON() as Record<string, unknown>);
       // The import dry run is a check, not a write.
       if (url.searchParams.get("dry_run") === "1") {
@@ -160,7 +198,15 @@ test("a superadmin filters, hits a duplicate, and imports a sheet", async ({ pag
   const csv = ["Material,Group,Unit,kgCO2e,Region,Source,Year", "Wooden drum,packaging,unit,38.5,,DEFRA,2024", "Steel wire,steel,kg,2.3,GLO,worldsteel,2022", ","].join("\n");
   await imp.locator('input[type="file"]').setInputFiles({ name: "factors.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
   await expect(imp.getByLabel("Name")).toHaveValue("Material");
+  // The AI reader placed the value column and says so.
+  await expect(imp.getByText("AI 72%")).toBeVisible();
   await expect(imp.getByText("All 2 rows are ready to import.")).toBeVisible();
+  // A changed column re-reads the sheet with the person's mapping.
+  await imp.getByLabel("Value (kgCO₂e per unit)").selectOption("");
+  await expect(imp.getByText("Pick a column for Value (kgCO₂e per unit).")).toBeVisible();
+  await imp.getByLabel("Value (kgCO₂e per unit)").selectOption("kgCO2e");
+  await expect(imp.getByText("All 2 rows are ready to import.")).toBeVisible();
+  expect(calls.filter((c) => c.path.endsWith("/parse-excel"))).toHaveLength(3);
   await imp.getByRole("button", { name: "Import 2 factors" }).click();
   await expect(imp.getByText("Imported 2 factors.", { exact: false })).toBeVisible();
   expect(calls.at(-1)).toMatchObject({
@@ -209,6 +255,9 @@ test("an import refused after the check keeps Import off until the sheet changes
   const imp = page.getByRole("dialog", { name: "Import sheet" });
   const csv = ["Material,Group,Unit,kgCO2e", "Raced row,steel,kg,2"].join("\n");
   await imp.locator('input[type="file"]').setInputFiles({ name: "factors.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  // The AI reader is down for this file: the sheet is read in the browser and the drawer says so.
+  await expect(imp.getByText("The AI sheet reader couldn't be reached, so the columns were matched by header name here instead.")).toBeVisible();
+  await expect(imp.getByLabel("Name")).toHaveValue("Material");
   await expect(imp.getByText("All 1 rows are ready to import.")).toBeVisible();
   await imp.getByRole("button", { name: "Import 1 factor" }).click();
   await expect(imp.getByText("Nothing was imported. Fix the rows below in the sheet or the columns, then import again.")).toBeVisible();
