@@ -75,6 +75,8 @@ export function HistoricalImport(props: {
       id: "status",
       header: "Status",
       sortable: true,
+      // A skipped row's reason has to be readable in full.
+      wrap: true,
       value: (r) => r.reason ?? "",
       cell: (r) => (r.status === "import" ? <Badge tone="good">Import</Badge> : <span className="text-bad">{r.reason}</span>),
     },

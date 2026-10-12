@@ -107,7 +107,8 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
     () => feraCategoryIds(ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)) : sites),
     [sites, ctx.siteIds],
   );
-  const counts = useStatusCounts(ctx.siteIds, feraIds, { categoryId: ctx.categoryId, ...periodQuery(ctx.period) });
+  const search = params.get("q")?.trim() || null;
+  const counts = useStatusCounts(ctx.siteIds, feraIds, { categoryId: ctx.categoryId, ...periodQuery(ctx.period), search });
   // No site chip = all of the manager's sites; batches must always be scoped (the endpoint isn't).
   const scopeSites = useMemo(() => (ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)), [ctx.siteIds, sites]);
   const batches = useBatches(scopeSites, ctx.categoryId);

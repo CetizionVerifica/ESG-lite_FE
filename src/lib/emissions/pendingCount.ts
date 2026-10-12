@@ -9,7 +9,7 @@ export function feraCategoryIds(sites: CategorySite[]): number[] {
   return [...ids].sort((a, b) => a - b);
 }
 
-export type PendingFilter = { categoryId?: number | null; year?: number | null; month?: number | null };
+export type PendingFilter = { categoryId?: number | null; year?: number | null; month?: number | null; search?: string | null };
 
 /**
  * Pending entries as the approvals list shows them: a FERA twin of a pending
@@ -17,7 +17,7 @@ export type PendingFilter = { categoryId?: number | null; year?: number | null; 
  * returns that count as `pending_review_count` (ESG-lite #82). An older API
  * only counts every row; then its pending FERA rows are taken off.
  *
- * `filter` narrows the count to the list's category and period, so the badge
+ * `filter` narrows the count to the list's category, period and search, so the badge
  * matches the list under it. Looking at the FERA category itself, the list
  * shows its rows, so every pending row counts.
  */

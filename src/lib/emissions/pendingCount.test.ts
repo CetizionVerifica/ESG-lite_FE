@@ -40,8 +40,8 @@ describe("pending count for approvals", () => {
   it("narrows the count to the list's category and period", async () => {
     getEmissionsPaginated.mockReset();
     getEmissionsPaginated.mockResolvedValue({ summary: { pending_count: 4, pending_review_count: 3 } });
-    expect(await fetchPendingForApproval([1], [9], { categoryId: 2, year: 2026, month: null })).toBe(3);
-    expect(getEmissionsPaginated).toHaveBeenCalledWith({ siteIds: [1], categoryId: 2, year: 2026, status: "pending", page: 1, limit: 1 });
+    expect(await fetchPendingForApproval([1], [9], { categoryId: 2, year: 2026, month: null, search: "coal" })).toBe(3);
+    expect(getEmissionsPaginated).toHaveBeenCalledWith({ siteIds: [1], categoryId: 2, year: 2026, search: "coal", status: "pending", page: 1, limit: 1 });
   });
 
   it("counts every pending row when the list shows the FERA category itself", async () => {

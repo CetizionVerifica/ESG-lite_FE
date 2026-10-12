@@ -53,7 +53,7 @@ export function useEmissionList(params: ReturnType<typeof listParams>) {
 }
 
 /**
- * Pending / approved / rejected counts for the chosen sites, category and period
+ * Pending / approved / rejected counts for the chosen sites, category, period and search
  * (tab badge), so the badge matches the list. Pending leaves out FERA twins, as
  * the list folds them away.
  */
