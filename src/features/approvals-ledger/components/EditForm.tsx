@@ -57,7 +57,7 @@ function Loaded({
   const payload = editPayload(activity, date, unit, reason, start);
   // The factor and unit are needed only when the values are sent; a date-only fix keeps them as stored.
   const sendsValues = !!payload.activity_data;
-  const errors = editErrors(reason, sendsValues ? category : "x", hasMapping, sendsValues ? unit : "x", (units.data?.length ?? 0) > 0);
+  const errors = editErrors(reason, sendsValues ? category : "x", hasMapping, sendsValues ? unit : "x", units.isSuccess ? units.data.length > 0 : true);
   const notSaved = tried ? blockedMessage(errors) : null;
   const reasonId = useId();
   const unitId = useId();

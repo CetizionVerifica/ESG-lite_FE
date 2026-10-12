@@ -14,6 +14,8 @@ type Row = {
   total_emission: string;
   category: { category_id: number; category_name: string; scope: string | null };
   review_comment?: string;
+  // Defaults to "litre"; null for an entry stored without a unit.
+  activity_data_unit?: string | null;
 };
 
 const company = { company_id: 1, name: "Midal Cables" };
@@ -107,7 +109,7 @@ async function signIn(page: Page) {
           .map((r) => ({
             ...r,
             unit: "tCO2e",
-            activity_data_unit: "litre",
+            activity_data_unit: r.activity_data_unit === undefined ? "litre" : r.activity_data_unit,
             date_of_reporting: "2025-09-30",
             created_at: `2025-10-0${r.pk_id}T08:00:00Z`,
             updated_at: "2025-10-01T08:00:00Z",
@@ -228,6 +230,57 @@ test("a date-only fix sends just the date", async ({ page }) => {
     date_of_reporting: "2025-08-31",
     reason: "Wrong reporting month",
   });
+});
+
+test("an amount change on an entry without a unit waits for a unit", async ({ page }) => {
+  const { rows, calls } = await signIn(page);
+  rows[0].activity_data_unit = null;
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Quantity").fill("150");
+  await page.getByLabel("Reason for the change").fill("Meter read corrected");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Not saved yet: choose a unit, without one the total would be 0.")).toBeVisible();
+  await expect(page.getByLabel("Unit")).toBeFocused();
+  expect(calls.some((c) => c.path.includes("manager-edit"))).toBe(false);
+  await page.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    activity_data: { fuel_type: "1", quantity: "150", emission_category: "Diesel (average biofuel blend)" },
+    activity_data_unit: "litre",
+    reason: "Meter read corrected",
+  });
+});
+
+test("a date-only fix on an entry without a unit sends just the date", async ({ page }) => {
+  const { rows, calls } = await signIn(page);
+  rows[0].activity_data_unit = null;
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Date of reporting").fill("2025-08-31");
+  await page.getByLabel("Reason for the change").fill("Wrong reporting month");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    date_of_reporting: "2025-08-31",
+    reason: "Wrong reporting month",
+  });
+});
+
+test("clearing the unit blocks the save", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Unit").selectOption("");
+  await page.getByLabel("Reason for the change").fill("Unit was wrong");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Not saved yet: choose a unit, without one the total would be 0.")).toBeVisible();
+  await expect(page.getByLabel("Unit")).toBeFocused();
+  expect(calls.some((c) => c.path.includes("manager-edit"))).toBe(false);
 });
 
 test("rejecting a batch with approved rows needs an explicit tick", async ({ page }) => {
