@@ -5,7 +5,7 @@ import { type EmissionDocument, getDocumentsByEmission } from "../../services/do
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { type UnitData, getUserUnitsBySiteAndCategory } from "../../services/unitService";
 import { invalidateEmissionQueries } from "../../lib/emissionQueries";
-import { fetchPendingForApproval } from "../../lib/emissions/pendingCount";
+import { type PendingFilter, fetchPendingForApproval } from "../../lib/emissions/pendingCount";
 import {
   type EmissionUploadBatch,
   approveEmission,
@@ -53,19 +53,22 @@ export function useEmissionList(params: ReturnType<typeof listParams>) {
 }
 
 /**
- * Pending / approved / rejected counts for the chosen sites, whatever the filters
- * (tab badge). Pending leaves out FERA twins, as the list folds them away.
+ * Pending / approved / rejected counts for the chosen sites, category and period
+ * (tab badge), so the badge matches the list. Pending leaves out FERA twins, as
+ * the list folds them away.
  */
-export function useStatusCounts(siteIds: number[], feraIds: number[]) {
+export function useStatusCounts(siteIds: number[], feraIds: number[], filter: PendingFilter = {}) {
   return useQuery({
-    queryKey: [...keys.counts(siteIds), feraIds],
+    queryKey: [...keys.counts(siteIds), feraIds, filter],
     queryFn: async () => {
+      const narrow = Object.fromEntries(Object.entries(filter).filter(([, v]) => v != null));
       const [{ summary }, pending] = await Promise.all([
-        getEmissionsPaginated({ siteIds, page: 1, limit: 1 }),
-        fetchPendingForApproval(siteIds, feraIds),
+        getEmissionsPaginated({ siteIds, ...narrow, page: 1, limit: 1 }),
+        fetchPendingForApproval(siteIds, feraIds, filter),
       ]);
       return { ...summary, pending_count: pending };
     },
+    placeholderData: keepPreviousData,
   });
 }
 

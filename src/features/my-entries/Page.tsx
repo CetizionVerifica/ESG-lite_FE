@@ -179,6 +179,8 @@ export default function MyEntriesPage() {
       info: "status",
       sortable: true,
       value: (r) => STATUS_LABEL[r.status],
+      // A rejected entry shows the reviewer's reason under the pill.
+      wrap: true,
       cell: (r) => (
         <div className="min-w-0 max-w-56">
           <StatusPill status={r.status} size="sm" />

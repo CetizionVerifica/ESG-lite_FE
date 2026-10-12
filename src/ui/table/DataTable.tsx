@@ -270,7 +270,8 @@ export function DataTable<T>({
         </div>
       )}
 
-      <div className="overflow-auto" style={{ maxHeight }}>
+      {/* relative: absolutely positioned children (sr-only labels) stay inside the scroll box instead of stretching the page. */}
+      <div className="relative overflow-auto" style={{ maxHeight }}>
         <table aria-label={label} aria-busy={loading || undefined} className="w-full border-collapse text-sm text-ink">
           <thead className="sticky top-0 z-10 bg-panel shadow-[inset_0_-1px_0_var(--t-line)]">
             <tr>
@@ -296,7 +297,7 @@ export function DataTable<T>({
                     scope="col"
                     aria-sort={active === "asc" ? "ascending" : active === "desc" ? "descending" : undefined}
                     style={{ width: c.width }}
-                    className={cn("h-row whitespace-nowrap px-3 text-xs font-medium text-muted", c.numeric ? "text-right" : "text-left")}
+                    className={cn("h-row whitespace-nowrap px-2.5 text-xs font-medium text-muted", c.numeric ? "text-right" : "text-left")}
                   >
                     <span className={cn("inline-flex items-center gap-1.5 align-middle", c.numeric && "flex-row-reverse")}>
                       {c.sortable ? (
@@ -387,7 +388,7 @@ export function DataTable<T>({
                       return (
                         <td
                           key={c.id}
-                          className={cn("px-3 py-1", c.numeric ? "text-right font-num tabular-nums" : "text-left")}
+                          className={cn("px-2.5 py-0.5", !c.wrap && "whitespace-nowrap", c.numeric ? "text-right font-num tabular-nums" : "text-left")}
                         >
                           {content}
                         </td>

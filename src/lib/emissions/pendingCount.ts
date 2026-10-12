@@ -9,17 +9,27 @@ export function feraCategoryIds(sites: CategorySite[]): number[] {
   return [...ids].sort((a, b) => a - b);
 }
 
+export type PendingFilter = { categoryId?: number | null; year?: number | null; month?: number | null };
+
 /**
  * Pending entries as the approvals list shows them: a FERA twin of a pending
  * entry is folded into that entry, so it isn't counted on its own. The API
  * returns that count as `pending_review_count` (ESG-lite #82). An older API
  * only counts every row; then its pending FERA rows are taken off.
+ *
+ * `filter` narrows the count to the list's category and period, so the badge
+ * matches the list under it. Looking at the FERA category itself, the list
+ * shows its rows, so every pending row counts.
  */
-export async function fetchPendingForApproval(siteIds: number[], feraIds: number[]): Promise<number> {
-  const all = await getEmissionsPaginated({ siteIds, status: "pending", page: 1, limit: 1 });
+export async function fetchPendingForApproval(siteIds: number[], feraIds: number[], filter: PendingFilter = {}): Promise<number> {
+  const narrow = Object.fromEntries(Object.entries(filter).filter(([, v]) => v != null));
+  const all = await getEmissionsPaginated({ siteIds, ...narrow, status: "pending", page: 1, limit: 1 });
+  if (filter.categoryId != null && feraIds.includes(filter.categoryId)) return all.summary.pending_count ?? 0;
   if (typeof all.summary.pending_review_count === "number") return all.summary.pending_review_count;
+  // A non-FERA category has no FERA rows to take off.
+  if (filter.categoryId != null) return all.summary.pending_count ?? 0;
   const fera = await Promise.all(
-    feraIds.map((categoryId) => getEmissionsPaginated({ siteIds, categoryId, status: "pending", page: 1, limit: 1 })),
+    feraIds.map((categoryId) => getEmissionsPaginated({ siteIds, ...narrow, categoryId, status: "pending", page: 1, limit: 1 })),
   );
   const twins = fera.reduce((n, r) => n + (r.summary.pending_count ?? 0), 0);
   return Math.max(0, (all.summary.pending_count ?? 0) - twins);

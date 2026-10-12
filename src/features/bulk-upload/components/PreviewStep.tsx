@@ -32,6 +32,8 @@ export function PreviewStep(props: {
       id: "issue",
       header: "Issue",
       sortable: true,
+      // The reason has to be readable in full to fix the file.
+      wrap: true,
       value: (r) => rowIssue(r)?.text ?? "",
       cell: (r) => {
         const issue = rowIssue(r);

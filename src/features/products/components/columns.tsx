@@ -34,7 +34,7 @@ export function productColumns(opts: { onOpen: (row: Product) => void }): Column
       id: "description",
       header: "Description",
       value: (r) => r.description ?? "",
-      cell: (r) => (r.description ? <span className="line-clamp-2 text-sm text-muted">{r.description}</span> : <span className="text-muted">—</span>),
+      cell: (r) => (r.description ? <span title={r.description} className="block max-w-[24rem] truncate text-sm text-muted">{r.description}</span> : <span className="text-muted">—</span>),
     },
     {
       id: "records",
