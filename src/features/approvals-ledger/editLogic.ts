@@ -204,10 +204,36 @@ export function isNumberField(config: ColumnConfig | undefined, column: string, 
   return value !== "" && value !== null && value !== undefined && !Number.isNaN(Number(value));
 }
 
-/** The body for PUT /user/emissions/manager-edit/:id (bookkeeping keys stripped). */
-export function editPayload(activity: Activity, date: string, unit: string, reason: string) {
-  const clean = Object.fromEntries(Object.entries(activity).filter(([k]) => !META_KEYS.has(k)));
-  return { activity_data: clean, date_of_reporting: date, activity_data_unit: unit || undefined, reason: reason.trim() };
+const stripMeta = (activity: Activity) => Object.fromEntries(Object.entries(activity).filter(([k]) => !META_KEYS.has(k)));
+
+/** Same values, ignoring key order, bookkeeping keys and number vs string ("9.17" = 9.17). */
+export function sameActivity(a: Activity, b: Activity): boolean {
+  const norm = (x: Activity) =>
+    Object.entries(stripMeta(x))
+      .map(([k, v]) => [k, v === null || v === undefined ? "" : String(v)] as const)
+      .filter(([, v]) => v !== "")
+      .sort(([k1], [k2]) => (k1 < k2 ? -1 : k1 > k2 ? 1 : 0));
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+}
+
+export type EditStart = { activity: Activity; date: string; unit: string };
+
+/**
+ * The body for PUT /user/emissions/manager-edit/:id: only what the manager
+ * changed. Sending unchanged activity_data makes the backend recalculate it,
+ * which zeroes a row stored without a category or unit, so a date-only fix
+ * sends just the date. A unit change carries the values too, so a factor
+ * resolved from the options is saved with it.
+ */
+export function editPayload(activity: Activity, date: string, unit: string, reason: string, start?: EditStart) {
+  const unitChanged = !start || (unit || "") !== (start.unit || "");
+  const activityChanged = !start || unitChanged || !sameActivity(activity, start.activity);
+  return {
+    activity_data: activityChanged ? stripMeta(activity) : undefined,
+    date_of_reporting: !start || date !== start.date ? date : undefined,
+    activity_data_unit: unitChanged ? unit || undefined : undefined,
+    reason: reason.trim(),
+  };
 }
 
 export const EDIT_REASON_MIN = 5;

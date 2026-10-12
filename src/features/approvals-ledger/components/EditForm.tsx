@@ -3,6 +3,7 @@ import { Button, Callout, DateField, Select, SkeletonText, TextField, Textarea }
 import { errorMessage, useColumnConfig, useFactorNames, useManagerEdit, useUnits } from "../api";
 import {
   type Activity,
+  type EditStart,
   applyChange,
   blockedMessage,
   editErrors,
@@ -36,9 +37,14 @@ function Loaded({
 }) {
   const siteId = row.site?.site_id;
   const categoryId = row.category?.category_id;
-  const [activity, setActivity] = useState<Activity>(() => initialActivity(config, { ...row.activity_data }));
-  const [date, setDate] = useState(row.date_of_reporting.slice(0, 10));
-  const [unit, setUnit] = useState(row.activity_data_unit ?? "");
+  const [start] = useState<EditStart>(() => ({
+    activity: initialActivity(config, { ...row.activity_data }),
+    date: row.date_of_reporting.slice(0, 10),
+    unit: row.activity_data_unit ?? "",
+  }));
+  const [activity, setActivity] = useState<Activity>(start.activity);
+  const [date, setDate] = useState(start.date);
+  const [unit, setUnit] = useState(start.unit);
   const [reason, setReason] = useState("");
   const [tried, setTried] = useState(false);
 
@@ -48,7 +54,9 @@ function Loaded({
   const names = useFactorNames(siteId, categoryId, factorYear, !hasMapping);
   const save = useManagerEdit();
   const category = String(activity.emission_category ?? "");
-  const errors = editErrors(reason, category, hasMapping);
+  const payload = editPayload(activity, date, unit, reason, start);
+  // The factor is needed only when the values are sent; a date-only fix keeps them as stored.
+  const errors = editErrors(reason, payload.activity_data ? category : "x", hasMapping);
   const notSaved = tried ? blockedMessage(errors) : null;
   const reasonId = useId();
   const formRef = useRef<HTMLFormElement>(null);
@@ -64,7 +72,7 @@ function Loaded({
       target?.focus();
       return;
     }
-    save.mutate({ id: row.pk_id, body: editPayload(activity, date, unit, reason) }, { onSuccess: (data) => onDone(data?.emission) });
+    save.mutate({ id: row.pk_id, body: payload }, { onSuccess: (data) => onDone(data?.emission) });
   };
   return (
     <form

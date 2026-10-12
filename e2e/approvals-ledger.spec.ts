@@ -82,7 +82,8 @@ async function signIn(page: Page) {
       const edit = /\/user\/emissions\/manager-edit\/(\d+)$/.exec(path);
       if (edit) {
         const row = rows.find((r) => r.pk_id === Number(edit[1]))!;
-        row.activity_data = (request.postDataJSON() as { activity_data: Record<string, unknown> }).activity_data;
+        const body = request.postDataJSON() as { activity_data?: Record<string, unknown> };
+        if (body.activity_data) row.activity_data = body.activity_data;
         return json({ emission: row });
       }
 
@@ -207,9 +208,9 @@ test("a manager edits an entry from the drawer with a reason", async ({ page }) 
   await page.getByLabel("Reason for the change").fill("Meter read corrected");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Changes saved")).toBeVisible();
-  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toMatchObject({
-    activity_data: { fuel_type: "1", quantity: "150" },
-    activity_data_unit: "litre",
+  // Only the changed values go: the unchanged unit and date stay off the request.
+  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    activity_data: { fuel_type: "1", quantity: "150", emission_category: "Diesel (average biofuel blend)" },
     reason: "Meter read corrected",
   });
 });

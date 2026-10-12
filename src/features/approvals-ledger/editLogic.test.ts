@@ -4,6 +4,7 @@ import {
   blockedMessage,
   editErrors,
   editPayload,
+  sameActivity,
   editableKeys,
   fieldOptions,
   initialActivity,
@@ -139,6 +140,26 @@ describe("form helpers", () => {
     expect(editErrors("Typo in litres")).toEqual({});
     expect(editErrors("Typo in litres", "").category).toMatch(/emission factor/);
     expect(editErrors("Typo in litres", "Diesel")).toEqual({});
+  });
+
+  it("sends only what the manager changed", () => {
+    const start = { activity: { quantity: 2, emission_category: "Diesel" }, date: "2025-09-30", unit: "litres" };
+    // Date-only fix: no activity_data, so the backend doesn't recalculate a row stored without a unit.
+    expect(editPayload({ quantity: "2", emission_category: "Diesel", _isFeraRow: true }, "2025-10-01", "litres", "Wrong day", start)).toEqual({
+      activity_data: undefined,
+      date_of_reporting: "2025-10-01",
+      activity_data_unit: undefined,
+      reason: "Wrong day",
+    });
+    const amount = editPayload({ quantity: "3", emission_category: "Diesel" }, "2025-09-30", "litres", "Typo in litres", start);
+    expect(amount.activity_data).toEqual({ quantity: "3", emission_category: "Diesel" });
+    expect(amount.date_of_reporting).toBeUndefined();
+    // A unit change carries the values (and a factor resolved on open) along.
+    const unit = editPayload({ quantity: 2, emission_category: "Diesel" }, "2025-09-30", "kg", "Wrong unit", start);
+    expect(unit.activity_data).toEqual({ quantity: 2, emission_category: "Diesel" });
+    expect(unit.activity_data_unit).toBe("kg");
+    expect(sameActivity({ b: "", a: 1 }, { a: "1" })).toBe(true);
+    expect(sameActivity({ a: 1 }, { a: 2 })).toBe(false);
   });
 
   it("prompts for the parent", () => {
