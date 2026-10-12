@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   actionsFor,
   compareVersions,
-  dataSplit,
   dqrMatrix,
   dqrWord,
   hotspots,
@@ -143,7 +142,7 @@ describe("dqrWord", () => {
   });
 });
 
-describe("dqrMatrix and dataSplit", () => {
+describe("dqrMatrix", () => {
   it("weights each stage's DQR by contribution and adds an all-stages row", () => {
     const rows = dqrMatrix([
       line({ id: "a", stage: "A1", kgco2e_per_unit: 3, dqr: { technology: 1, geography: 1, time: 1 } }),
@@ -163,13 +162,6 @@ describe("dqrMatrix and dataSplit", () => {
       line({ id: "b", kgco2e_per_unit: 9, data_type: "primary", dqr: { technology: 3, geography: 3, time: 3 } }),
     ];
     expect(dqrMatrix(lines)[0].technology).toBe(2);
-    expect(dataSplit(lines)).toEqual({ primary: 1, secondary: 1, primary_pct: 50, by_lines: true });
-  });
-
-  it("splits primary and secondary by share of the footprint", () => {
-    const split = dataSplit([line({ id: "a", kgco2e_per_unit: 1, data_type: "primary" }), line({ id: "b", kgco2e_per_unit: 3, data_type: "secondary" })]);
-    expect(split.primary_pct).toBe(25);
-    expect(split.by_lines).toBe(false);
   });
 });
 

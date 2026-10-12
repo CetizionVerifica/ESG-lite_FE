@@ -1,4 +1,4 @@
-import { dataSplit, dqrMatrix, dqrWord, type ResultDetail } from "../logic";
+import { dqrMatrix, dqrWord, type ResultDetail } from "../logic";
 
 const fmt = (v: number | null, digits = 1) => (v == null ? "—" : v.toLocaleString("en-GB", { maximumFractionDigits: digits }));
 
@@ -7,9 +7,10 @@ type Props = { result: ResultDetail; unitText: string };
 /** DQR matrix per stage and the primary vs secondary split (spec §5 Data quality). */
 export function DataQualityTab({ result, unitText }: Props) {
   const rows = dqrMatrix(result.lines);
-  const split = dataSplit(result.lines);
   if (rows.length === 0) return <p className="text-sm text-muted">This calculation has no input lines.</p>;
-  const primaryPct = result.primary_data_share_pct ?? split.primary_pct;
+  // Null means the API withheld it (a licensed factor is in the calculation);
+  // it is never rebuilt from the lines, which would leak the hidden share.
+  const primaryPct = result.primary_data_share_pct;
   return (
     <div className="space-y-5">
       <section className="space-y-2">
@@ -23,8 +24,7 @@ export function DataQualityTab({ result, unitText }: Props) {
               <span className="bg-warn" style={{ width: `${100 - primaryPct}%` }} />
             </div>
             <p className="text-sm text-muted">
-              <span className="text-ink">{fmt(primaryPct, 0)}% primary</span> (supplier-specific figures and the site's approved plant data), {fmt(100 - primaryPct, 0)}% secondary (database factors)
-              {split.by_lines ? ", by line count" : `, by share of the ${unitText}`}.
+              <span className="text-ink">{fmt(primaryPct, 0)}% primary</span> (supplier-specific figures and the site's approved plant data), {fmt(100 - primaryPct, 0)}% secondary (database factors), by share of the {unitText}.
             </p>
           </>
         )}

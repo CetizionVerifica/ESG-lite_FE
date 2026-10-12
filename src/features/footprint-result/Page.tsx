@@ -6,6 +6,7 @@ import {
   Callout,
   EmptyState,
   KpiStrip,
+  Modal,
   PageHeader,
   RejectReasonModal,
   Skeleton,
@@ -66,7 +67,7 @@ const PILL: Record<Study["status"], string> = {
  */
 export default function FootprintResultPage() {
   const params = useParams();
-  const productId = Number(params.productId) || 0;
+  const productId = Math.max(0, Math.trunc(Number(params.productId) || 0));
   const pinned = Number(params.studyId) || null;
   const versions = useVersions(productId);
   const chosen = pinned ?? (versions.data ? latestVersion(versions.data)?.pcf_study_id ?? null : null);
@@ -99,6 +100,15 @@ export default function FootprintResultPage() {
         title="Couldn't load the footprints."
         description={errorMessage(versions.error, "Check your connection and try again.")}
         action={<Button onClick={() => void versions.refetch()}>Try again</Button>}
+      />,
+    );
+
+  if (productId <= 0)
+    return shell(
+      <EmptyState
+        icon={Package}
+        title="This footprint doesn't exist or isn't on your sites."
+        action={<Button onClick={() => navigate("/products")}>All footprints</Button>}
       />,
     );
 
@@ -150,6 +160,7 @@ function Result({ study, versions, back }: { study: Study; versions: Study[]; ba
   const move = useMove(study);
   const newVersion = useNewVersion();
   const [rejecting, setRejecting] = useState(false);
+  const [confirming, setConfirming] = useState<"approve" | "publish" | null>(null);
 
   const productId = study.product?.product_id ?? 0;
   const unitText = perUnitText(study.product);
@@ -167,20 +178,38 @@ function Result({ study, versions, back }: { study: Study; versions: Study[]; ba
       onSuccess: (s) => navigate(`/products/${productId}/footprints/${s.pcf_study_id}/edit`),
       onError: (e) => toast({ tone: "bad", title: errorMessage(e, "Couldn't start a new version.") }),
     });
+  // Approve and Publish are confirmed in a Modal (Esc closes it); the error
+  // of a refused move stays in the dialog so the reason is read in place.
   const run = (kind: "approve" | "publish") =>
     move.mutate(
       { kind },
       {
-        onSuccess: () => toast({ tone: "good", title: kind === "approve" ? "Footprint approved." : "Footprint published." }),
-        onError: (e) => toast({ tone: "bad", title: errorMessage(e, kind === "approve" ? "Couldn't approve the footprint." : "Couldn't publish the footprint.") }),
+        onSuccess: () => {
+          setConfirming(null);
+          toast({ tone: "good", title: kind === "approve" ? "Footprint approved." : "Footprint published." });
+        },
       },
     );
+  const confirmCopy = {
+    approve: {
+      title: "Approve this footprint?",
+      description: `v${study.version} becomes the approved footprint of ${study.product?.name ?? "this product"} and can be published and exported.`,
+      label: "Approve",
+      fallback: "Couldn't approve the footprint.",
+    },
+    publish: {
+      title: "Publish this footprint?",
+      description: `v${study.version} becomes the published footprint of ${study.product?.name ?? "this product"}. Later changes need a new version.`,
+      label: "Publish",
+      fallback: "Couldn't publish the footprint.",
+    },
+  } as const;
 
   const act: Record<ActionId, () => void> = {
     edit: () => editLink && navigate(editLink),
-    approve: () => run("approve"),
+    approve: () => setConfirming("approve"),
     reject: () => setRejecting(true),
-    publish: () => run("publish"),
+    publish: () => setConfirming("publish"),
     "new-version": startNewVersion,
     export: () => navigate(`/products/${study.pcf_study_id}/export`),
   };
@@ -319,6 +348,18 @@ function Result({ study, versions, back }: { study: Study; versions: Study[]; ba
           </section>
         </>
       )}
+
+      {(["approve", "publish"] as const).map((kind) => (
+        <Modal
+          key={kind}
+          open={confirming === kind}
+          onClose={() => setConfirming(null)}
+          title={confirmCopy[kind].title}
+          description={confirmCopy[kind].description}
+          primaryAction={{ label: confirmCopy[kind].label, onClick: () => run(kind), loading: move.isPending && move.variables?.kind === kind }}
+          error={move.isError && move.variables?.kind === kind ? errorMessage(move.error, confirmCopy[kind].fallback) : null}
+        />
+      ))}
 
       <RejectReasonModal
         open={rejecting}

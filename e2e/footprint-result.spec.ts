@@ -75,7 +75,8 @@ const RESULT = {
 
 type Seen = { method: string; path: string; body: unknown }[];
 
-async function signIn(page: Page, studies: Record<number, ReturnType<typeof study>>) {
+/** `detail` overrides parts of RESULT for one study id (e.g. a licensed line). */
+async function signIn(page: Page, studies: Record<number, ReturnType<typeof study>>, detail: Record<number, Record<string, unknown>> = {}) {
   const seen: Seen = [];
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
@@ -99,13 +100,14 @@ async function signIn(page: Page, studies: Record<number, ReturnType<typeof stud
         const s = studies[Number(one[1])];
         if (!s) return json({ message: "Footprint not found" }, 404);
         seen.push({ method, path: one[2] ?? "", body: req.postDataJSON?.() ?? null });
-        if (one[2] === "/result") return s.result ? json({ ...RESULT, pcf_study_id: s.pcf_study_id }) : json({ message: "Not calculated" }, 404);
+        if (one[2] === "/result") return s.result ? json({ ...RESULT, ...(detail[Number(one[1])] ?? {}), pcf_study_id: s.pcf_study_id }) : json({ message: "Not calculated" }, 404);
         if (one[2] === "/audit")
           return json([
             { id: 2, action: "approve", changed_fields: { status: { old: "in_review", new: "approved" } }, reason: null, changed_by: { user_id: 3, name: "Raj Reviewer" }, changed_at: "2026-02-11T09:00:00Z" },
             { id: 1, action: "calculate", changed_fields: { engine_version: { old: null, new: "pcf-1.0.0" } }, reason: null, changed_by: { user_id: 2, name: "Mia Manager" }, changed_at: "2026-02-10T08:00:00Z" },
           ]);
         if (one[2] === "/publish") return json(Object.assign(s, { status: "published" }));
+        if (one[2] === "/reject") return json(Object.assign(s, { status: "draft", review_comment: req.postDataJSON?.()?.comment ?? null }));
         if (one[2] === "/approve") return json({ message: "Someone other than whoever created or calculated this footprint must approve it" }, 403);
         return json(s);
       }
@@ -142,6 +144,10 @@ test("publishes an approved footprint and starts a new version", async ({ page }
   const seen = await signIn(page, { 12: study(12, 2, "approved", 7.2) });
   await page.goto("/products/5/footprints/12");
   await page.getByRole("button", { name: "Publish" }).click();
+  const publish = page.getByRole("dialog", { name: "Publish this footprint?" });
+  await expect(publish).toBeVisible();
+  await publish.getByRole("button", { name: "Publish" }).click();
+  await expect(publish).toBeHidden();
   await expect(page.getByText("Footprint published.")).toBeVisible();
   expect(seen.some((r) => r.path === "/publish")).toBe(true);
 
@@ -157,7 +163,48 @@ test("an out-of-date footprint says so and a refused approval shows why", async 
 
   await page.goto("/products/5/footprints/15");
   await page.getByRole("button", { name: "Approve" }).click();
-  await expect(page.getByText("Someone other than whoever created or calculated this footprint must approve it")).toBeVisible();
+  const approve = page.getByRole("dialog", { name: "Approve this footprint?" });
+  await expect(approve).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(approve).toBeHidden();
+  await page.getByRole("button", { name: "Approve" }).click();
+  await approve.getByRole("button", { name: "Approve" }).click();
+  await expect(approve.getByText("Someone other than whoever created or calculated this footprint must approve it")).toBeVisible();
+});
+
+test("send back asks for a reason; Esc cancels, a suggested reason confirms", async ({ page }) => {
+  const seen = await signIn(page, { 15: study(15, 3, "in_review", 7.1) });
+  await page.goto("/products/5/footprints/15");
+  await page.getByRole("button", { name: "Send back" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Reject this footprint?" });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  expect(seen.some((r) => r.path === "/reject")).toBe(false);
+
+  await page.getByRole("button", { name: "Send back" }).click();
+  await dialog.getByRole("button", { name: "Wrong unit" }).click();
+  await dialog.getByRole("button", { name: "Reject" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Sent back to draft.")).toBeVisible();
+  expect(seen.find((r) => r.path === "/reject")?.body).toEqual({ comment: "Wrong unit" });
+});
+
+test("a licensed factor shows as Licensed and withholds the primary data share", async ({ page }) => {
+  const licensed = {
+    ...RESULT.lines[0],
+    id: "in-72", pcf_input_id: 72, name: "Licensed alloy", kgco2e_per_unit: null, share_pct: null, value_hidden: true, lever_kg_per_10pts: null, recycled_factor: null,
+    factor: { name: "Alloy (ecoinvent)", unit: "kg", source: "ecoinvent", licence: "ecoinvent", value_kgco2e: null },
+  };
+  await signIn(page, { 12: study(12, 2, "approved", 7.2) }, { 12: { lines: [licensed, RESULT.lines[1]], hidden_stages: ["A1"], by_stage: { ...RESULT.by_stage, A1: null }, primary_data_share_pct: null, dqr: null } });
+  await page.goto("/products/5/footprints/12");
+  const row = page.getByRole("row", { name: /Licensed alloy/ });
+  await expect(row).toContainText("Licensed");
+  await expect(row).not.toContainText("Hidden");
+
+  await page.getByRole("tab", { name: "Data quality" }).click();
+  await expect(page.getByText("Hidden while a licensed factor is in the calculation.")).toBeVisible();
+  await expect(page.getByText("% primary")).toHaveCount(0);
 });
 
 test("a product without a footprint offers to start one, at 390px too", async ({ page }) => {

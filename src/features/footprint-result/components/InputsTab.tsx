@@ -49,7 +49,7 @@ export function InputsTab({ lines, unitText, editLink }: Props) {
                 </td>
                 <td className="px-2 py-2 text-muted">{l.data_type === "primary" ? "Primary" : "Secondary"}</td>
                 <td className="px-2 py-2 text-right">{fmt(dqrAverage(l.dqr), 1)}</td>
-                <td className="px-2 py-2 text-right text-ink">{l.value_hidden ? "Hidden" : fmt(l.kgco2e_per_unit)}</td>
+                <td className="px-2 py-2 text-right text-ink">{l.value_hidden ? "Licensed" : fmt(l.kgco2e_per_unit)}</td>
                 <td className="px-2 py-2 text-right">{l.share_pct == null ? "—" : `${fmt(l.share_pct, 1)}%`}</td>
               </tr>
             ))}

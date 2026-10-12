@@ -36,7 +36,7 @@ export function VersionsTab({ study, versions, productId, unitText }: Props) {
             {sorted.map((v) => {
               const current = v.pcf_study_id === study.pcf_study_id;
               return (
-                <tr key={v.pcf_study_id} className={cn("border-b border-line last:border-0", current && "bg-tint")} aria-current={current ? "true" : undefined}>
+                <tr key={v.pcf_study_id} className={cn("border-b border-line last:border-0", current && "bg-tint")}>
                   <td className="px-2 py-2">
                     {current ? (
                       <span className="font-medium text-ink">v{v.version} (this one)</span>

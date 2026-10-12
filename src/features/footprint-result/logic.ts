@@ -282,21 +282,6 @@ export function dqrMatrix(lines: ResultLine[]): DqrRow[] {
   return all ? [...rows, all] : rows;
 }
 
-export type DataSplit = { primary: number; secondary: number; primary_pct: number | null; by_lines: boolean };
-
-/**
- * Primary vs secondary data as a share of the footprint, or of the line count
- * when a licensed line hides its value (`by_lines`).
- */
-export function dataSplit(lines: ResultLine[]): DataSplit {
-  const hidden = lines.some((l) => l.kgco2e_per_unit == null);
-  const weight = (l: ResultLine) => (hidden ? 1 : l.kgco2e_per_unit ?? 0);
-  const primary = lines.filter((l) => l.data_type === "primary").reduce((s, l) => s + weight(l), 0);
-  const secondary = lines.filter((l) => l.data_type === "secondary").reduce((s, l) => s + weight(l), 0);
-  const total = primary + secondary;
-  return { primary, secondary, primary_pct: total > 0 ? (primary / total) * 100 : null, by_lines: hidden };
-}
-
 export type CompareRow = { key: Stage | "total"; label: string; a: number | null; b: number | null; delta: number | null; delta_pct: number | null };
 
 /**
