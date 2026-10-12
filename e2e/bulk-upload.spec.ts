@@ -30,10 +30,36 @@ const FUEL_FORM = {
 
 const HEADERS = ["Fuel Category", "Quantity", "Unit"];
 
+/** What the AI service answers since IM11: ESG-lite's plan and its rows, flattened. */
+const PLAN = {
+  plan_id: "11111111-2222-4333-8444-555555555555",
+  version: 1,
+  status: "draft",
+  counts: { rows: 3, ready: 2, issue: 1, skipped: 0, warnings: 0 },
+  totals: { tco2e: 0.3835, by_category: [{ category_id: 1, name: "Fuel", scope: "Scope 1", tco2e: 0.3835, rows: 2 }], by_month: [{ month: "2026-08", tco2e: 0.3835 }] },
+  issues_summary: [{ code: "NO_FACTOR_FOR_YEAR", count: 1, example_row_refs: ["Row 3"] }],
+  expires_at: "2026-08-02T00:00:00.000Z",
+};
 const PREVIEW = [
-  { emission_category: "Diesel", activity_value: "100", activity_data_unit: "litres", global_category_name: "Diesel", factor_value: 0.00268, denominator_unit: "litres", total_emission: 0.268, date_of_reporting: "2026-08-31" },
-  { emission_category: "Petrol", activity_value: "50", activity_data_unit: "litres", global_category_name: "Petrol", factor_value: 0.00231, denominator_unit: "litres", total_emission: 0.1155, date_of_reporting: "2026-08-31" },
-  { emission_category: "Biogas", activity_value: "10", activity_data_unit: "m3", global_category_name: null, factor_value: null, denominator_unit: null, total_emission: 0, date_of_reporting: "2026-08-31" },
+  { row: 1, row_ref: "Row 1", state: "ready", issues: [], emission_category: "Diesel", activity_value: 100, activity_data_unit: "litres", global_category_name: "Diesel", factor_value: 0.00268, factor_year: 2024, denominator_unit: "litres", total_emission: 0.268, fera_total_emission: null, date_of_reporting: "2026-08-31" },
+  { row: 2, row_ref: "Row 2", state: "ready", issues: [], emission_category: "Petrol", activity_value: 50, activity_data_unit: "litres", global_category_name: "Petrol", factor_value: 0.00231, factor_year: 2024, denominator_unit: "litres", total_emission: 0.1155, fera_total_emission: null, date_of_reporting: "2026-08-31" },
+  {
+    row: 3,
+    row_ref: "Row 3",
+    state: "issue",
+    issues: [{ code: "NO_FACTOR_FOR_YEAR", severity: "error", message: '"Biogas" matches no emission factor or mapping. Did you mean: Diesel; Petrol?' }],
+    emission_category: "Biogas",
+    activity_value: 10,
+    activity_data_unit: "m3",
+    global_category_name: null,
+    factor_value: null,
+    factor_year: null,
+    denominator_unit: null,
+    total_emission: null,
+    fera_total_emission: null,
+    date_of_reporting: "2026-08-31",
+    row_error: '"Biogas" matches no emission factor or mapping. Did you mean: Diesel; Petrol?',
+  },
 ];
 
 const HISTORICAL_ROWS = [
@@ -71,8 +97,10 @@ async function signIn(page: Page, role = "Superadmin", user: object = SUPERADMIN
         ai.push({ path, body });
         if (path.endsWith("/upload")) return json({ document_id: 42, headers: HEADERS });
         if (path.endsWith("/unique-categories")) return json({ unique_categories: ["Diesel", "Petrol", "Biogas"], total_rows: 3 });
-        if (path.endsWith("/preview")) return json({ rows: PREVIEW, total_rows: 3, page: 1, page_size: 100 });
-        if (path.endsWith("/import")) return json({ inserted: 3, skipped: 0, total_rows: 3, upload_batch_id: "b-1", skipped_rows: [] });
+        if (path.endsWith("/preview")) return json({ plan: PLAN, rows: PREVIEW, total_rows: 3, page: 1, page_size: 100, not_selected: 0, sheet_rows: 3 });
+        if (path.endsWith("/import")) {
+          return json({ inserted: 2, fera_inserted: 0, skipped: 1, skipped_rows: [{ row: 3, emission_category: "Biogas", reason: PREVIEW[2].row_error }], not_selected: 0, total_rows: 3, upload_batch_id: "b-1", plan_id: PLAN.plan_id, plan: { ...PLAN, status: "committed", version: 2 } });
+        }
       }
 
       if (path.endsWith("/admin/upload/emissions")) {
@@ -131,18 +159,24 @@ test("a superadmin uploads a sheet, maps it, previews and imports the rows", asy
   expect(ai.find((c) => c.path.endsWith("/unique-categories"))?.body).toEqual({ document_id: 42, mappings: { emission_category: "Fuel Category" } });
   await toPreview.click();
 
-  // Preview: one row has no factor and shows under Issues.
+  // Preview: ESG-lite's plan, with one row it won't import, shown under Issues.
+  const previewSent = ai.find((c) => c.path.endsWith("/preview"))?.body as Record<string, unknown>;
+  expect(previewSent).toMatchObject({ document_id: 42, selected_categories: [], site_id: 1, category_id: 1, date_of_reporting: "2026-08-31", page: 1, page_size: 100 });
+  expect(previewSent.plan_id).toBeUndefined();
   const table = page.getByRole("table", { name: "Preview of the rows to import" });
   await expect(table.getByRole("row")).toHaveCount(4);
-  await expect(page.getByText("3 rows. 2 look right, 1 need a look.")).toBeVisible();
+  await expect(page.getByText("3 rows. 2 ready, 1 need a look.")).toBeVisible();
+  await expect(page.getByText("Will import", { exact: true })).toBeVisible();
   await page.getByRole("radio", { name: "Issues (1)" }).click();
   await expect(table.getByRole("row")).toHaveCount(2);
-  await expect(table).toContainText('No factor for "Biogas"');
+  await expect(table).toContainText('Won\'t import: "Biogas" matches no emission factor');
 
-  await page.getByRole("button", { name: "Import 3 rows" }).click();
-  await expect(page.getByText("Imported 3 rows.")).toBeVisible();
+  await page.getByRole("button", { name: "Import 2 rows" }).click();
+  await expect(page.getByText("Imported 2 rows.")).toBeVisible();
   await expect(page.getByText("Rows arrive as Pending")).toBeVisible();
+  await expect(page.getByText("1 row was skipped. The file gives the reason for each one.")).toBeVisible();
 
+  // The import commits the previewed plan at its version; nothing else is re-sent as a calculation.
   const sent = ai.find((c) => c.path.endsWith("/import"))?.body as Record<string, unknown>;
   expect(sent).toMatchObject({
     document_id: 42,
@@ -150,8 +184,10 @@ test("a superadmin uploads a sheet, maps it, previews and imports the rows", asy
     site_id: 1,
     category_id: 1,
     date_of_reporting: "2026-08-31",
-    user_id: 9,
+    plan_id: PLAN.plan_id,
+    version: 1,
   });
+  expect(sent.user_id).toBeUndefined();
   expect(sent.mappings).toEqual({
     emission_category: "Fuel Category",
     "Fuel Category": "Fuel Category",
