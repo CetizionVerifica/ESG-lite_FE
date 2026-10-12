@@ -5,7 +5,8 @@ import { useContextParams } from "./useContextParams";
 /**
  * A category the chosen sites don't have would still filter the page while the
  * chip can't show it: drop such ids from `?category=` once the options are known.
- * `ready` is false while the sites (and so the options) are still loading.
+ * `ready` is false while the options are still loading; pass false too when
+ * the sites have no categories, so an empty list never clears the choice.
  */
 export function useDropStaleCategories(categories: Option<number>[], ready: boolean) {
   const [ctx, update] = useContextParams();

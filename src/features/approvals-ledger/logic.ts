@@ -111,8 +111,9 @@ export const isFera = (row: EmissionData) => row.category?.category_name?.toLowe
 
 /**
  * FERA (fuel- and energy-related) rows ride on their parent: they are hidden
- * from the list and shown as "+X tCO₂e" on the parent, unless the user is
- * looking at the FERA category itself. A FERA row that waits for review while
+ * from the list and shown as "+X tCO₂e" on the parent, unless the FERA
+ * category is among the chosen ones: then every FERA row is a row of its own
+ * and nothing hangs on its parent, so no entry shows twice. A FERA row that waits for review while
  * its parent doesn't (an edit can send a twin back for review) needs its own
  * decision and stays a row of its own.
  *
@@ -124,6 +125,7 @@ export const isFera = (row: EmissionData) => row.category?.category_name?.toLowe
  */
 export function mergeFera<T extends EmissionData>(rows: T[], showFera: boolean): { rows: T[]; feraOf: Map<number, T> } {
   const feraOf = new Map<number, T>();
+  if (showFera) return { rows, feraOf };
   const folded = new Set<number>();
   for (const row of rows) {
     if (isFera(row)) continue;
@@ -138,7 +140,7 @@ export function mergeFera<T extends EmissionData>(rows: T[], showFera: boolean):
     // undefined: an API without the field; hide as before rather than risk it.
     (r.fera_partner_status === undefined || r.fera_partner_status === "pending");
   return {
-    rows: showFera ? rows : rows.filter((r) => !isFera(r) || (!folded.has(r.pk_id) && !partnerElsewhere(r))),
+    rows: rows.filter((r) => !isFera(r) || (!folded.has(r.pk_id) && !partnerElsewhere(r))),
     feraOf,
   };
 }

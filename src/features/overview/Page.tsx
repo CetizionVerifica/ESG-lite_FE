@@ -95,7 +95,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
     for (const s of sites) if (!ctx.siteIds.length || ctx.siteIds.includes(s.site_id)) s.categories?.forEach((c) => map.set(c.category_id, c.category_name));
     return [...map].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sites, ctx.siteIds]);
-  useDropStaleCategories(categories, sites.length > 0);
+  useDropStaleCategories(categories, categories.length > 0);
 
   const title = periodLabel(period, fyStartMonth);
   const chips = (

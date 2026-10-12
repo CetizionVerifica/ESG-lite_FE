@@ -85,6 +85,12 @@ describe("mergeFera", () => {
     expect(mergeFera([parent, fera], true).rows).toHaveLength(2);
   });
 
+  it("shows a FERA entry once when FERA and its parent's category are both chosen", () => {
+    const m = mergeFera([parent, fera, other], true);
+    expect(m.rows.map((r) => r.pk_id)).toEqual([1, 2, 3]);
+    expect(m.feraOf.size).toBe(0);
+  });
+
   it("keeps a FERA row whose parent isn't in the list when the parent isn't pending", () => {
     const lone = { ...fera, fera_partner_status: "approved" as const };
     expect(mergeFera([lone, other], false).rows.map((r) => r.pk_id)).toEqual([2, 3]);

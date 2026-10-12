@@ -98,7 +98,7 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
     for (const s of inScope) for (const c of s.categories ?? []) byId.set(c.category_id, c.category_name);
     return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sites, ctx.siteIds]);
-  useDropStaleCategories(categories, sites.length > 0);
+  useDropStaleCategories(categories, categories.length > 0);
   const feraIds = useMemo(
     () => feraCategoryIds(ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)) : sites),
     [sites, ctx.siteIds],
