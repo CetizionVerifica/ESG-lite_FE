@@ -53,8 +53,8 @@ export function UnitsTab({ nav, panel }: TabShell) {
 
   const all = useMemo(() => unitRows(units.data ?? [], sites.data, categories.data), [units.data, sites.data, categories.data]);
   const rows = useMemo(
-    () => all.filter((r) => matchesUnit(r, { q: filters.q, siteIds: ctx.siteIds, categoryId: ctx.categoryId })),
-    [all, filters.q, ctx.siteIds, ctx.categoryId],
+    () => all.filter((r) => matchesUnit(r, { q: filters.q, siteIds: ctx.siteIds, categoryIds: ctx.categoryIds })),
+    [all, filters.q, ctx.siteIds, ctx.categoryIds],
   );
 
   const creating = openParam === "new";
@@ -116,10 +116,10 @@ export function UnitsTab({ nav, panel }: TabShell) {
     openColumn((r) => r.unit_name, (r) => open(String(r.unit_id))),
   ];
 
-  const filtered = !!filters.q.trim() || ctx.siteIds.length > 0 || !!ctx.categoryId;
+  const filtered = !!filters.q.trim() || ctx.siteIds.length > 0 || ctx.categoryIds.length > 0;
   const clear = () => {
     setFilters(EMPTY_FILTERS);
-    setCtx({ siteIds: [], categoryId: null });
+    setCtx({ siteIds: [], categoryIds: [] });
   };
   const empty =
     all.length === 0 && !filtered ? (
@@ -137,7 +137,7 @@ export function UnitsTab({ nav, panel }: TabShell) {
       nav={
         <>
           {nav}
-          <ContextChips chips={["site", "category"]} sites={siteOptions} categories={categoryOptions} loading={sites.isPending} />
+          <ContextChips chips={["site", "category"]} sites={siteOptions} categories={categoryOptions} multiCategory loading={sites.isPending} />
         </>
       }
       panel={panel}

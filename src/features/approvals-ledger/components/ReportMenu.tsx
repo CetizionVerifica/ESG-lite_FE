@@ -7,7 +7,7 @@ import { errorMessage } from "../api";
 import { type ReportOption, reportOptions } from "../logic";
 
 /** Header "Excel report ▾": the server's formatted month or year file for the chosen sites. */
-export function ReportMenu({ siteIds, categoryId, period }: { siteIds: number[]; categoryId: number | null; period: Period | null }) {
+export function ReportMenu({ siteIds, categoryIds, period }: { siteIds: number[]; categoryIds: number[]; period: Period | null }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const options = reportOptions(period, useFyStartMonth());
@@ -15,7 +15,7 @@ export function ReportMenu({ siteIds, categoryId, period }: { siteIds: number[];
   const run = async (o: ReportOption) => {
     setBusy(true);
     try {
-      const base = { siteIds, categoryId: categoryId ?? undefined };
+      const base = { siteIds, categoryId: categoryIds };
       if (o.kind === "month") {
         await exportMonthlyEmissions({ ...base, year: o.year, month: o.month });
       } else {

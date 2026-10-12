@@ -147,7 +147,7 @@ describe("intensity", () => {
 
 describe("links and text", () => {
   it("builds P07 links with the context", () => {
-    expect(listLink("/data/ledger", { siteIds: [3, 1], categoryId: 10, period: { kind: "fy", startYear: 2025 }, status: "approved" })).toBe(
+    expect(listLink("/data/ledger", { siteIds: [3, 1], categoryIds: [10], period: { kind: "fy", startYear: 2025 }, status: "approved" })).toBe(
       "/data/ledger?site=1%2C3&category=10&period=FY2025&status=approved",
     );
     expect(listLink("/data/approvals", {})).toBe("/data/approvals?period=all");

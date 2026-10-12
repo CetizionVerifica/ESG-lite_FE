@@ -49,4 +49,18 @@ describe("pending count for approvals", () => {
     getEmissionsPaginated.mockResolvedValue({ summary: { pending_count: 4, pending_review_count: 0 } });
     expect(await fetchPendingForApproval([1], [9], { categoryId: 9 })).toBe(4);
   });
+
+  it("counts every pending row when FERA is among several chosen categories", async () => {
+    getEmissionsPaginated.mockReset();
+    getEmissionsPaginated.mockResolvedValue({ summary: { pending_count: 5, pending_review_count: 2 } });
+    expect(await fetchPendingForApproval([1], [9], { categoryId: [2, 9] })).toBe(5);
+    expect(getEmissionsPaginated).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the folded count for several non-FERA categories", async () => {
+    getEmissionsPaginated.mockReset();
+    getEmissionsPaginated.mockResolvedValue({ summary: { pending_count: 5 } });
+    expect(await fetchPendingForApproval([1], [9], { categoryId: [2, 3] })).toBe(5);
+    expect(getEmissionsPaginated).toHaveBeenCalledWith({ siteIds: [1], categoryId: [2, 3], status: "pending", page: 1, limit: 1 });
+  });
 });

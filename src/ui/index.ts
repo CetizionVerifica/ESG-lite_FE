@@ -15,6 +15,7 @@ export { Popover, type PopoverProps } from "./Popover";
 export { PageHeader, type PageHeaderProps, type HeaderAction } from "./PageHeader";
 export { ContextChips, type ContextChipsProps, type ContextChipKind } from "./ContextChips";
 export { useContextParams, readContext, writeContext, CONTEXT_KEYS, type ContextValues, type ContextPatch, type Scope } from "./hooks/useContextParams";
+export { useDropStaleCategories } from "./hooks/useDropStaleCategories";
 export * from "./table";
 export { Badge, type BadgeTone } from "./Badge";
 export { Avatar } from "./Avatar";

@@ -44,7 +44,7 @@ const fuelConfig: ColumnConfig = {
 };
 
 describe("listParams", () => {
-  const base = { siteIds: [1, 2], categoryId: null, period: null, search: "", status: null, sort: null, page: 0, pageSize: 50 };
+  const base = { siteIds: [1, 2], categoryIds: [] as number[], period: null, search: "", status: null, sort: null, page: 0, pageSize: 50 };
 
   it("always asks for pending on the approvals tab, oldest first is passed through", () => {
     const p = listParams({ ...base, tab: "approvals", status: "approved", sort: { id: "submitted", dir: "asc" } });
@@ -83,6 +83,12 @@ describe("mergeFera", () => {
 
   it("keeps FERA rows when looking at the FERA category", () => {
     expect(mergeFera([parent, fera], true).rows).toHaveLength(2);
+  });
+
+  it("shows a FERA entry once when FERA and its parent's category are both chosen", () => {
+    const m = mergeFera([parent, fera, other], true);
+    expect(m.rows.map((r) => r.pk_id)).toEqual([1, 2, 3]);
+    expect(m.feraOf.size).toBe(0);
   });
 
   it("keeps a FERA row whose parent isn't in the list when the parent isn't pending", () => {

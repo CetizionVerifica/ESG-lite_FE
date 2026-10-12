@@ -8,13 +8,14 @@ import { readContext, useContextParams, writeContext, type ContextPatch } from "
 describe("context URL params", () => {
   it("reads period, sites, category and scope", () => {
     const ctx = readContext(new URLSearchParams("period=2025-Q3&site=3,1,1,x&category=12&scope=2"));
-    expect(ctx).toEqual({ period: { kind: "quarter", year: 2025, quarter: 3 }, siteIds: [3, 1], categoryId: 12, scope: 2 });
+    expect(ctx).toEqual({ period: { kind: "quarter", year: 2025, quarter: 3 }, siteIds: [3, 1], categoryIds: [12], categoryId: 12, scope: 2 });
   });
 
   it("ignores bad values", () => {
     expect(readContext(new URLSearchParams("period=soon&site=-1&category=abc&scope=4"))).toEqual({
       period: null,
       siteIds: [],
+      categoryIds: [],
       categoryId: null,
       scope: null,
     });
@@ -30,10 +31,20 @@ describe("context URL params", () => {
     expect(writeContext(new URLSearchParams(), { siteIds: [], categoryId: null }).toString()).toBe("site=all&category=all");
   });
 
+  it("reads and writes several categories as a list", () => {
+    const ctx = readContext(new URLSearchParams("category=12,3,12,x"));
+    expect(ctx.categoryIds).toEqual([12, 3]);
+    // Pages that take one category see none when several are chosen.
+    expect(ctx.categoryId).toBeNull();
+    expect(decodeURIComponent(writeContext(new URLSearchParams(), { categoryIds: [12, 3] }).toString())).toBe("category=3,12");
+    expect(writeContext(new URLSearchParams("category=3,12"), { categoryIds: [] }).toString()).toBe("category=all");
+  });
+
   it("reads all as an empty selection", () => {
     expect(readContext(new URLSearchParams("period=all&site=all&category=all&scope=all"))).toEqual({
       period: null,
       siteIds: [],
+      categoryIds: [],
       categoryId: null,
       scope: null,
     });
@@ -57,6 +68,7 @@ describe("useContextParams", () => {
     const { result } = setup("/overview?site=2", defaults);
     expect(result.current.values.siteIds).toEqual([2]);
     expect(result.current.values.categoryId).toBe(7);
+    expect(result.current.values.categoryIds).toEqual([7]);
     expect(result.current.values.scope).toBe(1);
   });
 
@@ -64,7 +76,7 @@ describe("useContextParams", () => {
     const { result } = setup("/overview", defaults);
     act(() => result.current.update({ siteIds: [], categoryId: null, scope: null, period: null }));
     expect(result.current.search).toBe("?period=all&site=all&category=all&scope=all");
-    expect(result.current.values).toEqual({ period: null, siteIds: [], categoryId: null, scope: null });
+    expect(result.current.values).toEqual({ period: null, siteIds: [], categoryIds: [], categoryId: null, scope: null });
   });
 
   it("still uses the default when the URL value is unreadable", () => {

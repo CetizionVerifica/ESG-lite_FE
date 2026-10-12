@@ -26,6 +26,8 @@ export type ContextChipsProps = {
   allowAnyPeriod?: boolean;
   /** Used when the URL has no value. Not written to the URL. */
   defaults?: ContextPatch;
+  /** Lets several categories be picked (`?category=1,2`); read them from `ctx.categoryIds`. */
+  multiCategory?: boolean;
   /** Disables the chips while their options load. */
   loading?: boolean;
   className?: string;
@@ -170,28 +172,34 @@ function periodRangeStart(p: Exclude<Period, { kind: "custom" }>, fyStartMonth: 
   }
 }
 
-function SiteEditor({ sites, value, onApply }: { sites: Option<number>[]; value: number[]; onApply: (ids: number[]) => void }) {
+function CheckListEditor({ options, value, noun, onApply }: {
+  options: Option<number>[];
+  value: number[];
+  /** Plural noun: "sites", "categories". */
+  noun: string;
+  onApply: (ids: number[]) => void;
+}) {
   const [draft, setDraft] = useState<Set<number>>(new Set(value));
   const [query, setQuery] = useState("");
   const shown = useMemo(
-    () => sites.filter((s) => s.label.toLowerCase().includes(query.trim().toLowerCase())),
-    [sites, query],
+    () => options.filter((s) => s.label.toLowerCase().includes(query.trim().toLowerCase())),
+    [options, query],
   );
   const toggle = (id: number) => setDraft((d) => new Set(d.has(id) ? [...d].filter((x) => x !== id) : [...d, id]));
   return (
     <div className="w-64 space-y-2">
-      {sites.length > 8 && (
+      {options.length > 8 && (
         <input
-          aria-label="Search sites"
-          placeholder="Search sites"
+          aria-label={`Search ${noun}`}
+          placeholder={`Search ${noun}`}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className={cn("h-8 w-full rounded-control border border-line bg-panel px-2 text-sm text-ink placeholder:text-muted", focusRing)}
         />
       )}
       <fieldset className="max-h-60 space-y-0.5 overflow-auto">
-        <legend className="sr-only">Sites</legend>
-        {shown.length === 0 && <p className="px-1 py-2 text-sm text-muted">No sites match</p>}
+        <legend className="sr-only">{noun[0].toUpperCase() + noun.slice(1)}</legend>
+        {shown.length === 0 && <p className="px-1 py-2 text-sm text-muted">No {noun} match</p>}
         {shown.map((s) => (
           <label key={s.value} className="flex cursor-pointer items-center gap-2 rounded-chip px-1 py-1 text-sm hover:bg-tint">
             <input type="checkbox" className="accent-brand" checked={draft.has(s.value)} onChange={() => toggle(s.value)} />
@@ -201,7 +209,7 @@ function SiteEditor({ sites, value, onApply }: { sites: Option<number>[]; value:
       </fieldset>
       <div className="flex justify-between">
         <Button size="sm" variant="ghost" onClick={() => setDraft(new Set())}>
-          All sites
+          All {noun}
         </Button>
         <Button size="sm" variant="primary" onClick={() => onApply([...draft])}>
           Apply
@@ -222,6 +230,7 @@ export function ContextChips({
   periodKinds = ALL_KINDS,
   fyStartMonth = DEFAULT_FY_START_MONTH,
   allowAnyPeriod,
+  multiCategory,
   defaults,
   loading,
   className,
@@ -236,7 +245,14 @@ export function ContextChips({
       : ctx.siteIds.length === 1
         ? sites.find((s) => s.value === ctx.siteIds[0])?.label ?? "1 site"
         : `${ctx.siteIds.length} sites`;
-  const categoryLabel = categories.find((c) => c.value === ctx.categoryId)?.label ?? "All categories";
+  const categoryLabel =
+    ctx.categoryIds.length === 0
+      ? "All categories"
+      : ctx.categoryIds.length === 1
+        ? categories.find((c) => c.value === ctx.categoryIds[0])?.label ?? (multiCategory ? "1 category" : "All categories")
+        : multiCategory
+          ? `${ctx.categoryIds.length} categories`
+          : "All categories";
 
   return (
     <div role="group" aria-label="Context" className={cn("flex flex-wrap items-center gap-2", className)}>
@@ -305,8 +321,9 @@ export function ContextChips({
                 sites.length === 0 ? (
                   <p className="w-56 text-sm text-muted">No sites available.</p>
                 ) : (
-                  <SiteEditor
-                    sites={sites}
+                  <CheckListEditor
+                    options={sites}
+                    noun="sites"
                     value={ctx.siteIds}
                     onApply={(siteIds) => {
                       update({ siteIds });
@@ -321,10 +338,24 @@ export function ContextChips({
           return (
             <Popover
               key={kind}
-              label="Choose category"
+              label={multiCategory ? "Choose categories" : "Choose category"}
               trigger={(t) => <Chip {...t} disabled={loading} icon={<Tag className="size-3.5" />} label="Category" value={categoryLabel} />}
             >
-              {(close) => (
+              {(close) => multiCategory ? (
+                categories.length === 0 ? (
+                  <p className="w-56 text-sm text-muted">No categories available.</p>
+                ) : (
+                  <CheckListEditor
+                    options={categories}
+                    noun="categories"
+                    value={ctx.categoryIds}
+                    onApply={(categoryIds) => {
+                      update({ categoryIds });
+                      close();
+                    }}
+                  />
+                )
+              ) : (
                 <div className="w-64 space-y-2">
                   <Combobox
                     label="Category"

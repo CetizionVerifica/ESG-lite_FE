@@ -1,4 +1,5 @@
 import api from "../api/axios";
+import { type CategoryFilter, categoryParams } from "./emissionService";
 
 /** Monthly gross / saved (scope = null) / net, tCO₂e. */
 export interface OverviewMonth {
@@ -95,7 +96,7 @@ export interface OverviewParams {
   /** Backend form: 2025-09, 2025-Q3, 2025 (CY), FY2025-26; leave out for all time. */
   period?: string;
   siteIds?: number[];
-  categoryId?: number | null;
+  categoryId?: CategoryFilter;
 }
 
 export const getManagerOverview = async ({ period, siteIds, categoryId }: OverviewParams): Promise<OverviewResponse> => {
@@ -103,7 +104,7 @@ export const getManagerOverview = async ({ period, siteIds, categoryId }: Overvi
     params: {
       period: period || undefined,
       siteIds: siteIds?.length ? siteIds.join(",") : undefined,
-      categoryId: categoryId ?? undefined,
+      ...categoryParams(categoryId),
     },
   });
   return response.data;
