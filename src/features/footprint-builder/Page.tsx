@@ -120,7 +120,7 @@ export default function FootprintBuilderPage() {
           tone="info"
           title={`This footprint is ${STATUS_WORD[s.status]}, so it can't be edited.`}
           action={
-            <Button size="sm" onClick={() => navigate(`/products/${s.pcf_study_id}`)}>
+            <Button size="sm" onClick={() => navigate(`/products/${s.product?.product_id ?? 0}/footprints/${s.pcf_study_id}`)}>
               Open the result
             </Button>
           }

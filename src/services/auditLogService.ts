@@ -2,7 +2,7 @@ import api from "../api/axios";
 
 export interface AuditLogEntry {
   id: number;
-  entity_type: "emission" | "production_data";
+  entity_type: "emission" | "production_data" | "pcf_study";
   entity_id: number;
   action: string;
   changed_fields: Record<string, { old: any; new: any }>;
