@@ -215,6 +215,21 @@ test("a manager edits an entry from the drawer with a reason", async ({ page }) 
   });
 });
 
+test("a date-only fix sends just the date", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Date of reporting").fill("2025-08-31");
+  await page.getByLabel("Reason for the change").fill("Wrong reporting month");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    date_of_reporting: "2025-08-31",
+    reason: "Wrong reporting month",
+  });
+});
+
 test("rejecting a batch with approved rows needs an explicit tick", async ({ page }) => {
   const { calls } = await signIn(page);
   await page.goto("/data/approvals");

@@ -55,20 +55,24 @@ function Loaded({
   const save = useManagerEdit();
   const category = String(activity.emission_category ?? "");
   const payload = editPayload(activity, date, unit, reason, start);
-  // The factor is needed only when the values are sent; a date-only fix keeps them as stored.
-  const errors = editErrors(reason, payload.activity_data ? category : "x", hasMapping);
+  // The factor and unit are needed only when the values are sent; a date-only fix keeps them as stored.
+  const sendsValues = !!payload.activity_data;
+  const errors = editErrors(reason, sendsValues ? category : "x", hasMapping, sendsValues ? unit : "x", (units.data?.length ?? 0) > 0);
   const notSaved = tried ? blockedMessage(errors) : null;
   const reasonId = useId();
+  const unitId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   // Older entries have no stored factor; say where the one shown came from.
-  const derivedFactor = !row.activity_data?.emission_category && !!category;
+  const derivedFactor = sendsValues && !row.activity_data?.emission_category && !!category;
 
   const submit = () => {
     setTried(true);
-    if (errors.reason || errors.category) {
+    if (errors.reason || errors.category || errors.unit) {
       // Take the manager to the first field that stops the save; the message by the button says what's missing.
       const selects = [...(formRef.current?.querySelectorAll<HTMLSelectElement>("select:not(:disabled)") ?? [])];
-      const target = errors.category ? (selects.find((el) => el.value === "") ?? selects[0]) : document.getElementById(reasonId);
+      const target = errors.category
+        ? (selects.find((el) => el.value === "" && el.id !== unitId) ?? selects[0])
+        : document.getElementById(errors.unit ? unitId : reasonId);
       target?.focus();
       return;
     }
@@ -143,14 +147,16 @@ function Loaded({
         })}
         {units.data && units.data.length > 0 ? (
           <Select<string>
+            id={unitId}
             label="Unit"
+            error={tried ? errors.unit : undefined}
             value={unit || null}
             placeholder="Choose a unit"
             options={[...new Set([...units.data.map((u) => u.unit_name), ...(unit ? [unit] : [])])].map((u) => ({ value: u, label: u }))}
             onChange={(v) => setUnit(v ?? "")}
           />
         ) : (
-          <TextField label="Unit" value={unit} readOnly help={units.isPending ? "Loading units…" : undefined} onChange={setUnit} />
+          <TextField id={unitId} label="Unit" value={unit} readOnly error={tried ? errors.unit : undefined} help={units.isPending ? "Loading units…" : undefined} onChange={setUnit} />
         )}
         <DateField label="Date of reporting" required value={date} onChange={setDate} />
       </div>
