@@ -20,4 +20,4 @@ PageHeader with primary "Add factor", secondary "Import sheet". `FilterBar`: mat
 
 ## Built (E2 2/2, 2026-10-12)
 - Import sheet sends the file to the AI reader (`POST /v1/pcf/material-factors/parse-excel`, `src/services/pcfAiService.ts`): any layout, header row found by the service, columns shown with their confidence and how they were matched (an "AI n%" chip when the service placed the column), rows returned already checked. Changing a column or the sheet re-reads the file with the person's mapping. Low-confidence rows are listed for a check before import.
-- When the AI service can't be reached (no answer or 5xx) the drawer falls back to the in-browser reader (`sheet.ts`, header-name matching) and says so; `.xls` files always use it. A 4xx from the service (wrong file type, bad sheet) is shown as is.
+- When the AI service can't be reached (no answer, 5xx, no such route or a refused token) the drawer falls back to the in-browser reader (`sheet.ts`, header-name matching) and says so; `.xls` files always use it. A 4xx from the service (wrong file type, bad sheet) is shown as is.

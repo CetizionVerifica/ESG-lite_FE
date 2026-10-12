@@ -187,6 +187,6 @@ export const useFactorSuggestions = (req: MatchRequest | null, enabled: boolean)
 
 /** Reads a BOM file (E2 parse-bom); the raw file is kept as evidence against the study. */
 export const useParseBom = () =>
-  useMutation<BomResponse, unknown, { file: File; studyId: number; batchUnits: number; massPerUnitKg: number | null; sheetName?: string | null; mapping?: MappingOverride }>({
-    mutationFn: ({ file, studyId, batchUnits, massPerUnitKg, sheetName, mapping }) => parseBom(file, { studyId, batchUnits, massPerUnitKg, sheetName, mapping }),
+  useMutation<BomResponse, unknown, { file: File; studyId: number; batchUnits: number; massPerUnitKg: number | null; sheetName?: string | null; mapping?: MappingOverride; keepEvidence?: boolean }>({
+    mutationFn: ({ file, studyId, batchUnits, massPerUnitKg, sheetName, mapping, keepEvidence }) => parseBom(file, { studyId, batchUnits, massPerUnitKg, sheetName, mapping, keepEvidence }),
   });

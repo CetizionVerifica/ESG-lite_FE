@@ -71,6 +71,8 @@ async function signIn(page: Page, role: "Superadmin" | "Manager") {
         calls.push({ method, path, body: null });
         const data = request.postData() ?? "";
         if (data.includes("Raced row")) return json({ detail: "AI service down" }, 503);
+        // An AI service deployed without the E2 routes.
+        if (data.includes("Old service")) return json({ detail: "Not Found" }, 404);
         const personMapping = /name="mapping"\r?\n\r?\n(\{[^\r\n]*\})/.exec(data)?.[1];
         const mapping = personMapping ? (JSON.parse(personMapping) as Record<string, string | null>) : null;
         const header = (field: string, def: string | null) => (mapping ? mapping[field] : def);
@@ -246,6 +248,18 @@ test("a manager sees licensed values masked and edits their own factor", async (
   await own.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText('Factor "Supplier PVC compound" saved')).toBeVisible();
   expect(calls).toEqual([{ method: "PATCH", path: expect.stringMatching(/\/pcf\/material-factors\/3$/), body: { value_kgco2e: 2.3 } }]);
+});
+
+test("falls back to the in-browser reader when the AI service has no sheet reader", async ({ page }) => {
+  await signIn(page, "Manager");
+  await page.goto("/factors/materials");
+  await page.getByRole("button", { name: "Import sheet" }).click();
+  const imp = page.getByRole("dialog", { name: "Import sheet" });
+  const csv = ["Material,Group,Unit,kgCO2e", "Old service,steel,kg,2"].join("\n");
+  await imp.locator('input[type="file"]').setInputFiles({ name: "factors.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(imp.getByText("The AI sheet reader couldn't be reached, so the columns were matched by header name here instead.")).toBeVisible();
+  await expect(imp.getByLabel("Name")).toHaveValue("Material");
+  await expect(imp.getByText("All 1 rows are ready to import.")).toBeVisible();
 });
 
 test("an import refused after the check keeps Import off until the sheet changes", async ({ page }) => {

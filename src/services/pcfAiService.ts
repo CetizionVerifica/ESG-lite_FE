@@ -118,7 +118,7 @@ export const parseMaterialFactorSheet = async (file: File, opts: { sheetName?: s
 
 export const parseBom = async (
   file: File,
-  opts: { sheetName?: string | null; mapping?: MappingOverride; batchUnits?: number; massPerUnitKg?: number | null; studyId?: number } = {},
+  opts: { sheetName?: string | null; mapping?: MappingOverride; batchUnits?: number; massPerUnitKg?: number | null; studyId?: number; keepEvidence?: boolean } = {},
 ): Promise<BomResponse> => {
   const form = new FormData();
   form.append("file", file);
@@ -127,6 +127,8 @@ export const parseBom = async (
   if (opts.batchUnits != null) form.append("batch_units", String(opts.batchUnits));
   if (opts.massPerUnitKg != null) form.append("mass_per_unit_kg", String(opts.massPerUnitKg));
   if (opts.studyId != null) form.append("study_id", String(opts.studyId));
+  // A re-read of a file already kept as evidence must not store it again.
+  if (opts.keepEvidence === false) form.append("keep_evidence", "false");
   const response = await ocrApi.post<BomResponse>("/v1/pcf/parse-bom", form, multipart);
   return response.data;
 };
@@ -143,8 +145,16 @@ export function aiErrorMessage(e: unknown, fallback: string): string {
   return fallback;
 }
 
-/** True when the AI service never answered (down, blocked or no URL configured): the page falls back to what it can do alone. */
+/**
+ * True when the AI service can't do this job: it never answered (down, blocked
+ * or no URL configured), failed, has no such route (an older deployment), or
+ * refused the token. The page then falls back to what it can do alone. A 4xx
+ * that carries the service's own `detail` is an answer about the file.
+ */
 export function aiUnreachable(e: unknown): boolean {
-  const status = (e as { response?: { status?: number } })?.response?.status;
-  return status === undefined || status >= 500;
+  const res = (e as { response?: { status?: number; data?: { detail?: unknown } } })?.response;
+  const status = res?.status;
+  if (status === undefined || status >= 500) return true;
+  if ([401, 403, 404, 405].includes(status)) return true;
+  return res?.data?.detail === undefined;
 }

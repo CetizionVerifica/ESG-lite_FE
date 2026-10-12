@@ -109,7 +109,9 @@ async function signIn(page: Page, studies: Record<number, ReturnType<typeof stud
       // The AI assist (E2). parse-bom is a multipart upload, so it is answered before any JSON body is read.
       if (path.endsWith("/v1/pcf/parse-bom")) {
         const data = req.postData() ?? "";
-        seen.push({ method, path: "/parse-bom", body: { batch_units: /name="batch_units"\r?\n\r?\n([^\r\n]*)/.exec(data)?.[1] ?? null, study_id: /name="study_id"\r?\n\r?\n([^\r\n]*)/.exec(data)?.[1] ?? null } });
+        const part = (name: string) => new RegExp(`name="${name}"\\r?\\n\\r?\\n([^\\r\\n]*)`).exec(data)?.[1] ?? null;
+        seen.push({ method, path: "/parse-bom", body: { batch_units: part("batch_units"), study_id: part("study_id"), keep_evidence: part("keep_evidence") } });
+        const reread = part("keep_evidence") === "false";
         return json({
           file_name: "bom.xlsx",
           sheet_names: ["BOM"],
@@ -132,7 +134,7 @@ async function signIn(page: Page, studies: Record<number, ReturnType<typeof stud
           low_confidence_lines: 1,
           warnings: [],
           ai_used: false,
-          evidence: { id: 7, document_name: "bom.xlsx", url: "http://localhost/evidence/7", stored: "local" },
+          evidence: reread ? null : { id: 7, document_name: "bom.xlsx", url: "http://localhost/evidence/7", stored: "local" },
         });
       }
       if (path.endsWith("/v1/pcf/match-factors")) {
@@ -266,7 +268,12 @@ test("imports a BOM through the AI reader and accepts a suggested factor", async
   await expect(bom.getByText("2 lines read, quantities divided by 25. 1 read with low confidence: confirm it before Calculate.")).toBeVisible();
   await expect(bom.getByLabel(/^Material\b/)).toHaveValue("Item");
   await expect(bom.getByText("bom.xlsx is kept as evidence for this footprint.")).toBeVisible();
-  expect(seen.find((r) => r.path === "/parse-bom")?.body).toEqual({ batch_units: "25", study_id: "13" });
+  expect(seen.find((r) => r.path === "/parse-bom")?.body).toEqual({ batch_units: "25", study_id: "13", keep_evidence: null });
+  // Changing a column re-reads the file without storing it as evidence again; the first evidence row still shows.
+  await bom.getByLabel("Supplier").selectOption("Item");
+  await expect.poll(() => seen.filter((r) => r.path === "/parse-bom").length).toBe(2);
+  expect(seen.filter((r) => r.path === "/parse-bom").at(-1)?.body).toEqual({ batch_units: "25", study_id: "13", keep_evidence: "false" });
+  await expect(bom.getByText("bom.xlsx is kept as evidence for this footprint.")).toBeVisible();
   await bom.getByRole("button", { name: "Add 2 lines" }).click();
   await expect(bom).toBeHidden();
   await expect(page.getByText("Added 2 lines from bom.xlsx.")).toBeVisible();

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Sparkles } from "lucide-react";
 import { Badge, Button, Callout, Drawer, FileDrop, type FileDropItem, NumberField, Select, Stepper, cn } from "../../../ui";
 import { type BomResponse, type MappingOverride, aiErrorMessage, aiUnreachable } from "../../../services/pcfAiService";
@@ -11,6 +11,9 @@ const STEPS = [
   { id: "review", label: "Check lines" },
 ];
 const PREVIEW = 12;
+/** How long the batch-size field waits after the last keystroke before the file is re-read. */
+const REREAD_DELAY_MS = 600;
+const BATCH_HELP = (unit: string) => `1 when the file lists what goes into one ${unit}; a batch size (e.g. 25) when it lists a whole batch or order. At least 1.`;
 const BOM_FIELDS: { field: string; label: string; required?: boolean }[] = [
   { field: "name", label: "Material", required: true },
   { field: "quantity", label: "Quantity", required: true },
@@ -43,10 +46,19 @@ export function BomImportDrawer({ open, studyId, massPerUnitKg, unitLabel, onImp
   const [result, setResult] = useState<BomResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
+  const rereadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const parse = useParseBom();
+  const batchOk = batchUnits != null && batchUnits >= 1;
+
+  const cancelReread = () => {
+    if (rereadTimer.current) clearTimeout(rereadTimer.current);
+    rereadTimer.current = null;
+  };
+  useEffect(() => cancelReread, []);
 
   const reset = () => {
     seq.current++;
+    cancelReread();
     setStep(0);
     setItems([]);
     setFile(null);
@@ -61,11 +73,22 @@ export function BomImportDrawer({ open, studyId, massPerUnitKg, unitLabel, onImp
     onClose();
   };
 
-  const read = (f: File, opts: { sheetName?: string | null; mapping?: MappingOverride; batch?: number | null } = {}) => {
+  /**
+   * Reads the file. The first read of a file keeps it as evidence on the AI
+   * service; every re-read (a changed column, sheet or batch size) sends
+   * `keep_evidence=false` so the same file isn't stored again.
+   */
+  const read = (f: File, opts: { sheetName?: string | null; mapping?: MappingOverride; batch?: number | null; first?: boolean } = {}) => {
+    cancelReread();
+    const batch = opts.batch ?? batchUnits;
+    if (batch == null || batch < 1) {
+      setError(`Enter how many ${unitLabel} the file's quantities cover (at least 1) before the file is read.`);
+      return;
+    }
     const mine = ++seq.current;
     setError(null);
     parse.mutate(
-      { file: f, studyId, batchUnits: opts.batch ?? batchUnits ?? 1, massPerUnitKg, sheetName: opts.sheetName ?? result?.sheet_name ?? null, mapping: opts.mapping },
+      { file: f, studyId, batchUnits: batch, massPerUnitKg, sheetName: opts.sheetName ?? result?.sheet_name ?? null, mapping: opts.mapping, keepEvidence: opts.first ? undefined : false },
       {
         onSuccess: (r) => {
           if (mine !== seq.current) return;
@@ -73,7 +96,8 @@ export function BomImportDrawer({ open, studyId, massPerUnitKg, unitLabel, onImp
             setError("The AI service gave an answer this page can't read. Try again later.");
             return;
           }
-          setResult(r);
+          // A re-read returns no evidence row; the first read's one still stands.
+          setResult((prev) => ({ ...r, evidence: r.evidence ?? (opts.first ? null : (prev?.evidence ?? null)) }));
           setStep(1);
         },
         onError: (e) => {
@@ -89,7 +113,7 @@ export function BomImportDrawer({ open, studyId, massPerUnitKg, unitLabel, onImp
     setItems([{ id: f.name, file: f }]);
     setFile(f);
     setResult(null);
-    read(f, { sheetName: null });
+    read(f, { sheetName: null, first: true });
   };
 
   const mapping = useMemo(() => Object.fromEntries(Object.entries(result?.mapping ?? {}).map(([f, m]) => [f, m.header])) as Record<string, string | undefined>, [result]);
@@ -97,6 +121,14 @@ export function BomImportDrawer({ open, studyId, massPerUnitKg, unitLabel, onImp
     if (!file || !result) return;
     const next = { ...mapping, [field]: header ?? undefined };
     read(file, { mapping: Object.fromEntries(BOM_FIELDS.map((f) => [f.field, next[f.field] ?? null])) });
+  };
+  const currentMapping = (): MappingOverride => Object.fromEntries(BOM_FIELDS.map((f) => [f.field, mapping[f.field] ?? null]));
+  /** Step 2 batch size: re-read once typing pauses, never below 1. */
+  const changeBatch = (v: number | null) => {
+    setBatchUnits(v);
+    cancelReread();
+    if (!file || v == null || v < 1) return;
+    rereadTimer.current = setTimeout(() => read(file, { batch: v, mapping: currentMapping() }), REREAD_DELAY_MS);
   };
   const headerOptions = (result?.headers ?? []).map((h) => ({ value: h, label: h }));
   const sheetOptions = (result?.sheet_names ?? []).map((n) => ({ value: n, label: n }));
@@ -147,9 +179,10 @@ export function BomImportDrawer({ open, studyId, massPerUnitKg, unitLabel, onImp
               label="Quantities in the file cover"
               unit={unitLabel}
               value={batchUnits}
-              min={0}
+              min={1}
               onChange={setBatchUnits}
-              help={`1 when the file lists what goes into one ${unitLabel}; a batch size (e.g. 25) when it lists a whole batch or order.`}
+              help={BATCH_HELP(unitLabel)}
+              error={batchOk ? undefined : "At least 1."}
               className="w-72"
             />
             <FileDrop
@@ -167,7 +200,7 @@ export function BomImportDrawer({ open, studyId, massPerUnitKg, unitLabel, onImp
               accept={[".xlsx", ".csv", ".pdf"]}
               maxSize={10 * 1024 * 1024}
               multiple={false}
-              disabled={parse.isPending}
+              disabled={parse.isPending || !batchOk}
             />
             {parse.isPending && (
               <p className="text-sm text-muted" role="status">
@@ -197,11 +230,9 @@ export function BomImportDrawer({ open, studyId, massPerUnitKg, unitLabel, onImp
                     label="Quantities in the file cover"
                     unit={unitLabel}
                     value={batchUnits}
-                    min={0}
-                    onChange={(v) => {
-                      setBatchUnits(v);
-                      if (file && v != null && v > 0) read(file, { batch: v, mapping: Object.fromEntries(BOM_FIELDS.map((f) => [f.field, mapping[f.field] ?? null])) });
-                    }}
+                    min={1}
+                    onChange={changeBatch}
+                    error={batchOk ? undefined : "At least 1."}
                     disabled={parse.isPending}
                   />
                   {BOM_FIELDS.map((f) => {
