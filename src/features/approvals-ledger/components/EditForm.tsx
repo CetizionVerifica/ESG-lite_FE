@@ -1,16 +1,17 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Button, Callout, DateField, Select, SkeletonText, TextField, Textarea } from "../../../ui";
 import { errorMessage, useColumnConfig, useFactorNames, useManagerEdit, useUnits } from "../api";
 import {
   type Activity,
   applyChange,
+  blockedMessage,
   editErrors,
   editPayload,
   editableKeys,
   fieldOptions,
   isNumberField,
+  initialActivity,
   parentPrompt,
-  prefillFromCategory,
 } from "../editLogic";
 import { type ColumnConfig, type LedgerRow, humanize } from "../logic";
 
@@ -35,7 +36,7 @@ function Loaded({
 }) {
   const siteId = row.site?.site_id;
   const categoryId = row.category?.category_id;
-  const [activity, setActivity] = useState<Activity>(() => prefillFromCategory(config, { ...row.activity_data }));
+  const [activity, setActivity] = useState<Activity>(() => initialActivity(config, { ...row.activity_data }));
   const [date, setDate] = useState(row.date_of_reporting.slice(0, 10));
   const [unit, setUnit] = useState(row.activity_data_unit ?? "");
   const [reason, setReason] = useState("");
@@ -47,11 +48,17 @@ function Loaded({
   const names = useFactorNames(siteId, categoryId, factorYear, !hasMapping);
   const save = useManagerEdit();
   const category = String(activity.emission_category ?? "");
-  const errors = editErrors(reason, category);
+  const errors = editErrors(reason, category, hasMapping);
+  const blocked = tried ? blockedMessage(errors) : null;
+  const reasonId = useId();
 
   const submit = () => {
     setTried(true);
-    if (errors.reason || errors.category) return;
+    if (errors.reason || errors.category) {
+      // Take the manager to the field that stops the save; the message by the button says what's missing.
+      if (errors.reason && !errors.category) document.getElementById(reasonId)?.focus();
+      return;
+    }
     save.mutate({ id: row.pk_id, body: editPayload(activity, date, unit, reason) }, { onSuccess: (data) => onDone(data?.emission) });
   };
   return (
@@ -134,6 +141,7 @@ function Loaded({
       </div>
 
       <Textarea
+        id={reasonId}
         label="Reason for the change"
         required
         value={reason}
@@ -143,6 +151,11 @@ function Loaded({
         error={tried ? errors.reason : undefined}
       />
 
+      {blocked && (
+        <p role="alert" className="rounded-control bg-bad-soft px-3 py-2 text-sm text-bad">
+          {blocked}
+        </p>
+      )}
       {save.isError && (
         <p role="alert" className="rounded-control bg-bad-soft px-3 py-2 text-sm text-bad">
           {errorMessage(save.error, "Couldn't save the changes. Nothing was changed.")}

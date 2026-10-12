@@ -201,6 +201,8 @@ test("a manager edits an entry from the drawer with a reason", async ({ page }) 
   await page.getByLabel("Quantity").fill("150");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText(/Say why this changes/)).toBeVisible();
+  await expect(page.getByText("Not saved yet: add a reason for the change (at least 5 characters).")).toBeVisible();
+  await expect(page.getByLabel("Reason for the change")).toBeFocused();
   expect(calls.some((c) => c.path.includes("manager-edit"))).toBe(false);
   await page.getByLabel("Reason for the change").fill("Meter read corrected");
   await page.getByRole("button", { name: "Save changes" }).click();

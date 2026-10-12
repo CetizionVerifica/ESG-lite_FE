@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   applyChange,
+  blockedMessage,
   editErrors,
   editPayload,
   editableKeys,
   fieldOptions,
+  initialActivity,
   isNumberField,
   parentPrompt,
   prefillFromCategory,
@@ -142,5 +144,62 @@ describe("form helpers", () => {
   it("prompts for the parent", () => {
     expect(parentPrompt(chained, "grade")).toBe("Select fuel type first");
     expect(parentPrompt(chained, "fuel_type")).toBeUndefined();
+  });
+});
+
+// Waste as configured for a real site: the child list's ids differ from the
+// column's own options, and some mapping keys carry stray spaces.
+const waste: ColumnConfig = {
+  columns: [
+    { pk_id: 5, column_name: "Waste Type", column_type: "select" },
+    { pk_id: 7, column_name: "Disposal Method", column_type: "select" },
+    { pk_id: 36, column_name: "Amount of waste", column_type: "number" },
+  ],
+  column_options: {
+    "5": [{ id: 6, label: "ETP Sludge" }, { id: 8, label: "Process Organic Waste" }],
+    "7": [{ id: 1, label: "Recycle" }, { id: 2, label: "Reuse" }, { id: 5, label: "Landfill" }],
+  },
+  column_dependencies: { "Disposal Method": "Waste Type" },
+  dependent_options: {
+    "Disposal Method": {
+      "ETP Sludge": [{ id: 1, label: "Reuse" }, { id: 2, label: "Recycle" }, { id: 5, label: "Landfill" }],
+      "Process Organic Waste": [{ id: 1, label: "Reuse" }, { id: 5, label: "Landfill" }],
+    },
+  },
+  emission_category_mapping: {
+    "ETP Sludge|Landfill": "ETP Sludge - Landfill",
+    "ETP Sludge|Reuse": "ETP Sludge - Reuse",
+    "Process Organic Waste |Reuse": "Process Organic Waste  - Reuse",
+  },
+};
+
+describe("initialActivity", () => {
+  it("fills a missing emission category from the chosen options", () => {
+    const start = initialActivity(waste, { "Waste Type": "6", "Disposal Method": "5", "Amount of waste": "9.17" });
+    expect(start.emission_category).toBe("ETP Sludge - Landfill");
+  });
+
+  it("reads the child's id from its dependent list, not the column's own list", () => {
+    // Id 1 is Reuse under ETP Sludge but Recycle in the column's own options.
+    expect(initialActivity(waste, { "Waste Type": "6", "Disposal Method": "1" }).emission_category).toBe("ETP Sludge - Reuse");
+  });
+
+  it("matches mapping keys that carry stray spaces", () => {
+    expect(initialActivity(waste, { "Waste Type": "8", "Disposal Method": "1" }).emission_category).toBe("Process Organic Waste  - Reuse");
+  });
+
+  it("keeps a stored category and leaves unresolvable rows empty", () => {
+    expect(initialActivity(waste, { "Waste Type": "6", "Disposal Method": "5", emission_category: "Custom" }).emission_category).toBe("Custom");
+    expect(initialActivity(waste, { "Waste Type": "6" }).emission_category).toBeUndefined();
+  });
+});
+
+describe("blockedMessage", () => {
+  it("says why a save didn't go through", () => {
+    expect(blockedMessage({})).toBeNull();
+    expect(blockedMessage(editErrors(""))).toMatch(/add a reason/);
+    expect(blockedMessage(editErrors("Typo in litres", ""))).toMatch(/emission factor/);
+    expect(blockedMessage(editErrors("", ""))).toMatch(/emission factor.*reason/);
+    expect(blockedMessage(editErrors("Typo in litres", "", false))).toBe("Not saved yet: choose an emission factor.");
   });
 });

@@ -10,6 +10,12 @@ type Option = { id: string | number; label: string };
 export type Activity = Record<string, unknown>;
 
 const lower = (v: unknown) => String(v).toLowerCase();
+/** Mapping keys as stored can carry stray spaces ("Process Organic Waste |Reuse"). */
+const mapKey = (v: string) =>
+  v
+    .split("|")
+    .map((part) => part.trim().replace(/\s+/g, " ").toLowerCase())
+    .join("|");
 const byName = (config: ColumnConfig, name: string) => config.columns?.find((c) => lower(c.column_name) === lower(name));
 const optionsOf = (config: ColumnConfig, name: string): Option[] => {
   const col = byName(config, name);
@@ -95,7 +101,7 @@ export function fieldOptions(config: ColumnConfig | undefined, column: string, a
 export function resolveEmissionCategory(config: ColumnConfig, activity: Activity): string | null {
   const ecm = config.emission_category_mapping ?? {};
   if (Object.keys(ecm).length === 0) return null;
-  const find = (key: string) => ecm[key] ?? Object.entries(ecm).find(([k]) => lower(k) === lower(key))?.[1] ?? null;
+  const find = (key: string) => ecm[key] ?? Object.entries(ecm).find(([k]) => mapKey(k) === mapKey(key))?.[1] ?? null;
   const deps = config.column_dependencies ?? {};
 
   if (Object.keys(deps).length === 0) {
@@ -160,10 +166,23 @@ export function prefillFromCategory(config: ColumnConfig | undefined, activity: 
     const col = chain[i];
     if (!col || next[col]) return;
     const opts = fieldOptions(config, col, next) ?? optionsOf(config, col);
-    const hit = opts.find((o) => lower(o.label) === lower(label));
+    const hit = opts.find((o) => mapKey(o.label) === mapKey(label));
     if (hit) next[col] = String(hit.id);
   });
   return next;
+}
+
+/**
+ * The form's starting values. Entries saved without an emission_category
+ * (older imports) get it from their select values, so a manager who changes
+ * only the amount isn't blocked by "choose every option" with every option
+ * already chosen.
+ */
+export function initialActivity(config: ColumnConfig | undefined, activity: Activity): Activity {
+  const next = prefillFromCategory(config, activity);
+  if (!config || next.emission_category || Object.keys(config.emission_category_mapping ?? {}).length === 0) return next;
+  const resolved = resolveEmissionCategory(config, next);
+  return resolved ? { ...next, emission_category: resolved } : next;
 }
 
 /** Field keys in form order: configured columns first, then anything else stored. */
@@ -192,11 +211,20 @@ export const EDIT_REASON_MIN = 5;
  * `category` is the resolved emission factor. Saving without one keeps the old
  * total while the entered values change, so it is required.
  */
-export function editErrors(reason: string, category = "x"): { reason?: string; category?: string } {
+export function editErrors(reason: string, category = "x", mapped = true): { reason?: string; category?: string } {
   const errors: { reason?: string; category?: string } = {};
   if (reason.trim().length < EDIT_REASON_MIN) errors.reason = `Say why this changes (at least ${EDIT_REASON_MIN} characters)`;
-  if (!category.trim()) errors.category = "Choose every option until the emission factor is set";
+  if (!category.trim()) errors.category = mapped ? "Choose every option until the emission factor is set" : "Choose an emission factor";
   return errors;
+}
+
+/** One line next to the Save button saying why nothing was saved. */
+export function blockedMessage(errors: { reason?: string; category?: string }): string | null {
+  const missing = [
+    errors.category && errors.category.charAt(0).toLowerCase() + errors.category.slice(1),
+    errors.reason && `add a reason for the change (at least ${EDIT_REASON_MIN} characters)`,
+  ].filter(Boolean);
+  return missing.length ? `Not saved yet: ${missing.join(", and ")}.` : null;
 }
 
 export const parentPrompt = (config: ColumnConfig | undefined, column: string) => {
