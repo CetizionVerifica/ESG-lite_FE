@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextSort, pageCount, paginate, retainSelectedRows, sortRows, toCsv, toMatrix } from "./tableLogic";
+import { nextSort, pageCount, pageOf, paginate, retainSelectedRows, sortRows, toCsv, toMatrix } from "./tableLogic";
 import type { Column } from "./types";
 
 type Row = { site: string; t: number | null };
@@ -81,5 +81,15 @@ describe("retainSelectedRows", () => {
     const kept = retainSelectedRows([1, 9], rowsA, id, new Map());
     expect([...kept.keys()]).toEqual([1]);
     expect(retainSelectedRows([1, 9], rowsA, id, kept)).toBe(kept);
+  });
+});
+
+describe("pageOf", () => {
+  it("finds the page a row sits on in sorted order, or -1", () => {
+    const ids = Array.from({ length: 30 }, (_, i) => ({ id: `b${i + 1}` }));
+    expect(pageOf(ids, (r) => r.id, "b1", 10)).toBe(0);
+    expect(pageOf(ids, (r) => r.id, "b11", 10)).toBe(1);
+    expect(pageOf(ids, (r) => r.id, "b30", 10)).toBe(2);
+    expect(pageOf(ids, (r) => r.id, "nope", 10)).toBe(-1);
   });
 });

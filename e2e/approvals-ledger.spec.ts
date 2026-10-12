@@ -301,3 +301,16 @@ test("rejecting a batch with approved rows needs an explicit tick", async ({ pag
   await expect(page.getByText("Batch rejected")).toBeVisible();
   expect(calls).toContainEqual({ method: "PUT", path: "/user/emissions/batch/b-1/reject", body: { comment: "Wrong month in the sheet" } });
 });
+
+test("an upload notification's link lands on its batch, and a missing batch says so", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/approvals?view=batches&batch=b-1");
+  const table = page.getByRole("table", { name: "Upload batches" });
+  const row = table.getByRole("row", { name: /Diesel/ });
+  await expect(row).toHaveAttribute("aria-current", "true");
+  await expect(row).toBeFocused();
+
+  await page.goto("/data/approvals?view=batches&batch=b-gone");
+  await expect(page.getByRole("status").filter({ hasText: "That upload batch isn't in this list" })).toBeVisible();
+  await expect(table.getByRole("row", { name: /Diesel/ })).not.toHaveAttribute("aria-current", "true");
+});

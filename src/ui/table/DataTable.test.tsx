@@ -28,6 +28,14 @@ describe("DataTable", () => {
     expect(within(bodyRows()[0]).getByText("Site 11")).toBeTruthy();
   });
 
+  it("lands on a highlighted row: turns to its page, focuses it and marks it current", () => {
+    render(<DataTable label="Entries" rows={rows} columns={columns} getRowId={(r) => r.id} highlightId={23} pagination={{ mode: "client", pageSize: 10 }} />);
+    expect(screen.getByText("21–30 of 30")).toBeTruthy();
+    const row = screen.getByRole("row", { current: true });
+    expect(within(row).getByText("Site 23")).toBeTruthy();
+    expect(document.activeElement).toBe(row);
+  });
+
   it("sorts by a column header, with aria-sort and right-aligned mono numbers", async () => {
     const user = userEvent.setup();
     render(<DataTable label="Entries" rows={rows} columns={columns} getRowId={(r) => r.id} pagination={{ mode: "client", pageSize: 50 }} />);

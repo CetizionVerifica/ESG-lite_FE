@@ -96,7 +96,7 @@ test("appearance applies at once and is saved to the account", async ({ page }) 
   expect(sent).toContainEqual({ method: "PUT", path: expect.stringMatching(/\/auth\/me\/appearance$/), body: { appearance: "dark" } });
 });
 
-test("an admin has no email toggles, and a failed load says so", async ({ page }) => {
+test("a failed preferences load says so and offers a retry", async ({ page }) => {
   await signIn(page, "Admin", { failPrefs: true });
   await page.goto("/settings");
   await expect(page.getByRole("alert").getByText("Preferences are down")).toBeVisible();

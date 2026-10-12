@@ -9,7 +9,7 @@ import { formatNumber } from "../format";
 import { focusRing } from "../styles";
 import { AutoInfoTip, InfoTip } from "../InfoTerm";
 import { exportMatrix, type ExportFormat } from "./exportTable";
-import { nextSort, pageCount, paginate, retainSelectedRows, sortRows, toMatrix } from "./tableLogic";
+import { nextSort, pageCount, pageOf, paginate, retainSelectedRows, sortRows, toMatrix } from "./tableLogic";
 import type { Column, SortState } from "./types";
 
 type RowId = string | number;
@@ -51,6 +51,11 @@ export type DataTableProps<T> = {
   pagination?: Pagination;
   /** Opens the row, usually in a Drawer. Rows become focusable; Enter opens. */
   onRowClick?: (row: T) => void;
+  /**
+   * Row to land on (a deep link such as `?batch=<id>`): the table turns to its
+   * page, scrolls it into view, focuses it and marks it `aria-current`.
+   */
+  highlightId?: RowId;
 
   /** File name without extension; enables CSV/XLSX export of all rows and visible columns. */
   exportName?: string;
@@ -104,6 +109,7 @@ export function DataTable<T>({
   bulkActions,
   pagination = { mode: "client", pageSize: 25 },
   onRowClick,
+  highlightId,
   exportName,
   onExport,
   toolbar,
@@ -142,6 +148,24 @@ export function DataTable<T>({
 
   // Back to page 1 when the data set changes under client pagination.
   useEffect(() => setClientPage(0), [rows.length, sort?.id, sort?.dir]);
+  // ...unless a deep link names a row: turn to its page (declared after the reset so it wins).
+  useEffect(() => {
+    if (highlightId === undefined || isServer) return;
+    const p = pageOf(sortedRows, getRowId, highlightId, pageSize);
+    if (p >= 0) setClientPage(p);
+  }, [highlightId, sortedRows, getRowId, pageSize, isServer]);
+  // Once the row is on screen, scroll to it and focus it, once per id.
+  const scroller = useRef<HTMLDivElement>(null);
+  const landedOn = useRef<RowId | null>(null);
+  useEffect(() => {
+    if (highlightId === undefined || landedOn.current === highlightId) return;
+    const want = String(highlightId);
+    const el = [...(scroller.current?.querySelectorAll<HTMLElement>("tr[data-row-id]") ?? [])].find((r) => r.dataset.rowId === want);
+    if (!el) return;
+    landedOn.current = highlightId;
+    el.scrollIntoView?.({ block: "center" });
+    el.focus({ preventScroll: true });
+  });
 
   const pageIds = pageRows.map(getRowId);
   const allOnPage = pageIds.length > 0 && pageIds.every((id) => selectedSet.has(id));
@@ -271,7 +295,7 @@ export function DataTable<T>({
       )}
 
       {/* relative: absolutely positioned children (sr-only labels) stay inside the scroll box instead of stretching the page. */}
-      <div className="relative overflow-auto" style={{ maxHeight }}>
+      <div ref={scroller} className="relative overflow-auto" style={{ maxHeight }}>
         <table aria-label={label} aria-busy={loading || undefined} className="w-full border-collapse text-sm text-ink">
           <thead className="sticky top-0 z-10 bg-panel shadow-[inset_0_-1px_0_var(--t-line)]">
             <tr>
@@ -344,12 +368,14 @@ export function DataTable<T>({
               pageRows.map((row) => {
                 const id = getRowId(row);
                 const isSelected = selectedSet.has(id);
+                const isCurrent = highlightId !== undefined && id === highlightId;
                 return (
                   <tr
                     key={id}
                     data-row-id={String(id)}
                     aria-selected={selectable ? isSelected : undefined}
-                    tabIndex={onRowClick ? 0 : undefined}
+                    aria-current={isCurrent ? "true" : undefined}
+                    tabIndex={onRowClick ? 0 : isCurrent ? -1 : undefined}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
                     onKeyDown={
                       onRowClick
@@ -364,6 +390,7 @@ export function DataTable<T>({
                     className={cn(
                       "h-row border-t border-line",
                       isSelected && "bg-tint",
+                      isCurrent && "bg-tint outline outline-2 -outline-offset-2 outline-accent",
                       onRowClick && "cursor-pointer hover:bg-tint focus-visible:bg-tint focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
                     )}
                   >
