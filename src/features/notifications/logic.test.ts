@@ -9,6 +9,7 @@ describe("notificationKind", () => {
     ["BULK_REJECTED", "rejected"],
     ["DEADLINE_REMINDER", "reminder"],
     ["DEADLINE_ESCALATION", "escalation"],
+    ["UPLOAD_PENDING", "upload"],
     ["SYSTEM", "other"],
   ])("%s → %s", (type, kind) => expect(notificationKind(type)).toBe(kind));
 });
@@ -37,6 +38,9 @@ describe("tabs", () => {
     expect(matchesTab(n("APPROVED"), "reminders")).toBe(false);
     expect(matchesTab(n("BULK_APPROVED"), "approvals")).toBe(true);
     expect(matchesTab(n("PRODUCTION_REJECTED"), "rejections")).toBe(true);
+    expect(matchesTab(n("UPLOAD_PENDING"), "uploads")).toBe(true);
+    expect(matchesTab(n("UPLOAD_PENDING"), "reminders")).toBe(false);
+    expect(parseTab("uploads")).toBe("uploads");
     expect(matchesTab({ type: "APPROVED", read: false }, "unread")).toBe(true);
     expect(matchesTab({ type: "APPROVED", read: true }, "unread")).toBe(false);
   });

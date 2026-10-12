@@ -1,7 +1,7 @@
 import type { NotificationItem, NotificationTypeGroup } from "../../services/notificationService";
 import { notificationKind } from "../../ui";
 
-export const TABS = ["all", "unread", "approvals", "rejections", "reminders"] as const;
+export const TABS = ["all", "unread", "approvals", "rejections", "reminders", "uploads"] as const;
 export type Tab = (typeof TABS)[number];
 
 export const TAB_LABEL: Record<Tab, string> = {
@@ -10,6 +10,7 @@ export const TAB_LABEL: Record<Tab, string> = {
   approvals: "Approvals",
   rejections: "Rejections",
   reminders: "Reminders",
+  uploads: "Uploads",
 };
 
 export const PAGE_SIZE = 30;
@@ -48,6 +49,8 @@ export function matchesTab(n: Pick<NotificationItem, "type" | "read">, tab: Tab)
       return kind === "rejected";
     case "reminders":
       return kind === "reminder" || kind === "escalation";
+    case "uploads":
+      return kind === "upload";
   }
 }
 
@@ -110,6 +113,7 @@ export function reviewerLabel(type: string): string {
 
 export function emptyText(tab: Tab): { title: string; description: string } {
   if (tab === "unread") return { title: "No unread notifications", description: "You're all caught up." };
-  if (tab === "all") return { title: "No notifications yet", description: "You'll see approvals, rejections and reminders here." };
+  if (tab === "all") return { title: "No notifications yet", description: "You'll see approvals, rejections, reminders and uploads here." };
+  if (tab === "uploads") return { title: "No uploads", description: "Batches waiting for your review will show here." };
   return { title: `No ${TAB_LABEL[tab].toLowerCase()}`, description: "Nothing of this type yet." };
 }

@@ -1,4 +1,4 @@
-import { AlertTriangle, Bell, CheckCircle, Clock, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle, Clock, CloudUpload, XCircle, type LucideIcon } from "lucide-react";
 import { cn } from "./cn";
 import { type NotificationKind, notificationKind } from "./notificationKind";
 
@@ -8,6 +8,7 @@ const KIND: Record<NotificationKind, { icon: LucideIcon; tone: string; soft: str
   rejected: { icon: XCircle, tone: "text-bad", soft: "bg-bad-soft" },
   reminder: { icon: Clock, tone: "text-warn", soft: "bg-warn-soft" },
   escalation: { icon: AlertTriangle, tone: "text-warn", soft: "bg-warn-soft" },
+  upload: { icon: CloudUpload, tone: "text-info", soft: "bg-info-soft" },
   other: { icon: Bell, tone: "text-info", soft: "bg-info-soft" },
 };
 

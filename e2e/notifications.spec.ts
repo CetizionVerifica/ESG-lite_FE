@@ -42,7 +42,7 @@ const all = [
   },
 ];
 
-const GROUPS: Record<string, string[]> = { approvals: ["APPROVED"], rejections: ["REJECTED"], reminders: ["REMINDER", "DEADLINE", "ESCALATION"] };
+const GROUPS: Record<string, string[]> = { approvals: ["APPROVED"], rejections: ["REJECTED"], reminders: ["REMINDER", "DEADLINE", "ESCALATION"], uploads: ["UPLOAD_PENDING"] };
 
 async function signIn(page: Page, opts: { failList?: boolean } = {}) {
   const sent: { method: string; path: string; query: string }[] = [];

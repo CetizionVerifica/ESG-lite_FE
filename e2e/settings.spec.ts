@@ -103,8 +103,11 @@ test("an admin has no email toggles, and a failed load says so", async ({ page }
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
 });
 
-test("an admin with preferences loaded is told there are no emails for the role", async ({ page }) => {
+test("an admin sees the uploads toggle; a superadmin is told there are no emails for the role", async ({ page }) => {
   await signIn(page, "Admin");
+  await page.goto("/settings");
+  await expect(page.getByText("Uploads to review")).toBeVisible();
+  await signIn(page, "Superadmin");
   await page.goto("/settings");
   await expect(page.getByText("No email notifications for your role yet")).toBeVisible();
 });
