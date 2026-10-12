@@ -35,6 +35,14 @@ export function teamColumns(opts: {
       header: "Sites",
       sortable: true,
       value: (u) => sitesOf(u).map((s) => s.site_name).join(", "),
+      cell: (u) => {
+        const names = sitesOf(u).map((s) => s.site_name).join(", ");
+        return (
+          <span title={names} className="block max-w-[20rem] truncate">
+            {names || "—"}
+          </span>
+        );
+      },
     },
     {
       id: "categories",

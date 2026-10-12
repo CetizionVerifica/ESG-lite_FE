@@ -50,7 +50,7 @@ import { BatchesView } from "./components/BatchesView";
 import { ReportMenu } from "./components/ReportMenu";
 import { RecordDrawer } from "./components/RecordDrawer";
 import { ledgerColumns } from "./components/columns";
-import { DEFAULT_SORT, type LedgerRow, PAGE_SIZES, type Tab, asStatus, effectiveStatus, listParams, mergeFera, rowPeriodLabel } from "./logic";
+import { DEFAULT_SORT, type LedgerRow, PAGE_SIZES, type Tab, asStatus, effectiveStatus, listParams, mergeFera, periodQuery, rowPeriodLabel } from "./logic";
 
 type SiteOption = { site_id: number; name: string; categories?: { category_id: number; category_name: string }[] };
 
@@ -88,7 +88,7 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const sites = useManagerSites();
-  const [ctx] = useContextParams();
+  const [ctx, updateContext] = useContextParams();
   const view: View = tab === "approvals" && params.get("view") === "batches" ? "batches" : tab;
 
   const categories = useMemo(() => {
@@ -97,11 +97,18 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
     for (const s of inScope) for (const c of s.categories ?? []) byId.set(c.category_id, c.category_name);
     return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sites, ctx.siteIds]);
+  // A category the chosen sites don't have would still filter the list while
+  // the chip reads "All categories": drop it when the sites change.
+  const staleCategory = ctx.categoryId !== null && sites.length > 0 && !categories.some((c) => c.value === ctx.categoryId);
+  useEffect(() => {
+    if (staleCategory) updateContext({ categoryId: null });
+  }, [staleCategory, updateContext]);
   const feraIds = useMemo(
     () => feraCategoryIds(ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)) : sites),
     [sites, ctx.siteIds],
   );
-  const counts = useStatusCounts(ctx.siteIds, feraIds);
+  const search = params.get("q")?.trim() || null;
+  const counts = useStatusCounts(ctx.siteIds, feraIds, { categoryId: ctx.categoryId, ...periodQuery(ctx.period), search });
   // No site chip = all of the manager's sites; batches must always be scoped (the endpoint isn't).
   const scopeSites = useMemo(() => (ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)), [ctx.siteIds, sites]);
   const batches = useBatches(scopeSites, ctx.categoryId);

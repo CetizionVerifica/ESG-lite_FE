@@ -40,6 +40,16 @@ describe("DataTable", () => {
     expect(firstCell.className).toContain("font-num");
   });
 
+  it("keeps cells on one line unless a column wraps, inside a positioned scroll box", () => {
+    const wrapping: Column<Row>[] = [columns[0], { id: "note", header: "Note", value: (r) => r.site, wrap: true }];
+    render(<DataTable label="Entries" rows={rows} columns={wrapping} getRowId={(r) => r.id} />);
+    const [site, note] = within(bodyRows()[0]).getAllByRole("cell");
+    expect(site.className).toContain("whitespace-nowrap");
+    expect(note.className).not.toContain("whitespace-nowrap");
+    // Absolutely positioned children (sr-only text) must not stretch the page below the table.
+    expect(screen.getByRole("table").parentElement?.className).toContain("relative");
+  });
+
   it("selects rows, shows the bulk bar and clears", async () => {
     const user = userEvent.setup();
     const approve = vi.fn();

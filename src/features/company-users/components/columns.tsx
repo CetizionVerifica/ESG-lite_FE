@@ -42,7 +42,13 @@ export function peopleColumns(actions: RowActions, canRemove: boolean): Column<C
       value: (u) => sitesOf(u).map((s) => s.name).join(", "),
       cell: (u) => {
         const names = sitesOf(u).map((s) => s.name);
-        return names.length ? <span className="text-ink">{names.join(", ")}</span> : <span className="text-warn">No site</span>;
+        return names.length ? (
+          <span title={names.join(", ")} className="block max-w-[20rem] truncate text-ink">
+            {names.join(", ")}
+          </span>
+        ) : (
+          <span className="text-warn">No site</span>
+        );
       },
     },
     {

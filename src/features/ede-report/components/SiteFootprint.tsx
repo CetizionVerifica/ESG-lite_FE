@@ -59,10 +59,10 @@ export function SiteFootprint({ rows, colorIndex }: Props) {
       header: "Share",
       value: (r) => r.pctOfTotal,
       numeric: true,
-      width: "9rem",
+      width: "7rem",
       cell: (r) => (
         <span className="flex items-center justify-end gap-2">
-          <span className="h-1.5 w-16 overflow-hidden rounded-full bg-tint" aria-hidden>
+          <span className="h-1.5 w-10 overflow-hidden rounded-full bg-tint" aria-hidden>
             <span
               className="block h-full rounded-full"
               style={{

@@ -54,12 +54,14 @@ export function productionColumns({
       id: "notes",
       header: "Notes",
       value: (r) => r.notes ?? "",
-      cell: (r) => (r.notes?.trim() ? <span className="line-clamp-2 max-w-[16rem] text-sm">{r.notes}</span> : <span className="text-muted">—</span>),
+      cell: (r) => (r.notes?.trim() ? <span title={r.notes} className="block max-w-[16rem] truncate text-sm">{r.notes}</span> : <span className="text-muted">—</span>),
     },
     {
       id: "status",
       header: "Status",
       sortable: true,
+      // A rejected record shows the reviewer's reason under the pill.
+      wrap: true,
       value: (r) => r.status,
       cell: (r) => (
         <div className="space-y-1">

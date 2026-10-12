@@ -373,6 +373,8 @@ export function PreviewStep(props: {
       header: "",
       hideable: false,
       width: "8rem",
+      // Validation messages wrap inside the narrow column.
+      wrap: true,
       value: (r) => (r.excluded ? null : rowProblem(r)),
       cell: (r) => {
         const p = r.excluded ? null : rowProblem(r);
