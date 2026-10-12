@@ -28,8 +28,8 @@ function SplitBar({ batch }: { batch: EmissionUploadBatch }) {
 }
 
 /** Upload batches tab: approve or reject a bulk upload's pending rows in one go. */
-export function BatchesView({ siteIds, categoryId }: { siteIds: number[]; categoryId: number | null }) {
-  const batches = useBatches(siteIds, categoryId);
+export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categoryIds: number[] }) {
+  const batches = useBatches(siteIds, categoryIds);
   const m = useBatchMutations();
   const { toast } = useToast();
   const [approving, setApproving] = useState<EmissionUploadBatch | null>(null);

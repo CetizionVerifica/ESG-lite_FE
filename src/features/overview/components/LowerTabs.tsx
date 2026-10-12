@@ -20,7 +20,7 @@ const lastDay = (month: string) => {
  * Below-the-fold charts. Only the open tab is mounted, so each loads its data
  * when first opened; all follow the header's sites, category and period.
  */
-export function LowerTabs(props: { overview: OverviewResponse | undefined; siteIds: number[]; categoryId: number | null; now: Date }) {
+export function LowerTabs(props: { overview: OverviewResponse | undefined; siteIds: number[]; categoryIds: number[]; now: Date }) {
   const [params, setParams] = useSearchParams();
   const raw = params.get("view") as View | null;
   const view: View = raw && VIEWS.includes(raw) ? raw : "intensity";
@@ -53,10 +53,10 @@ export function LowerTabs(props: { overview: OverviewResponse | undefined; siteI
         {months.length > 0 && <IntensityChart siteIds={props.siteIds} months={months} />}
       </TabPanel>
       <TabPanel idBase={ID} value="scope2" current={view}>
-        {months.length > 0 && <Scope2Chart siteIds={props.siteIds} categoryId={props.categoryId} months={months} />}
+        {months.length > 0 && <Scope2Chart siteIds={props.siteIds} categoryIds={props.categoryIds} months={months} />}
       </TabPanel>
       <TabPanel idBase={ID} value="yoy" current={view}>
-        <YearOverYear siteIds={props.siteIds} categoryId={props.categoryId} now={props.now} />
+        <YearOverYear siteIds={props.siteIds} categoryIds={props.categoryIds} now={props.now} />
       </TabPanel>
       <TabPanel idBase={ID} value="sites" current={view}>
         <SiteComparison overview={props.overview} />
@@ -107,9 +107,9 @@ function IntensityChart({ siteIds, months }: { siteIds: number[]; months: string
   );
 }
 
-function Scope2Chart({ siteIds, categoryId, months }: { siteIds: number[]; categoryId: number | null; months: string[] }) {
+function Scope2Chart({ siteIds, categoryIds, months }: { siteIds: number[]; categoryIds: number[]; months: string[] }) {
   const { tokens } = useTheme();
-  const q = useScope2Entries(siteIds, categoryId, yearsOf(months));
+  const q = useScope2Entries(siteIds, categoryIds, yearsOf(months));
   const { unit, rows } = scope2Monthly(q.data?.flatMap((y) => y.rows) ?? [], months);
   const truncated = q.data?.some((y) => y.truncated) ?? false;
   return (
@@ -153,11 +153,11 @@ function Scope2Chart({ siteIds, categoryId, months }: { siteIds: number[]; categ
   );
 }
 
-function YearOverYear({ siteIds, categoryId, now }: { siteIds: number[]; categoryId: number | null; now: Date }) {
+function YearOverYear({ siteIds, categoryIds, now }: { siteIds: number[]; categoryIds: number[]; now: Date }) {
   const options = recentYears(now);
   const [years, setYears] = useState<number[]>(options.slice(0, 2));
   const shown = [...years].sort((a, b) => a - b);
-  const q = useYearTrends(shown, siteIds, categoryId);
+  const q = useYearTrends(shown, siteIds, categoryIds);
   const toggle = (y: number) => setYears((cur) => (cur.includes(y) ? (cur.length > 1 ? cur.filter((x) => x !== y) : cur) : [...cur, y]));
   const lines = shown.map((year, i) => ({ year, net: q.data?.[i]?.trend.map((t) => t.net) ?? [] }));
   return (

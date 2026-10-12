@@ -44,7 +44,7 @@ const fuelConfig: ColumnConfig = {
 };
 
 describe("listParams", () => {
-  const base = { siteIds: [1, 2], categoryId: null, period: null, search: "", status: null, sort: null, page: 0, pageSize: 50 };
+  const base = { siteIds: [1, 2], categoryIds: [] as number[], period: null, search: "", status: null, sort: null, page: 0, pageSize: 50 };
 
   it("always asks for pending on the approvals tab, oldest first is passed through", () => {
     const p = listParams({ ...base, tab: "approvals", status: "approved", sort: { id: "submitted", dir: "asc" } });

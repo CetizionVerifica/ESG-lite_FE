@@ -75,7 +75,7 @@ export function periodQuery(period: Period | null): { year: number | null; month
 export type ListInput = {
   tab: Tab;
   siteIds: number[];
-  categoryId: number | null;
+  categoryIds: number[];
   period: Period | null;
   search: string;
   /** Ledger status chip; the approvals tab is always pending. */
@@ -89,7 +89,7 @@ export function listParams(input: ListInput) {
   const sortKey = input.sort ? SORT_KEYS[input.sort.id] : undefined;
   return {
     siteIds: input.siteIds,
-    categoryId: input.categoryId,
+    categoryId: input.categoryIds,
     ...periodQuery(input.period),
     status: input.tab === "approvals" ? "pending" : input.status,
     search: input.search.trim() || null,

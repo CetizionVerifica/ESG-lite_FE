@@ -28,7 +28,7 @@ export const keys = {
   counts: (siteIds: number[]) => [...keys.all, "counts", siteIds] as const,
   documents: (id: number) => [...keys.all, "documents", id] as const,
   factor: (id: number) => [...keys.all, "factor", id] as const,
-  batches: (siteIds: number[], categoryId: number | null) => [...keys.all, "batches", siteIds, categoryId] as const,
+  batches: (siteIds: number[], categoryIds: number[]) => [...keys.all, "batches", siteIds, categoryIds] as const,
   units: (siteId: number, categoryId: number) => ["units", siteId, categoryId] as const,
   factorNames: (siteId: number, categoryId: number, year: number) => [...keys.all, "factor-names", siteId, categoryId, year] as const,
   // Shared with other pages that read the same config.
@@ -203,10 +203,10 @@ export function useManagerEdit() {
  * Upload batches for these sites. Always pass the manager's sites when no site
  * is picked: `/user/emissions/batches` doesn't limit itself to the user's sites.
  */
-export function useBatches(siteIds: number[], categoryId: number | null) {
+export function useBatches(siteIds: number[], categoryIds: number[]) {
   return useQuery({
-    queryKey: keys.batches(siteIds, categoryId),
-    queryFn: (): Promise<EmissionUploadBatch[]> => getEmissionBatches(siteIds, categoryId),
+    queryKey: keys.batches(siteIds, categoryIds),
+    queryFn: (): Promise<EmissionUploadBatch[]> => getEmissionBatches(siteIds, categoryIds),
     enabled: siteIds.length > 0,
   });
 }

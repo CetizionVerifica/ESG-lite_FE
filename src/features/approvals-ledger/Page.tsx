@@ -26,6 +26,7 @@ import {
   UNDO_MS,
   toMatrix,
   useContextParams,
+  useDropStaleCategories,
   useFilterParams,
   useRowKeys,
   useToast,
@@ -88,7 +89,7 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const sites = useManagerSites();
-  const [ctx, updateContext] = useContextParams();
+  const [ctx] = useContextParams();
   const view: View = tab === "approvals" && params.get("view") === "batches" ? "batches" : tab;
 
   const categories = useMemo(() => {
@@ -97,21 +98,16 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
     for (const s of inScope) for (const c of s.categories ?? []) byId.set(c.category_id, c.category_name);
     return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sites, ctx.siteIds]);
-  // A category the chosen sites don't have would still filter the list while
-  // the chip reads "All categories": drop it when the sites change.
-  const staleCategory = ctx.categoryId !== null && sites.length > 0 && !categories.some((c) => c.value === ctx.categoryId);
-  useEffect(() => {
-    if (staleCategory) updateContext({ categoryId: null });
-  }, [staleCategory, updateContext]);
+  useDropStaleCategories(categories, sites.length > 0);
   const feraIds = useMemo(
     () => feraCategoryIds(ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)) : sites),
     [sites, ctx.siteIds],
   );
   const search = params.get("q")?.trim() || null;
-  const counts = useStatusCounts(ctx.siteIds, feraIds, { categoryId: ctx.categoryId, ...periodQuery(ctx.period), search });
+  const counts = useStatusCounts(ctx.siteIds, feraIds, { categoryId: ctx.categoryIds, ...periodQuery(ctx.period), search });
   // No site chip = all of the manager's sites; batches must always be scoped (the endpoint isn't).
   const scopeSites = useMemo(() => (ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)), [ctx.siteIds, sites]);
-  const batches = useBatches(scopeSites, ctx.categoryId);
+  const batches = useBatches(scopeSites, ctx.categoryIds);
 
   // Tabs keep the context (sites, category, period) and drop the list filters.
   const goView = (next: View) => {
@@ -135,6 +131,7 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
             categories={categories}
             periodKinds={["month", "cy"]}
             allowAnyPeriod
+            multiCategory
           />
         }
       />
@@ -149,18 +146,18 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
             { value: "batches", label: "Upload batches", count: batches.data?.filter((b) => b.pending_count > 0).length },
           ]}
         />
-        <ReportMenu siteIds={ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)} categoryId={ctx.categoryId} period={ctx.period} />
+        <ReportMenu siteIds={ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)} categoryIds={ctx.categoryIds} period={ctx.period} />
       </div>
       {view === "batches" ? (
-        <BatchesView siteIds={scopeSites} categoryId={ctx.categoryId} />
+        <BatchesView siteIds={scopeSites} categoryIds={ctx.categoryIds} />
       ) : (
-        <ListView key={view} tab={view} categoryName={categories.find((c) => c.value === ctx.categoryId)?.label ?? ""} />
+        <ListView key={view} tab={view} showFera={ctx.categoryIds.some((id) => feraIds.includes(id))} />
       )}
     </div>
   );
 }
 
-function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
+function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [, setParams] = useSearchParams();
@@ -177,7 +174,7 @@ function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
   const [deleting, setDeleting] = useState<LedgerRow[] | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const query = listParams({ tab, siteIds: ctx.siteIds, categoryId: ctx.categoryId, period: ctx.period, search: filters.q, status, sort, page, pageSize });
+  const query = listParams({ tab, siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period: ctx.period, search: filters.q, status, sort, page, pageSize });
   const list = useEmissionList(query);
   const review = useReviewMutations();
 
@@ -195,7 +192,7 @@ function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
   });
   const statusOf = useCallback((r: LedgerRow) => effectiveStatus(r, undoable.optimistic), [undoable.optimistic]);
 
-  const merged = useMemo(() => mergeFera(list.data?.data ?? [], categoryName.toLowerCase() === "fera"), [list.data, categoryName]);
+  const merged = useMemo(() => mergeFera(list.data?.data ?? [], showFera), [list.data, showFera]);
   const rows = useMemo(
     () => (tab === "approvals" ? merged.rows.filter((r) => statusOf(r) === "pending") : merged.rows),
     [merged.rows, statusOf, tab],
@@ -318,11 +315,11 @@ function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
   const actions = { open: setDrawer, approve: (r: LedgerRow) => approve(r), reject: (r: LedgerRow) => reject([r]), remove: (r: LedgerRow) => askDelete([r]) };
   const columns = ledgerColumns({ configOf, feraOf: merged.feraOf, statusOf, actions });
 
-  const filtered = !!filters.q.trim() || !!status || ctx.categoryId !== null || ctx.period !== null;
+  const filtered = !!filters.q.trim() || !!status || ctx.categoryIds.length > 0 || ctx.period !== null;
   // One URL write: two functional setSearchParams calls in one tick both start from the
   // same params, so the second would undo the first.
   const clearFilters = () =>
-    setParams((p) => writeContext(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS[tab]), { categoryId: null, period: null }), { replace: true });
+    setParams((p) => writeContext(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS[tab]), { categoryIds: [], period: null }), { replace: true });
   // Every row shown was just approved, but the server still lists them (undo window): more may follow.
   const savingApprovals = tab === "approvals" && rows.length === 0 && (list.data?.total ?? 0) > 0;
   const empty = savingApprovals ? (
@@ -347,7 +344,7 @@ function ListView({ tab, categoryName }: { tab: Tab; categoryName: string }) {
   const exportView = async (format: ExportFormat) => {
     try {
       const all = await fetchAllForExport(query, list.data?.total ?? 0);
-      const exported = mergeFera(all.rows, categoryName.toLowerCase() === "fera");
+      const exported = mergeFera(all.rows, showFera);
       // Rows beyond this page need their own configs (option labels) and FERA links.
       const exportColumns = ledgerColumns({ configOf: await loadConfigs(qc, all.rows), feraOf: exported.feraOf, statusOf, actions });
       await exportMatrix(toMatrix(exported.rows, exportColumns.filter((c) => c.id !== "actions")), `emissions-${tab}`, format);

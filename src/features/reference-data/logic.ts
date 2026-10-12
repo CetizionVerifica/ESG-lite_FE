@@ -234,9 +234,9 @@ export function unitRows(units: Unit[], sites?: Site[], categories?: Category[])
   }));
 }
 
-export function matchesUnit(row: UnitRow, f: { q: string; siteIds: number[]; categoryId: number | null }): boolean {
+export function matchesUnit(row: UnitRow, f: { q: string; siteIds: number[]; categoryIds: number[] }): boolean {
   if (f.siteIds.length && !f.siteIds.includes(row.site?.site_id ?? -1)) return false;
-  if (f.categoryId && row.category?.category_id !== f.categoryId) return false;
+  if (f.categoryIds.length && !f.categoryIds.includes(row.category?.category_id ?? -1)) return false;
   const t = norm(f.q);
   return !t || [row.unit_name, row.description, row.siteName, row.categoryName].some((v) => norm(v).includes(t));
 }
