@@ -10,6 +10,12 @@ type Option = { id: string | number; label: string };
 export type Activity = Record<string, unknown>;
 
 const lower = (v: unknown) => String(v).toLowerCase();
+/** Mapping keys as stored can carry stray spaces ("Process Organic Waste |Reuse"). */
+const mapKey = (v: string) =>
+  v
+    .split("|")
+    .map((part) => part.trim().replace(/\s+/g, " ").toLowerCase())
+    .join("|");
 const byName = (config: ColumnConfig, name: string) => config.columns?.find((c) => lower(c.column_name) === lower(name));
 const optionsOf = (config: ColumnConfig, name: string): Option[] => {
   const col = byName(config, name);
@@ -95,7 +101,12 @@ export function fieldOptions(config: ColumnConfig | undefined, column: string, a
 export function resolveEmissionCategory(config: ColumnConfig, activity: Activity): string | null {
   const ecm = config.emission_category_mapping ?? {};
   if (Object.keys(ecm).length === 0) return null;
-  const find = (key: string) => ecm[key] ?? Object.entries(ecm).find(([k]) => lower(k) === lower(key))?.[1] ?? null;
+  const find = (key: string) => {
+    if (ecm[key]) return ecm[key];
+    // Loose match only when it is unambiguous: two keys that differ only in spacing could name different factors.
+    const hits = Object.entries(ecm).filter(([k]) => mapKey(k) === mapKey(key));
+    return hits.length === 1 ? hits[0][1] : null;
+  };
   const deps = config.column_dependencies ?? {};
 
   if (Object.keys(deps).length === 0) {
@@ -160,10 +171,23 @@ export function prefillFromCategory(config: ColumnConfig | undefined, activity: 
     const col = chain[i];
     if (!col || next[col]) return;
     const opts = fieldOptions(config, col, next) ?? optionsOf(config, col);
-    const hit = opts.find((o) => lower(o.label) === lower(label));
+    const hit = opts.find((o) => mapKey(o.label) === mapKey(label));
     if (hit) next[col] = String(hit.id);
   });
   return next;
+}
+
+/**
+ * The form's starting values. Entries saved without an emission_category
+ * (older imports) get it from their select values, so a manager who changes
+ * only the amount isn't blocked by "choose every option" with every option
+ * already chosen.
+ */
+export function initialActivity(config: ColumnConfig | undefined, activity: Activity): Activity {
+  const next = prefillFromCategory(config, activity);
+  if (!config || next.emission_category || Object.keys(config.emission_category_mapping ?? {}).length === 0) return next;
+  const resolved = resolveEmissionCategory(config, next);
+  return resolved ? { ...next, emission_category: resolved } : next;
 }
 
 /** Field keys in form order: configured columns first, then anything else stored. */
@@ -180,23 +204,69 @@ export function isNumberField(config: ColumnConfig | undefined, column: string, 
   return value !== "" && value !== null && value !== undefined && !Number.isNaN(Number(value));
 }
 
-/** The body for PUT /user/emissions/manager-edit/:id (bookkeeping keys stripped). */
-export function editPayload(activity: Activity, date: string, unit: string, reason: string) {
-  const clean = Object.fromEntries(Object.entries(activity).filter(([k]) => !META_KEYS.has(k)));
-  return { activity_data: clean, date_of_reporting: date, activity_data_unit: unit || undefined, reason: reason.trim() };
+const stripMeta = (activity: Activity) => Object.fromEntries(Object.entries(activity).filter(([k]) => !META_KEYS.has(k)));
+
+/** Same values, ignoring key order, bookkeeping keys and number vs string ("9.17" = 9.17). */
+export function sameActivity(a: Activity, b: Activity): boolean {
+  const norm = (x: Activity) =>
+    Object.entries(stripMeta(x))
+      .map(([k, v]) => [k, v === null || v === undefined ? "" : String(v)] as const)
+      .filter(([, v]) => v !== "")
+      .sort(([k1], [k2]) => (k1 < k2 ? -1 : k1 > k2 ? 1 : 0));
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+}
+
+export type EditStart = { activity: Activity; date: string; unit: string };
+
+/**
+ * The body for PUT /user/emissions/manager-edit/:id: only what the manager
+ * changed. Sending unchanged activity_data makes the backend recalculate it,
+ * which zeroes a row stored without a category or unit, so a date-only fix
+ * sends just the date. A unit change carries the values too, so a factor
+ * resolved from the options is saved with it.
+ */
+export function editPayload(activity: Activity, date: string, unit: string, reason: string, start?: EditStart) {
+  const unitChanged = !start || (unit || "") !== (start.unit || "");
+  const activityChanged = !start || unitChanged || !sameActivity(activity, start.activity);
+  return {
+    activity_data: activityChanged ? stripMeta(activity) : undefined,
+    date_of_reporting: !start || date !== start.date ? date : undefined,
+    activity_data_unit: unitChanged ? unit || undefined : undefined,
+    reason: reason.trim(),
+  };
 }
 
 export const EDIT_REASON_MIN = 5;
 
+type EditErrors = { reason?: string; category?: string; unit?: string };
+
 /**
  * `category` is the resolved emission factor. Saving without one keeps the old
- * total while the entered values change, so it is required.
+ * total while the entered values change, so it is required. So is `unit`: the
+ * backend can't apply a factor without one and saves the total as 0.
+ * `unitChoices` is false when no units are set up to pick from.
  */
-export function editErrors(reason: string, category = "x"): { reason?: string; category?: string } {
-  const errors: { reason?: string; category?: string } = {};
+export function editErrors(reason: string, category = "x", mapped = true, unit = "x", unitChoices = true): EditErrors {
+  const errors: EditErrors = {};
   if (reason.trim().length < EDIT_REASON_MIN) errors.reason = `Say why this changes (at least ${EDIT_REASON_MIN} characters)`;
-  if (!category.trim()) errors.category = "Choose every option until the emission factor is set";
+  if (!category.trim()) errors.category = mapped ? "Choose every option until the emission factor is set" : "Choose an emission factor";
+  if (!unit.trim())
+    errors.unit = unitChoices
+      ? "Choose a unit, without one the total would be 0"
+      : "This entry has no unit and none are set up for its category, so its values can't be recalculated";
   return errors;
+}
+
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
+/** One line next to the Save button saying why nothing was saved. */
+export function blockedMessage(errors: EditErrors): string | null {
+  const missing = [
+    errors.category && lowerFirst(errors.category),
+    errors.unit && lowerFirst(errors.unit),
+    errors.reason && `add a reason for the change (at least ${EDIT_REASON_MIN} characters)`,
+  ].filter(Boolean);
+  return missing.length ? `Not saved yet: ${missing.join(", and ")}.` : null;
 }
 
 export const parentPrompt = (config: ColumnConfig | undefined, column: string) => {
