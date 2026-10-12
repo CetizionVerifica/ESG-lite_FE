@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Button, Callout, DateField, Select, SkeletonText, TextField, Textarea } from "../../../ui";
 import { errorMessage, useColumnConfig, useFactorNames, useManagerEdit, useUnits } from "../api";
 import {
   type Activity,
+  type EditStart,
   applyChange,
+  blockedMessage,
   editErrors,
   editPayload,
   editableKeys,
   fieldOptions,
   isNumberField,
+  initialActivity,
   parentPrompt,
-  prefillFromCategory,
 } from "../editLogic";
 import { type ColumnConfig, type LedgerRow, humanize } from "../logic";
 
@@ -35,9 +37,14 @@ function Loaded({
 }) {
   const siteId = row.site?.site_id;
   const categoryId = row.category?.category_id;
-  const [activity, setActivity] = useState<Activity>(() => prefillFromCategory(config, { ...row.activity_data }));
-  const [date, setDate] = useState(row.date_of_reporting.slice(0, 10));
-  const [unit, setUnit] = useState(row.activity_data_unit ?? "");
+  const [start] = useState<EditStart>(() => ({
+    activity: initialActivity(config, { ...row.activity_data }),
+    date: row.date_of_reporting.slice(0, 10),
+    unit: row.activity_data_unit ?? "",
+  }));
+  const [activity, setActivity] = useState<Activity>(start.activity);
+  const [date, setDate] = useState(start.date);
+  const [unit, setUnit] = useState(start.unit);
   const [reason, setReason] = useState("");
   const [tried, setTried] = useState(false);
 
@@ -47,15 +54,29 @@ function Loaded({
   const names = useFactorNames(siteId, categoryId, factorYear, !hasMapping);
   const save = useManagerEdit();
   const category = String(activity.emission_category ?? "");
-  const errors = editErrors(reason, category);
+  const payload = editPayload(activity, date, unit, reason, start);
+  // The factor is needed only when the values are sent; a date-only fix keeps them as stored.
+  const errors = editErrors(reason, payload.activity_data ? category : "x", hasMapping);
+  const notSaved = tried ? blockedMessage(errors) : null;
+  const reasonId = useId();
+  const formRef = useRef<HTMLFormElement>(null);
+  // Older entries have no stored factor; say where the one shown came from.
+  const derivedFactor = !row.activity_data?.emission_category && !!category;
 
   const submit = () => {
     setTried(true);
-    if (errors.reason || errors.category) return;
-    save.mutate({ id: row.pk_id, body: editPayload(activity, date, unit, reason) }, { onSuccess: (data) => onDone(data?.emission) });
+    if (errors.reason || errors.category) {
+      // Take the manager to the first field that stops the save; the message by the button says what's missing.
+      const selects = [...(formRef.current?.querySelectorAll<HTMLSelectElement>("select:not(:disabled)") ?? [])];
+      const target = errors.category ? (selects.find((el) => el.value === "") ?? selects[0]) : document.getElementById(reasonId);
+      target?.focus();
+      return;
+    }
+    save.mutate({ id: row.pk_id, body: payload }, { onSuccess: (data) => onDone(data?.emission) });
   };
   return (
     <form
+      ref={formRef}
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
@@ -68,8 +89,9 @@ function Loaded({
         <div className="text-sm">
           <span className="text-muted">Emission factor: </span>
           {category || <span className="text-muted">choose the options below to set it</span>}
+          {derivedFactor && <span className="text-muted"> (set from the options below, saved with this edit)</span>}
           {tried && errors.category && (
-            <p role="alert" className="mt-1 text-bad">
+            <p className="mt-1 text-bad">
               {errors.category}
             </p>
           )}
@@ -134,6 +156,7 @@ function Loaded({
       </div>
 
       <Textarea
+        id={reasonId}
         label="Reason for the change"
         required
         value={reason}
@@ -143,7 +166,12 @@ function Loaded({
         error={tried ? errors.reason : undefined}
       />
 
-      {save.isError && (
+      {notSaved && (
+        <p role="alert" className="rounded-control bg-bad-soft px-3 py-2 text-sm text-bad">
+          {notSaved}
+        </p>
+      )}
+      {save.isError && !notSaved && (
         <p role="alert" className="rounded-control bg-bad-soft px-3 py-2 text-sm text-bad">
           {errorMessage(save.error, "Couldn't save the changes. Nothing was changed.")}
         </p>
