@@ -28,3 +28,8 @@ Tabs: Inputs · Plant energy allocation · Data quality · Versions · Audit
 ## Acceptance
 - Every figure links to the inputs or emissions that produced it.
 - Matches screen "Result" in the previews artifact in all three themes.
+
+## Built (C03, 2026-10-12)
+- FE #142 (2/3): header, KpiStrip, waterfall, hotspots, out-of-date banner, Inputs and Plant energy allocation tabs.
+- 3/3: Data quality (DQR matrix weighted by contribution, primary vs secondary split, cut-off), Versions (table plus side-by-side compare from the stored stage summaries) and Audit (`AuditTimeline` on `GET /pcf/studies/:id/audit`).
+- Not built: the scenario slider (phase 2) and the verifier role.

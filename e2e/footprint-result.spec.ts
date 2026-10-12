@@ -100,7 +100,11 @@ async function signIn(page: Page, studies: Record<number, ReturnType<typeof stud
         if (!s) return json({ message: "Footprint not found" }, 404);
         seen.push({ method, path: one[2] ?? "", body: req.postDataJSON?.() ?? null });
         if (one[2] === "/result") return s.result ? json({ ...RESULT, pcf_study_id: s.pcf_study_id }) : json({ message: "Not calculated" }, 404);
-        if (one[2] === "/audit") return json([]);
+        if (one[2] === "/audit")
+          return json([
+            { id: 2, action: "approve", changed_fields: { status: { old: "in_review", new: "approved" } }, reason: null, changed_by: { user_id: 3, name: "Raj Reviewer" }, changed_at: "2026-02-11T09:00:00Z" },
+            { id: 1, action: "calculate", changed_fields: { engine_version: { old: null, new: "pcf-1.0.0" } }, reason: null, changed_by: { user_id: 2, name: "Mia Manager" }, changed_at: "2026-02-10T08:00:00Z" },
+          ]);
         if (one[2] === "/publish") return json(Object.assign(s, { status: "published" }));
         if (one[2] === "/approve") return json({ message: "Someone other than whoever created or calculated this footprint must approve it" }, 403);
         return json(s);
@@ -164,4 +168,23 @@ test("a product without a footprint offers to start one, at 390px too", async ({
   await expect(page.getByRole("button", { name: "Start footprint" })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("data quality, versions compare and audit tabs", async ({ page }) => {
+  await signIn(page, { 11: study(11, 1, "superseded", 7.5), 12: study(12, 2, "approved", 7.2) });
+  await page.goto("/products/5/footprints/12?tab=quality");
+  await expect(page.getByText("38% primary")).toBeVisible();
+  await expect(page.getByRole("row", { name: /All stages 2/ })).toContainText("fair");
+  await expect(page.getByText("No input is under the 1% cut-off; everything counts in the total.")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Versions" }).click();
+  await expect(page).toHaveURL(/tab=versions/);
+  await expect(page.getByRole("link", { name: "v1" })).toHaveAttribute("href", "/products/5/footprints/11");
+  await expect(page.getByRole("combobox", { name: "Version to compare with" })).toHaveValue("11");
+  await expect(page.getByRole("row", { name: /^Total/ })).toContainText("-0.3");
+  await expect(page.getByRole("row", { name: /^Total/ })).toContainText("-4%");
+
+  await page.getByRole("tab", { name: "Audit" }).click();
+  await expect(page.getByText("Mia Manager").last()).toBeVisible();
+  await expect(page.getByText("Approved", { exact: true }).last()).toBeVisible();
 });

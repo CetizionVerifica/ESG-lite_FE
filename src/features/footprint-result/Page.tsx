@@ -19,9 +19,12 @@ import {
 } from "../../ui";
 import { errorMessage, isNotFound, useMove, useNewVersion, useResult, useStudy, useVersions } from "./api";
 import { AllocationTab } from "./components/AllocationTab";
+import { AuditTab } from "./components/AuditTab";
+import { DataQualityTab } from "./components/DataQualityTab";
 import { Hotspots } from "./components/Hotspots";
 import { InputsTab } from "./components/InputsTab";
 import { StageWaterfall } from "./components/StageWaterfall";
+import { VersionsTab } from "./components/VersionsTab";
 import {
   ACTION_LABEL,
   STATUS_LABEL,
@@ -38,10 +41,13 @@ import {
   type Study,
 } from "./logic";
 
-type Tab = "inputs" | "allocation";
+type Tab = "inputs" | "allocation" | "quality" | "versions" | "audit";
 const TABS: { value: Tab; label: string }[] = [
   { value: "inputs", label: "Inputs" },
   { value: "allocation", label: "Plant energy allocation" },
+  { value: "quality", label: "Data quality" },
+  { value: "versions", label: "Versions" },
+  { value: "audit", label: "Audit" },
 ];
 const asTab = (v: string | null): Tab => (TABS.some((t) => t.value === v) ? (v as Tab) : "inputs");
 
@@ -300,6 +306,15 @@ function Result({ study, versions, back }: { study: Study; versions: Study[]; ba
             </TabPanel>
             <TabPanel idBase="result" value="allocation" current={tab}>
               <AllocationTab result={r} unitText={unitText} emissionsLink={emissionsLink} productionLink={productionLink} />
+            </TabPanel>
+            <TabPanel idBase="result" value="quality" current={tab}>
+              <DataQualityTab result={r} unitText={unitText} />
+            </TabPanel>
+            <TabPanel idBase="result" value="versions" current={tab}>
+              <VersionsTab study={study} versions={versions} productId={productId} unitText={unitText} />
+            </TabPanel>
+            <TabPanel idBase="result" value="audit" current={tab}>
+              <AuditTab studyId={study.pcf_study_id} active={tab === "audit"} />
             </TabPanel>
           </section>
         </>

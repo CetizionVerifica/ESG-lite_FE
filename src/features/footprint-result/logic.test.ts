@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   actionsFor,
+  compareVersions,
+  dataSplit,
+  dqrMatrix,
   dqrWord,
   hotspots,
   latestVersion,
@@ -137,5 +140,51 @@ describe("dqrWord", () => {
     expect(dqrWord(1.8)).toBe("good");
     expect(dqrWord(2.2)).toBe("fair");
     expect(dqrWord(2.7)).toBe("poor");
+  });
+});
+
+describe("dqrMatrix and dataSplit", () => {
+  it("weights each stage's DQR by contribution and adds an all-stages row", () => {
+    const rows = dqrMatrix([
+      line({ id: "a", stage: "A1", kgco2e_per_unit: 3, dqr: { technology: 1, geography: 1, time: 1 } }),
+      line({ id: "b", stage: "A1", kgco2e_per_unit: 1, dqr: { technology: 3, geography: 3, time: 3 } }),
+      line({ id: "c", stage: "A2", kgco2e_per_unit: 1, dqr: { technology: 2, geography: 2, time: 2 } }),
+    ]);
+    expect(rows.map((r) => r.stage)).toEqual(["A1", "A2", "all"]);
+    expect(rows[0].technology).toBeCloseTo(1.5);
+    expect(rows[0].overall).toBeCloseTo(1.5);
+    expect(rows[2].lines).toBe(3);
+    expect(rows[2].overall).toBeCloseTo((3 * 1 + 1 * 3 + 1 * 2) / 5);
+  });
+
+  it("counts lines equally when a licensed value is hidden", () => {
+    const lines = [
+      line({ id: "a", kgco2e_per_unit: null, value_hidden: true, data_type: "secondary", dqr: { technology: 1, geography: 1, time: 1 } }),
+      line({ id: "b", kgco2e_per_unit: 9, data_type: "primary", dqr: { technology: 3, geography: 3, time: 3 } }),
+    ];
+    expect(dqrMatrix(lines)[0].technology).toBe(2);
+    expect(dataSplit(lines)).toEqual({ primary: 1, secondary: 1, primary_pct: 50, by_lines: true });
+  });
+
+  it("splits primary and secondary by share of the footprint", () => {
+    const split = dataSplit([line({ id: "a", kgco2e_per_unit: 1, data_type: "primary" }), line({ id: "b", kgco2e_per_unit: 3, data_type: "secondary" })]);
+    expect(split.primary_pct).toBe(25);
+    expect(split.by_lines).toBe(false);
+  });
+});
+
+describe("compareVersions", () => {
+  it("lists stages either version has, with the change against the other", () => {
+    const a = { result: { total_kg_per_unit: 7.2, by_stage: { A1: 6.5, A2: 0.5, A3_energy: 0.2 } } } as unknown as Study;
+    const b = { result: { total_kg_per_unit: 7.5, by_stage: { A1: 7, A3_energy: 0.5 } } } as unknown as Study;
+    const rows = compareVersions(a, b);
+    expect(rows.map((r) => r.key)).toEqual(["A1", "A2", "A3_energy", "total"]);
+    expect(rows[0].delta).toBeCloseTo(-0.5);
+    expect(rows[1]).toMatchObject({ a: 0.5, b: null, delta: null });
+    expect(rows[3].delta_pct).toBeCloseTo(-4);
+  });
+
+  it("has only the total row when neither version is calculated", () => {
+    expect(compareVersions({ result: null }, { result: null })).toEqual([{ key: "total", label: "Total", a: null, b: null, delta: null, delta_pct: null }]);
   });
 });

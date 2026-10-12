@@ -256,3 +256,75 @@ export const ACTION_LABEL: Record<ActionId, string> = {
 
 /** Average of a line's three DQR scores. */
 export const dqrAverage = (d: Dqr) => (d.technology + d.geography + d.time) / 3;
+
+export type DqrRow = { stage: Stage | "all"; label: string; lines: number; technology: number | null; geography: number | null; time: number | null; overall: number | null };
+
+/**
+ * DQR matrix: the mean technology, geography and time score per stage,
+ * weighted by each line's contribution when it is visible (licensed lines
+ * count equally), plus an "All stages" row. Stages without lines are left out.
+ */
+export function dqrMatrix(lines: ResultLine[]): DqrRow[] {
+  const row = (stage: DqrRow["stage"], label: string, group: ResultLine[]): DqrRow | null => {
+    if (group.length === 0) return null;
+    const visible = group.every((l) => l.kgco2e_per_unit != null) && group.some((l) => (l.kgco2e_per_unit ?? 0) > 0);
+    const weight = (l: ResultLine) => (visible ? l.kgco2e_per_unit ?? 0 : 1);
+    const total = group.reduce((s, l) => s + weight(l), 0);
+    const mean = (pick: (d: Dqr) => number) => (total > 0 ? group.reduce((s, l) => s + pick(l.dqr) * weight(l), 0) / total : null);
+    const technology = mean((d) => d.technology);
+    const geography = mean((d) => d.geography);
+    const time = mean((d) => d.time);
+    const overall = technology == null || geography == null || time == null ? null : (technology + geography + time) / 3;
+    return { stage, label, lines: group.length, technology, geography, time, overall };
+  };
+  const rows = STAGES.map((s) => row(s, STAGE_LABEL[s], lines.filter((l) => l.stage === s))).filter((r): r is DqrRow => r != null);
+  const all = row("all", "All stages", lines);
+  return all ? [...rows, all] : rows;
+}
+
+export type DataSplit = { primary: number; secondary: number; primary_pct: number | null; by_lines: boolean };
+
+/**
+ * Primary vs secondary data as a share of the footprint, or of the line count
+ * when a licensed line hides its value (`by_lines`).
+ */
+export function dataSplit(lines: ResultLine[]): DataSplit {
+  const hidden = lines.some((l) => l.kgco2e_per_unit == null);
+  const weight = (l: ResultLine) => (hidden ? 1 : l.kgco2e_per_unit ?? 0);
+  const primary = lines.filter((l) => l.data_type === "primary").reduce((s, l) => s + weight(l), 0);
+  const secondary = lines.filter((l) => l.data_type === "secondary").reduce((s, l) => s + weight(l), 0);
+  const total = primary + secondary;
+  return { primary, secondary, primary_pct: total > 0 ? (primary / total) * 100 : null, by_lines: hidden };
+}
+
+export type CompareRow = { key: Stage | "total"; label: string; a: number | null; b: number | null; delta: number | null; delta_pct: number | null };
+
+/**
+ * Side-by-side stage figures for two versions, from their stored summaries
+ * (`study.result.by_stage`). `b` is the version compared against; the delta is
+ * a − b, so a negative number means `a` is lower.
+ */
+export function compareVersions(a: Pick<Study, "result">, b: Pick<Study, "result">): CompareRow[] {
+  const ra = a.result;
+  const rb = b.result;
+  const rows: CompareRow[] = STAGES.map((s) => ({ key: s, label: STAGE_LABEL[s], a: ra?.by_stage[s] ?? null, b: rb?.by_stage[s] ?? null, delta: null, delta_pct: null }));
+  rows.push({ key: "total", label: "Total", a: ra?.total_kg_per_unit ?? null, b: rb?.total_kg_per_unit ?? null, delta: null, delta_pct: null });
+  return rows
+    .filter((r) => r.key === "total" || r.a != null || r.b != null)
+    .map((r) => {
+      if (r.a == null || r.b == null) return r;
+      const delta = r.a - r.b;
+      return { ...r, delta, delta_pct: r.b === 0 ? null : (delta / r.b) * 100 };
+    });
+}
+
+/** Audit actions the backend writes for a study, as past-tense labels. */
+export const AUDIT_ACTION_LABEL: Record<string, string> = {
+  calculate: "Calculated",
+  submit: "Sent for review",
+  approve: "Approved",
+  reject: "Sent back",
+  publish: "Published",
+  published: "Published",
+  superseded: "Superseded",
+};
