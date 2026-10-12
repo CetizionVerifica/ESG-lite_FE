@@ -56,6 +56,8 @@ export const SHELL_ROUTES = [
   { id: "footprint-latest", path: "/products/:productId", title: "Footprint", crumb: ["Products (PCF)", "Footprint"], roles: ["Manager"], spec: "C03", roleRedirect: { Superadmin: "/setup/products" } },
   { id: "footprint-result", path: "/products/:productId/footprints/:studyId", title: "Footprint", crumb: ["Products (PCF)", "Footprint"], roles: ["Manager"], spec: "C03", roleRedirect: { Superadmin: "/setup/products" } },
   { id: "pcf", path: "/products/*", title: "Products (PCF)", crumb: ["Products (PCF)"], roles: ["Manager"], spec: "C01–C06", roleRedirect: { Superadmin: "/setup/products" } },
+  // C05: a footprint's declaration as PDF, PACT JSON or CSV; more specific than /products/*, so it wins.
+  { id: "declaration-export", path: "/products/:studyId/export", title: "Export declaration", crumb: ["Products (PCF)", "Export declaration"], roles: ["Manager"], spec: "C05", roleRedirect: { Superadmin: "/setup/products" } },
 
   // Everyone
   { id: "notifications", path: "/notifications", title: "Notifications", crumb: ["Notifications"], roles: ALL, spec: "P13" },
