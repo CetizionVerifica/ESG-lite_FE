@@ -277,8 +277,13 @@ export const deleteEmissionsByBatch = async (batchId: string) => {
   return response.data;
 };
 
+/** How a batch's rows came in (MCP import plan): Claude connector, the Bulk upload page, a historical import, or the API. */
+export type BatchChannel = "mcp" | "bulk_upload" | "historical" | "api";
+
 export interface EmissionUploadBatch {
   upload_batch_id: string;
+  /** Absent on batches older than the import plans table; read as "bulk_upload". */
+  channel?: BatchChannel | null;
   count: number;
   pending_count: number;
   approved_count: number;

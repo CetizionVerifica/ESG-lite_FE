@@ -31,6 +31,11 @@ React 19 + Vite + TypeScript + Tailwind. Backend is ESG-lite (Node), AI/OCR endp
 - Old paths redirect through `LEGACY_REDIRECTS` in `src/features/shell/routeMap.ts`.
 - Dev-only pages (never in production builds) go in `src/routes/devRoutes.tsx`. `/dev/theme` previews every theme token in PlanetPulse, Midal Classic, Midal Light and Midal Night.
 
+## Connect Claude — see docs/mcp-import/ (in ESG-lite)
+
+- Consent and Connected apps screens follow the redesign rules (src/ui, tokens only). Consent copy must say what Claude can't do (approve, edit, delete).
+- Upload batches show their `channel` (Claude, Bulk upload, Historical).
+
 ## Definition of done (every module)
 
 1. Matches its spec's layout and the screen in the previews artifact.

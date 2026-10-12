@@ -75,9 +75,10 @@ async function signIn(page: Page) {
       if (path.includes("/user/units/")) return json([{ unit_id: 1, unit_name: "litre" }, { unit_id: 2, unit_name: "m3" }]);
       if (path.endsWith("/user/emissions/batches")) {
         const own = { upload_batch_id: "b-1", count: 40, pending_count: 30, approved_count: 10, rejected_count: 0, uploaded_at: "2025-10-03T09:00:00Z", site_id: 1, site_name: "Hidd", category_id: 10, category_name: "Diesel", uploaded_by: "Omar Contributor" };
+        const claude = { ...own, upload_batch_id: "b-2", channel: "mcp", count: 12, pending_count: 12, approved_count: 0, uploaded_at: "2025-10-04T09:00:00Z", category_id: 20, category_name: "Electricity", uploaded_by: "Sam Staff" };
         // Like the real endpoint, no site filter means every company's batches.
         const foreign = { ...own, upload_batch_id: "b-9", site_id: 99, site_name: "Other company site" };
-        return json(url.searchParams.get("siteIds") === "1" ? [own] : [own, foreign]);
+        return json(url.searchParams.get("siteIds") === "1" ? [own, claude] : [own, claude, foreign]);
       }
       if (/\/user\/emissions\/batch\/[^/]+\/(approve|reject)$/.test(path)) return json({ message: "ok" });
 
@@ -291,7 +292,7 @@ test("rejecting a batch with approved rows needs an explicit tick", async ({ pag
   const table = page.getByRole("table", { name: "Upload batches" });
   await expect(table).toContainText("30 pending · 10 approved");
   await expect(table).not.toContainText("Other company site");
-  await table.getByRole("button", { name: "Reject…" }).click();
+  await table.getByRole("row", { name: /Diesel/ }).getByRole("button", { name: "Reject…" }).click();
   const dialog = page.getByRole("alertdialog", { name: "Reject 30 rows?" });
   await dialog.getByLabel("Reason").fill("Wrong month in the sheet");
   await expect(dialog.getByRole("button", { name: "Reject", exact: true })).toBeDisabled();
@@ -300,4 +301,20 @@ test("rejecting a batch with approved rows needs an explicit tick", async ({ pag
   await page.getByRole("alertdialog").getByRole("button", { name: "Reject", exact: true }).click();
   await expect(page.getByText("Batch rejected")).toBeVisible();
   expect(calls).toContainEqual({ method: "PUT", path: "/user/emissions/batch/b-1/reject", body: { comment: "Wrong month in the sheet" } });
+});
+
+test("upload batches show their source and filter by it", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/approvals?view=batches");
+  const table = page.getByRole("table", { name: "Upload batches" });
+  await expect(table.getByRole("row", { name: /Diesel/ })).toContainText("Bulk upload");
+  await expect(table.getByRole("row", { name: /Electricity/ })).toContainText("Claude");
+  await page.getByLabel("Source").selectOption("claude");
+  await expect(page).toHaveURL(/source=claude/);
+  await expect(table.getByRole("row", { name: /Hidd/ })).toHaveCount(1);
+  await expect(table).toContainText("Sam Staff");
+  await page.getByLabel("Source").selectOption("historical");
+  await expect(page.getByText("No Historical batches")).toBeVisible();
+  await page.getByRole("button", { name: "All sources" }).click();
+  await expect(table.getByRole("row", { name: /Hidd/ })).toHaveCount(2);
 });

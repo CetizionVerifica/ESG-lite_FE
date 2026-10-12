@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
-import { type Door, wrongDoor } from "../logic";
+import { type Door, returnPath, wrongDoor } from "../logic";
 
 export interface Credentials {
   email: string;
@@ -12,12 +12,15 @@ export interface Credentials {
 export type SignInResult = { ok: true } | { ok: false; rightDoor: Door };
 
 /**
- * Signs in through one door. The right role goes to "/" where RootRedirect
- * picks the role's home; the wrong one is signed out again straight away.
+ * Signs in through one door. The right role goes back to the in-app path it
+ * was sent here from (ProtectedRoute's `state.from`), else to "/" where
+ * RootRedirect picks the role's home; the wrong one is signed out again
+ * straight away.
  */
 export function useSignIn(door: Door) {
   const { login, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   return useMutation<SignInResult, unknown, Credentials>({
     mutationFn: async ({ email, password }) => {
       const role = await login(email.trim(), password);
@@ -29,7 +32,7 @@ export function useSignIn(door: Door) {
       return { ok: true };
     },
     onSuccess: (result) => {
-      if (result.ok) navigate("/", { replace: true });
+      if (result.ok) navigate(returnPath((location.state as { from?: unknown } | null)?.from), { replace: true });
     },
   });
 }
