@@ -56,5 +56,6 @@ export const getGrants = async (): Promise<GrantsResponse> => {
 };
 
 export const revokeGrant = async (grantId: number): Promise<void> => {
+  // data-loss-reviewed: revokes one Claude connection (its tokens stop working) after the Disconnect dialog naming the app is confirmed; the row is kept with revoked_at, and Claude can be connected again.
   await api.delete(`/oauth/grants/${grantId}`);
 };
