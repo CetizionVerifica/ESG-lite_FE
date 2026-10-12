@@ -8,11 +8,23 @@ export type ContextValues = {
   period: Period | null;
   /** Empty means all sites. */
   siteIds: number[];
+  /** Empty means all categories. `?category=1,2` when the chip allows several. */
+  categoryIds: number[];
+  /** The one chosen category, or null for none or several (single-category pages). */
   categoryId: number | null;
   scope: Scope | null;
 };
 
 export type ContextPatch = Partial<ContextValues>;
+
+const idList = (raw: string | null) => [
+  ...new Set(
+    (raw ?? "")
+      .split(",")
+      .map((s) => Number(s))
+      .filter((n) => Number.isInteger(n) && n > 0),
+  ),
+];
 
 /** `?period=&site=&category=&scope=` keys. Pages read context only through this hook. */
 export const CONTEXT_KEYS = { period: "period", site: "site", category: "category", scope: "scope" } as const;
@@ -29,16 +41,13 @@ export function isAll(params: URLSearchParams, key: string): boolean {
 }
 
 export function readContext(params: URLSearchParams): ContextValues {
-  const siteIds = (params.get(CONTEXT_KEYS.site) ?? "")
-    .split(",")
-    .map((s) => Number(s))
-    .filter((n) => Number.isInteger(n) && n > 0);
-  const category = Number(params.get(CONTEXT_KEYS.category));
+  const categoryIds = idList(params.get(CONTEXT_KEYS.category));
   const scope = Number(params.get(CONTEXT_KEYS.scope));
   return {
     period: parsePeriod(params.get(CONTEXT_KEYS.period)),
-    siteIds: [...new Set(siteIds)],
-    categoryId: Number.isInteger(category) && category > 0 ? category : null,
+    siteIds: idList(params.get(CONTEXT_KEYS.site)),
+    categoryIds,
+    categoryId: categoryIds.length === 1 ? categoryIds[0] : null,
     scope: scope === 1 || scope === 2 || scope === 3 ? scope : null,
   };
 }
@@ -52,10 +61,13 @@ export function writeContext(params: URLSearchParams, patch: ContextPatch): URLS
   const set = (key: string, value: string | null) => next.set(key, value || ALL);
   if ("period" in patch) set(CONTEXT_KEYS.period, patch.period ? serializePeriod(patch.period) : null);
   if ("siteIds" in patch) set(CONTEXT_KEYS.site, patch.siteIds?.length ? [...patch.siteIds].sort((a, b) => a - b).join(",") : null);
-  if ("categoryId" in patch) set(CONTEXT_KEYS.category, patch.categoryId ? String(patch.categoryId) : null);
+  if ("categoryIds" in patch) set(CONTEXT_KEYS.category, patch.categoryIds?.length ? [...patch.categoryIds].sort((a, b) => a - b).join(",") : null);
+  else if ("categoryId" in patch) set(CONTEXT_KEYS.category, patch.categoryId ? String(patch.categoryId) : null);
   if ("scope" in patch) set(CONTEXT_KEYS.scope, patch.scope ? String(patch.scope) : null);
   return next;
 }
+
+const categoryValues = (categoryIds: number[]) => ({ categoryIds, categoryId: categoryIds.length === 1 ? categoryIds[0] : null });
 
 /**
  * Page context (period, sites, category, scope) held in the URL so links are shareable.
@@ -66,16 +78,19 @@ export function useContextParams(defaults: ContextPatch = {}) {
   const [params, setParams] = useSearchParams();
   const fromUrl = useMemo(() => readContext(params), [params]);
   const { period: dPeriod, siteIds: dSites, categoryId: dCategory, scope: dScope } = defaults;
+  const dCategoryKey = (defaults.categoryIds ?? (dCategory ? [dCategory] : [])).join(",");
+  // Keyed on the joined ids so a fresh defaults array each render doesn't rebuild the values.
+  const dCategories = useMemo(() => idList(dCategoryKey), [dCategoryKey]);
   const values: ContextValues = useMemo(() => {
     // "all" in the URL means the user cleared it: no fallback to the default.
     const all = (key: string) => isAll(params, key);
     return {
       period: fromUrl.period ?? (all(CONTEXT_KEYS.period) ? null : dPeriod ?? null),
       siteIds: fromUrl.siteIds.length || all(CONTEXT_KEYS.site) ? fromUrl.siteIds : dSites ?? [],
-      categoryId: fromUrl.categoryId ?? (all(CONTEXT_KEYS.category) ? null : dCategory ?? null),
+      ...categoryValues(fromUrl.categoryIds.length || all(CONTEXT_KEYS.category) ? fromUrl.categoryIds : dCategories),
       scope: fromUrl.scope ?? (all(CONTEXT_KEYS.scope) ? null : dScope ?? null),
     };
-  }, [params, fromUrl, dPeriod, dSites, dCategory, dScope]);
+  }, [params, fromUrl, dPeriod, dSites, dCategories, dScope]);
   const update = useCallback(
     (patch: ContextPatch) => setParams((p) => writeContext(p, patch), { replace: true }),
     [setParams],
