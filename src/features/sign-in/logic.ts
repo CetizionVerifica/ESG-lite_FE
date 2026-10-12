@@ -46,6 +46,18 @@ export function errorStatus(error: unknown): number | null {
   return typeof status === "number" ? status : null;
 }
 
+/**
+ * Where to go after signing in: the in-app path the person was sent to
+ * sign-in from, when it is one (absolute path, same origin, not a sign-in
+ * page); otherwise "/" (RootRedirect picks the role's home).
+ */
+export function returnPath(from: unknown): string {
+  if (typeof from !== "string" || !from.startsWith("/") || from.startsWith("//")) return "/";
+  const path = from.split(/[?#]/)[0];
+  if (path === "/" || Object.values(DOOR_PATH).includes(path) || path === "/reset-password") return "/";
+  return from;
+}
+
 /** Client slugs in `/{clientSlug}/login`: lower-case letters, digits and dashes. */
 export function isClientSlug(value: string | undefined): value is string {
   return !!value && /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(value);

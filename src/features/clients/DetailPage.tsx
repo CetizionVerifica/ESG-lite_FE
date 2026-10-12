@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Building2 } from "lucide-react";
 import { Badge, Button, EmptyState, Modal, PageHeader, Skeleton, TabPanel, Tabs, TypedDeleteModal, useToast, withoutParams } from "../../ui";
 import { errorMessage, hasBrand, useAdminUsers, useBrand, useCompanies, useDeleteCompany, useSites, useThreshold, useUpdateCompany } from "./api";
+import { ClaudeImportsToggle } from "./components/ClaudeImportsToggle";
 import { CompanyDrawer } from "./components/CompanyDrawer";
 import { ClientLogo, StatusBadge } from "./components/bits";
 import { BrandTab, DangerTab, MappingsTab, OverviewTab, PeopleTab, SitesTab, ThresholdTab } from "./components/DetailTabs";
@@ -156,7 +157,10 @@ export default function ClientDetailPage() {
       />
       <Tabs label="Client sections" idBase={idBase} items={tabs} value={tab} onChange={(v) => setParam("tab", v === "overview" ? null : v)} />
       <TabPanel idBase={idBase} value="overview" current={tab}>
-        <OverviewTab row={row} />
+        <div className="space-y-5">
+          <OverviewTab row={row} />
+          <ClaudeImportsToggle row={row} />
+        </div>
       </TabPanel>
       <TabPanel idBase={idBase} value="sites" current={tab}>
         <SitesTab row={row} load={sitesLoad} />

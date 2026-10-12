@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Button, TextField, cn, focusRing } from "../../../ui";
 import { useSignIn } from "../hooks/useSignIn";
 import { DOOR_PATH, type Door, errorMessage, errorStatus, wrongDoorMessage } from "../logic";
@@ -28,6 +28,7 @@ export function SignInForm({ door, title, lead }: SignInFormProps) {
   const [password, setPassword] = useState("");
   const [forgot, setForgot] = useState(false);
   const signIn = useSignIn(door);
+  const location = useLocation();
   const turnedAway = signIn.data && !signIn.data.ok ? signIn.data.rightDoor : null;
 
   if (forgot) {
@@ -60,7 +61,7 @@ export function SignInForm({ door, title, lead }: SignInFormProps) {
         {turnedAway && (
           <FormError>
             {wrongDoorMessage(turnedAway)}{" "}
-            <Link to={DOOR_PATH[turnedAway]} className={linkClass}>
+            <Link to={DOOR_PATH[turnedAway]} state={location.state} className={linkClass}>
               {turnedAway === "staff" ? "Go to staff sign-in" : "Go to company sign-in"}
             </Link>
           </FormError>

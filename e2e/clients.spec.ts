@@ -68,6 +68,11 @@ async function signIn(page: Page) {
       const brand = /\/brands\/(\d+)$/.exec(path);
       if (brand && method === "GET") return json(brand[1] === "1" ? midal : { companyId: Number(brand[1]), name: "", primary: "#1f2a44", accent: "#3b82f6", logoUrl: null });
       if (path.endsWith("/user/reporting-calendar")) return json({ fiscalYearStartMonth: 4, fiscalYearRule: "Apr 1 → Mar 31" });
+      const company = /\/admin\/companies\/(\d+)$/.exec(path);
+      if (company && method === "PUT" && body && "mcp_enabled" in body) {
+        companies = companies.map((c) => (c.company_id === Number(company[1]) ? { ...c, mcp_enabled: body.mcp_enabled } : c));
+        return json({ message: "Company updated" });
+      }
       if (path.endsWith("/admin/onboarding/company")) {
         const company = { company_id: 7, name: "Bahrain Steel", status: true };
         companies = [...companies, company];
@@ -315,4 +320,16 @@ test("a superadmin uploads and removes a client's colour guideline", async ({ pa
   await expect(page.getByText("Colour guideline removed")).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ method: "PUT", body: { guidelineUrl: null } });
   await expect(page.getByText("No colour guideline yet.")).toBeVisible();
+});
+
+test("a superadmin allows Claude imports for a client from its overview", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/clients/1");
+  const toggle = page.getByRole("switch", { name: "Allow Claude imports" });
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByText(/Off: every Claude import for this client is refused/)).toBeVisible();
+  await toggle.click();
+  await expect(page.getByText("Claude imports allowed for Midal Cables")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  expect(calls).toContainEqual({ method: "PUT", path: expect.stringMatching(/\/admin\/companies\/1$/), body: { mcp_enabled: true } });
 });

@@ -1,13 +1,24 @@
 import type { Look } from "../../theme";
 
-export type SectionId = "profile" | "appearance" | "notifications" | "timezone";
+export type SectionId = "profile" | "appearance" | "notifications" | "timezone" | "apps";
 
 export const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "appearance", label: "Appearance" },
   { id: "notifications", label: "Notifications" },
   { id: "timezone", label: "Timezone" },
+  { id: "apps", label: "Connected apps" },
 ];
+
+/** Connected apps (Claude, IM10) is for Superadmins only; everyone else never sees the section. */
+export function sectionsFor(role: string | null): { id: SectionId; label: string }[] {
+  return SECTIONS.filter((s) => s.id !== "apps" || role === "Superadmin");
+}
+
+/** `/settings?tab=apps` opens on a section; unknown or hidden tabs are ignored. */
+export function sectionFromTab(tab: string | null, role: string | null): SectionId | null {
+  return sectionsFor(role).find((s) => s.id === tab)?.id ?? null;
+}
 
 export const sectionDomId = (id: SectionId) => `settings-${id}`;
 
