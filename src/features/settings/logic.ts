@@ -96,10 +96,12 @@ const BY_ROLE: Record<string, NotificationOption[]> = {
   ],
   Manager: [
     { key: "email_escalations", label: "Escalations", description: "If people on your sites haven't filed by the 15th." },
+    { key: "email_uploads", label: "Uploads to review", description: "When a batch of entries is waiting for your review." },
   ],
+  Admin: [{ key: "email_uploads", label: "Uploads to review", description: "When entries are uploaded for a site without a manager, so the review falls to you." }],
 };
 
-/** Email toggles the role can change. Admin and Superadmin have none yet. */
+/** Email toggles the role can change. Superadmin has none yet. */
 export function notificationOptions(role: string | null): NotificationOption[] {
   return (role && BY_ROLE[role]) || [];
 }

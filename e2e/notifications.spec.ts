@@ -32,6 +32,15 @@ const all = [
     created_at: daysAgo(3),
   },
   {
+    id: 4,
+    type: "UPLOAD_PENDING",
+    title: "Entries waiting for your review",
+    message: "Asha Analyst uploaded 312 entries for Plant 2 (Mar–Jun 2026). 41.2 tCO₂e waiting for review",
+    link: "/data/approvals?view=batches&batch=b-312",
+    read: true,
+    created_at: daysAgo(25),
+  },
+  {
     id: 1,
     type: "APPROVED",
     title: "Emission approved",
@@ -42,7 +51,7 @@ const all = [
   },
 ];
 
-const GROUPS: Record<string, string[]> = { approvals: ["APPROVED"], rejections: ["REJECTED"], reminders: ["REMINDER", "DEADLINE", "ESCALATION"] };
+const GROUPS: Record<string, string[]> = { approvals: ["APPROVED"], rejections: ["REJECTED"], reminders: ["REMINDER", "DEADLINE", "ESCALATION"], uploads: ["UPLOAD_PENDING"] };
 
 async function signIn(page: Page, opts: { failList?: boolean } = {}) {
   const sent: { method: string; path: string; query: string }[] = [];
@@ -108,6 +117,17 @@ test("lists by day, filters on the server, expands details and marks read", asyn
   await expect.poll(() => sent.some((s) => s.path.endsWith("/notifications") && s.query.includes("type=reminders"))).toBe(true);
   await expect(page.getByRole("button", { name: /^Submission reminder/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Emission approved/ })).toHaveCount(0);
+
+  // The Uploads tab (IM4) shows only batches waiting for review, with their kind spelled out.
+  await page.getByRole("tab", { name: "Uploads" }).click();
+  await expect(page).toHaveURL(/tab=uploads/);
+  await expect.poll(() => sent.some((s) => s.path.endsWith("/notifications") && s.query.includes("type=uploads"))).toBe(true);
+  const upload = page.getByRole("button", { name: /^Entries waiting for your review/ });
+  await expect(upload).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Submission reminder/ })).toHaveCount(0);
+  await upload.click();
+  await expect(page.getByText("Waiting for review", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Reminders" }).click();
 
   // Open follows the link (old paths redirect to the new ones).
   await page.getByRole("button", { name: /^Submission reminder/ }).click();

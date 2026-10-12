@@ -37,10 +37,10 @@ describe("profileView", () => {
 });
 
 describe("notifications", () => {
-  it("lists the role's email toggles; Admin and Superadmin have none", () => {
+  it("lists the role's email toggles; Superadmin has none", () => {
     expect(notificationOptions("User").map((o) => o.key)).toEqual(["email_approvals", "email_rejections", "email_reminders"]);
-    expect(notificationOptions("Manager").map((o) => o.key)).toEqual(["email_escalations"]);
-    expect(notificationOptions("Admin")).toEqual([]);
+    expect(notificationOptions("Manager").map((o) => o.key)).toEqual(["email_escalations", "email_uploads"]);
+    expect(notificationOptions("Admin").map((o) => o.key)).toEqual(["email_uploads"]);
     expect(notificationOptions("Superadmin")).toEqual([]);
     expect(notificationOptions(null)).toEqual([]);
   });

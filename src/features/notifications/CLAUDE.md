@@ -27,3 +27,6 @@ List grouped Today / Yesterday / This week / Earlier
 ## Acceptance
 
 Token colours only (today hard-coded hex); errors visible; keyboard navigable list.
+
+## Uploads (IM4, 2026-10-12)
+`UPLOAD_PENDING` (an import batch waiting for the manager's review, ESG-lite IM4) is kind `upload` in `src/ui/notificationKind.ts` (CloudUpload icon, info tone, label "Waiting for review"). The Notifications page has an "Uploads" tab (`?tab=uploads`, server group `type=uploads`); its link opens the batch in Approvals → Upload batches. Settings shows the `email_uploads` toggle to Managers and Admins.

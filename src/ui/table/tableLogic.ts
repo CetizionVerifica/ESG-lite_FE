@@ -40,6 +40,13 @@ export function paginate<T>(rows: T[], page: number, pageSize: number): T[] {
   return rows.slice(page * pageSize, page * pageSize + pageSize);
 }
 
+/** Zero-based page holding the row with `id` in `rows` (already sorted), or -1 when absent. */
+export function pageOf<T>(rows: T[], getRowId: (row: T) => string | number, id: string | number, pageSize: number): number {
+  const want = String(id);
+  const i = rows.findIndex((r) => String(getRowId(r)) === want);
+  return i < 0 ? -1 : Math.floor(i / Math.max(1, pageSize));
+}
+
 export function pageCount(total: number, pageSize: number): number {
   return Math.max(1, Math.ceil(total / pageSize));
 }

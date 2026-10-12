@@ -318,3 +318,16 @@ test("upload batches show their source and filter by it", async ({ page }) => {
   await page.getByRole("button", { name: "All sources" }).click();
   await expect(table.getByRole("row", { name: /Hidd/ })).toHaveCount(2);
 });
+
+test("an upload notification's link lands on its batch, and a missing batch says so", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/approvals?view=batches&batch=b-1");
+  const table = page.getByRole("table", { name: "Upload batches" });
+  const row = table.getByRole("row", { name: /Diesel/ });
+  await expect(row).toHaveAttribute("aria-current", "true");
+  await expect(row).toBeFocused();
+
+  await page.goto("/data/approvals?view=batches&batch=b-gone");
+  await expect(page.getByRole("status").filter({ hasText: "That upload batch isn't in this list" })).toBeVisible();
+  await expect(table.getByRole("row", { name: /Diesel/ })).not.toHaveAttribute("aria-current", "true");
+});

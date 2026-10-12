@@ -13,7 +13,7 @@ export interface NotificationItem {
 }
 
 /** Server-side tab filter on GET /notifications (backend P13). */
-export type NotificationTypeGroup = "approvals" | "rejections" | "reminders";
+export type NotificationTypeGroup = "approvals" | "rejections" | "reminders" | "uploads";
 
 export interface NotificationPreferences {
   notification_preferences: Record<string, boolean>;

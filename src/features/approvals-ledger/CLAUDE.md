@@ -39,6 +39,8 @@ Row click → Drawer (720px)
 ## Upload batches tab
 Replaces the orange collapsible panel. Columns: Category, Rows, Status split bar (pending/approved/rejected), Uploaded by, Uploaded at, Actions (Approve pending, Reject pending). **Batch reject only touches pending rows**, with a separate explicit "Reject approved rows too" checkbox (fixes today).
 
+`?view=batches&batch=<upload_batch_id>` (the link in an `UPLOAD_PENDING` notification, IM4) lands on that batch: DataTable `highlightId` turns to its page, focuses the row and marks it `aria-current`; a batch not in the list (other sites, or already handled) shows a status line above the table.
+
 ## Record drawer
 Header: category, site, period, StatusPill, tCO₂e (large mono).
 Sections:

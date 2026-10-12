@@ -36,12 +36,17 @@ function SplitBar({ batch }: { batch: EmissionUploadBatch }) {
   );
 }
 
-/** Upload batches tab: approve or reject a bulk upload's pending rows in one go. */
+/**
+ * Upload batches tab: approve or reject a bulk upload's pending rows in one go.
+ * `?batch=<id>` (the link in an upload notification) lands on that batch's row.
+ */
 export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categoryIds: number[] }) {
   const batches = useBatches(siteIds, categoryIds);
   const [params, setParams] = useSearchParams();
   const source = parseBatchSource(params.get("source"));
   const rows = useMemo(() => (batches.data ?? []).filter((b) => !source || batchSource(b.channel) === source), [batches.data, source]);
+  const batchId = params.get("batch") || null;
+  const batchMissing = batchId !== null && batches.isSuccess && !rows.some((b) => b.upload_batch_id === batchId);
   const setSource = (next: BatchSource | null) =>
     setParams(
       (p) => {
@@ -103,6 +108,14 @@ export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categ
         rows={rows}
         columns={columns}
         getRowId={(b) => b.upload_batch_id}
+        highlightId={batchId ?? undefined}
+        toolbar={
+          batchMissing ? (
+            <p role="status" className="text-sm text-muted">
+              That upload batch isn't in this list. It may belong to a site outside the current filters, or it has already been handled.
+            </p>
+          ) : undefined
+        }
         rowLabel={(b) => `${b.category_name} batch from ${formatDateTime(b.uploaded_at)}`}
         loading={batches.isPending}
         error={batches.isError ? errorMessage(batches.error, "Couldn't load upload batches.") : null}
