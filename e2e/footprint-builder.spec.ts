@@ -106,6 +106,51 @@ async function signIn(page: Page, studies: Record<number, ReturnType<typeof stud
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       if (/\/products\/site\/1$/.test(path)) return json([PRODUCT]);
       if (path.endsWith("/pcf/material-factors")) return json(FACTORS);
+      // The AI assist (E2). parse-bom is a multipart upload, so it is answered before any JSON body is read.
+      if (path.endsWith("/v1/pcf/parse-bom")) {
+        const data = req.postData() ?? "";
+        const part = (name: string) => new RegExp(`name="${name}"\\r?\\n\\r?\\n([^\\r\\n]*)`).exec(data)?.[1] ?? null;
+        seen.push({ method, path: "/parse-bom", body: { batch_units: part("batch_units"), study_id: part("study_id"), keep_evidence: part("keep_evidence") } });
+        const reread = part("keep_evidence") === "false";
+        return json({
+          file_name: "bom.xlsx",
+          sheet_names: ["BOM"],
+          sheet_name: "BOM",
+          header_line: 1,
+          headers: ["Item", "Qty", "UoM", "Vendor"],
+          mapping: {
+            name: { header: "Item", confidence: 95, reason: "Header “Item” is the material column", by: "header" },
+            quantity: { header: "Qty", confidence: 95, reason: "Header “Qty” is the quantity column", by: "header" },
+            unit: { header: "UoM", confidence: 95, reason: "Header “UoM” is the unit column", by: "header" },
+            supplier_name: { header: "Vendor", confidence: 95, reason: "Header “Vendor” is the supplier column", by: "header" },
+          },
+          batch_units: 25,
+          lines: [
+            { line: 2, values: { stage: "A1", name: "EC-grade aluminium ingot", quantity: 1020, unit: "kg", supplier_name: "Alba", origin_country: null, recycled_share_pct: 0, data_type: "secondary" }, confidence: 92, reason: "Row 2, quantities divided by 25", warnings: [], problems: [], by: "sheet" },
+            { line: 3, values: { stage: "A3_packaging", name: "Wooden drum", quantity: 0.04, unit: "unit", supplier_name: null, origin_country: null, recycled_share_pct: 0, data_type: "secondary" }, confidence: 55, reason: "Packaging word in the name", warnings: ["Stage guessed from the name"], problems: [], by: "sheet" },
+          ],
+          total_lines: 2,
+          lines_with_problems: 0,
+          low_confidence_lines: 1,
+          warnings: [],
+          ai_used: false,
+          evidence: reread ? null : { id: 7, document_name: "bom.xlsx", url: "http://localhost/evidence/7", stored: "local" },
+        });
+      }
+      if (path.endsWith("/v1/pcf/match-factors")) {
+        const body = req.postDataJSON() as { lines: { id: string; name: string }[]; factors: unknown[]; geography_hint: string | null };
+        seen.push({ method, path: "/match-factors", body });
+        return json({
+          lines: body.lines.map((l) =>
+            /aluminium/i.test(l.name)
+              ? { id: l.id, name: l.name, unmatched: false, suggestions: [{ material_factor_id: 1, name: "Aluminium, primary (placeholder)", confidence: 84, reason: "“EC-grade aluminium ingot” → Aluminium, primary, same group (aluminium), GLO dataset, Test 2024", by: "rule" }] }
+              : { id: l.id, name: l.name, unmatched: true, suggestions: [{ material_factor_id: 2, name: "Copper cathode (placeholder)", confidence: 22, reason: "nothing closer in the library", by: "rule" }] },
+          ),
+          total_lines: body.lines.length,
+          unmatched_lines: body.lines.filter((l) => !/aluminium/i.test(l.name)).length,
+          ai_used: false,
+        });
+      }
       if (/\/emission-factors\/site\/1\/category\/9$/.test(path))
         return json([
           { emission_factor_id: 40, emission_category_name: "HGV, average laden", denominator_unit: "tonne.km", factor_value: "0.1", source: "DEFRA", year: 2024 },
@@ -186,7 +231,6 @@ test("adds a material and its transport leg; the total follows both", async ({ p
   const seen = await signIn(page, { 13: study(13, 3, "draft") });
   await page.goto("/products/5/footprints/13/edit?step=materials");
   await expect(page.getByRole("heading", { name: "Materials (A1)" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Import BOM" })).toBeDisabled();
 
   await page.getByRole("button", { name: "Add material" }).first().click();
   await page.getByLabel("Name, row 2").fill("Magnesium");
@@ -212,6 +256,50 @@ test("adds a material and its transport leg; the total follows both", async ({ p
   await page.getByRole("option", { name: /HGV, average laden · DEFRA 2024/ }).click();
   // + 1.01 t × 100 km × 0.1 = 10.1 kg.
   await expect(page.getByLabel("Running total")).toContainText("2,540.1");
+});
+
+test("imports a BOM through the AI reader and accepts a suggested factor", async ({ page }) => {
+  const seen = await signIn(page, { 13: study(13, 3, "draft") });
+  await page.goto("/products/5/footprints/13/edit?step=materials");
+  await page.getByRole("button", { name: "Import BOM" }).click();
+  const bom = page.getByRole("dialog", { name: "Import BOM" });
+  await bom.getByLabel("Quantities in the file cover").fill("25");
+  await bom.locator('input[type="file"]').setInputFiles({ name: "bom.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("not really a workbook") });
+  await expect(bom.getByText("2 lines read, quantities divided by 25. 1 read with low confidence: confirm it before Calculate.")).toBeVisible();
+  await expect(bom.getByLabel(/^Material\b/)).toHaveValue("Item");
+  await expect(bom.getByText("bom.xlsx is kept as evidence for this footprint.")).toBeVisible();
+  expect(seen.find((r) => r.path === "/parse-bom")?.body).toEqual({ batch_units: "25", study_id: "13", keep_evidence: null });
+  // Changing a column re-reads the file without storing it as evidence again; the first evidence row still shows.
+  await bom.getByLabel("Supplier").selectOption("Item");
+  await expect.poll(() => seen.filter((r) => r.path === "/parse-bom").length).toBe(2);
+  expect(seen.filter((r) => r.path === "/parse-bom").at(-1)?.body).toEqual({ batch_units: "25", study_id: "13", keep_evidence: "false" });
+  await expect(bom.getByText("bom.xlsx is kept as evidence for this footprint.")).toBeVisible();
+  await bom.getByRole("button", { name: "Add 2 lines" }).click();
+  await expect(bom).toBeHidden();
+  await expect(page.getByText("Added 2 lines from bom.xlsx.")).toBeVisible();
+
+  // The lines arrive AI-suggested; the low-confidence one blocks Calculate until confirmed.
+  await expect(page.getByLabel("Name, row 2")).toHaveValue("EC-grade aluminium ingot");
+  await expect(page.getByText("AI 92%")).toBeVisible();
+  await expect(page.getByLabel("Running total")).toContainText("Confirm 1 AI line");
+
+  // Suggest factors: the ingot gets a match, the drum is left for the person.
+  await page.getByRole("button", { name: "Suggest factors" }).click();
+  const suggest = page.getByRole("dialog", { name: "Suggest factors" });
+  await expect(suggest.getByText("1 of 2 lines have a close match; 1 needs picking by hand.")).toBeVisible();
+  await expect(suggest.getByText(/same group \(aluminium\)/)).toBeVisible();
+  const match = seen.find((r) => r.path === "/match-factors")?.body as { lines: { name: string }[]; factors: { material_factor_id: number }[]; geography_hint: string | null };
+  expect(match.lines.map((l) => l.name)).toEqual(["EC-grade aluminium ingot", "Wooden drum"]);
+  expect(match.factors.map((f) => f.material_factor_id)).toEqual([2, 1]);
+  expect(match.geography_hint).toBe("Bahrain");
+  await suggest.getByRole("button", { name: "Apply 1 factor" }).click();
+  await expect(suggest).toBeHidden();
+  // (1010 kg + 1020 kg) at 2 kg/kg, plus 500 kg plant energy.
+  await expect(page.getByLabel("Running total")).toContainText("4,560");
+  await expect.poll(() => {
+    const last = seen.filter((r) => r.path === "/inputs").at(-1)?.body as { inputs: { name: string; ai_suggested: boolean; ai_confidence: number | null; material_factor_id: number | null }[] } | undefined;
+    return last?.inputs.find((i) => i.name === "EC-grade aluminium ingot");
+  }).toMatchObject({ ai_suggested: true, ai_confidence: 0.84, material_factor_id: 1 });
 });
 
 test("shows the allocated plant energy, then calculates and sends for review", async ({ page }) => {

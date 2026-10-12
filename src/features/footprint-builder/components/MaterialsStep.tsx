@@ -16,12 +16,14 @@ type Props = {
   onRemove: (line: Line) => void;
   onDetails: (line: Line) => void;
   onApplyYield: (pct: number) => void;
+  onImportBom: () => void;
+  onSuggest: () => void;
+  /** Lines without a factor or supplier footprint: what "Suggest factors" works on. */
+  suggestCount: number;
 };
 
-const SOON = "Arrives with AI assist (E2)";
-
 /** Step 2: the bill of materials per declared unit, each line priced by a library factor. */
-export function MaterialsStep({ lines, factors, factorsLoading, factorsError, book, unitLabel, onAdd, onChange, onRemove, onDetails, onApplyYield }: Props) {
+export function MaterialsStep({ lines, factors, factorsLoading, factorsError, book, unitLabel, onAdd, onChange, onRemove, onDetails, onApplyYield, onImportBom, onSuggest, suggestCount }: Props) {
   const [yieldPct, setYieldPct] = useState<number | null>(null);
   return (
     <section aria-labelledby="materials-title" className={`${panel} space-y-4 p-4 sm:p-6`}>
@@ -33,23 +35,16 @@ export function MaterialsStep({ lines, factors, factorsLoading, factorsError, bo
           <p className="mt-1 text-sm text-muted">What goes into one {unitLabel}, losses included. Factors come from the material factor library.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Tooltip content={SOON}>
+          <Button icon={<FileUp aria-hidden className="size-4" />} onClick={onImportBom}>
+            Import BOM
+          </Button>
+          <Tooltip content={suggestCount ? `Suggest a library factor for ${suggestCount} ${suggestCount === 1 ? "line" : "lines"} without one` : "Every named material already has a factor"}>
             <span>
-              <Button icon={<FileUp aria-hidden className="size-4" />} disabled aria-describedby="materials-soon">
-                Import BOM
-              </Button>
-            </span>
-          </Tooltip>
-          <Tooltip content={SOON}>
-            <span>
-              <Button icon={<Wand2 aria-hidden className="size-4" />} disabled aria-describedby="materials-soon">
+              <Button icon={<Wand2 aria-hidden className="size-4" />} onClick={onSuggest} disabled={suggestCount === 0 || factorsLoading || factorsError}>
                 Suggest factors
               </Button>
             </span>
           </Tooltip>
-          <span id="materials-soon" className="sr-only">
-            {SOON}
-          </span>
           <Button variant="primary" icon={<Plus aria-hidden className="size-4" />} onClick={onAdd}>
             Add material
           </Button>

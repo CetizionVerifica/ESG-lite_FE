@@ -12,6 +12,7 @@ import {
   submitPcfStudy,
   updatePcfStudy,
 } from "../../services/pcfService";
+import { type BomResponse, type MappingOverride, type MatchRequest, type MatchResponse, matchFactors, parseBom } from "../../services/pcfAiService";
 import { getProductsBySite } from "../../services/productService";
 import type { AllocationPreview, InputRow, PickerFactor, ScopeFields, Study } from "./logic";
 
@@ -171,3 +172,21 @@ export function useFreightFactors(siteId: number | null, categoryIds: number[]) 
     combine: toFreight,
   });
 }
+
+// ------------------------------------------------------------- AI assist ---
+
+/** Suggestions for the lines in `req` (E2 match-factors); off while there is nothing to match. */
+export const useFactorSuggestions = (req: MatchRequest | null, enabled: boolean) =>
+  useQuery<MatchResponse>({
+    queryKey: [...keys.all, "match-factors", req],
+    queryFn: () => matchFactors(req!),
+    enabled: enabled && req !== null,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+
+/** Reads a BOM file (E2 parse-bom); the raw file is kept as evidence against the study. */
+export const useParseBom = () =>
+  useMutation<BomResponse, unknown, { file: File; studyId: number; batchUnits: number; massPerUnitKg: number | null; sheetName?: string | null; mapping?: MappingOverride; keepEvidence?: boolean }>({
+    mutationFn: ({ file, studyId, batchUnits, massPerUnitKg, sheetName, mapping, keepEvidence }) => parseBom(file, { studyId, batchUnits, massPerUnitKg, sheetName, mapping, keepEvidence }),
+  });

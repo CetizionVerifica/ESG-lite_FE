@@ -319,3 +319,25 @@ export function toRow(raw: Record<string, unknown>, m: Mapping): { row: Material
 export const isBlankRow = (raw: Record<string, unknown>) => Object.values(raw).every((v) => cellText(v) === "");
 
 export const TEMPLATE_HEADERS = SHEET_FIELDS.map((f) => f.field);
+
+// -------------------------------------------------------- AI sheet reader ---
+
+/** The AI reader's detected columns as the drawer's mapping (field → header). */
+export function mappingFromAi(detected: Record<string, { header: string }>): Mapping {
+  const out: Mapping = {};
+  for (const { field } of SHEET_FIELDS) {
+    const hit = detected[field]?.header;
+    if (hit) out[field] = hit;
+  }
+  return out;
+}
+
+/** The person's mapping as the reader's override: every field named, null where no column is picked, so a detected column can be dropped. */
+export function mappingOverride(m: Mapping): Record<SheetField, string | null> {
+  return Object.fromEntries(SHEET_FIELDS.map((f) => [f.field, m[f.field] ?? null])) as Record<SheetField, string | null>;
+}
+
+/** Rows the AI reader returned, in the drawer's row shape. */
+export function rowsFromAi(rows: { line: number; values: Record<string, unknown>; problems: string[] }[]): { line: number; row: MaterialFactorBody; problems: string[] }[] {
+  return rows.map((r) => ({ line: r.line, row: r.values as MaterialFactorBody, problems: r.problems }));
+}

@@ -1,9 +1,10 @@
-import { type ReactNode, useMemo, useState } from "react";
-import { CheckCircle2, Download } from "lucide-react";
-import { Button, Callout, Combobox, Drawer, FileDrop, type FileDropItem, Select, Stepper } from "../../../ui";
+import { type ReactNode, useMemo, useRef, useState } from "react";
+import { CheckCircle2, Download, Sparkles } from "lucide-react";
+import { Badge, Button, Callout, Combobox, Drawer, FileDrop, type FileDropItem, Select, Stepper } from "../../../ui";
 import type { MaterialFactorBody } from "../../../services/materialFactorService";
+import { type FactorSheetResponse, aiErrorMessage, aiUnreachable, parseMaterialFactorSheet } from "../../../services/pcfAiService";
 import { type ImportError, errorMessage, importErrors, useImportCheck, useImportFactors } from "../api";
-import { type Company, type Mapping, type Role, SHEET_FIELDS, detectMapping, missingRequired, toRow } from "../logic";
+import { type Company, type Mapping, type Role, SHEET_FIELDS, detectMapping, mappingFromAi, mappingOverride, missingRequired, rowsFromAi, toRow } from "../logic";
 import { type Sheet, downloadTemplate, readSheet } from "../sheet";
 
 const STEPS = [
@@ -23,15 +24,25 @@ type Props = {
   onClose: () => void;
 };
 
+const FALLBACK_NOTE = "The AI sheet reader couldn't be reached, so the columns were matched by header name here instead.";
+const AI_FILE = "Use an .xlsx or .csv file. Save an .xls file as .xlsx first.";
+
 /**
  * Import sheet: upload → check the detected columns and rows → import all or nothing.
- * Columns are matched by header name; the AI sheet reader (E2) replaces the matching later.
+ * The AI sheet reader (E2) reads any layout and checks the rows; when it can't
+ * be reached the sheet is read in the browser and columns matched by header name.
  */
 export function ImportDrawer(props: Props) {
   const [step, setStep] = useState(0);
   const [items, setItems] = useState<FileDropItem[]>([]);
+  const [file, setFile] = useState<File | null>(null);
+  // Either the AI reader's answer or the in-browser sheet (fallback); never both.
+  const [ai, setAi] = useState<FactorSheetResponse | null>(null);
   const [sheet, setSheet] = useState<Sheet | null>(null);
+  const [fallbackNote, setFallbackNote] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
+  const readSeq = useRef(0);
   const [mapping, setMapping] = useState<Mapping>({});
   const [companyId, setCompanyId] = useState<number | null>(props.defaultCompanyId);
   // The rows the server last refused; Import stays off until the file, columns or target change.
@@ -39,10 +50,15 @@ export function ImportDrawer(props: Props) {
   const run = useImportFactors();
 
   const reset = () => {
+    readSeq.current++;
     setStep(0);
     setItems([]);
+    setFile(null);
+    setAi(null);
     setSheet(null);
+    setFallbackNote(null);
     setReadError(null);
+    setReading(false);
     setMapping({});
     setRefused(null);
     run.reset();
@@ -53,27 +69,94 @@ export function ImportDrawer(props: Props) {
     props.onClose();
   };
 
+  // The in-browser reader: the fallback, and the only path for .xls files.
+  const readLocally = async (f: File, note: string | null) => {
+    const s = await readSheet(f);
+    if (!s.rows.length) throw new Error("empty");
+    if (s.rows.length > MAX_ROWS) {
+      setReadError(`The sheet has ${s.rows.length} rows; import at most ${MAX_ROWS} at a time.`);
+      return;
+    }
+    setAi(null);
+    setSheet(s);
+    setFallbackNote(note);
+    setMapping(detectMapping(s.headers));
+    setStep(1);
+  };
+
   const onAdd = async (files: File[]) => {
-    const file = files[0];
-    setItems([{ id: file.name, file }]);
+    const f = files[0];
+    const seq = ++readSeq.current;
+    setItems([{ id: f.name, file: f }]);
+    setFile(f);
     setReadError(null);
+    setFallbackNote(null);
     run.reset();
     try {
-      const s = await readSheet(file);
-      if (!s.rows.length) throw new Error("empty");
-      if (s.rows.length > MAX_ROWS) {
-        setReadError(`The sheet has ${s.rows.length} rows; import at most ${MAX_ROWS} at a time.`);
+      if (/\.xls$/i.test(f.name)) {
+        await readLocally(f, null);
         return;
       }
-      setSheet(s);
-      setMapping(detectMapping(s.headers));
-      setStep(1);
+      setReading(true);
+      try {
+        const r = await parseMaterialFactorSheet(f);
+        if (seq !== readSeq.current) return;
+        if (!Array.isArray(r.rows)) throw new Error("shape");
+        if (r.total_rows > MAX_ROWS) {
+          setReadError(`The sheet has ${r.total_rows} rows; import at most ${MAX_ROWS} at a time.`);
+          return;
+        }
+        if (!r.rows.length) throw new Error("empty");
+        setSheet(null);
+        setAi(r);
+        setMapping(mappingFromAi(r.mapping));
+        setStep(1);
+      } catch (e) {
+        if (seq !== readSeq.current) return;
+        if (e instanceof Error && e.message === "empty") throw e;
+        if (!aiUnreachable(e)) {
+          setReadError(aiErrorMessage(e, AI_FILE));
+          return;
+        }
+        await readLocally(f, FALLBACK_NOTE);
+      } finally {
+        if (seq === readSeq.current) setReading(false);
+      }
     } catch {
-      setReadError("Couldn't read that file. Use an .xlsx, .xls or .csv file with one header row.");
+      if (seq === readSeq.current) setReadError("Couldn't read that file. Use an .xlsx, .xls or .csv file with one header row.");
     }
   };
 
-  const parsed = useMemo(() => (sheet ? sheet.rows.map((r) => ({ line: r.line, ...toRow(r.raw, mapping) })) : []), [sheet, mapping]);
+  /** AI mode: a changed column or sheet re-reads the file with the person's choices; the rows come back re-checked. */
+  const reread = async (next: Mapping | null, sheetName: string | null) => {
+    if (!file || !ai) return;
+    const seq = ++readSeq.current;
+    if (next) setMapping(next);
+    setRefused(null);
+    setReading(true);
+    try {
+      const r = await parseMaterialFactorSheet(file, { sheetName, mapping: next ? mappingOverride(next) : undefined });
+      if (seq !== readSeq.current) return;
+      setAi(r);
+      setMapping(mappingFromAi(r.mapping));
+    } catch (e) {
+      if (seq !== readSeq.current) return;
+      setReadError(aiUnreachable(e) ? "The AI sheet reader stopped answering. Choose the file again to continue." : aiErrorMessage(e, "Couldn't re-read the sheet with those columns."));
+    } finally {
+      if (seq === readSeq.current) setReading(false);
+    }
+  };
+  const changeMapping = (field: keyof Mapping, header: string | null) => {
+    const next = { ...mapping, [field]: header ?? undefined };
+    if (ai) void reread(next, ai.sheet_name);
+    else setMapping(next);
+  };
+
+  const parsed = useMemo(
+    () => (ai ? rowsFromAi(ai.rows) : sheet ? sheet.rows.map((r) => ({ line: r.line, ...toRow(r.raw, mapping) })) : []),
+    [ai, sheet, mapping],
+  );
+  const lowConfidence = useMemo(() => (ai ? ai.rows.filter((r) => r.confidence < 60) : []), [ai]);
   const missing = missingRequired(mapping);
   const withProblems = parsed.filter((p) => p.problems.length);
   const serverErrors = importErrors(run.error);
@@ -81,7 +164,8 @@ export function ImportDrawer(props: Props) {
     () => ({ ...(props.role === "Superadmin" ? { company_id: companyId } : {}), rows: parsed.map((p): MaterialFactorBody => p.row) }),
     [props.role, companyId, parsed],
   );
-  const clientOk = !!sheet && missing.length === 0 && withProblems.length === 0;
+  const loaded = !!ai || !!sheet;
+  const clientOk = loaded && !reading && missing.length === 0 && withProblems.length === 0;
   // The server dry run also finds rows already in the library. If it can't run, the import itself still checks everything.
   const check = useImportCheck(body, clientOk && step === 1);
   const canImport = clientOk && !run.isPending && refused !== body && (check.data ? check.data.valid : !!check.error);
@@ -99,7 +183,8 @@ export function ImportDrawer(props: Props) {
   };
 
   const companyOptions = [{ value: 0, label: "Global library" }, ...props.companies.map((c) => ({ value: c.company_id, label: c.name }))];
-  const headerOptions = (sheet?.headers ?? []).map((h) => ({ value: h, label: h }));
+  const headerOptions = (ai?.headers ?? sheet?.headers ?? []).map((h) => ({ value: h, label: h }));
+  const sheetOptions = (ai?.sheet_names ?? []).map((n) => ({ value: n, label: n }));
 
   return (
     <Drawer
@@ -144,17 +229,26 @@ export function ImportDrawer(props: Props) {
             )}
             <FileDrop
               label="Factor sheet"
-              help="Excel or CSV, one factor per row, up to 1,000 rows."
+              help="Excel or CSV in any layout, one factor per row, up to 1,000 rows. The AI reader finds the columns."
               items={items}
               onAdd={(f) => void onAdd(f)}
               onRemove={() => {
+                readSeq.current++;
                 setItems([]);
+                setFile(null);
                 setReadError(null);
+                setReading(false);
               }}
               accept={[".xlsx", ".xls", ".csv"]}
               maxSize={5 * 1024 * 1024}
               multiple={false}
+              disabled={reading}
             />
+            {reading && (
+              <p className="text-sm text-muted" role="status">
+                Reading the sheet…
+              </p>
+            )}
             {readError && <Callout tone="warn">{readError}</Callout>}
             <Button variant="ghost" icon={<Download aria-hidden className="size-4" />} onClick={downloadTemplate}>
               Download the column template
@@ -162,27 +256,58 @@ export function ImportDrawer(props: Props) {
           </div>
         )}
 
-        {step === 1 && sheet && (
+        {step === 1 && loaded && (
           <div className="space-y-5">
+            {fallbackNote && <Callout tone="info">{fallbackNote}</Callout>}
+            {readError && <Callout tone="warn">{readError}</Callout>}
             <section aria-labelledby="import-columns" className="space-y-3">
               <h3 id="import-columns" className="text-sm font-semibold text-ink">
                 Columns
               </h3>
-              <p className="text-sm text-muted">We matched your headers by name. Change any match that is wrong.</p>
+              <p className="text-sm text-muted">
+                {ai
+                  ? `${ai.ai_used ? "The AI reader" : "We"} matched your headers${ai.header_line > 1 ? ` (header on row ${ai.header_line})` : ""}. Change any match that is wrong; the rows are re-read.`
+                  : "We matched your headers by name. Change any match that is wrong."}
+              </p>
+              {sheetOptions.length > 1 && (
+                <Select<string> label="Sheet" value={ai?.sheet_name ?? sheetOptions[0].value} onChange={(v) => v && void reread(null, v)} options={sheetOptions} className="sm:w-1/2" disabled={reading} />
+              )}
               <div className="grid gap-3 sm:grid-cols-2">
-                {SHEET_FIELDS.map((f) => (
-                  <Select<string>
-                    key={f.field}
-                    label={f.label}
-                    required={f.required}
-                    value={mapping[f.field] ?? null}
-                    onChange={(v) => setMapping((m) => ({ ...m, [f.field]: v ?? undefined }))}
-                    options={headerOptions}
-                    placeholder="Not in the sheet"
-                  />
-                ))}
+                {SHEET_FIELDS.map((f) => {
+                  const match = ai?.mapping[f.field];
+                  return (
+                    <Select<string>
+                      key={f.field}
+                      label={f.label}
+                      required={f.required}
+                      value={mapping[f.field] ?? null}
+                      onChange={(v) => changeMapping(f.field, v)}
+                      options={headerOptions}
+                      placeholder="Not in the sheet"
+                      disabled={reading}
+                      help={
+                        match && mapping[f.field] === match.header ? (
+                          <span className="inline-flex flex-wrap items-center gap-1">
+                            {match.by === "ai" && (
+                              <Badge tone={match.confidence < 60 ? "warn" : "neutral"} className="gap-1">
+                                <Sparkles aria-hidden className="size-3" /> AI {match.confidence}%
+                              </Badge>
+                            )}
+                            {match.reason}
+                          </span>
+                        ) : undefined
+                      }
+                    />
+                  );
+                })}
               </div>
+              {ai?.sheet_unit && <p className="text-sm text-muted">{ai.sheet_unit.reason}.</p>}
               {missing.length > 0 && <Callout tone="warn">Pick a column for {missing.join(", ")}.</Callout>}
+              {reading && (
+                <p className="text-sm text-muted" role="status">
+                  Re-reading the sheet…
+                </p>
+              )}
             </section>
 
             {missing.length === 0 && (
@@ -190,6 +315,20 @@ export function ImportDrawer(props: Props) {
                 <h3 id="import-rows" className="text-sm font-semibold text-ink">
                   Rows
                 </h3>
+                {ai && ai.warnings.length > 0 && (
+                  <Callout tone="info">
+                    <ul className="space-y-1">
+                      {ai.warnings.map((w) => (
+                        <li key={w}>{w}</li>
+                      ))}
+                    </ul>
+                  </Callout>
+                )}
+                {lowConfidence.length > 0 && (
+                  <Callout tone="warn" title={`${lowConfidence.length} ${lowConfidence.length === 1 ? "row was" : "rows were"} read with low confidence. Check ${lowConfidence.length === 1 ? "it" : "them"} before importing.`}>
+                    <RowList items={lowConfidence.map((r) => ({ line: r.line, text: `${r.reason}${r.warnings.length ? ` (${r.warnings.join("; ")})` : ""}` }))} />
+                  </Callout>
+                )}
                 {withProblems.length > 0 ? (
                   <Callout tone="warn" title={`${withProblems.length} of ${parsed.length} rows need fixing in the sheet`}>
                     <RowList items={withProblems.map((p) => ({ line: p.line, text: p.problems.join("; ") }))} />
