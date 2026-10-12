@@ -313,8 +313,8 @@ test("upload batches show their source and filter by it", async ({ page }) => {
   await expect(page).toHaveURL(/source=claude/);
   await expect(table.getByRole("row", { name: /Hidd/ })).toHaveCount(1);
   await expect(table).toContainText("Sam Staff");
-  await page.getByLabel("Source").selectOption("historical");
-  await expect(page.getByText("No Historical batches")).toBeVisible();
+  await page.getByLabel("Source").selectOption("api");
+  await expect(page.getByText("No API batches")).toBeVisible();
   await page.getByRole("button", { name: "All sources" }).click();
   await expect(table.getByRole("row", { name: /Hidd/ })).toHaveCount(2);
 });

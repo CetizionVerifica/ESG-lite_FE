@@ -34,7 +34,7 @@ React 19 + Vite + TypeScript + Tailwind. Backend is ESG-lite (Node), AI/OCR endp
 ## Connect Claude — see docs/mcp-import/ (in ESG-lite)
 
 - Consent and Connected apps screens follow the redesign rules (src/ui, tokens only). Consent copy must say what Claude can't do (approve, edit, delete).
-- Upload batches show their `channel` (Claude, Bulk upload, Historical).
+- Upload batches show their `channel` (Claude, Bulk upload, API; no channel = Bulk upload).
 
 ## Definition of done (every module)
 

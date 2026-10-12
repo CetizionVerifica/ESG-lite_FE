@@ -201,16 +201,15 @@ describe("reportOptions", () => {
 });
 
 describe("batch source chip", () => {
-  it("maps the channel, with Bulk upload for batches that predate channels", () => {
+  it("maps the contract channels, with Bulk upload for batches that predate channels", () => {
     expect(batchSource("mcp")).toBe("claude");
     expect(batchSource("bulk_upload")).toBe("bulk");
-    expect(batchSource("historical")).toBe("historical");
     expect(batchSource("api")).toBe("api");
     expect(batchSource(undefined)).toBe("bulk");
     expect(batchSource(null)).toBe("bulk");
   });
-  it("offers Claude, Bulk upload, Historical and API and reads ?source=", () => {
-    expect(BATCH_SOURCE_OPTIONS.map((o) => o.label)).toEqual(["Claude", "Bulk upload", "Historical", "API"]);
+  it("offers Claude, Bulk upload and API and reads ?source=", () => {
+    expect(BATCH_SOURCE_OPTIONS.map((o) => o.label)).toEqual(["Claude", "Bulk upload", "API"]);
     expect(parseBatchSource("claude")).toBe("claude");
     expect(parseBatchSource("everything")).toBeNull();
     expect(parseBatchSource(null)).toBeNull();

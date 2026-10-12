@@ -6,9 +6,9 @@ import { Badge, type BadgeTone, Button, type Column, DataTable, EmptyState, Moda
 import { errorMessage, useBatchMutations, useBatches } from "../api";
 import { BATCH_SOURCE_LABEL, BATCH_SOURCE_OPTIONS, type BatchSource, batchSource, parseBatchSource } from "../logic";
 
-const SOURCE_TONE: Record<BatchSource, BadgeTone> = { claude: "brand", bulk: "neutral", historical: "info", api: "neutral" };
+const SOURCE_TONE: Record<BatchSource, BadgeTone> = { claude: "brand", bulk: "neutral", api: "info" };
 
-/** Where the batch came from: Claude (MCP), the Bulk upload page, a historical import or the API. */
+/** Where the batch came from: Claude (MCP), the Bulk upload page or the API. */
 export function SourceChip({ source }: { source: BatchSource }) {
   return <Badge tone={SOURCE_TONE[source]}>{BATCH_SOURCE_LABEL[source]}</Badge>;
 }
@@ -111,7 +111,7 @@ export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categ
           source ? (
             <EmptyState icon={Inbox} title={`No ${BATCH_SOURCE_LABEL[source]} batches`} description="Try another source, or clear the filter." action={<Button onClick={() => setSource(null)}>All sources</Button>} />
           ) : (
-            <EmptyState icon={Inbox} title="No bulk uploads" description="Rows uploaded in bulk, imported through Claude or from history show up here as batches." />
+            <EmptyState icon={Inbox} title="No bulk uploads" description="Rows uploaded in bulk or imported through Claude show up here as batches." />
           )
         }
         defaultSort={{ id: "at", dir: "desc" }}

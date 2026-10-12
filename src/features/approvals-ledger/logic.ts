@@ -304,15 +304,17 @@ export function reportOptions(period: Period | null, fyStartMonth = DEFAULT_FY_S
 
 // ─── Upload batch source (IM10) ─────────────────────────────────────────────
 
-export type BatchSource = "claude" | "bulk" | "historical" | "api";
+export type BatchSource = "claude" | "bulk" | "api";
 
-/** Where a batch came from; a batch without a channel is a Bulk upload (the only source before the import plans). */
+/**
+ * Where a batch came from (contract channel → chip). A batch without a
+ * channel, which includes every batch older than the import plans and the
+ * historical imports, is a Bulk upload.
+ */
 export function batchSource(channel: BatchChannel | null | undefined): BatchSource {
   switch (channel) {
     case "mcp":
       return "claude";
-    case "historical":
-      return "historical";
     case "api":
       return "api";
     default:
@@ -320,9 +322,9 @@ export function batchSource(channel: BatchChannel | null | undefined): BatchSour
   }
 }
 
-export const BATCH_SOURCE_LABEL: Record<BatchSource, string> = { claude: "Claude", bulk: "Bulk upload", historical: "Historical", api: "API" };
+export const BATCH_SOURCE_LABEL: Record<BatchSource, string> = { claude: "Claude", bulk: "Bulk upload", api: "API" };
 
-export const BATCH_SOURCE_OPTIONS: { value: BatchSource; label: string }[] = (["claude", "bulk", "historical", "api"] as BatchSource[]).map((value) => ({ value, label: BATCH_SOURCE_LABEL[value] }));
+export const BATCH_SOURCE_OPTIONS: { value: BatchSource; label: string }[] = (["claude", "bulk", "api"] as BatchSource[]).map((value) => ({ value, label: BATCH_SOURCE_LABEL[value] }));
 
 /** Reads `?source=` for the batches tab; anything unknown means all sources. */
 export function parseBatchSource(value: string | null): BatchSource | null {
