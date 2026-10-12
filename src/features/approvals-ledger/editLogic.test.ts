@@ -235,5 +235,9 @@ describe("blockedMessage", () => {
     expect(blockedMessage(editErrors("Typo in litres", ""))).toMatch(/emission factor/);
     expect(blockedMessage(editErrors("", ""))).toMatch(/emission factor.*reason/);
     expect(blockedMessage(editErrors("Typo in litres", "", false))).toBe("Not saved yet: choose an emission factor.");
+    // No unit: the backend would save the total as 0.
+    expect(blockedMessage(editErrors("Typo in litres", "Diesel", true, ""))).toBe("Not saved yet: choose a unit, without one the total would be 0.");
+    expect(editErrors("Typo in litres", "Diesel", true, "", false).unit).toMatch(/none are set up/);
+    expect(editErrors("Typo in litres", "Diesel", true, "litres")).toEqual({});
   });
 });

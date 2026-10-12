@@ -238,21 +238,32 @@ export function editPayload(activity: Activity, date: string, unit: string, reas
 
 export const EDIT_REASON_MIN = 5;
 
+type EditErrors = { reason?: string; category?: string; unit?: string };
+
 /**
  * `category` is the resolved emission factor. Saving without one keeps the old
- * total while the entered values change, so it is required.
+ * total while the entered values change, so it is required. So is `unit`: the
+ * backend can't apply a factor without one and saves the total as 0.
+ * `unitChoices` is false when no units are set up to pick from.
  */
-export function editErrors(reason: string, category = "x", mapped = true): { reason?: string; category?: string } {
-  const errors: { reason?: string; category?: string } = {};
+export function editErrors(reason: string, category = "x", mapped = true, unit = "x", unitChoices = true): EditErrors {
+  const errors: EditErrors = {};
   if (reason.trim().length < EDIT_REASON_MIN) errors.reason = `Say why this changes (at least ${EDIT_REASON_MIN} characters)`;
   if (!category.trim()) errors.category = mapped ? "Choose every option until the emission factor is set" : "Choose an emission factor";
+  if (!unit.trim())
+    errors.unit = unitChoices
+      ? "Choose a unit, without one the total would be 0"
+      : "This entry has no unit and none are set up for its category, so its values can't be recalculated";
   return errors;
 }
 
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
 /** One line next to the Save button saying why nothing was saved. */
-export function blockedMessage(errors: { reason?: string; category?: string }): string | null {
+export function blockedMessage(errors: EditErrors): string | null {
   const missing = [
-    errors.category && errors.category.charAt(0).toLowerCase() + errors.category.slice(1),
+    errors.category && lowerFirst(errors.category),
+    errors.unit && lowerFirst(errors.unit),
     errors.reason && `add a reason for the change (at least ${EDIT_REASON_MIN} characters)`,
   ].filter(Boolean);
   return missing.length ? `Not saved yet: ${missing.join(", and ")}.` : null;
