@@ -64,12 +64,6 @@ export function standardLabel(s: string) {
 
 export const allocationLabel = (key: string) => key.replace(/_/g, " ");
 
-/** The file name from a Content-Disposition header, or the fallback. */
-export function fileNameFrom(disposition: string | null | undefined, fallback: string): string {
-  const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition ?? "");
-  return m ? decodeURIComponent(m[1]) : fallback;
-}
-
 /** The message in an error response; blob responses carry it as JSON text. */
 export async function errorMessage(err: unknown, fallback: string): Promise<string> {
   const data = (err as { response?: { data?: unknown } })?.response?.data;
@@ -94,14 +88,3 @@ export function draftName(fileName: string, draft: boolean): string {
   return dot > 0 ? `${fileName.slice(0, dot)}-DRAFT${fileName.slice(dot)}` : `${fileName}-DRAFT`;
 }
 
-/** Saves a blob through a temporary link. */
-export function saveBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canExportPact, draftName, errorMessage, fileNameFrom, formatKg, periodLabel, stageRows, standardLabel } from "./logic";
+import { canExportPact, draftName, errorMessage, formatKg, periodLabel, stageRows, standardLabel } from "./logic";
 
 describe("declaration export logic", () => {
   it("issues PACT files only for reviewed footprints", () => {
@@ -35,8 +35,6 @@ describe("declaration export logic", () => {
   });
 
   it("names files", () => {
-    expect(fileNameFrom('attachment; filename="Rod-12-v1.pact.json"', "x")).toBe("Rod-12-v1.pact.json");
-    expect(fileNameFrom(null, "fallback.csv")).toBe("fallback.csv");
     expect(draftName("Rod-12-v1.pdf", true)).toBe("Rod-12-v1-DRAFT.pdf");
     expect(draftName("Rod-12-v1.pdf", false)).toBe("Rod-12-v1.pdf");
   });

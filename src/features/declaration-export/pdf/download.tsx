@@ -2,7 +2,7 @@ import { pdf } from "@react-pdf/renderer";
 import type { ThemePack } from "../../../theme";
 import { pdfTheme } from "../../../theme";
 import type { Declaration } from "../../../services/pcfExportService";
-import { saveBlob } from "../logic";
+import { saveBlob } from "../../../ui";
 import { DeclarationPdf } from "./DeclarationPdf";
 
 /** The logo as a data URL; react-pdf can't send credentials and a CORS failure would break the whole PDF. */
