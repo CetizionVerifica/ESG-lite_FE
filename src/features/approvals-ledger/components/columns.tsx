@@ -20,7 +20,17 @@ export function ledgerColumns({
 }): Column<LedgerRow>[] {
   const fieldsOf = (r: LedgerRow) => activityFields(r, configOf(r.site?.site_id ?? 0, r.category?.category_id ?? 0));
   return [
-    { id: "site", header: "Site", value: (r) => r.site?.name, sortable: true },
+    {
+      id: "site",
+      header: "Site",
+      value: (r) => r.site?.name,
+      sortable: true,
+      cell: (r) => (
+        <span title={r.site?.name} className="block max-w-[11rem] truncate">
+          {r.site?.name ?? "—"}
+        </span>
+      ),
+    },
     {
       id: "category",
       header: "Category",
@@ -29,9 +39,11 @@ export function ledgerColumns({
       cell: (r) => {
         const scope = scopeNumber(r.category?.scope);
         return (
-          <span className="inline-flex items-center gap-1.5">
+          <span className="inline-flex max-w-[14rem] items-center gap-1.5">
             {scope && <span aria-hidden className={cn("size-2 shrink-0 rounded-full", SCOPE_DOT[scope])} />}
-            <span>{r.category?.category_name ?? "—"}</span>
+            <span title={r.category?.category_name} className="truncate">
+              {r.category?.category_name ?? "—"}
+            </span>
             {scope && <span className="sr-only">Scope {scope}</span>}
           </span>
         );
@@ -44,7 +56,7 @@ export function ledgerColumns({
       cell: (r) => {
         const s = activitySummary(fieldsOf(r));
         return (
-          <span className="flex max-w-[22rem] items-baseline gap-1.5">
+          <span className="flex max-w-[16rem] items-baseline gap-1.5">
             <span className="truncate">{s.text || "—"}</span>
             {s.more > 0 && <span className="shrink-0 text-xs text-muted">+{s.more} {s.more === 1 ? "field" : "fields"}</span>}
           </span>
@@ -81,6 +93,7 @@ export function ledgerColumns({
     {
       id: "status",
       header: "Status",
+      info: "status",
       value: (r) => statusOf(r),
       sortable: true,
       cell: (r) => <StatusPill status={statusOf(r)} size="sm" />,
@@ -91,8 +104,11 @@ export function ledgerColumns({
       value: (r) => r.created_at,
       sortable: true,
       cell: (r) => (
-        <span className="whitespace-nowrap">
-          {r.created_by?.name ?? "—"} <span className="text-muted">· {formatDate(r.created_at)}</span>
+        <span className="inline-flex max-w-[14rem] gap-1 whitespace-nowrap">
+          <span title={r.created_by?.name} className="truncate">
+            {r.created_by?.name ?? "—"}
+          </span>
+          <span className="shrink-0 text-muted">· {formatDate(r.created_at)}</span>
         </span>
       ),
     },

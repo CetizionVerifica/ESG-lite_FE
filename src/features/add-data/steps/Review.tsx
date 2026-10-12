@@ -136,7 +136,7 @@ export function Review(p: Props) {
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="primary" onClick={p.onAnother}>Add another category</Button>
               <Link to="/my-month" className="inline-flex h-9 items-center px-3 text-sm font-medium text-brand-text underline">
-                Back to My month
+                Back to Current Month
               </Link>
               <Link to="/data/mine" className="inline-flex h-9 items-center px-3 text-sm font-medium text-brand-text underline">
                 View in My entries

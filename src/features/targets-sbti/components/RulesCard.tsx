@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, Info, type LucideIcon } from "lucide-react";
-import { Button, EmptyState, SkeletonText, cn } from "../../../ui";
+import { Button, EmptyState, InfoTip, SkeletonText, cn } from "../../../ui";
 import type { Rule, RuleState } from "../logic";
 
 const ICON: Record<RuleState, { icon: LucideIcon; className: string; label: string }> = {
@@ -13,9 +13,12 @@ export function RulesCard(props: { rules: Rule[] | null; loading: boolean; error
   const { rules, loading, error, onRetry, className } = props;
   return (
     <section aria-labelledby="sbti-rules" className={cn("rounded-card border border-line bg-panel p-4", className)}>
-      <h2 id="sbti-rules" className="text-sm font-semibold text-ink">
-        SBTi rules check
-      </h2>
+      <div className="flex items-center gap-1.5">
+        <h2 id="sbti-rules" className="text-sm font-semibold text-ink">
+          SBTi rules check
+        </h2>
+        <InfoTip id="sbti" />
+      </div>
       <p className="mt-0.5 text-xs text-muted">Based on approved base-year emissions for the chosen sites.</p>
       <div className="mt-3">
         {loading ? (

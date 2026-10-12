@@ -17,6 +17,7 @@ import {
   KpiStrip,
   PageHeader,
   type SortState,
+  InfoTerm,
   StatusPill,
   type ViewerFile,
   activeCount,
@@ -167,7 +168,7 @@ export default function MyEntriesPage() {
       cell: (r) => (
         <div className="whitespace-nowrap">
           <span>{formatEmissions(Number(r.total_emission))}</span>
-          {r.fera && <p className="text-xs text-muted">+ FERA {formatEmissions(Number(r.fera.total_emission))}</p>}
+          {r.fera && <p className="text-xs text-muted">+ <InfoTerm>FERA</InfoTerm> {formatEmissions(Number(r.fera.total_emission))}</p>}
         </div>
       ),
     },
@@ -175,8 +176,11 @@ export default function MyEntriesPage() {
     {
       id: "status",
       header: "Status",
+      info: "status",
       sortable: true,
       value: (r) => STATUS_LABEL[r.status],
+      // A rejected entry shows the reviewer's reason under the pill.
+      wrap: true,
       cell: (r) => (
         <div className="min-w-0 max-w-56">
           <StatusPill status={r.status} size="sm" />

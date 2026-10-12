@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { Check, ChevronDown, ExternalLink } from "lucide-react";
 import type { NotificationItem } from "../../../services/notificationService";
-import { Button, NotificationIcon, cn, focusRing, formatDateTime, timeAgo } from "../../../ui";
+import { Button, NOTIFICATION_KIND_LABEL, NotificationIcon, cn, focusRing, formatDateTime, notificationKind, timeAgo } from "../../../ui";
 import { notificationDetails, reviewerLabel } from "../logic";
 
 export type NotificationRowProps = {
@@ -65,6 +65,10 @@ export function NotificationRow({ item: n, expanded, onToggle, onMarkRead, onOpe
                 <dd className="mt-0.5 text-ink">{d.reviewer}</dd>
               </div>
             )}
+            <div>
+              <dt className="text-xs font-medium text-muted">Type</dt>
+              <dd className="mt-0.5 text-ink">{NOTIFICATION_KIND_LABEL[notificationKind(n.type)]}</dd>
+            </div>
             <div>
               <dt className="text-xs font-medium text-muted">Date</dt>
               <dd className="mt-0.5 text-ink">{formatDateTime(n.created_at)}</dd>

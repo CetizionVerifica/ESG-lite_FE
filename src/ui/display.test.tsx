@@ -28,13 +28,13 @@ describe("KpiStrip", () => {
         ]}
       />,
     );
-    const total = screen.getByText("Total emissions").parentElement!;
+    const total = screen.getByText("Total emissions").closest("dt")!.parentElement!;
     expect(within(total).getByText("1,235").textContent).toBe("1,235");
     expect(within(total).getByText("tCO₂e")).toBeTruthy();
     expect(within(total).getByText("▼ 5.0%").className).toContain("text-good");
-    const elec = screen.getByText("Electricity").parentElement!;
+    const elec = screen.getByText("Electricity").closest("dt")!.parentElement!;
     expect(within(elec).getByText("▲ 20.5%").className).toContain("text-bad");
-    const intensity = screen.getByText("Intensity").parentElement!;
+    const intensity = screen.getByText("Intensity").closest("dt")!.parentElement!;
     expect(within(intensity).getByText("—")).toBeTruthy();
     expect(within(intensity).queryByText("tCO₂e/t")).toBeNull();
   });

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  sectionFromTab,
+  sectionsFor,
   clientThemeLabel,
   isEnabled,
   modernZone,
@@ -35,10 +37,10 @@ describe("profileView", () => {
 });
 
 describe("notifications", () => {
-  it("lists the role's email toggles; Admin and Superadmin have none", () => {
+  it("lists the role's email toggles; Superadmin has none", () => {
     expect(notificationOptions("User").map((o) => o.key)).toEqual(["email_approvals", "email_rejections", "email_reminders"]);
-    expect(notificationOptions("Manager").map((o) => o.key)).toEqual(["email_escalations"]);
-    expect(notificationOptions("Admin")).toEqual([]);
+    expect(notificationOptions("Manager").map((o) => o.key)).toEqual(["email_escalations", "email_uploads"]);
+    expect(notificationOptions("Admin").map((o) => o.key)).toEqual(["email_uploads"]);
     expect(notificationOptions("Superadmin")).toEqual([]);
     expect(notificationOptions(null)).toEqual([]);
   });
@@ -105,5 +107,19 @@ describe("labels", () => {
   it("prefers the server's message", () => {
     expect(serverMessage({ response: { data: { message: "Nope" } } }, "Fallback")).toBe("Nope");
     expect(serverMessage(new Error("x"), "Fallback")).toBe("Fallback");
+  });
+});
+
+describe("Connected apps section", () => {
+  it("shows only for Superadmin", () => {
+    expect(sectionsFor("Superadmin").map((s) => s.id)).toContain("apps");
+    for (const role of ["User", "Manager", "Admin", null]) expect(sectionsFor(role).map((s) => s.id)).not.toContain("apps");
+  });
+  it("reads ?tab= only for sections the role can see", () => {
+    expect(sectionFromTab("apps", "Superadmin")).toBe("apps");
+    expect(sectionFromTab("apps", "Manager")).toBeNull();
+    expect(sectionFromTab("timezone", "User")).toBe("timezone");
+    expect(sectionFromTab("nope", "Superadmin")).toBeNull();
+    expect(sectionFromTab(null, "Superadmin")).toBeNull();
   });
 });

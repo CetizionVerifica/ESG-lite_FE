@@ -28,6 +28,14 @@ describe("DataTable", () => {
     expect(within(bodyRows()[0]).getByText("Site 11")).toBeTruthy();
   });
 
+  it("lands on a highlighted row: turns to its page, focuses it and marks it current", () => {
+    render(<DataTable label="Entries" rows={rows} columns={columns} getRowId={(r) => r.id} highlightId={23} pagination={{ mode: "client", pageSize: 10 }} />);
+    expect(screen.getByText("21–30 of 30")).toBeTruthy();
+    const row = screen.getByRole("row", { current: true });
+    expect(within(row).getByText("Site 23")).toBeTruthy();
+    expect(document.activeElement).toBe(row);
+  });
+
   it("sorts by a column header, with aria-sort and right-aligned mono numbers", async () => {
     const user = userEvent.setup();
     render(<DataTable label="Entries" rows={rows} columns={columns} getRowId={(r) => r.id} pagination={{ mode: "client", pageSize: 50 }} />);
@@ -38,6 +46,16 @@ describe("DataTable", () => {
     expect(firstCell.textContent).toBe("99");
     expect(firstCell.className).toContain("text-right");
     expect(firstCell.className).toContain("font-num");
+  });
+
+  it("keeps cells on one line unless a column wraps, inside a positioned scroll box", () => {
+    const wrapping: Column<Row>[] = [columns[0], { id: "note", header: "Note", value: (r) => r.site, wrap: true }];
+    render(<DataTable label="Entries" rows={rows} columns={wrapping} getRowId={(r) => r.id} />);
+    const [site, note] = within(bodyRows()[0]).getAllByRole("cell");
+    expect(site.className).toContain("whitespace-nowrap");
+    expect(note.className).not.toContain("whitespace-nowrap");
+    // Absolutely positioned children (sr-only text) must not stretch the page below the table.
+    expect(screen.getByRole("table").parentElement?.className).toContain("relative");
   });
 
   it("selects rows, shows the bulk bar and clears", async () => {

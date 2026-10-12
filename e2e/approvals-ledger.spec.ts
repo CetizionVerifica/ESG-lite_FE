@@ -14,6 +14,8 @@ type Row = {
   total_emission: string;
   category: { category_id: number; category_name: string; scope: string | null };
   review_comment?: string;
+  // Defaults to "litre"; null for an entry stored without a unit.
+  activity_data_unit?: string | null;
 };
 
 const company = { company_id: 1, name: "Midal Cables" };
@@ -73,16 +75,18 @@ async function signIn(page: Page) {
       if (path.includes("/user/units/")) return json([{ unit_id: 1, unit_name: "litre" }, { unit_id: 2, unit_name: "m3" }]);
       if (path.endsWith("/user/emissions/batches")) {
         const own = { upload_batch_id: "b-1", count: 40, pending_count: 30, approved_count: 10, rejected_count: 0, uploaded_at: "2025-10-03T09:00:00Z", site_id: 1, site_name: "Hidd", category_id: 10, category_name: "Diesel", uploaded_by: "Omar Contributor" };
+        const claude = { ...own, upload_batch_id: "b-2", channel: "mcp", count: 12, pending_count: 12, approved_count: 0, uploaded_at: "2025-10-04T09:00:00Z", category_id: 20, category_name: "Electricity", uploaded_by: "Sam Staff" };
         // Like the real endpoint, no site filter means every company's batches.
         const foreign = { ...own, upload_batch_id: "b-9", site_id: 99, site_name: "Other company site" };
-        return json(url.searchParams.get("siteIds") === "1" ? [own] : [own, foreign]);
+        return json(url.searchParams.get("siteIds") === "1" ? [own, claude] : [own, claude, foreign]);
       }
       if (/\/user\/emissions\/batch\/[^/]+\/(approve|reject)$/.test(path)) return json({ message: "ok" });
 
       const edit = /\/user\/emissions\/manager-edit\/(\d+)$/.exec(path);
       if (edit) {
         const row = rows.find((r) => r.pk_id === Number(edit[1]))!;
-        row.activity_data = (request.postDataJSON() as { activity_data: Record<string, unknown> }).activity_data;
+        const body = request.postDataJSON() as { activity_data?: Record<string, unknown> };
+        if (body.activity_data) row.activity_data = body.activity_data;
         return json({ emission: row });
       }
 
@@ -106,7 +110,7 @@ async function signIn(page: Page) {
           .map((r) => ({
             ...r,
             unit: "tCO2e",
-            activity_data_unit: "litre",
+            activity_data_unit: r.activity_data_unit === undefined ? "litre" : r.activity_data_unit,
             date_of_reporting: "2025-09-30",
             created_at: `2025-10-0${r.pk_id}T08:00:00Z`,
             updated_at: "2025-10-01T08:00:00Z",
@@ -201,15 +205,83 @@ test("a manager edits an entry from the drawer with a reason", async ({ page }) 
   await page.getByLabel("Quantity").fill("150");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText(/Say why this changes/)).toBeVisible();
+  await expect(page.getByText("Not saved yet: add a reason for the change (at least 5 characters).")).toBeVisible();
+  await expect(page.getByLabel("Reason for the change")).toBeFocused();
   expect(calls.some((c) => c.path.includes("manager-edit"))).toBe(false);
   await page.getByLabel("Reason for the change").fill("Meter read corrected");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Changes saved")).toBeVisible();
-  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toMatchObject({
-    activity_data: { fuel_type: "1", quantity: "150" },
+  // Only the changed values go: the unchanged unit and date stay off the request.
+  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    activity_data: { fuel_type: "1", quantity: "150", emission_category: "Diesel (average biofuel blend)" },
+    reason: "Meter read corrected",
+  });
+});
+
+test("a date-only fix sends just the date", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Date of reporting").fill("2025-08-31");
+  await page.getByLabel("Reason for the change").fill("Wrong reporting month");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    date_of_reporting: "2025-08-31",
+    reason: "Wrong reporting month",
+  });
+});
+
+test("an amount change on an entry without a unit waits for a unit", async ({ page }) => {
+  const { rows, calls } = await signIn(page);
+  rows[0].activity_data_unit = null;
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Quantity").fill("150");
+  await page.getByLabel("Reason for the change").fill("Meter read corrected");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Not saved yet: choose a unit, without one the total would be 0.")).toBeVisible();
+  await expect(page.getByLabel("Unit")).toBeFocused();
+  expect(calls.some((c) => c.path.includes("manager-edit"))).toBe(false);
+  await page.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    activity_data: { fuel_type: "1", quantity: "150", emission_category: "Diesel (average biofuel blend)" },
     activity_data_unit: "litre",
     reason: "Meter read corrected",
   });
+});
+
+test("a date-only fix on an entry without a unit sends just the date", async ({ page }) => {
+  const { rows, calls } = await signIn(page);
+  rows[0].activity_data_unit = null;
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Date of reporting").fill("2025-08-31");
+  await page.getByLabel("Reason for the change").fill("Wrong reporting month");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    date_of_reporting: "2025-08-31",
+    reason: "Wrong reporting month",
+  });
+});
+
+test("clearing the unit blocks the save", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Unit").selectOption("");
+  await page.getByLabel("Reason for the change").fill("Unit was wrong");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Not saved yet: choose a unit, without one the total would be 0.")).toBeVisible();
+  await expect(page.getByLabel("Unit")).toBeFocused();
+  expect(calls.some((c) => c.path.includes("manager-edit"))).toBe(false);
 });
 
 test("rejecting a batch with approved rows needs an explicit tick", async ({ page }) => {
@@ -220,7 +292,7 @@ test("rejecting a batch with approved rows needs an explicit tick", async ({ pag
   const table = page.getByRole("table", { name: "Upload batches" });
   await expect(table).toContainText("30 pending · 10 approved");
   await expect(table).not.toContainText("Other company site");
-  await table.getByRole("button", { name: "Reject…" }).click();
+  await table.getByRole("row", { name: /Diesel/ }).getByRole("button", { name: "Reject…" }).click();
   const dialog = page.getByRole("alertdialog", { name: "Reject 30 rows?" });
   await dialog.getByLabel("Reason").fill("Wrong month in the sheet");
   await expect(dialog.getByRole("button", { name: "Reject", exact: true })).toBeDisabled();
@@ -229,4 +301,33 @@ test("rejecting a batch with approved rows needs an explicit tick", async ({ pag
   await page.getByRole("alertdialog").getByRole("button", { name: "Reject", exact: true }).click();
   await expect(page.getByText("Batch rejected")).toBeVisible();
   expect(calls).toContainEqual({ method: "PUT", path: "/user/emissions/batch/b-1/reject", body: { comment: "Wrong month in the sheet" } });
+});
+
+test("upload batches show their source and filter by it", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/approvals?view=batches");
+  const table = page.getByRole("table", { name: "Upload batches" });
+  await expect(table.getByRole("row", { name: /Diesel/ })).toContainText("Bulk upload");
+  await expect(table.getByRole("row", { name: /Electricity/ })).toContainText("Claude");
+  await page.getByLabel("Source").selectOption("claude");
+  await expect(page).toHaveURL(/source=claude/);
+  await expect(table.getByRole("row", { name: /Hidd/ })).toHaveCount(1);
+  await expect(table).toContainText("Sam Staff");
+  await page.getByLabel("Source").selectOption("api");
+  await expect(page.getByText("No API batches")).toBeVisible();
+  await page.getByRole("button", { name: "All sources" }).click();
+  await expect(table.getByRole("row", { name: /Hidd/ })).toHaveCount(2);
+});
+
+test("an upload notification's link lands on its batch, and a missing batch says so", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/approvals?view=batches&batch=b-1");
+  const table = page.getByRole("table", { name: "Upload batches" });
+  const row = table.getByRole("row", { name: /Diesel/ });
+  await expect(row).toHaveAttribute("aria-current", "true");
+  await expect(row).toBeFocused();
+
+  await page.goto("/data/approvals?view=batches&batch=b-gone");
+  await expect(page.getByRole("status").filter({ hasText: "That upload batch isn't in this list" })).toBeVisible();
+  await expect(table.getByRole("row", { name: /Diesel/ })).not.toHaveAttribute("aria-current", "true");
 });

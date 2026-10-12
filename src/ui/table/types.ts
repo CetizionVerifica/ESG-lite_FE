@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { TermKey } from "../glossary";
 
 export type SortDir = "asc" | "desc";
 export type SortState = { id: string; dir: SortDir } | null;
@@ -20,6 +21,10 @@ export type Column<T> = {
   /** False keeps the column out of the column picker (always shown). */
   hideable?: boolean;
   defaultHidden?: boolean;
+  /** Lets the cell wrap onto more lines. Cells stay on one line by default so rows keep one height. */
+  wrap?: boolean;
   /** CSS width, e.g. "8rem". */
   width?: string;
+  /** Glossary id explained by an info icon in the header. Defaults to a term matching `header`; false hides it. */
+  info?: TermKey | false;
 };

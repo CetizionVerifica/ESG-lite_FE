@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { EmissionData } from "../../services/emissionService";
 import {
+  BATCH_SOURCE_OPTIONS,
+  batchSource,
+  parseBatchSource,
   type ColumnConfig,
   activityFields,
   activitySummary,
@@ -44,7 +47,7 @@ const fuelConfig: ColumnConfig = {
 };
 
 describe("listParams", () => {
-  const base = { siteIds: [1, 2], categoryId: null, period: null, search: "", status: null, sort: null, page: 0, pageSize: 50 };
+  const base = { siteIds: [1, 2], categoryIds: [] as number[], period: null, search: "", status: null, sort: null, page: 0, pageSize: 50 };
 
   it("always asks for pending on the approvals tab, oldest first is passed through", () => {
     const p = listParams({ ...base, tab: "approvals", status: "approved", sort: { id: "submitted", dir: "asc" } });
@@ -83,6 +86,12 @@ describe("mergeFera", () => {
 
   it("keeps FERA rows when looking at the FERA category", () => {
     expect(mergeFera([parent, fera], true).rows).toHaveLength(2);
+  });
+
+  it("shows a FERA entry once when FERA and its parent's category are both chosen", () => {
+    const m = mergeFera([parent, fera, other], true);
+    expect(m.rows.map((r) => r.pk_id)).toEqual([1, 2, 3]);
+    expect(m.feraOf.size).toBe(0);
   });
 
   it("keeps a FERA row whose parent isn't in the list when the parent isn't pending", () => {
@@ -188,5 +197,21 @@ describe("reportOptions", () => {
   it("offers the year for a calendar year and nothing for any period", () => {
     expect(reportOptions({ kind: "cy", year: 2024 })).toEqual([{ kind: "year", label: "Calendar year 2024", year: 2024, yearType: "CY" }]);
     expect(reportOptions(null)).toEqual([]);
+  });
+});
+
+describe("batch source chip", () => {
+  it("maps the contract channels, with Bulk upload for batches that predate channels", () => {
+    expect(batchSource("mcp")).toBe("claude");
+    expect(batchSource("bulk_upload")).toBe("bulk");
+    expect(batchSource("api")).toBe("api");
+    expect(batchSource(undefined)).toBe("bulk");
+    expect(batchSource(null)).toBe("bulk");
+  });
+  it("offers Claude, Bulk upload and API and reads ?source=", () => {
+    expect(BATCH_SOURCE_OPTIONS.map((o) => o.label)).toEqual(["Claude", "Bulk upload", "API"]);
+    expect(parseBatchSource("claude")).toBe("claude");
+    expect(parseBatchSource("everything")).toBeNull();
+    expect(parseBatchSource(null)).toBeNull();
   });
 });

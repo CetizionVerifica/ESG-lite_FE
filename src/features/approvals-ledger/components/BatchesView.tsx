@@ -1,8 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Inbox } from "lucide-react";
 import type { EmissionUploadBatch } from "../../../services/emissionService";
-import { Button, type Column, DataTable, EmptyState, Modal, Textarea, formatDateTime, formatNumber, rejectReasonError, useToast } from "../../../ui";
+import { Badge, type BadgeTone, Button, type Column, DataTable, EmptyState, Modal, Select, Textarea, formatDateTime, formatNumber, rejectReasonError, useToast, withoutParams } from "../../../ui";
 import { errorMessage, useBatchMutations, useBatches } from "../api";
+import { BATCH_SOURCE_LABEL, BATCH_SOURCE_OPTIONS, type BatchSource, batchSource, parseBatchSource } from "../logic";
+
+const SOURCE_TONE: Record<BatchSource, BadgeTone> = { claude: "brand", bulk: "neutral", api: "info" };
+
+/** Where the batch came from: Claude (MCP), the Bulk upload page or the API. */
+export function SourceChip({ source }: { source: BatchSource }) {
+  return <Badge tone={SOURCE_TONE[source]}>{BATCH_SOURCE_LABEL[source]}</Badge>;
+}
 
 /** Pending / approved / rejected split of one batch, with the numbers in text. */
 function SplitBar({ batch }: { batch: EmissionUploadBatch }) {
@@ -27,15 +36,33 @@ function SplitBar({ batch }: { batch: EmissionUploadBatch }) {
   );
 }
 
-/** Upload batches tab: approve or reject a bulk upload's pending rows in one go. */
-export function BatchesView({ siteIds, categoryId }: { siteIds: number[]; categoryId: number | null }) {
-  const batches = useBatches(siteIds, categoryId);
+/**
+ * Upload batches tab: approve or reject a bulk upload's pending rows in one go.
+ * `?batch=<id>` (the link in an upload notification) lands on that batch's row.
+ */
+export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categoryIds: number[] }) {
+  const batches = useBatches(siteIds, categoryIds);
+  const [params, setParams] = useSearchParams();
+  const source = parseBatchSource(params.get("source"));
+  const rows = useMemo(() => (batches.data ?? []).filter((b) => !source || batchSource(b.channel) === source), [batches.data, source]);
+  const batchId = params.get("batch") || null;
+  const batchMissing = batchId !== null && batches.isSuccess && !rows.some((b) => b.upload_batch_id === batchId);
+  const setSource = (next: BatchSource | null) =>
+    setParams(
+      (p) => {
+        const out = withoutParams(p, ["source"]);
+        if (next) out.set("source", next);
+        return out;
+      },
+      { replace: true },
+    );
   const m = useBatchMutations();
   const { toast } = useToast();
   const [approving, setApproving] = useState<EmissionUploadBatch | null>(null);
   const [rejecting, setRejecting] = useState<EmissionUploadBatch | null>(null);
 
   const columns: Column<EmissionUploadBatch>[] = [
+    { id: "source", header: "Source", value: (b) => BATCH_SOURCE_LABEL[batchSource(b.channel)], sortable: true, cell: (b) => <SourceChip source={batchSource(b.channel)} /> },
     { id: "category", header: "Category", value: (b) => b.category_name, sortable: true },
     { id: "site", header: "Site", value: (b) => b.site_name, sortable: true },
     { id: "rows", header: "Rows", numeric: true, value: (b) => b.count, sortable: true },
@@ -73,16 +100,33 @@ export function BatchesView({ siteIds, categoryId }: { siteIds: number[]; catego
 
   return (
     <>
+      <div className="flex flex-wrap items-end gap-3">
+        <Select<BatchSource> label="Source" value={source} onChange={setSource} options={BATCH_SOURCE_OPTIONS} placeholder="All sources" className="w-44" />
+      </div>
       <DataTable<EmissionUploadBatch>
         label="Upload batches"
-        rows={batches.data ?? []}
+        rows={rows}
         columns={columns}
         getRowId={(b) => b.upload_batch_id}
+        highlightId={batchId ?? undefined}
+        toolbar={
+          batchMissing ? (
+            <p role="status" className="text-sm text-muted">
+              That upload batch isn't in this list. It may belong to a site outside the current filters, or it has already been handled.
+            </p>
+          ) : undefined
+        }
         rowLabel={(b) => `${b.category_name} batch from ${formatDateTime(b.uploaded_at)}`}
         loading={batches.isPending}
         error={batches.isError ? errorMessage(batches.error, "Couldn't load upload batches.") : null}
         onRetry={() => void batches.refetch()}
-        empty={<EmptyState icon={Inbox} title="No bulk uploads" description="Rows uploaded in bulk for these sites show up here as batches." />}
+        empty={
+          source ? (
+            <EmptyState icon={Inbox} title={`No ${BATCH_SOURCE_LABEL[source]} batches`} description="Try another source, or clear the filter." action={<Button onClick={() => setSource(null)}>All sources</Button>} />
+          ) : (
+            <EmptyState icon={Inbox} title="No bulk uploads" description="Rows uploaded in bulk or imported through Claude show up here as batches." />
+          )
+        }
         defaultSort={{ id: "at", dir: "desc" }}
         storageKey="p07-batches"
         exportName="upload-batches"

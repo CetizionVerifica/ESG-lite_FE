@@ -35,7 +35,7 @@ const ALL: readonly Role[] = ROLES;
 
 export const SHELL_ROUTES = [
   // Contributor (User)
-  { id: "my-month", path: "/my-month", title: "My month", crumb: ["My month"], roles: ["User"], spec: "P02" },
+  { id: "my-month", path: "/my-month", title: "Current Month", crumb: ["Current Month"], roles: ["User"], spec: "P02" },
   { id: "add-data", path: "/data/new", title: "Add data", crumb: ["Add data"], roles: ["User"], spec: "P03" },
   { id: "my-entries", path: "/data/mine", title: "My entries", crumb: ["My entries"], roles: ["User"], spec: "P04" },
   { id: "production", path: "/production", title: "Production", crumb: ["Production"], roles: ["User"], spec: "P05" },
@@ -60,6 +60,8 @@ export const SHELL_ROUTES = [
   // Everyone
   { id: "notifications", path: "/notifications", title: "Notifications", crumb: ["Notifications"], roles: ALL, spec: "P13" },
   { id: "settings", path: "/settings", title: "Settings", crumb: ["Settings"], roles: ALL, spec: "P14" },
+  // Connect Claude consent (MCP import plan IM10); ESG-lite /oauth/authorize lands here.
+  { id: "oauth-consent", path: "/oauth/consent", title: "Connect Claude", crumb: ["Connect Claude"], roles: ALL, spec: "IM10" },
 
   // Company admin
   { id: "company-users", path: "/users", title: "Users", crumb: ["Users"], roles: ["Admin"], spec: "P15", roleRedirect: { Superadmin: "/setup/users" } },

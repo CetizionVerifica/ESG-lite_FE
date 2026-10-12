@@ -83,6 +83,16 @@ export interface PeriodTotalParams {
   // meaning for the period currently being entered.
   basis?: "approved" | "entered";
 }
+/** One category id, several (sent as `categoryIds=1,2`), or none. */
+export type CategoryFilter = number | number[] | null | undefined;
+
+/** Query params for a category filter; one id keeps the older `categoryId` form. */
+export function categoryParams(c: CategoryFilter): { categoryId?: number; categoryIds?: string } {
+  const ids = (Array.isArray(c) ? c : c != null ? [c] : []).filter((n) => Number.isInteger(n) && n > 0);
+  if (ids.length === 0) return {};
+  return ids.length === 1 ? { categoryId: ids[0] } : { categoryIds: [...new Set(ids)].sort((a, b) => a - b).join(",") };
+}
+
 export const getEmissionsBySite = async (siteId: string | number) => {
   const response = await api.get("/user/emissions", {
     params: { siteId },
@@ -93,7 +103,7 @@ export const getEmissionsBySite = async (siteId: string | number) => {
 export const getEmissionsPaginated = async (params: {
   siteId?: number;
   siteIds?: number[];
-  categoryId?: number | null;
+  categoryId?: CategoryFilter;
   scope?: string | null;
   year?: number | null;
   month?: number | null;
@@ -116,7 +126,7 @@ export const getEmissionsPaginated = async (params: {
   } else if (params.siteId != null) {
     query.siteId = params.siteId;
   }
-  if (params.categoryId != null) query.categoryId = params.categoryId;
+  Object.assign(query, categoryParams(params.categoryId));
   if (params.scope) query.scope = params.scope;
   if (params.year != null) query.year = params.year;
   if (params.month != null) query.month = params.month;
@@ -267,8 +277,13 @@ export const deleteEmissionsByBatch = async (batchId: string) => {
   return response.data;
 };
 
+/** How a batch's rows came in (MCP import plan, 01-contracts §3): the Claude connector, the Bulk upload page, or the API. */
+export type BatchChannel = "mcp" | "bulk_upload" | "api";
+
 export interface EmissionUploadBatch {
   upload_batch_id: string;
+  /** Absent on batches older than the import plans table (historical ones included); read as "bulk_upload". */
+  channel?: BatchChannel | null;
   count: number;
   pending_count: number;
   approved_count: number;
@@ -284,7 +299,7 @@ export interface EmissionUploadBatch {
 // Get all upload batches for emissions
 export const getEmissionBatches = async (
   site?: number | number[] | null,
-  categoryId?: number | null,
+  categoryId?: CategoryFilter,
 ): Promise<EmissionUploadBatch[]> => {
   const params: Record<string, number | string> = {};
   if (Array.isArray(site)) {
@@ -292,7 +307,7 @@ export const getEmissionBatches = async (
   } else if (site != null) {
     params.siteId = site;
   }
-  if (categoryId != null) params.categoryId = categoryId;
+  Object.assign(params, categoryParams(categoryId));
   const response = await api.get("/user/emissions/batches", { params });
   return response.data;
 };
@@ -331,7 +346,7 @@ export const exportMonthlyEmissions = async (params: {
   siteIds: number[];
   year: number;
   month: number;
-  categoryId?: number;
+  categoryId?: CategoryFilter;
   status?: string;
 }) => {
   const query: Record<string, string | number> = {
@@ -339,7 +354,7 @@ export const exportMonthlyEmissions = async (params: {
     year: params.year,
     month: params.month,
   };
-  if (params.categoryId != null) query.categoryId = params.categoryId;
+  Object.assign(query, categoryParams(params.categoryId));
   if (params.status) query.status = params.status;
 
   const response = await api.get("/user/emissions/export", {
@@ -369,7 +384,7 @@ export const exportYearEmissions = async (params: {
   siteIds: number[];
   year: number;
   yearType: "CY" | "FY";
-  categoryId?: number;
+  categoryId?: CategoryFilter;
   status?: string;
 }): Promise<{ truncated: boolean }> => {
   const query: Record<string, string | number> = {
@@ -377,7 +392,7 @@ export const exportYearEmissions = async (params: {
     year: params.year,
     yearType: params.yearType,
   };
-  if (params.categoryId != null) query.categoryId = params.categoryId;
+  Object.assign(query, categoryParams(params.categoryId));
   if (params.status) query.status = params.status;
 
   const response = await api.get("/user/emissions/export", { params: query, responseType: "blob" });

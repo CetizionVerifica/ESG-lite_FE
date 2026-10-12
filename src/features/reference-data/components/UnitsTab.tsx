@@ -53,8 +53,8 @@ export function UnitsTab({ nav, panel }: TabShell) {
 
   const all = useMemo(() => unitRows(units.data ?? [], sites.data, categories.data), [units.data, sites.data, categories.data]);
   const rows = useMemo(
-    () => all.filter((r) => matchesUnit(r, { q: filters.q, siteIds: ctx.siteIds, categoryId: ctx.categoryId })),
-    [all, filters.q, ctx.siteIds, ctx.categoryId],
+    () => all.filter((r) => matchesUnit(r, { q: filters.q, siteIds: ctx.siteIds, categoryIds: ctx.categoryIds })),
+    [all, filters.q, ctx.siteIds, ctx.categoryIds],
   );
 
   const creating = openParam === "new";
@@ -109,17 +109,17 @@ export function UnitsTab({ nav, panel }: TabShell) {
   const countsKnown = all.some((r) => r.entries !== null);
   const columns: Column<UnitRow>[] = [
     { id: "unit", header: "Unit", hideable: false, sortable: true, value: (r) => r.unit_name, cell: (r) => <span className="font-medium text-ink">{r.unit_name}</span> },
-    { id: "description", header: "Description", value: (r) => r.description ?? "", cell: (r) => (r.description ? <span className="text-muted">{r.description}</span> : dash) },
+    { id: "description", header: "Description", value: (r) => r.description ?? "", cell: (r) => (r.description ? <span title={r.description} className="block max-w-[24rem] truncate text-muted">{r.description}</span> : dash) },
     { id: "site", header: "Site", sortable: true, value: (r) => r.siteName },
     { id: "category", header: "Category", sortable: true, value: (r) => r.categoryName },
     { id: "entries", header: "Used by entries", numeric: true, sortable: true, width: "9rem", value: (r) => r.entries, cell: countsKnown ? undefined : () => dash },
     openColumn((r) => r.unit_name, (r) => open(String(r.unit_id))),
   ];
 
-  const filtered = !!filters.q.trim() || ctx.siteIds.length > 0 || !!ctx.categoryId;
+  const filtered = !!filters.q.trim() || ctx.siteIds.length > 0 || ctx.categoryIds.length > 0;
   const clear = () => {
     setFilters(EMPTY_FILTERS);
-    setCtx({ siteIds: [], categoryId: null });
+    setCtx({ siteIds: [], categoryIds: [] });
   };
   const empty =
     all.length === 0 && !filtered ? (
@@ -137,7 +137,7 @@ export function UnitsTab({ nav, panel }: TabShell) {
       nav={
         <>
           {nav}
-          <ContextChips chips={["site", "category"]} sites={siteOptions} categories={categoryOptions} loading={sites.isPending} />
+          <ContextChips chips={["site", "category"]} sites={siteOptions} categories={categoryOptions} multiCategory loading={sites.isPending} />
         </>
       }
       panel={panel}

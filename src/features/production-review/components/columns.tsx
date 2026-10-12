@@ -54,6 +54,7 @@ export function productionColumns({
     {
       id: "status",
       header: "Status",
+      info: "status",
       sortable: true,
       value: (r) => statusOf(r),
       cell: (r) => <StatusPill status={statusOf(r)} size="sm" />,

@@ -151,9 +151,9 @@ describe("units", () => {
 
   it("filters by sites, category and text", () => {
     const rows = unitRows(units, SITES);
-    expect(rows.filter((r) => matchesUnit(r, { q: "", siteIds: [2], categoryId: null })).map((r) => r.unit_id)).toEqual([2]);
-    expect(rows.filter((r) => matchesUnit(r, { q: "", siteIds: [], categoryId: 10 })).map((r) => r.unit_id)).toEqual([1]);
-    expect(rows.filter((r) => matchesUnit(r, { q: "diesel", siteIds: [], categoryId: null })).map((r) => r.unit_id)).toEqual([1]);
+    expect(rows.filter((r) => matchesUnit(r, { q: "", siteIds: [2], categoryIds: [] })).map((r) => r.unit_id)).toEqual([2]);
+    expect(rows.filter((r) => matchesUnit(r, { q: "", siteIds: [], categoryIds: [10] })).map((r) => r.unit_id)).toEqual([1]);
+    expect(rows.filter((r) => matchesUnit(r, { q: "diesel", siteIds: [], categoryIds: [] })).map((r) => r.unit_id)).toEqual([1]);
   });
 
   it("requires a site, one of its categories and a unique name", () => {

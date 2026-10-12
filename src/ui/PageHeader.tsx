@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Button } from "./Button";
 import { Skeleton } from "./Skeleton";
 import { cn } from "./cn";
+import { AutoInfoTip } from "./InfoTerm";
 
 export type HeaderAction = {
   label: string;
@@ -33,7 +34,10 @@ export function PageHeader({ title, description, context, primaryAction, seconda
           {loading ? (
             <Skeleton className="h-7 w-56" />
           ) : (
-            <h1 className="text-xl font-semibold text-ink sm:text-2xl">{title}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-ink sm:text-2xl">{title}</h1>
+              <AutoInfoTip label={title} side="bottom" />
+            </div>
           )}
           {description && !loading && <p className="mt-1 text-sm text-muted">{description}</p>}
         </div>

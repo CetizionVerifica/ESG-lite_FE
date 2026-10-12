@@ -4,6 +4,7 @@ import { EmptyState } from "./EmptyState";
 import { SkeletonKpi } from "./Skeleton";
 import { cn } from "./cn";
 import { focusRing } from "./styles";
+import { AutoInfoTip } from "./InfoTerm";
 import { EMPTY_VALUE, emissionsParts, formatDelta, formatNumber, formatPercent, type Delta } from "./format";
 
 export type KpiFormat = "emissions" | "number" | "percent";
@@ -88,7 +89,11 @@ export function KpiStrip({ items, loading, error, onRetry, className }: KpiStrip
                 className={cn("absolute inset-0 rounded-card hover:bg-tint/60", focusRing)}
               />
             )}
-            <dt className="relative truncate text-xs font-medium text-muted">{k.label}</dt>
+            <dt className="relative flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted">
+              <span className="truncate">{k.label}</span>
+              {/* Above the full-cell toggle and clickable even though the dt ignores pointer events. */}
+              <AutoInfoTip label={k.label} className="pointer-events-auto" />
+            </dt>
             <dd className="relative mt-1">
               <span className={cn("font-num font-semibold tabular-nums text-ink", k.primary ? "text-3xl" : "text-2xl")}>{value}</span>
               {unit && value !== EMPTY_VALUE && <span className="ml-1 text-xs text-muted">{unit}</span>}

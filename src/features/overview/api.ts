@@ -8,21 +8,21 @@ import { type Intensity, combinedIntensity, siteIntensity } from "./logic";
 
 export const keys = {
   all: ["overview"] as const,
-  overview: (period: string, siteIds: number[], categoryId: number | null) => [...keys.all, "b4", period, siteIds, categoryId] as const,
+  overview: (period: string, siteIds: number[], categoryIds: number[]) => [...keys.all, "b4", period, siteIds, categoryIds] as const,
   submission: (month: string) => [...keys.all, "submission", month] as const,
   intensity: (siteIds: number[], from: string, to: string) => [...keys.all, "intensity", siteIds, from, to] as const,
   pending: (siteIds: number[]) => [...keys.all, "pending", siteIds] as const,
   production: (siteIds: number[]) => [...keys.all, "production-pending", siteIds] as const,
   threshold: (companyId: number) => ["threshold", companyId] as const,
   siteIntensity: (siteId: number, from: string, to: string) => [...keys.all, "site-intensity", siteId, from, to] as const,
-  scope2: (siteIds: number[], categoryId: number | null, year: number) => [...keys.all, "scope2", siteIds, categoryId, year] as const,
+  scope2: (siteIds: number[], categoryIds: number[], year: number) => [...keys.all, "scope2", siteIds, categoryIds, year] as const,
 };
 
 /** B4 for one period (backend form) and site/category context. */
-export function useOverview(period: string | null, siteIds: number[], categoryId: number | null) {
+export function useOverview(period: string | null, siteIds: number[], categoryIds: number[]) {
   return useQuery<OverviewResponse>({
-    queryKey: keys.overview(period ?? "", siteIds, categoryId),
-    queryFn: () => getManagerOverview({ period: period ?? undefined, siteIds, categoryId }),
+    queryKey: keys.overview(period ?? "", siteIds, categoryIds),
+    queryFn: () => getManagerOverview({ period: period ?? undefined, siteIds, categoryId: categoryIds }),
     enabled: period !== null && siteIds.length > 0,
     placeholderData: keepPreviousData,
   });
@@ -122,12 +122,12 @@ export function useSiteIntensityMonthly(siteIds: number[], from: string, to: str
 }
 
 /** Approved Scope 2 entries for the given calendar years (activity amounts aren't in B4). */
-export function useScope2Entries(siteIds: number[], categoryId: number | null, years: number[]) {
+export function useScope2Entries(siteIds: number[], categoryIds: number[], years: number[]) {
   return useQueries({
     queries: years.map((year) => ({
-      queryKey: keys.scope2(siteIds, categoryId, year),
+      queryKey: keys.scope2(siteIds, categoryIds, year),
       queryFn: async () => {
-        const res = await getEmissionsPaginated({ siteIds, categoryId, scope: "Scope 2", status: "approved", year, page: 1, limit: SCOPE2_CAP });
+        const res = await getEmissionsPaginated({ siteIds, categoryId: categoryIds, scope: "Scope 2", status: "approved", year, page: 1, limit: SCOPE2_CAP });
         return { rows: res.data, truncated: (res.total ?? 0) > res.data.length };
       },
     })),
@@ -138,11 +138,11 @@ export function useScope2Entries(siteIds: number[], categoryId: number | null, y
 export const SCOPE2_CAP = 5000;
 
 /** B4 for whole calendar years: their 12-month trend feeds the year-over-year lines. */
-export function useYearTrends(years: number[], siteIds: number[], categoryId: number | null) {
+export function useYearTrends(years: number[], siteIds: number[], categoryIds: number[]) {
   return useQueries({
     queries: years.map((year) => ({
-      queryKey: keys.overview(String(year), siteIds, categoryId),
-      queryFn: () => getManagerOverview({ period: String(year), siteIds, categoryId }),
+      queryKey: keys.overview(String(year), siteIds, categoryIds),
+      queryFn: () => getManagerOverview({ period: String(year), siteIds, categoryId: categoryIds }),
     })),
     combine,
   });

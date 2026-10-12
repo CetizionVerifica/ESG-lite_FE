@@ -27,7 +27,7 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | `PageHeader` | `PageHeader.tsx` | `title`, `description`, `context`, `primaryAction`, `secondaryActions[]`, `loading` (no breadcrumb) |
 | `ContextChips` | `ContextChips.tsx` | Period (Month / Quarter / CY / FY / custom, with ‹ › stepping), Site (multi), Category, Scope; synced to `?period=&site=&category=&scope=` |
 | `useContextParams` | `hooks/useContextParams.ts` | read/write the same URL context in a page: `const [ctx, update] = useContextParams(defaults)` |
-| `DataTable` | `table/` | column defs, sort (client or `onSortChange` for server), sticky header, selection + bulk bar, column picker + density (persisted with `storageKey`), client or server pagination, `onRowClick` (Enter too) → open a `Drawer`, numeric columns right-aligned mono, CSV/XLSX export (formula-safe CSV) |
+| `DataTable` | `table/` | column defs, sort (client or `onSortChange` for server), sticky header, selection + bulk bar, column picker + density (persisted with `storageKey`), client or server pagination, `onRowClick` (Enter too) → open a `Drawer`, `highlightId` lands on a deep-linked row (its page, focus, `aria-current`), numeric columns right-aligned mono, CSV/XLSX export (formula-safe CSV) |
 | `FilterBar` | `FilterBar.tsx`, `filterLogic.ts` | search (debounced) + filter chips (multi or single choice), Clear all, saved views in this browser (`storageKey`); keep the value in the URL with `useFilterParams(["status", "site"])` (`?q=&status=pending,approved`) |
 | `KpiStrip` | `KpiStrip.tsx` | 3–5 figures in one panel; `primary` is wider; `onSelect` + `selected` make a figure a filter toggle; `format: "emissions"` picks t/kg; delta ▲▼ with fixed good/bad colour; loading/error |
 | `ScopeBar` | `ScopeBar.tsx` | stacked Scope 1/2/3 bar + legend from `--t-s1/2/3` only; loading/empty |
@@ -36,7 +36,8 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | `Toast` | `Toast.tsx`, `toastStore.ts` | `ToastProvider` is mounted in `main.tsx`; `const { toast } = useToast(); toast({ title, tone, action: { label: "Undo", onClick } })` |
 | `Tabs`, `TabPanel` | `Tabs.tsx` | ARIA tabs, arrow keys/Home/End, counts |
 | `SegmentedControl` | `SegmentedControl.tsx` | radiogroup with roving focus |
-| `Tooltip` | `Tooltip.tsx` | hover + focus, Esc hides; short hints only |
+| `Tooltip` | `Tooltip.tsx` | hover + focus (+ tap with `toggleOnClick`), Esc hides; portal, stays in the viewport; short hints only |
+| `InfoTip`, `InfoTerm`, `GLOSSARY` | `InfoTerm.tsx`, `glossary.ts` | `<InfoTip id="scope1" />`; ids are shared with the i18n termbase. Highlighted info icon with a plain-language definition. KpiStrip labels, DataTable headers (or `info:` on a column), ChartFrame title/unit, Field labels, ScopeBar and PageHeader titles that match a glossary term get it automatically; add new terms to `glossary.ts` and their Arabic/Spanish text to `glossaryTranslations.ts` (tsc enforces it). The info-icon language (English/العربية/Español, account menu, `esglite.infoLanguage`) changes only these definitions; it is hidden and everything stays English unless `VITE_INFO_LANGUAGE=1` (ar/es await a native-speaker check) |
 | `Menu` | `Menu.tsx` | action menu: arrows, Enter, Esc returns focus; `danger`, radio (`checked`) and `current` items, separators and headings |
 | `Avatar`, `Badge` | `Avatar.tsx`, `Badge.tsx` | initials fallback; neutral/brand/info/good/warn/bad badges |
 | `Stepper` | `Stepper.tsx` | steps, `current`, `completed`, `canJump` rule (default: done steps + the next open one); "Step 2 of 3" on phones |

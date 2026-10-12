@@ -98,4 +98,32 @@ describe("ContextChips", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  it("picks several categories when multiCategory is on", async () => {
+    const user = userEvent.setup();
+    const categories = [
+      { value: 10, label: "Electricity" },
+      { value: 11, label: "Fuel" },
+      { value: 12, label: "Refrigerants" },
+    ];
+    render(
+      <MemoryRouter initialEntries={["/x?category=11"]}>
+        <ContextChips chips={["category"]} categories={categories} multiCategory />
+        <Search />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("button", { name: /Category: Fuel/ })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Category:/ }));
+    await user.click(screen.getByRole("checkbox", { name: "Refrigerants" }));
+    await user.click(screen.getByRole("checkbox", { name: "Electricity" }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(search()).toBe("?category=10,11,12");
+    expect(screen.getByRole("button", { name: /Category: 3 categories/ })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /Category:/ }));
+    await user.click(screen.getByRole("button", { name: "All categories" }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(search()).toBe("?category=all");
+    expect(screen.getByRole("button", { name: /Category: All categories/ })).toBeTruthy();
+  });
 });

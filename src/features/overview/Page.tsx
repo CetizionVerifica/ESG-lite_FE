@@ -20,6 +20,7 @@ import {
   periodRange,
   shiftPeriod,
   useContextParams,
+  useDropStaleCategories,
 } from "../../ui";
 import { useIntensity, useOverview, usePendingEntries, usePendingProduction, useSubmission, useThreshold } from "./api";
 import { AttentionList } from "./components/AttentionList";
@@ -71,11 +72,11 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
   const fyStartMonth = useFyStartMonth();
   const range = periodRange(period, fyStartMonth);
 
-  const overview = useOverview(toOverviewPeriod(period), scopeSites, ctx.categoryId);
+  const overview = useOverview(toOverviewPeriod(period), scopeSites, ctx.categoryIds);
   // Threshold alerts compare a month or quarter with the one before.
   const comparable = period.kind === "month" || period.kind === "quarter";
   const previousPeriod = shiftPeriod(period, -1);
-  const previous = useOverview(comparable ? toOverviewPeriod(previousPeriod) : null, scopeSites, ctx.categoryId);
+  const previous = useOverview(comparable ? toOverviewPeriod(previousPeriod) : null, scopeSites, ctx.categoryIds);
   const intensity = useIntensity(scopeSites, range.from, range.to);
   const feraIds = useMemo(() => feraCategoryIds(sites.filter((s) => scopeSites.includes(s.site_id))), [sites, scopeSites]);
   const pendingEntries = usePendingEntries(scopeSites, feraIds);
@@ -94,6 +95,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
     for (const s of sites) if (!ctx.siteIds.length || ctx.siteIds.includes(s.site_id)) s.categories?.forEach((c) => map.set(c.category_id, c.category_name));
     return [...map].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sites, ctx.siteIds]);
+  useDropStaleCategories(categories, categories.length > 0);
 
   const title = periodLabel(period, fyStartMonth);
   const chips = (
@@ -101,6 +103,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
       chips={["site", "category", "period"]}
       sites={sites.map((s) => ({ value: s.site_id, label: s.name }))}
       categories={categories}
+      multiCategory
       periodKinds={PERIOD_KINDS}
       fyStartMonth={fyStartMonth}
       defaults={{ period: fallback }}
@@ -117,10 +120,10 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
 
   const links = {
     approvals: listLink("/data/approvals", { siteIds: ctx.siteIds }),
-    approvalsInPeriod: listLink("/data/approvals", { siteIds: ctx.siteIds, categoryId: ctx.categoryId, period }),
-    approved: listLink("/data/ledger", { siteIds: ctx.siteIds, categoryId: ctx.categoryId, period, status: "approved" }),
-    site: (id: number) => listLink("/data/ledger", { siteIds: [id], categoryId: ctx.categoryId, period, status: "approved" }),
-    category: (id: number) => listLink("/data/ledger", { siteIds: ctx.siteIds, categoryId: id, period, status: "approved" }),
+    approvalsInPeriod: listLink("/data/approvals", { siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period }),
+    approved: listLink("/data/ledger", { siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period, status: "approved" }),
+    site: (id: number) => listLink("/data/ledger", { siteIds: [id], categoryIds: ctx.categoryIds, period, status: "approved" }),
+    category: (id: number) => listLink("/data/ledger", { siteIds: ctx.siteIds, categoryIds: [id], period, status: "approved" }),
     production: listLink("/data/production", { siteIds: ctx.siteIds, status: "pending" }),
   };
 
@@ -271,7 +274,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
         </div>
       </div>
 
-      <LowerTabs overview={data} siteIds={scopeSites} categoryId={ctx.categoryId} now={now} />
+      <LowerTabs overview={data} siteIds={scopeSites} categoryIds={ctx.categoryIds} now={now} />
     </div>
   );
 }

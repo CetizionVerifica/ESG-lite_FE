@@ -1,5 +1,5 @@
 /** Pure helpers for P07 Approvals and Emissions ledger. No React, no requests. */
-import type { EmissionData, EmissionStatus } from "../../services/emissionService";
+import type { BatchChannel, EmissionData, EmissionStatus } from "../../services/emissionService";
 import { fyEndYear, fyStartYearOf } from "../../lib/fiscalYear";
 import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatReportingYear } from "../../ui";
 
@@ -75,7 +75,7 @@ export function periodQuery(period: Period | null): { year: number | null; month
 export type ListInput = {
   tab: Tab;
   siteIds: number[];
-  categoryId: number | null;
+  categoryIds: number[];
   period: Period | null;
   search: string;
   /** Ledger status chip; the approvals tab is always pending. */
@@ -89,7 +89,7 @@ export function listParams(input: ListInput) {
   const sortKey = input.sort ? SORT_KEYS[input.sort.id] : undefined;
   return {
     siteIds: input.siteIds,
-    categoryId: input.categoryId,
+    categoryId: input.categoryIds,
     ...periodQuery(input.period),
     status: input.tab === "approvals" ? "pending" : input.status,
     search: input.search.trim() || null,
@@ -111,8 +111,9 @@ export const isFera = (row: EmissionData) => row.category?.category_name?.toLowe
 
 /**
  * FERA (fuel- and energy-related) rows ride on their parent: they are hidden
- * from the list and shown as "+X tCO₂e" on the parent, unless the user is
- * looking at the FERA category itself. A FERA row that waits for review while
+ * from the list and shown as "+X tCO₂e" on the parent, unless the FERA
+ * category is among the chosen ones: then every FERA row is a row of its own
+ * and nothing hangs on its parent, so no entry shows twice. A FERA row that waits for review while
  * its parent doesn't (an edit can send a twin back for review) needs its own
  * decision and stays a row of its own.
  *
@@ -124,6 +125,7 @@ export const isFera = (row: EmissionData) => row.category?.category_name?.toLowe
  */
 export function mergeFera<T extends EmissionData>(rows: T[], showFera: boolean): { rows: T[]; feraOf: Map<number, T> } {
   const feraOf = new Map<number, T>();
+  if (showFera) return { rows, feraOf };
   const folded = new Set<number>();
   for (const row of rows) {
     if (isFera(row)) continue;
@@ -138,7 +140,7 @@ export function mergeFera<T extends EmissionData>(rows: T[], showFera: boolean):
     // undefined: an API without the field; hide as before rather than risk it.
     (r.fera_partner_status === undefined || r.fera_partner_status === "pending");
   return {
-    rows: showFera ? rows : rows.filter((r) => !isFera(r) || (!folded.has(r.pk_id) && !partnerElsewhere(r))),
+    rows: rows.filter((r) => !isFera(r) || (!folded.has(r.pk_id) && !partnerElsewhere(r))),
     feraOf,
   };
 }
@@ -298,4 +300,33 @@ export function reportOptions(period: Period | null, fyStartMonth = DEFAULT_FY_S
     options.push({ kind: "year", label: formatReportingYear(startYear, "FY", fyStartMonth), year: fyEndYear(startYear, fyStartMonth), yearType: "FY" });
   }
   return options;
+}
+
+// ─── Upload batch source (IM10) ─────────────────────────────────────────────
+
+export type BatchSource = "claude" | "bulk" | "api";
+
+/**
+ * Where a batch came from (contract channel → chip). A batch without a
+ * channel, which includes every batch older than the import plans and the
+ * historical imports, is a Bulk upload.
+ */
+export function batchSource(channel: BatchChannel | null | undefined): BatchSource {
+  switch (channel) {
+    case "mcp":
+      return "claude";
+    case "api":
+      return "api";
+    default:
+      return "bulk";
+  }
+}
+
+export const BATCH_SOURCE_LABEL: Record<BatchSource, string> = { claude: "Claude", bulk: "Bulk upload", api: "API" };
+
+export const BATCH_SOURCE_OPTIONS: { value: BatchSource; label: string }[] = (["claude", "bulk", "api"] as BatchSource[]).map((value) => ({ value, label: BATCH_SOURCE_LABEL[value] }));
+
+/** Reads `?source=` for the batches tab; anything unknown means all sources. */
+export function parseBatchSource(value: string | null): BatchSource | null {
+  return value && value in BATCH_SOURCE_LABEL ? (value as BatchSource) : null;
 }

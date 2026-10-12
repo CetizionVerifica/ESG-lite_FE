@@ -5,7 +5,7 @@ const labels = (role: keyof typeof NAV_BY_ROLE) =>
   NAV_BY_ROLE[role].map((i) => (i.kind === "link" ? i.label : `${i.label} ▾ (${i.items.map((c) => c.label).join(", ")})`));
 
 describe("nav labels (final copy from the F2 spec)", () => {
-  it("User", () => expect(labels("User")).toEqual(["My month", "Add data", "My entries", "Production"]));
+  it("User", () => expect(labels("User")).toEqual(["Current Month", "Add data", "My entries", "Production"]));
   it("Manager", () =>
     expect(labels("Manager")).toEqual([
       "Overview",

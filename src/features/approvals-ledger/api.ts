@@ -5,7 +5,7 @@ import { type EmissionDocument, getDocumentsByEmission } from "../../services/do
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { type UnitData, getUserUnitsBySiteAndCategory } from "../../services/unitService";
 import { invalidateEmissionQueries } from "../../lib/emissionQueries";
-import { fetchPendingForApproval } from "../../lib/emissions/pendingCount";
+import { type PendingFilter, fetchPendingForApproval } from "../../lib/emissions/pendingCount";
 import {
   type EmissionUploadBatch,
   approveEmission,
@@ -28,7 +28,7 @@ export const keys = {
   counts: (siteIds: number[]) => [...keys.all, "counts", siteIds] as const,
   documents: (id: number) => [...keys.all, "documents", id] as const,
   factor: (id: number) => [...keys.all, "factor", id] as const,
-  batches: (siteIds: number[], categoryId: number | null) => [...keys.all, "batches", siteIds, categoryId] as const,
+  batches: (siteIds: number[], categoryIds: number[]) => [...keys.all, "batches", siteIds, categoryIds] as const,
   units: (siteId: number, categoryId: number) => ["units", siteId, categoryId] as const,
   factorNames: (siteId: number, categoryId: number, year: number) => [...keys.all, "factor-names", siteId, categoryId, year] as const,
   // Shared with other pages that read the same config.
@@ -53,19 +53,22 @@ export function useEmissionList(params: ReturnType<typeof listParams>) {
 }
 
 /**
- * Pending / approved / rejected counts for the chosen sites, whatever the filters
- * (tab badge). Pending leaves out FERA twins, as the list folds them away.
+ * Pending / approved / rejected counts for the chosen sites, category, period and search
+ * (tab badge), so the badge matches the list. Pending leaves out FERA twins, as
+ * the list folds them away.
  */
-export function useStatusCounts(siteIds: number[], feraIds: number[]) {
+export function useStatusCounts(siteIds: number[], feraIds: number[], filter: PendingFilter = {}) {
   return useQuery({
-    queryKey: [...keys.counts(siteIds), feraIds],
+    queryKey: [...keys.counts(siteIds), feraIds, filter],
     queryFn: async () => {
+      const narrow = Object.fromEntries(Object.entries(filter).filter(([, v]) => v != null));
       const [{ summary }, pending] = await Promise.all([
-        getEmissionsPaginated({ siteIds, page: 1, limit: 1 }),
-        fetchPendingForApproval(siteIds, feraIds),
+        getEmissionsPaginated({ siteIds, ...narrow, page: 1, limit: 1 }),
+        fetchPendingForApproval(siteIds, feraIds, filter),
       ]);
       return { ...summary, pending_count: pending };
     },
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -200,10 +203,10 @@ export function useManagerEdit() {
  * Upload batches for these sites. Always pass the manager's sites when no site
  * is picked: `/user/emissions/batches` doesn't limit itself to the user's sites.
  */
-export function useBatches(siteIds: number[], categoryId: number | null) {
+export function useBatches(siteIds: number[], categoryIds: number[]) {
   return useQuery({
-    queryKey: keys.batches(siteIds, categoryId),
-    queryFn: (): Promise<EmissionUploadBatch[]> => getEmissionBatches(siteIds, categoryId),
+    queryKey: keys.batches(siteIds, categoryIds),
+    queryFn: (): Promise<EmissionUploadBatch[]> => getEmissionBatches(siteIds, categoryIds),
     enabled: siteIds.length > 0,
   });
 }

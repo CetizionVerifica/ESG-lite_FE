@@ -3,7 +3,7 @@ import { Search } from "lucide-react";
 import { APPEARANCES, type ShellUser } from "../account";
 import { type NavItem, isActiveLink, resolveNavTo } from "../nav";
 import type { Appearance } from "../../../theme";
-import { Drawer } from "../../../ui";
+import { Drawer, GLOSSARY_LOCALES, LOCALE_NAMES, infoLanguageEnabled, setGlossaryLocale, useGlossaryLocale } from "../../../ui";
 import { focusRing } from "./styles";
 
 interface MobileNavProps {
@@ -21,6 +21,7 @@ interface MobileNavProps {
 /** < 1024px: the whole nav, with labels and groups spelled out, in a left drawer. */
 export default function MobileNav({ open, onClose, items, clientId, user, appearance, onAppearance, onSearch, onSignOut }: MobileNavProps) {
   const { pathname, search } = useLocation();
+  const infoLocale = useGlossaryLocale();
 
   const renderLink = (label: string, rawTo: string, indent: boolean) => {
     const to = resolveNavTo(rawTo, clientId);
@@ -93,6 +94,28 @@ export default function MobileNav({ open, onClose, items, clientId, user, appear
             </button>
           ))}
         </div>
+        {infoLanguageEnabled() && (
+          <>
+            <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-(--t-muted)" id="drawer-info-language">
+              Info icon language
+            </div>
+            <div role="radiogroup" aria-labelledby="drawer-info-language" className="mt-1.5 grid grid-cols-3 gap-1 rounded-(--r-md) bg-(--t-tint) p-1">
+              {GLOSSARY_LOCALES.map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  role="radio"
+                  lang={l}
+                  aria-checked={infoLocale === l}
+                  onClick={() => setGlossaryLocale(l)}
+                  className={`rounded-(--r-sm) py-1.5 text-xs font-medium ${infoLocale === l ? "bg-(--t-panel) shadow-sm" : "text-(--t-muted)"} ${focusRing}`}
+                >
+                  {LOCALE_NAMES[l]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <button
           type="button"
           onClick={onSignOut}

@@ -166,10 +166,10 @@ export function combinedIntensity(sites: { emissions: number; production: number
 }
 
 /** Query string for a P07 list, keeping only what's set. */
-export function listLink(path: string, q: { siteIds?: number[]; categoryId?: number | null; period?: Period | null; status?: string }): string {
+export function listLink(path: string, q: { siteIds?: number[]; categoryIds?: number[]; period?: Period | null; status?: string }): string {
   const p = new URLSearchParams();
   if (q.siteIds?.length) p.set("site", [...q.siteIds].sort((a, b) => a - b).join(","));
-  if (q.categoryId) p.set("category", String(q.categoryId));
+  if (q.categoryIds?.length) p.set("category", [...q.categoryIds].sort((a, b) => a - b).join(","));
   p.set("period", q.period ? serializePeriod(q.period) : "all");
   if (q.status) p.set("status", q.status);
   return `${path}?${p.toString()}`;

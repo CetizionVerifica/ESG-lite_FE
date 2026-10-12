@@ -17,6 +17,8 @@ export type Company = {
   subscription_id?: string | null;
   isEmailVerified?: boolean | null;
   esgMitraAccess?: boolean | null;
+  /** "Allow Claude imports" (MCP import plan); absent on servers without IM5 = off. */
+  mcp_enabled?: boolean | null;
 };
 export type Site = { site_id: number; name: string; address?: string | null; company?: { company_id: number } | null; country?: { name: string } | null };
 export type AdminUser = {
