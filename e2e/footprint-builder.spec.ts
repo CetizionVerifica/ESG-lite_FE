@@ -232,6 +232,13 @@ test("adds a material and its transport leg; the total follows both", async ({ p
   await page.goto("/products/5/footprints/13/edit?step=materials");
   await expect(page.getByRole("heading", { name: "Materials (A1)" })).toBeVisible();
 
+  // C06: the line's details link to "Ask supplier" for a saved input.
+  await page.getByLabel("More fields, row 1").click();
+  const details = page.getByRole("dialog", { name: "Aluminium ingot" });
+  await expect(details.getByRole("link", { name: "Ask the supplier" })).toHaveAttribute("href", "/products/suppliers?new=1&study=13&input=70");
+  await page.keyboard.press("Escape");
+  await expect(details).toBeHidden();
+
   await page.getByRole("button", { name: "Add material" }).first().click();
   await page.getByLabel("Name, row 2").fill("Magnesium");
   await page.getByLabel("Quantity, row 2").fill("5");

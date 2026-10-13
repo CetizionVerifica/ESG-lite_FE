@@ -434,7 +434,7 @@ function Builder({ study, header }: { study: Study; header: React.ReactNode }) {
         />
       </div>
 
-      <LineDrawer line={lines.find((l) => l.key === detailKey) ?? null} factors={materialPicker} onChange={changeLine} onClose={() => setDetailKey(null)} />
+      <LineDrawer line={lines.find((l) => l.key === detailKey) ?? null} factors={materialPicker} studyId={study.pcf_study_id} onChange={changeLine} onClose={() => setDetailKey(null)} />
       <BomImportDrawer
         open={bomOpen}
         studyId={study.pcf_study_id}

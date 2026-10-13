@@ -25,3 +25,8 @@
 - A different boundary is shown as a warning badge on the answer and blocks Accept until the manager ticks "Accept it anyway"; the backend refuses it otherwise (409 `boundary_mismatch`). AI chips show value, confidence and the reason on hover; under 60% they use the warn tint. The read fills the form only where the file says something.
 - Statuses: Sent, Opened, Received, Accepted, Rejected, Expired (the spec's five plus Rejected, which the backend records).
 - Not in this part: the supplier's upload page `/supplier/:token` and the entry points from C03 and C02 (part 4/4).
+
+## Build notes (C06 4/4, 2026-10-13)
+- Supplier side: `/supplier/:token` (`SupplierPage.tsx`), registered in `src/routes/newUiRoutes.tsx` next to the P01 signed-out routes, outside the shell and with no account; always the PlanetPulse theme (the supplier isn't a client), light or dark after the viewer's system. It reads `GET /public/supplier-requests/:token` and posts the file and typed values as multipart; 404 and 410 are told apart ("isn't valid" / "has expired"), 409 means the request is closed. After sending, the page shows what was received and offers "Send a correction" until the manager decides.
+- Entry points: C03 hotspots show "Ask the supplier" on a secondary line without a supplier figure; C02's line details drawer shows it under "Supplier's footprint" for a saved line; C01's header has a "Supplier requests" action. All link to `/products/suppliers?new=1&study=<id>&input=<id>` (or the list).
+- Real email stays off: the backend's `SUPPLIER_REQUEST_MAIL` defaults to the sink, so the only way a supplier reaches the page today is the link copied from the request drawer.

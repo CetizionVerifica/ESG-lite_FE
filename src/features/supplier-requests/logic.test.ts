@@ -10,6 +10,7 @@ import {
   formFromDeclaration,
   formFromReply,
   isBoundaryRefusal,
+  submitProblem,
   studyLabel,
   validityText,
   valueText,
@@ -137,5 +138,21 @@ describe("ask form", () => {
   it("reads ?new=1&study=&input=", () => {
     expect(askParams(new URLSearchParams("new=1&study=21&input=9"))).toEqual({ open: true, study_id: 21, input_id: 9 });
     expect(askParams(new URLSearchParams("study=x"))).toEqual({ open: false, study_id: null, input_id: null });
+  });
+});
+
+describe("supplier upload form", () => {
+  const blank = { value: null, boundary: null, standard: "", reference_start: "", reference_end: "", valid_from: "", valid_to: "", verifier: "", product_name: "", note: "" };
+  const file = { name: "epd.pdf" } as File;
+  it("needs a file or a value, and a boundary with a value", () => {
+    expect(submitProblem(blank, null)).toMatch(/Upload/);
+    expect(submitProblem(blank, file)).toBeNull();
+    expect(submitProblem({ ...blank, value: 7.85 }, null)).toMatch(/boundary/);
+    expect(submitProblem({ ...blank, value: 7.85, boundary: "cradle_to_gate" }, null)).toBeNull();
+    expect(submitProblem({ ...blank, value: -1, boundary: "cradle_to_gate" }, null)).toMatch(/0 or more/);
+  });
+  it("keeps the date ranges in order", () => {
+    expect(submitProblem({ ...blank, reference_start: "2024-06-01", reference_end: "2024-01-01" }, file)).toMatch(/reference/);
+    expect(submitProblem({ ...blank, valid_from: "2025-01-01", valid_to: "2024-01-01" }, file)).toMatch(/Valid to/);
   });
 });

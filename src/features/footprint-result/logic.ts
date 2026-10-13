@@ -313,3 +313,6 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   published: "Published",
   superseded: "Superseded",
 };
+
+/** C06: a secondary line without a supplier figure can be asked for one. */
+export const askSupplierLink = (studyId: number, inputId: number) => `/products/suppliers?new=1&study=${studyId}&input=${inputId}`;

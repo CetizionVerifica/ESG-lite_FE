@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Navigate, Outlet, type RouteObject } from "react-router-dom";
 import ClientContextProvider from "../lib/ClientContextProvider";
 import AppShell, { type ShellHandle } from "../features/shell/AppShell";
@@ -7,6 +8,10 @@ import { ResetPasswordPage, SignInPage, StaffSignInPage } from "../features/sign
 import { legacyPages } from "./legacyPages";
 import { type ModuleRoutesFile, collectModulePages } from "./pageRegistry";
 import ProtectedRoute from "./ProtectedRoute";
+import { Loading } from "../ui";
+
+// C06: the supplier's upload page, reached by emailed link, no account.
+const SupplierPage = lazy(() => import("../features/supplier-requests/SupplierPage"));
 
 /**
  * Routes of the app.
@@ -36,6 +41,14 @@ const newUiRoutes: RouteObject[] = [
   { path: "/superadmin/login", element: <StaffSignInPage /> },
   { path: "/admin/login", element: <Navigate to="/superadmin/login" replace /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
+  {
+    path: "/supplier/:token",
+    element: (
+      <Suspense fallback={<Loading label="Opening the request">{null}</Loading>}>
+        <SupplierPage />
+      </Suspense>
+    ),
+  },
   {
     element: (
       <ClientContextProvider>
