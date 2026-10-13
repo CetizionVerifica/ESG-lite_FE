@@ -399,6 +399,22 @@ test("typed rows ask before leaving the page", async ({ page }) => {
   await expect(row.getByLabel("Quantity")).toHaveValue("10");
 });
 
+test("typed rows survive a page reload", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
+  // The unsaved-rows guard asks before the reload; leave anyway.
+  page.on("dialog", (d) => void d.accept());
+  await page.reload();
+  const restored = page.getByRole("region", { name: "Row 1" });
+  await expect(restored.getByLabel("Quantity")).toHaveValue("1600");
+  await expect(restored.getByText("= 4.29 tCO₂e")).toBeVisible();
+});
+
 test("files picked on a typed row are attached to it after it is saved", async ({ page }) => {
   const created: unknown[] = [];
   const uploads: string[] = [];

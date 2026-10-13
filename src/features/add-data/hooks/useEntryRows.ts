@@ -8,9 +8,10 @@ import type { ModalRow } from "../types";
 // row state). The draft is kept in sessionStorage per site × category ×
 // period, so a reload or a detour doesn't lose typed rows.
 
-type State = { rows: ModalRow[]; nextId: number };
+/** `key` is the draft key the rows were started or restored for; null until then. */
+type State = { rows: ModalRow[]; nextId: number; key?: string | null };
 type Action =
-  | { type: "reset"; rows: ModalRow[] }
+  | { type: "reset"; rows: ModalRow[]; key: string }
   | { type: "add"; model: FormModel }
   | { type: "duplicate"; id: number }
   | { type: "remove"; id: number }
@@ -37,9 +38,9 @@ export function editRow(model: FormModel, row: ModalRow, column: string, value: 
 export function rowsReducer(state: State, action: Action): State {
   switch (action.type) {
     case "reset":
-      return { rows: action.rows, nextId: nextIdOf(action.rows) };
+      return { rows: action.rows, nextId: nextIdOf(action.rows), key: action.key };
     case "add":
-      return { rows: [...state.rows, newRow(action.model, state.nextId)], nextId: state.nextId + 1 };
+      return { ...state, rows: [...state.rows, newRow(action.model, state.nextId)], nextId: state.nextId + 1 };
     case "duplicate": {
       const i = state.rows.findIndex((r) => r.id === action.id);
       if (i < 0) return state;
@@ -48,7 +49,7 @@ export function rowsReducer(state: State, action: Action): State {
       delete source._editOf;
       delete source._editSaved;
       const copy = { ...source, id: state.nextId, _extra_data: { ...(source._extra_data ?? {}) } };
-      return { rows: [...state.rows.slice(0, i + 1), copy, ...state.rows.slice(i + 1)], nextId: state.nextId + 1 };
+      return { ...state, rows: [...state.rows.slice(0, i + 1), copy, ...state.rows.slice(i + 1)], nextId: state.nextId + 1 };
     }
     case "remove":
       return { ...state, rows: state.rows.filter((r) => r.id !== action.id) };
@@ -62,7 +63,7 @@ export function rowsReducer(state: State, action: Action): State {
     case "append": {
       // Ids are renumbered from nextId so rows read earlier never collide.
       const added = action.rows.map((r, i) => ({ ...r, id: state.nextId + i }));
-      return { rows: [...state.rows, ...added], nextId: state.nextId + added.length };
+      return { ...state, rows: [...state.rows, ...added], nextId: state.nextId + added.length };
     }
     case "confirmBill":
       return {
@@ -76,7 +77,7 @@ export function rowsReducer(state: State, action: Action): State {
       return { ...state, rows: state.rows.filter((r) => billOf(r)?.key !== action.key) };
     case "load": {
       const kept = state.rows.filter((r) => (billOf(r) || rowHasInput(r)) && (r._editOf == null || r._editOf !== action.row._editOf));
-      return { rows: [...kept, { ...action.row, id: state.nextId }], nextId: state.nextId + 1 };
+      return { ...state, rows: [...kept, { ...action.row, id: state.nextId }], nextId: state.nextId + 1 };
     }
   }
 }
@@ -96,23 +97,27 @@ export const rowHasInput = (row: ModalRow) =>
   Object.entries(row).some(([k, v]) => (k === "_extra_data" ? Object.values(v ?? {}).some(Boolean) : k !== "id" && !k.startsWith("_") && !!v));
 
 export function useEntryRows(model: FormModel | null, draftKey: string | null) {
-  const [state, dispatch] = useReducer(rowsReducer, { rows: [], nextId: 1 });
+  const [state, dispatch] = useReducer(rowsReducer, { rows: [], nextId: 1, key: null });
 
   // Start (or restore) the rows whenever the form for a new context arrives.
   useEffect(() => {
     if (!model || !draftKey) return;
-    dispatch({ type: "reset", rows: readDraft(draftKey) ?? [newRow(model, 1)] });
+    dispatch({ type: "reset", rows: readDraft(draftKey) ?? [newRow(model, 1)], key: draftKey });
   }, [model, draftKey]);
 
+  // Save only rows that belong to this context. Before the form arrives the
+  // rows are still empty (or the previous context's), and acting on them would
+  // delete the stored draft before it is restored, or file the old rows under
+  // the new key.
   useEffect(() => {
-    if (!draftKey) return;
+    if (!draftKey || state.key !== draftKey) return;
     try {
       if (state.rows.some(rowHasInput)) sessionStorage.setItem(draftKey, JSON.stringify(state.rows));
       else sessionStorage.removeItem(draftKey);
     } catch {
       // Storage full or blocked: the draft is a convenience only.
     }
-  }, [state.rows, draftKey]);
+  }, [state.rows, state.key, draftKey]);
 
   const clearDraft = useCallback(() => {
     if (!draftKey) return;
