@@ -5,17 +5,17 @@ description: Review every open redesign/PCF pull request (or one PR given by URL
 
 # Review PRs (ESGLite redesign + PCF)
 
-Runs the project's standard PR review on every open pull request into `redesign/integration`, or on the PRs passed as arguments.
+Runs the project's standard PR review on every open pull request into `production`, or on the PRs passed as arguments.
 
 ## Usage
-- `/review-prs` reviews all open PRs targeting `redesign/integration` in CetizionVerifica/ESG-lite_FE, CetizionVerifica/ESG-lite and CetizionVerifica/python_AI_service.
+- `/review-prs` reviews all open PRs targeting `production` in CetizionVerifica/ESG-lite_FE, CetizionVerifica/ESG-lite and CetizionVerifica/python_AI_service.
 - `/review-prs <PR URL or repo#number> [...]` reviews only those PRs.
 - Add `--comment` to also post each PR's review on GitHub (default is read-only: report here only).
 - Add `--base <branch>` to review PRs into a different base branch.
 
 ## Steps
 
-1. **Collect PRs.** Use the GitHub MCP tools (or `gh` if available). For each repo, list open PRs whose base is `redesign/integration` (or `--base`). Skip drafts only if the user says so; otherwise include them and mark them as draft. If no PRs are found, say so and stop.
+1. **Collect PRs.** Use the GitHub MCP tools (or `gh` if available). For each repo, list open PRs whose base is `production` (or `--base`). Skip drafts only if the user says so; otherwise include them and mark them as draft. If no PRs are found, say so and stop.
 
 2. **Find each PR's spec.** In this order:
    - a spec path named in the PR title or body (e.g. `docs/redesign/pages/P07-...`, `docs/pcf/pages/C02-...`, `docs/pcf/foundation/E1-...`);

@@ -1,13 +1,13 @@
 ---
 name: next-module
-description: Pick the next unblocked module of the ESGLite redesign or PCF plan from live repo state and build it end to end (spec, plan, code, tests, draft PR into redesign/integration).
+description: Pick the next unblocked module of the ESGLite redesign or PCF plan from live repo state and build it end to end (spec, plan, code, tests, draft PR into production).
 ---
 
 # Next module (ESGLite redesign + PCF)
 
-Executes the plan in `docs/redesign/01-plan.md` and `docs/pcf/00-pcf-plan.md` one work package at a time, so nobody has to write or paste a build prompt. Each run picks one module, builds it, and opens draft PR(s) into `redesign/integration`. It never merges.
+Executes the plan in `docs/redesign/01-plan.md` and `docs/pcf/00-pcf-plan.md` one work package at a time, so nobody has to write or paste a build prompt. Each run picks one module, builds it, and opens draft PR(s) into `production`. It never merges.
 
-Repos: CetizionVerifica/ESG-lite_FE (FE), CetizionVerifica/ESG-lite (BE), CetizionVerifica/python_AI_service (AI). Base branch in all three: `redesign/integration` (never `main`).
+Repos: CetizionVerifica/ESG-lite_FE (FE), CetizionVerifica/ESG-lite (BE), CetizionVerifica/python_AI_service (AI). Base branch in all three: `production` (never `main`).
 
 ## Usage
 - `/next-module` picks the next unblocked module on the redesign track and builds it.
@@ -23,9 +23,9 @@ Several people (or sessions) can run it at once: an open PR claims its module, a
 - Branch: the session's designated branch if the environment mandates one; otherwise `redesign/<id>-<slug>` (lower case).
 
 ## Step 1 · Read live state (always fresh, never from memory)
-1. For each repo, list PRs with base `redesign/integration`: open ones (state + draft) and merged ones. Parse `[ID n/m]` from titles and `Completes: ID` from bodies.
+1. For each repo, list PRs with base `production`: open ones (state + draft) and merged ones. Parse `[ID n/m]` from titles and `Completes: ID` from bodies.
 2. Merge that with the **baseline** below (work that predates the title convention). The live PR state wins wherever it says more.
-3. Also check the FE `redesign/integration` head for facts the gates depend on: `ls src/ui` (which F3 components exist), `ls src/features/shell/standins` (gone = M0-SHELL done), and whether `src/routes` switches each page route.
+3. Also check the FE `production` head for facts the gates depend on: `ls src/ui` (which F3 components exist), `ls src/features/shell/standins` (gone = M0-SHELL done), and whether `src/routes` switches each page route.
 4. A module is **in progress** if it has an open PR (or a pushed `redesign/<id>-*` branch with commits newer than 24 h and no PR). Skip it unless its ID was passed explicitly, in which case resume it (Step 4b).
 
 ### Baseline as of 2026-10-09 (gate report)
@@ -87,8 +87,8 @@ All PCF FE pages: under `/products/*` behind VITE_NEW_UI, stage colours `--t-ser
 Some modules need an input only the user has (PCF-0: real Midal BOM/plant data → use placeholders; E1 golden test → the PCF-0 spreadsheet; E2 → 3 sample BOM files). Look in the repo and `/mnt/project-files/` first; if missing, proceed with clearly marked placeholders and list what's needed in the PR. Never stop the run for it.
 
 ## Step 4a · Build the module
-0. **Claim before you build.** Re-list open PRs into `redesign/integration` for this module's ID right now (another session may have claimed it since Step 1). If one exists, stop and go back to Step 2. Otherwise make the claim the very first thing you push: branch, add one real commit (for a page, the spec copied to `src/features/<module>/CLAUDE.md`; otherwise `docs/plan-claims/<ID>.md` with your plan), push, and open the draft PR titled `[<ID> 1/m] <name>` with the plan in its body. Only then write code. If, after opening, you see a second open PR for the same ID, the older PR keeps the module: close yours with a comment linking it and pick the next module.
-1. `git fetch origin redesign/integration` and branch from it (see Conventions).
+0. **Claim before you build.** Re-list open PRs into `production` for this module's ID right now (another session may have claimed it since Step 1). If one exists, stop and go back to Step 2. Otherwise make the claim the very first thing you push: branch, add one real commit (for a page, the spec copied to `src/features/<module>/CLAUDE.md`; otherwise `docs/plan-claims/<ID>.md` with your plan), push, and open the draft PR titled `[<ID> 1/m] <name>` with the plan in its body. Only then write code. If, after opening, you see a second open PR for the same ID, the older PR keeps the module: close yours with a comment linking it and pick the next module.
+1. `git fetch origin production` and branch from it (see Conventions).
 2. Read only: the repo's `CLAUDE.md`, `docs/redesign/01-plan.md`, `docs/redesign/00-entity-map.md`, the F1–F3 foundation specs, and the module's spec (+ `docs/pcf/00-pcf-plan.md` for PCF). For a page, copy its spec to `src/features/<module>/CLAUDE.md` first.
 3. For a page that replaces old screens: before coding, write the inventory of what the old files do (actions, filters, modals, edge cases) that the spec keeps or drops. It goes in the PR body as a checklist.
 4. Write a short plan (files to add/change/delete; PR split ≤ ~600 changed lines each), show it, then continue without waiting. If the spec is ambiguous or contradicts the code, pick the safer default, note it in the PR, and continue.

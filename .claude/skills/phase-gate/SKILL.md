@@ -1,11 +1,11 @@
 ---
 name: phase-gate
-description: Check whether a phase of the ESGLite redesign/PCF plan is done and what blocks the next milestone (M0–M3), from the live redesign/integration heads.
+description: Check whether a phase of the ESGLite redesign/PCF plan is done and what blocks the next milestone (M0–M3), from the live production heads.
 ---
 
 # Phase gate (ESGLite redesign + PCF)
 
-Read-only check of a phase in `docs/redesign/01-plan.md` (and the PCF phases in `docs/pcf/00-pcf-plan.md`), run against the `redesign/integration` heads of CetizionVerifica/ESG-lite_FE, ESG-lite and python_AI_service, never against PR descriptions.
+Read-only check of a phase in `docs/redesign/01-plan.md` (and the PCF phases in `docs/pcf/00-pcf-plan.md`), run against the `production` heads of CetizionVerifica/ESG-lite_FE, ESG-lite and python_AI_service, never against PR descriptions.
 
 ## Usage
 - `/phase-gate` checks the lowest phase that isn't fully done.
@@ -13,7 +13,7 @@ Read-only check of a phase in `docs/redesign/01-plan.md` (and the PCF phases in 
 - `/phase-gate pcf` checks the PCF track (phase 0 method sign-off → phase 1 MVP exit check: pilot within ±0.5% of the golden spreadsheet).
 
 ## Steps
-1. Fetch the three `redesign/integration` heads into a scratch checkout; note each head SHA and its CI state.
+1. Fetch the three `production` heads into a scratch checkout; note each head SHA and its CI state.
 2. On the FE head run typecheck, unit tests and `lint:new` (commands in the repo's CLAUDE.md). Report pass/fail counts.
 3. Count `isDark ?` outside src/theme: `grep -rno "isDark ?" src | grep -v ^src/theme/ | wc -l`, the number of files, and the top 7 files. Also any `isDark` mention outside src/theme.
 4. For every module in the phase (use the module list in the phase table of 01-plan.md; split P03 into P03-A/B/C and F3 into F3-1/2/3), find its merged PRs (titles `[<ID> n/m]`, body `Completes: <ID>`, or older PRs by spec name) and check in the code:
