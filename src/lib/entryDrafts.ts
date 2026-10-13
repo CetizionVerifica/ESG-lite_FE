@@ -1,6 +1,7 @@
 // Add data keeps typed rows in sessionStorage so a reload doesn't lose them.
-// Keys are `add-data:{user}:{site}:{category}:{period}`; signing out removes
-// them all, so the next person on the tab never finds them.
+// Keys are `add-data:{user}:{site}:{category}:{period}`, so another person on
+// the tab never gets them. Signing out removes them all; an expired session
+// (401) doesn't, so the same person signing back in finds their rows.
 
 export const ENTRY_DRAFT_PREFIX = "add-data:";
 
