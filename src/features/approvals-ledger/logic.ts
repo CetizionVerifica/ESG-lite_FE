@@ -7,11 +7,20 @@ export type FactorSnapshot = {
   emission_factor_id: number;
   emission_category_name: string;
   global_category_name?: string;
-  factor_value: number;
+  /** Postgres numeric: the API sends it as text ("2.5600"). */
+  factor_value: number | string;
   denominator_unit: string;
   source: string;
   year: number;
 };
+
+/** A factor's value as a number, whether the API sent it as text or a number; null when it isn't one. */
+export function factorValue(factor: { factor_value: number | string | null | undefined }): number | null {
+  const raw = factor.factor_value;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const value = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
 
 /** A ledger row: the list API also returns these entity fields. */
 export type LedgerRow = EmissionData & {

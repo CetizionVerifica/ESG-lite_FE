@@ -8,6 +8,7 @@ import {
   activityFields,
   activitySummary,
   effectiveStatus,
+  factorValue,
   humanize,
   listParams,
   mergeFera,
@@ -213,5 +214,20 @@ describe("batch source chip", () => {
     expect(parseBatchSource("claude")).toBe("claude");
     expect(parseBatchSource("everything")).toBeNull();
     expect(parseBatchSource(null)).toBeNull();
+  });
+});
+
+describe("factorValue", () => {
+  it("reads the factor whether the API sends it as text or a number", () => {
+    expect(factorValue({ factor_value: "2.5600" })).toBe(2.56);
+    expect(factorValue({ factor_value: 0.00268 })).toBe(0.00268);
+    expect(factorValue({ factor_value: "0" })).toBe(0);
+  });
+
+  it("is null when there is no usable number", () => {
+    expect(factorValue({ factor_value: "" })).toBeNull();
+    expect(factorValue({ factor_value: null })).toBeNull();
+    expect(factorValue({ factor_value: undefined })).toBeNull();
+    expect(factorValue({ factor_value: "n/a" })).toBeNull();
   });
 });
