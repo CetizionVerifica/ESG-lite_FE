@@ -49,7 +49,7 @@ function overview(period: string) {
       { category_id: 10, category_name: "Diesel", scope: "Scope 1", total: 30 },
     ],
     submission: {
-      month: "2025-09",
+      month: "2025-12",
       submitted: 1,
       missing: 1,
       users: [
@@ -127,11 +127,11 @@ test("a manager sees the period at a glance and drills into a site", async ({ pa
   // Attention: pending queue, missing person, pending production.
   const attention = page.getByRole("region", { name: /Needs your attention/ });
   await expect(attention.getByRole("link", { name: "7 entries waiting for approval (all periods)" })).toHaveAttribute("href", "/data/approvals?period=all");
-  await expect(attention).toContainText("1 person missing Sep 2025");
+  await expect(attention).toContainText("1 person missing Dec 2025");
   await expect(attention).toContainText("1 production record pending");
 
   await expect(page.getByText("Electricity is 75% of the gross footprint.")).toBeVisible();
-  await expect(page.getByRole("list", { name: "Contributors for Sep 2025" })).toContainText("Lina Late");
+  await expect(page.getByRole("list", { name: "Contributors for Dec 2025" })).toContainText("Lina Late");
 
   // The trend's table view carries the yearly filing as its own row.
   await page.getByRole("radio", { name: "Table" }).first().click();
@@ -188,6 +188,11 @@ test("the lower tabs load on demand and follow the header context", async ({ pag
 test("submission status still shows when the overview request fails", async ({ page }) => {
   await signIn(page);
   await page.route(/\/manager\/overview(\?|$)/, (route) => route.fulfill({ status: 500, json: { message: "boom" } }));
+  const months: (string | null)[] = [];
+  await page.route(/\/manager\/submission-status/, (route) => {
+    months.push(new URL(route.request().url()).searchParams.get("month"));
+    return route.fallback();
+  });
   await page.goto("/overview?period=CY2025");
 
   await expect(page.getByText("Couldn't load").first()).toBeVisible();
@@ -195,4 +200,6 @@ test("submission status still shows when the overview request fails", async ({ p
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("Lina Late");
   await expect(panel).toContainText("Omar Contributor");
+  // CY 2025 has ended: its last month, as the overview API would pick.
+  expect(months).toContain("2025-12");
 });

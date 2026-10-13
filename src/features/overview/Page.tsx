@@ -38,6 +38,7 @@ import {
   lastYearCaption,
   listLink,
   missingBySite,
+  submissionMonthFor,
   submissionMonths,
   supportedPeriod,
   thresholdAlerts,
@@ -86,8 +87,8 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
 
   const data = overview.data;
   const [pickedMonth, setPickedMonth] = useState<string | null>(null);
-  // The panel has its own request: if the overview fails, fall back to the picker's latest month rather than hiding it.
-  const month = pickedMonth ?? data?.submission.month ?? (overview.isError ? submissionMonths(now)[0] : null);
+  // Picked here, not from the overview response, so the panel loads at once and survives an overview error.
+  const month = pickedMonth ?? submissionMonthFor(period.kind, range, now);
   const submission = useSubmission(month);
   const siteNames = ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)).map((s) => s.name) : null;
 
