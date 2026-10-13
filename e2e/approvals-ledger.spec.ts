@@ -16,6 +16,7 @@ type Row = {
   review_comment?: string;
   // Defaults to "litre"; null for an entry stored without a unit.
   activity_data_unit?: string | null;
+  upload_batch_id?: string | null;
 };
 
 const company = { company_id: 1, name: "Midal Cables" };
@@ -33,6 +34,8 @@ function makeRows(): Row[] {
     activity_data: { fuel_type: "1", quantity: String(100 * n), emission_category: "Diesel (average biofuel blend)" },
     total_emission: (0.268 * n).toFixed(4),
     category: diesel,
+    // Rows 1 and 2 came in Claude's batch b-2; row 3 was typed in.
+    upload_batch_id: n < 3 ? "b-2" : null,
   }));
 }
 
@@ -105,8 +108,10 @@ async function signIn(page: Page) {
       }
       if (path.endsWith("/user/emissions")) {
         const status = url.searchParams.get("status");
+        const batchId = url.searchParams.get("batchId");
         const data = rows
           .filter((r) => !status || r.status === status)
+          .filter((r) => !batchId || r.upload_batch_id === batchId)
           .map((r) => ({
             ...r,
             unit: "tCO2e",
@@ -118,7 +123,7 @@ async function signIn(page: Page) {
             created_by: { user_id: 4, name: "Omar Contributor" },
             emission_factor_snapshot: { emission_factor_id: 9, emission_category_name: "Diesel (average biofuel blend)", factor_value: "0.002680", denominator_unit: "litre", source: "DEFRA", year: 2024 },
           }));
-        const count = (s: string) => rows.filter((r) => r.status === s).length;
+        const count = (s: string) => rows.filter((r) => r.status === s && (!batchId || r.upload_batch_id === batchId)).length;
         return json({ data, total: data.length, summary: { total_emission: 0, pending_count: count("pending"), approved_count: count("approved"), rejected_count: count("rejected") } });
       }
       return json({});
@@ -381,6 +386,33 @@ test("upload batches show their source and filter by it", async ({ page }) => {
   await expect(page.getByText("No API batches")).toBeVisible();
   await page.getByRole("button", { name: "All sources" }).click();
   await expect(table.getByRole("row", { name: /Hidd/ })).toHaveCount(2);
+});
+
+test("Review rows opens the approvals queue with only that batch's rows, one by one", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/data/approvals?view=batches");
+  const batches = page.getByRole("table", { name: "Upload batches" });
+  await batches.getByRole("row", { name: /Electricity/ }).getByRole("button", { name: "Review rows" }).click();
+  await expect(page).toHaveURL(/\/data\/approvals\?/);
+  await expect(page).toHaveURL(/batch=b-2/);
+  await expect(page).toHaveURL(/site=1/);
+  await expect(page).toHaveURL(/category=20/);
+  await expect(page.getByRole("status").filter({ hasText: "Showing the pending rows of one upload batch" })).toBeVisible();
+  const queue = page.getByRole("table", { name: "Entries waiting for approval" });
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(2);
+  await expect(page.getByRole("tab", { name: /Approvals/ })).toContainText("2");
+
+  // Each row is still reviewed on its own: A approves the focused row only.
+  await queue.locator("tbody tr").first().focus();
+  await page.keyboard.press("a");
+  await expect(page.getByText("Entry approved")).toBeVisible();
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(1);
+  expect(calls.filter((c) => c.path.endsWith("/batch/b-2/approve"))).toHaveLength(0);
+
+  await page.getByRole("button", { name: "Show all rows" }).click();
+  await expect(page).not.toHaveURL(/batch=/);
+  await expect(page.getByRole("status").filter({ hasText: "one upload batch" })).toHaveCount(0);
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(2);
 });
 
 test("an upload notification's link lands on its batch, and a missing batch says so", async ({ page }) => {

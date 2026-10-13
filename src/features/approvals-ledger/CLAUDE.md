@@ -37,7 +37,9 @@ Row click → Drawer (720px)
 - Delete allowed for pending, approved, rejected (today approved only) with confirm modal; deletion of approved writes AuditLog reason.
 
 ## Upload batches tab
-Replaces the orange collapsible panel. Columns: Category, Rows, Status split bar (pending/approved/rejected), Uploaded by, Uploaded at, Actions (Approve pending, Reject pending). **Batch reject only touches pending rows**, with a separate explicit "Reject approved rows too" checkbox (fixes today).
+Replaces the orange collapsible panel. Columns: Category, Rows, Status split bar (pending/approved/rejected), Uploaded by, Uploaded at, Actions (Review rows, Approve pending, Reject pending). **Batch reject only touches pending rows**, with a separate explicit "Reject approved rows too" checkbox (fixes today).
+
+**Review rows** (2026-10-13, Shyam: a manager reviews each entry of a Claude import on its own) opens the Approvals tab with `?batch=<upload_batch_id>` and the batch's site and category as context (the Ledger when nothing is pending). The list then shows only that batch's rows under a "Showing the … rows of one upload batch" line with "Show all rows"; every row keeps its own Approve, Reject and drawer, and the tab badge counts that batch. `GET /user/emissions?batchId=` does the narrowing (ESG-lite). "Approve pending" on the batch approves only the rows still pending, so rows handled one by one are left as they are.
 
 `?view=batches&batch=<upload_batch_id>` (the link in an `UPLOAD_PENDING` notification, IM4) lands on that batch: DataTable `highlightId` turns to its page, focuses the row and marks it `aria-current`; a batch not in the list (other sites, or already handled) shows a status line above the table.
 

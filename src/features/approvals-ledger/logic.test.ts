@@ -12,6 +12,7 @@ import {
   formatFactorValue,
   humanize,
   listParams,
+  reviewRowsPath,
   mergeFera,
   optionLabel,
   periodQuery,
@@ -59,6 +60,11 @@ describe("listParams", () => {
   it("maps ledger sort, search and period", () => {
     const p = listParams({ ...base, tab: "ledger", status: "rejected", search: "  boiler ", sort: { id: "tco2e", dir: "desc" }, period: { kind: "month", year: 2025, month: 9 }, page: 2 });
     expect(p).toMatchObject({ status: "rejected", search: "boiler", sort: "total_emission", order: "desc", year: 2025, month: 9, page: 3 });
+  });
+
+  it("passes one upload batch through, and nothing when there is none", () => {
+    expect(listParams({ ...base, tab: "approvals", batchId: "b-2" })).toMatchObject({ batchId: "b-2", status: "pending" });
+    expect(listParams({ ...base, tab: "ledger" })).toMatchObject({ batchId: null });
   });
 
   it("drops sorts the server can't do", () => {
@@ -240,5 +246,15 @@ describe("formatFactorValue", () => {
     expect(formatFactorValue({ factor_value: "0.002680" })).toBe("0.00268");
     expect(formatFactorValue({ factor_value: 0.00000042 })).toBe("0.00000042");
     expect(formatFactorValue({ factor_value: null })).toBe("—");
+  });
+});
+
+describe("reviewRowsPath", () => {
+  const batch = { upload_batch_id: "b-2", site_id: 1, category_id: 20, pending_count: 12 };
+  it("opens the approvals queue on the batch's site and category, any period, while rows are pending", () => {
+    expect(reviewRowsPath(batch)).toBe("/data/approvals?period=all&site=1&category=20&batch=b-2");
+  });
+  it("opens the ledger once nothing is pending", () => {
+    expect(reviewRowsPath({ ...batch, pending_count: 0 })).toBe("/data/ledger?period=all&site=1&category=20&batch=b-2");
   });
 });
