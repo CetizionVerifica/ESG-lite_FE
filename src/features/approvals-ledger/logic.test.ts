@@ -9,6 +9,7 @@ import {
   activitySummary,
   effectiveStatus,
   factorValue,
+  formatFactorValue,
   humanize,
   listParams,
   mergeFera,
@@ -229,5 +230,15 @@ describe("factorValue", () => {
     expect(factorValue({ factor_value: null })).toBeNull();
     expect(factorValue({ factor_value: undefined })).toBeNull();
     expect(factorValue({ factor_value: "n/a" })).toBeNull();
+    expect(factorValue({ factor_value: "  " })).toBeNull();
+  });
+});
+
+describe("formatFactorValue", () => {
+  it("shows the factor without padding and keeps tiny factors", () => {
+    expect(formatFactorValue({ factor_value: "2.5600" })).toBe("2.56");
+    expect(formatFactorValue({ factor_value: "0.002680" })).toBe("0.00268");
+    expect(formatFactorValue({ factor_value: 0.00000042 })).toBe("0.00000042");
+    expect(formatFactorValue({ factor_value: null })).toBe("—");
   });
 });

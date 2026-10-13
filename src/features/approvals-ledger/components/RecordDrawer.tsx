@@ -21,7 +21,7 @@ import {
 import type { EmissionStatus } from "../../../services/emissionService";
 import { type LedgerDocument, useColumnConfig, useDocuments, useFactor } from "../api";
 import { EditForm } from "./EditForm";
-import { type FactorSnapshot, type LedgerRow, activityFields, factorValue, quantityOf, rowPeriodLabel } from "../logic";
+import { type FactorSnapshot, type LedgerRow, activityFields, formatFactorValue, quantityOf, rowPeriodLabel } from "../logic";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -177,7 +177,7 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
         <span>{quantity === null ? "—" : formatNumber(quantity, 2)} {row.activity_data_unit ?? ""}</span>
         <span aria-hidden className="text-muted">×</span>
         <span className="sr-only">times</span>
-        <span>{factor ? `${formatNumber(factorValue(factor), 6)} per ${factor.denominator_unit}` : "factor unknown"}</span>
+        <span>{factor ? `${formatFactorValue(factor)} per ${factor.denominator_unit}` : "factor unknown"}</span>
         <span aria-hidden className="text-muted">=</span>
         <span className="sr-only">equals</span>
         <span className="font-semibold">{formatEmissions(Number(row.total_emission))}</span>

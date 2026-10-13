@@ -175,7 +175,7 @@ test("a row opens in the drawer with its calculation", async ({ page }) => {
   const drawer = page.getByRole("dialog", { name: "Diesel" });
   await expect(drawer).toBeVisible();
   await expect(drawer.getByTestId("calculation")).toContainText("300.00 litre");
-  await expect(drawer.getByTestId("calculation")).toContainText("0.002680 per litre");
+  await expect(drawer.getByTestId("calculation")).toContainText("0.00268 per litre");
   await expect(drawer).toContainText("DEFRA");
   await expect(drawer).toContainText("No documents attached.");
   await expect(drawer).toContainText("0.804 tCO₂e");
