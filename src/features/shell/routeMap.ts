@@ -53,7 +53,13 @@ export const SHELL_ROUTES = [
   { id: "product-footprints", path: "/products", title: "Product footprints", crumb: ["Products (PCF)"], roles: ["Manager"], spec: "C01", roleRedirect: { Superadmin: "/setup/products" } },
   { id: "footprint-new", path: "/products/new", title: "New footprint", crumb: ["Products (PCF)", "New footprint"], roles: ["Manager"], spec: "C02", roleRedirect: { Superadmin: "/setup/products" } },
   { id: "footprint-builder", path: "/products/:productId/footprints/:studyId/edit", title: "Footprint builder", crumb: ["Products (PCF)", "Footprint builder"], roles: ["Manager"], spec: "C02", roleRedirect: { Superadmin: "/setup/products" } },
+  { id: "footprint-latest", path: "/products/:productId", title: "Footprint", crumb: ["Products (PCF)", "Footprint"], roles: ["Manager"], spec: "C03", roleRedirect: { Superadmin: "/setup/products" } },
+  { id: "footprint-result", path: "/products/:productId/footprints/:studyId", title: "Footprint", crumb: ["Products (PCF)", "Footprint"], roles: ["Manager"], spec: "C03", roleRedirect: { Superadmin: "/setup/products" } },
   { id: "pcf", path: "/products/*", title: "Products (PCF)", crumb: ["Products (PCF)"], roles: ["Manager"], spec: "C01–C06", roleRedirect: { Superadmin: "/setup/products" } },
+  // C05: a footprint's declaration as PDF, PACT JSON or CSV; more specific than /products/*, so it wins.
+  // C06: supplier data requests; a static segment, so it outranks /products/:productId.
+  { id: "supplier-requests", path: "/products/suppliers", title: "Supplier requests", crumb: ["Products (PCF)", "Supplier requests"], roles: ["Manager"], spec: "C06", roleRedirect: { Superadmin: "/setup/products" } },
+  { id: "declaration-export", path: "/products/:studyId/export", title: "Export declaration", crumb: ["Products (PCF)", "Export declaration"], roles: ["Manager"], spec: "C05", roleRedirect: { Superadmin: "/setup/products" } },
 
   // Everyone
   { id: "notifications", path: "/notifications", title: "Notifications", crumb: ["Notifications"], roles: ALL, spec: "P13" },

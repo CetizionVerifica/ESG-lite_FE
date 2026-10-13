@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Building2, FlaskConical, Package, Plus, SearchX } from "lucide-react";
+import { Braces, Building2, FileText, FlaskConical, Mail, Package, Plus, SearchX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { getExportFile } from "../../services/pcfExportService";
 import {
   Button,
   Callout,
@@ -17,11 +18,14 @@ import {
   InfoTerm,
   PageHeader,
   type Period,
+  Tooltip,
   cn,
   exportMatrix,
+  fileNameFrom,
   focusRing,
   periodLabel,
   periodRange,
+  saveBlob,
   serializePeriod,
   toMatrix,
   useContextParams,
@@ -67,7 +71,7 @@ function defaultYear(now: Date): Period {
 const startLink = (r: FootprintRow) => `/products/new?product=${r.product_id}&site=${r.site_id}`;
 /** A draft opens in the builder (C02); any other version opens its result (C03). */
 const studyLink = (s: { pcf_study_id: number; status: string }, productId: number) =>
-  s.status === "draft" ? `/products/${productId}/footprints/${s.pcf_study_id}/edit` : `/products/${s.pcf_study_id}`;
+  s.status === "draft" ? `/products/${productId}/footprints/${s.pcf_study_id}/edit` : `/products/${productId}/footprints/${s.pcf_study_id}`;
 
 /**
  * C01 `/products`: which products have a footprint a customer can use, which
@@ -136,6 +140,27 @@ export default function ProductFootprintsPage() {
       toast({ title: "Couldn't export", description: "Try again in a moment.", tone: "bad" });
     }
   };
+  /** C05: one selected footprint opens its declaration page (PDF, PACT, CSV). */
+  const exportDeclaration = (selected: FootprintRow[]) => {
+    const study = selected.length === 1 ? selected[0].study : null;
+    if (study) navigate(`/products/${study.pcf_study_id}/export`);
+  };
+  /** C05: the PACT JSON of every selected published footprint, one file each, from the backend (validated there). */
+  const exportPact = async (selected: FootprintRow[]) => {
+    const rows = selected.filter((r) => r.study?.status === "published");
+    let saved = 0;
+    for (const r of rows) {
+      if (!r.study) continue;
+      try {
+        const { blob, disposition } = await getExportFile(r.study.pcf_study_id, "pact");
+        saveBlob(blob, fileNameFrom(disposition, `${r.product_name.replace(/[^\w.-]+/g, "-")}-v${r.study.version}.pact.json`));
+        saved++;
+      } catch {
+        toast({ title: `Couldn't export ${r.product_name}`, description: "Try again in a moment.", tone: "bad" });
+      }
+    }
+    if (saved) toast({ title: saved === 1 ? "PACT JSON downloaded." : `${saved} PACT JSON files downloaded.`, tone: "good" });
+  };
 
   const siteName = (id: number) => sites.find((s) => s.site_id === id)?.name;
   const productionLink = (() => {
@@ -166,7 +191,10 @@ export default function ProductFootprintsPage() {
         icon: <Plus aria-hidden className="size-4" />,
         onClick: () => navigate(scopeSites.length === 1 ? `/products/new?site=${scopeSites[0]}` : "/products/new"),
       }}
-      secondaryActions={[{ label: "Material factors", icon: <FlaskConical aria-hidden className="size-4" />, onClick: () => navigate("/factors/materials") }]}
+      secondaryActions={[
+        { label: "Supplier requests", icon: <Mail aria-hidden className="size-4" />, onClick: () => navigate("/products/suppliers") },
+        { label: "Material factors", icon: <FlaskConical aria-hidden className="size-4" />, onClick: () => navigate("/factors/materials") },
+      ]}
     />
   );
 
@@ -284,11 +312,31 @@ export default function ProductFootprintsPage() {
         }
         defaultSort={{ id: "product", dir: "asc" }}
         selectable
-        bulkActions={(selected) => (
-          <Button size="sm" onClick={() => void exportRows(selected)}>
-            Export CSV
-          </Button>
-        )}
+        bulkActions={(selected) => {
+          const one = selected.length === 1 && selected[0].study ? selected[0] : null;
+          const published = selected.filter((r) => r.study?.status === "published").length;
+          return (
+            <>
+              <Button size="sm" onClick={() => void exportRows(selected)}>
+                Export CSV
+              </Button>
+              <Tooltip content={one ? `Open the declaration of ${one.product_name}` : "Select one product with a footprint"}>
+                <span>
+                  <Button size="sm" icon={<FileText aria-hidden className="size-4" />} disabled={!one} onClick={() => exportDeclaration(selected)}>
+                    Export declaration
+                  </Button>
+                </span>
+              </Tooltip>
+              <Tooltip content={published ? `PACT JSON for ${published} published ${published === 1 ? "footprint" : "footprints"}` : "Only published footprints export as PACT JSON"}>
+                <span>
+                  <Button size="sm" icon={<Braces aria-hidden className="size-4" />} disabled={published === 0} onClick={() => void exportPact(selected)}>
+                    Export PACT JSON
+                  </Button>
+                </span>
+              </Tooltip>
+            </>
+          );
+        }}
         pagination={{ mode: "client", pageSize: 50 }}
         onRowClick={(r) => navigate(r.study ? studyLink(r.study, r.product_id) : startLink(r))}
         exportName="product-footprints"

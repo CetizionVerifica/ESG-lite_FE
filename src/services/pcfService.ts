@@ -50,3 +50,29 @@ export const submitPcfStudy = async (id: number) => {
   const response = await api.post(`/pcf/studies/${id}/submit`);
   return response.data;
 };
+
+export const approvePcfStudy = async (id: number, comment?: string) => {
+  const response = await api.post(`/pcf/studies/${id}/approve`, comment ? { comment } : {});
+  return response.data;
+};
+
+export const rejectPcfStudy = async (id: number, comment: string) => {
+  const response = await api.post(`/pcf/studies/${id}/reject`, { comment });
+  return response.data;
+};
+
+export const publishPcfStudy = async (id: number) => {
+  const response = await api.post(`/pcf/studies/${id}/publish`);
+  return response.data;
+};
+
+/** C03: the stored result behind a calculated footprint (lines, allocation, ids used). */
+export const getPcfStudyResult = async (id: number) => {
+  const response = await api.get(`/pcf/studies/${id}/result`);
+  return response.data;
+};
+
+export const getPcfStudyAudit = async (id: number) => {
+  const response = await api.get(`/pcf/studies/${id}/audit`);
+  return response.data;
+};

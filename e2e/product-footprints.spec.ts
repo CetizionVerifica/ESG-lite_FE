@@ -76,6 +76,12 @@ async function signIn(page: Page, opts: { production?: boolean; products?: boole
         asked.push(`studies:${url.searchParams.get("siteId")}`);
         return json(STUDIES);
       }
+      // C05 bulk action: the backend's validated PACT file for a published footprint.
+      const exp = /\/pcf\/studies\/(\d+)\/export$/.exec(path);
+      if (exp) {
+        asked.push(`export:${exp[1]}:${url.searchParams.get("format")}`);
+        return route.fulfill({ status: 200, contentType: "application/json", headers: { "content-disposition": `attachment; filename="rod-${exp[1]}.pact.json"` }, body: JSON.stringify({ id: "pf-1" }) });
+      }
       if (path.endsWith("/pcf/reconciliation")) {
         asked.push(`recon:${url.searchParams.get("siteId")}:${url.searchParams.get("start")}:${url.searchParams.get("end")}`);
         return json({
@@ -118,6 +124,7 @@ test("shows the portfolio for the year with KPIs that filter the table", async (
   await page.goto("/products?period=CY2025");
 
   await expect(page.getByRole("heading", { name: "Product footprints" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Supplier requests" })).toBeVisible();
   const rows = table(page).locator("tbody tr");
   await expect(rows).toHaveCount(3);
   const wire = rows.filter({ hasText: "EC-grade wire rod 9.5 mm" });
@@ -145,8 +152,25 @@ test("shows the portfolio for the year with KPIs that filter the table", async (
   await rows.filter({ hasText: "AAAC conductor" }).getByRole("link", { name: "Start a footprint for AAAC conductor" }).click();
   await expect(page).toHaveURL(/\/products\/new\?product=6&site=1/);
   await page.goBack();
+
+  // Bulk actions (C05): one published footprint exports as PACT JSON and opens its declaration page.
+  await rows.filter({ hasText: "AAAC conductor" }).getByRole("checkbox", { name: "Select AAAC conductor" }).check();
+  const bulk = page.getByRole("region", { name: "Bulk actions" });
+  await expect(bulk.getByRole("button", { name: "Export declaration" })).toBeDisabled();
+  await expect(bulk.getByRole("button", { name: "Export PACT JSON" })).toBeDisabled();
+  await rows.filter({ hasText: "AAAC conductor" }).getByRole("checkbox", { name: "Select AAAC conductor" }).uncheck();
+  await rows.filter({ hasText: "EC-grade wire rod 9.5 mm" }).getByRole("checkbox", { name: "Select EC-grade wire rod 9.5 mm" }).check();
+  const download = page.waitForEvent("download");
+  await bulk.getByRole("button", { name: "Export PACT JSON" }).click();
+  // Content-Disposition isn’t CORS-exposed, so the page’s own name is used (it matches the backend’s).
+  expect((await download).suggestedFilename()).toBe("EC-grade-wire-rod-9.5-mm-v2.pact.json");
+  expect(asked).toContain("export:11:pact");
+  await bulk.getByRole("button", { name: "Export declaration" }).click();
+  await expect(page).toHaveURL(/\/products\/11\/export$/);
+  await page.goBack();
+
   await rows.filter({ hasText: "EC-grade wire rod 9.5 mm" }).click();
-  await expect(page).toHaveURL(/\/products\/11$/);
+  await expect(page).toHaveURL(/\/products\/5\/footprints\/11$/);
 });
 
 test("explains that footprints need approved production", async ({ page }) => {

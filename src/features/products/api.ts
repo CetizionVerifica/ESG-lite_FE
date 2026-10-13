@@ -52,7 +52,7 @@ export function useSaveProduct() {
       const payload = toPayload(draft, product);
       return product
         ? (updateProduct(product.product_id, payload) as Promise<{ moved_production_count?: number }>)
-        : (createProduct(payload as Required<typeof payload>) as Promise<{ moved_production_count?: number }>);
+        : (createProduct(payload as Parameters<typeof createProduct>[0]) as Promise<{ moved_production_count?: number }>);
     },
     // A site move changes the product's records too.
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),

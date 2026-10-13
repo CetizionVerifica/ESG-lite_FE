@@ -4,6 +4,7 @@ import {
   cascadeItems,
   changesUnitWithRecords,
   day,
+  changesDeclared,
   draftFrom,
   emptyDraft,
   isDirty,
@@ -97,14 +98,14 @@ describe("unitSuggestions", () => {
 describe("form", () => {
   it("requires a name, a site and a unit", () => {
     expect(Object.keys(validate(emptyDraft()))).toEqual(["name", "site_id", "unit"]);
-    expect(validate({ name: " Rod ", site_id: 1, unit: "t", description: "" })).toEqual({});
-    expect(validate({ name: "  ", site_id: 1, unit: " ", description: "" })).toEqual({
+    expect(validate({ ...emptyDraft(), name: " Rod ", site_id: 1, unit: "t" })).toEqual({});
+    expect(validate({ ...emptyDraft(), name: "  ", site_id: 1, unit: " " })).toEqual({
       name: expect.any(String),
       unit: expect.any(String),
     });
   });
   it("starts a new product on the default site", () => {
-    expect(emptyDraft(3)).toEqual({ name: "", site_id: 3, unit: "", description: "" });
+    expect(emptyDraft(3)).toEqual({ name: "", site_id: 3, unit: "", description: "", declared_unit: "", declared_unit_qty: null, mass_per_unit_kg: null });
   });
   it("is dirty only when a trimmed value changes", () => {
     const d = draftFrom(product);
@@ -114,8 +115,32 @@ describe("form", () => {
     expect(isDirty(emptyDraft(2), null)).toBe(false);
     expect(isDirty({ ...emptyDraft(2), name: "x" }, null)).toBe(true);
   });
+  it("validates the footprint basis and needs a declared unit once a quantity or mass is set", () => {
+    const base = { ...emptyDraft(), name: "Rod", site_id: 1, unit: "t" };
+    expect(validate({ ...base, declared_unit: "t", declared_unit_qty: 1, mass_per_unit_kg: 1000 })).toEqual({});
+    expect(Object.keys(validate({ ...base, mass_per_unit_kg: 1000 }))).toEqual(["declared_unit"]);
+    expect(Object.keys(validate({ ...base, declared_unit: "t", declared_unit_qty: 0, mass_per_unit_kg: -1 }))).toEqual(["declared_unit_qty", "mass_per_unit_kg"]);
+    expect(Object.keys(validate({ ...base, declared_unit: "x".repeat(21) }))).toEqual(["declared_unit"]);
+  });
+  it("reads decimal strings, sends footprint fields only when set or changed, and clears them", () => {
+    const withBasis = { ...product, declared_unit: "t", declared_unit_qty: "1", mass_per_unit_kg: "1000.0" };
+    const d = draftFrom(withBasis);
+    expect([d.declared_unit, d.declared_unit_qty, d.mass_per_unit_kg]).toEqual(["t", 1, 1000]);
+    expect(toPayload(d, withBasis)).toEqual({});
+    expect(changesDeclared(d, withBasis)).toBe(false);
+    expect(toPayload({ ...d, mass_per_unit_kg: 998.5 }, withBasis)).toEqual({ mass_per_unit_kg: 998.5 });
+    expect(changesDeclared({ ...d, mass_per_unit_kg: 998.5 }, withBasis)).toBe(true);
+    expect(toPayload({ ...d, declared_unit: " ", declared_unit_qty: null, mass_per_unit_kg: null }, withBasis)).toEqual({
+      declared_unit: "",
+      declared_unit_qty: null,
+      mass_per_unit_kg: null,
+    });
+    expect(toPayload({ ...emptyDraft(), name: "R", site_id: 1, unit: "t", declared_unit: " t ", mass_per_unit_kg: 1000 }, null)).toEqual({
+      name: "R", site_id: 1, unit: "t", description: "", declared_unit: "t", mass_per_unit_kg: 1000,
+    });
+  });
   it("sends everything for a new product and only changes for an edit", () => {
-    expect(toPayload({ name: " Rod ", site_id: 2, unit: " t ", description: " " }, null)).toEqual({ name: "Rod", site_id: 2, unit: "t", description: "" });
+    expect(toPayload({ ...emptyDraft(), name: " Rod ", site_id: 2, unit: " t ", description: " " }, null)).toEqual({ name: "Rod", site_id: 2, unit: "t", description: "" });
     expect(toPayload(draftFrom(product), product)).toEqual({});
     expect(toPayload({ ...draftFrom(product), site_id: 2, description: "" }, product)).toEqual({ site_id: 2, description: "" });
   });

@@ -38,6 +38,17 @@ describe("Field wiring", () => {
 });
 
 describe("NumberField", () => {
+  it("leaves the figure room next to a short unit", () => {
+    render(
+      <>
+        <NumberField label="Recycled" value={40} onChange={() => {}} unit="%" />
+        <NumberField label="Energy" value={40} onChange={() => {}} unit="kWh" />
+      </>,
+    );
+    expect(screen.getByLabelText("Recycled").className).toContain("pr-8");
+    expect(screen.getByLabelText("Energy").className).toContain("pr-14");
+  });
+
   it("accepts separators and reports numbers or null", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -76,6 +87,20 @@ describe("Combobox", () => {
     // "Hidd smelter", "Sitra rod mill", "Askar office" all contain an "s"
     await user.keyboard("{ArrowDown}{Enter}");
     expect(onChange).toHaveBeenCalledWith(2);
+  });
+
+  it("renders its list outside any clipping container, at the input's width", async () => {
+    const user = userEvent.setup();
+    render(
+      <div data-testid="box" style={{ overflowX: "auto" }}>
+        <Combobox label="Site" value={null} onChange={() => {}} options={sites} />
+      </div>,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Site" }));
+    const list = screen.getByRole("listbox");
+    expect(screen.getByTestId("box").contains(list)).toBe(false);
+    expect(list.parentElement).toBe(document.body);
+    expect(list.className).toContain("fixed");
   });
 
   it("shows the empty text and closes on Esc", async () => {

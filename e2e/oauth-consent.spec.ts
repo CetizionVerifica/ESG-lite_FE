@@ -122,7 +122,10 @@ test("a signed-out Superadmin signs in through the staff door and comes back to 
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.getByRole("link", { name: "Go to staff sign-in" }).click();
   await expect(page).toHaveURL(/\/superadmin\/login$/);
+  // The staff form mounts after the URL changes; typing into the old form is lost.
+  await expect(page.getByRole("heading", { name: "PlanetPulse staff sign in" })).toBeVisible();
   await page.getByLabel("Email").fill("sam@example.com");
+  await expect(page.getByLabel("Email")).toHaveValue("sam@example.com");
   await page.getByRole("textbox", { name: "Password" }).fill("secret-pass");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(`/oauth/consent?request=${REQUEST}`);

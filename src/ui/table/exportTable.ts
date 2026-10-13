@@ -2,14 +2,25 @@ import { toCsv } from "./tableLogic";
 
 export type ExportFormat = "csv" | "xlsx";
 
-function download(blob: Blob, fileName: string) {
+/** Saves a blob through a temporary link. */
+export function saveBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = fileName;
+  document.body.appendChild(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/** The file name from a Content-Disposition header, or the fallback. */
+export function fileNameFrom(disposition: string | null | undefined, fallback: string): string {
+  const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition ?? "");
+  return m ? decodeURIComponent(m[1]) : fallback;
+}
+
+const download = saveBlob;
 
 /** Downloads a matrix (header row first) as CSV or XLSX. xlsx is loaded only when needed. */
 export async function exportMatrix(matrix: Array<Array<string | number>>, baseName: string, format: ExportFormat) {
