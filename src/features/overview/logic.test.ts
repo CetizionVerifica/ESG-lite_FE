@@ -16,6 +16,7 @@ import {
   listLink,
   missingBySite,
   siteStatus,
+  submissionMonthFor,
   submissionMonths,
   supportedPeriod,
   thresholdAlerts,
@@ -227,5 +228,18 @@ describe("lower tabs", () => {
   it("lists years", () => {
     expect(yearsOf(["2025-04", "2025-12", "2026-01"])).toEqual([2025, 2026]);
     expect(recentYears(new Date(2026, 0, 10), 3)).toEqual([2025, 2024, 2023]);
+  });
+});
+
+describe("submissionMonthFor", () => {
+  const now = new Date(2026, 9, 13);
+  it("uses a month period's own month, even the current one", () => {
+    expect(submissionMonthFor("month", { from: "2025-03-01", to: "2025-03-31" }, now)).toBe("2025-03");
+    expect(submissionMonthFor("month", { from: "2026-10-01", to: "2026-10-31" }, now)).toBe("2026-10");
+  });
+  it("uses an ended period's last month, else the previous calendar month", () => {
+    expect(submissionMonthFor("cy", { from: "2025-01-01", to: "2025-12-31" }, now)).toBe("2025-12");
+    expect(submissionMonthFor("cy", { from: "2026-01-01", to: "2026-12-31" }, now)).toBe("2026-09");
+    expect(submissionMonthFor("quarter", { from: "2026-07-01", to: "2026-09-30" }, now)).toBe("2026-09");
   });
 });
