@@ -21,3 +21,9 @@ Review → Create (`companyService.onboardCompany`, FormData). Success page with
 
 ## Rules
 Unsaved-changes guard; inline validation; success toast; errors visible.
+
+## Copy client setup (2026-10-13, Shyam's decisions)
+Backend: ESG-lite `docs/setup-copy.md` (`GET /admin/companies/:id/setup-bundle`, `POST /admin/setup-copy/preview`, `POST /admin/companies/:id/setup-copy`). Logic in `setupCopy.ts`, shared form `components/SetupCopyPanel.tsx`.
+- Onboarding step 5 **Start from** (optional, before Review): Start empty · An existing client · A setup file (.json). What to copy (forms, units, factors, mappings, threshold, products on by default; material factors off), factor years (all by default; untick old ones), preview table per source site. The copy runs after the company exists: its main site takes the first source site (`first_site: "main"`), the others are created. A failed copy is a warning on the success page.
+- Client detail header: **Copy setup here** (drawer: same panel plus per-site target and "same name" form rule) and **Download setup** (the .json file; upload it on another environment).
+- Never copied: people, entries, production, PCF studies, documents, brand, MCP. Nothing existing is overwritten.

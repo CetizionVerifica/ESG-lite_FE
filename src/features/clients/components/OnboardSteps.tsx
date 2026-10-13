@@ -5,6 +5,9 @@ import { BLACK } from "../../../theme/color";
 import { Button, Callout, ColourField, FileDrop, PoweredBy, Select, TextField, Toggle } from "../../../ui";
 import { EMPLOYEE_RANGES } from "../logic";
 import { GUIDELINE_MAX, GUIDELINE_TYPES, INDUSTRIES, type OnboardDraft, type OnboardField, PASSWORD_MIN, REGIONS, coverFor, hasBrandInput, suggestFromPixels, toBrandUpdate } from "../onboarding";
+import { type CopyDraft, INCLUDE_ITEMS, sourceName } from "../setupCopy";
+import type { Company } from "../logic";
+import { type PreviewState, SetupCopyPanel } from "./SetupCopyPanel";
 
 export type StepProps = {
   draft: OnboardDraft;
@@ -228,6 +231,18 @@ export function BrandStep({ draft, set, error, onSkip }: StepProps & { onSkip: (
   );
 }
 
+/** "Start from": copy another client's setup (or a setup file) onto the new client once it exists. */
+export function SetupStep({ draft, set, companies, preview }: StepProps & { companies: Company[]; preview: PreviewState }) {
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted">
+        Give the new client the forms, units, factors, mappings and threshold another client already has. Its main site takes the first source site; the other source sites are created. People and entries are never copied.
+      </p>
+      <SetupCopyPanel draft={draft.setup} onChange={(v: CopyDraft) => set("setup", v)} companies={companies} onboarding preview={preview} />
+    </div>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-3 py-1.5 text-sm">
@@ -289,6 +304,17 @@ export function ReviewStep({ draft, onEdit }: { draft: OnboardDraft; onEdit: (st
               ["Colour guideline", draft.guideline?.name ?? ""],
             ]
           : [["Theme", "PlanetPulse (brand skipped)"]],
+      )}
+      {section(
+        "Start from",
+        4,
+        draft.setup.source
+          ? [
+              ["Source", sourceName(draft.setup.source)],
+              ["Copy", INCLUDE_ITEMS.filter((i) => draft.setup.include[i.key]).map((i) => i.label).join(", ") || "Sites only"],
+              ["Factor years", draft.setup.include.factors ? (draft.setup.factorYears ? draft.setup.factorYears.join(", ") : "All") : ""],
+            ]
+          : [["Setup", "Start empty"]],
       )}
     </div>
   );

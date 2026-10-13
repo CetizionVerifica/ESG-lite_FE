@@ -2,11 +2,13 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { type Brand, getBrand, saveBrand, uploadBrandDarkLogo, uploadBrandGuideline } from "../../services/brandService";
 import { getMappings } from "../../services/categoryMappingService";
 import { deleteCompany, getCompanies, getReportingCalendar, onboardCompany, updateCompany } from "../../services/companyService";
+import { applySetupCopy, getSetupBundle, previewSetupCopy } from "../../services/setupCopyService";
 import { getSites } from "../../services/siteService";
 import { type EmissionThreshold, createThreshold, getThresholds, updateThreshold } from "../../services/thresholdService";
 import { getUsers, sendUserInvite } from "../../services/userService";
 import type { AdminUser, Company, Site } from "./logic";
 import { type OnboardDraft, toBrandUpdate, toOnboardForm } from "./onboarding";
+import { type CopyDraft, type CopyReport, type SetupBundle, summarize, toRequest } from "./setupCopy";
 
 export const keys = {
   all: ["clients"] as const,
@@ -108,6 +110,8 @@ export const useReportingCalendar = () => useQuery({ queryKey: [...keys.all, "ca
 export type OnboardResult = {
   companyId: number;
   companyName: string;
+  /** What the "Start from" step copied, when a source was picked and the copy went through. */
+  copied: string | null;
   /** Set when the admin was invited by email: whether the email went out. */
   invite: { sent: boolean; email: string } | null;
   warnings: string[];
@@ -146,8 +150,20 @@ export function useOnboard() {
           warnings.push(`Dark logo was not saved: ${errorMessage(e, "the upload failed")}. Upload it in Brand theme.`);
         }
       }
+      // The "Start from" step: the company and its main site exist now, so the
+      // copy runs against them; a failure is a warning with the way to retry.
+      let copied: string | null = null;
+      const copyBody = toRequest(d.setup, { onboarding: true });
+      if (copyBody) {
+        try {
+          const report = (await applySetupCopy(company.company_id, copyBody)) as CopyReport;
+          copied = summarize(report);
+        } catch (e) {
+          warnings.push(`The setup was not copied: ${errorMessage(e, "the request failed")}. Use "Copy setup here" on the client's page.`);
+        }
+      }
       const invite = d.sendInvite ? { sent: !!res.invite?.sent, email: d.email.trim() } : null;
-      return { companyId: company.company_id, companyName: company.name, invite, warnings };
+      return { companyId: company.company_id, companyName: company.name, copied, invite, warnings };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
   });
@@ -155,3 +171,54 @@ export function useOnboard() {
 
 /** Emails a person a fresh link to choose their password. */
 export const useSendInvite = () => useMutation({ mutationFn: (userId: number) => sendUserInvite(userId) });
+
+/** Preview key: the source by id or file identity (not the whole bundle), the target and the options. */
+const previewKey = (d: CopyDraft, targetId: number | null) => [
+  ...keys.all,
+  "setup-copy-preview",
+  targetId,
+  d.source ? (d.source.kind === "client" ? `client:${d.source.companyId}` : `file:${d.source.fileName}:${d.source.bundle.source.taken_at}`) : null,
+  d.include,
+  d.factorYears,
+  d.formConflict,
+  d.sites,
+];
+
+/** What a copy would create; nothing is written. `targetId` null = a client that doesn't exist yet (onboarding). */
+export function useSetupCopyPreview(d: CopyDraft, targetId: number | null) {
+  const body = toRequest(d, { onboarding: targetId === null });
+  return useQuery<CopyReport>({
+    queryKey: previewKey(d, targetId),
+    queryFn: () => previewSetupCopy({ ...body!, ...(targetId === null ? {} : { target_company_id: targetId }) }),
+    enabled: !!body,
+    retry: 0,
+    staleTime: 60_000,
+  });
+}
+
+export function useApplySetupCopy(targetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (d: CopyDraft) => applySetupCopy(targetId, toRequest(d, { onboarding: false })!) as Promise<CopyReport>,
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
+}
+
+/** Fetches a client's setup file and hands it to the browser as a download. */
+export function useDownloadSetup() {
+  return useMutation({
+    mutationFn: async (companyId: number) => {
+      const bundle = (await getSetupBundle(companyId)) as SetupBundle;
+      const name = `esglite-setup-${bundle.source.company_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "client"}-${bundle.source.taken_at.slice(0, 10)}.json`;
+      const url = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      return name;
+    },
+  });
+}
