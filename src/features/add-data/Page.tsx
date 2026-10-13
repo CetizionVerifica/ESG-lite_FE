@@ -118,6 +118,27 @@ export default function AddDataPage() {
       ? `/capture/upload?${new URLSearchParams({ site: String(site.site_id), category: String(category.category_id), period: entryDate(period).slice(0, 7) })}`
       : "/capture/upload";
 
+  const finishSend = (saved: number) => {
+    // Rows all skipped as duplicates were not sent: they stay editable as a draft.
+    if (saved > 0) markSent();
+  };
+  const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
+    <Review
+      rows={activeRows}
+      payloads={activeRows.map((r) => buildPayload(r, { siteId: s.site_id, categoryId: c.category_id, period: p }))}
+      calc={calc}
+      evidenceFiles={evidence.filesOf}
+      periodLabel={periodLabel}
+      onBack={() => setStep(1)}
+      onFinished={finishSend}
+      onAnother={() => {
+        clearDraft();
+        setContext({ category: null });
+        setStep(0);
+      }}
+    />
+  );
+
   let body;
   if (sites.length === 0) {
     body = <EmptyState title="No site is assigned to you yet" description="Ask your manager to add you to a site." />;
@@ -135,6 +156,9 @@ export default function AddDataPage() {
         onNext={() => setStep(1)}
       />
     );
+  } else if (step === 2 && sent) {
+    // The success screen stays even if the form is refetched or fails to load in the background.
+    body = renderReview(site, category, period);
   } else if (setup.isPending) {
     body = (
       <Loading label="Loading the form" className="space-y-3">
@@ -179,22 +203,7 @@ export default function AddDataPage() {
       />
     );
   } else {
-    body = (
-      <Review
-        rows={activeRows}
-        payloads={activeRows.map((r) => buildPayload(r, { siteId: site.site_id, categoryId: category.category_id, period }))}
-        calc={calc}
-        evidenceFiles={evidence.filesOf}
-        periodLabel={periodLabel}
-        onBack={() => setStep(1)}
-        onFinished={markSent}
-        onAnother={() => {
-          clearDraft();
-          setContext({ category: null });
-          setStep(0);
-        }}
-      />
-    );
+    body = renderReview(site, category, period);
   }
 
   return (

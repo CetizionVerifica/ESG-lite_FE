@@ -23,8 +23,8 @@ type Props = {
   evidenceFiles: (rowId: number) => File[];
   periodLabel: string;
   onBack: () => void;
-  /** Every row is sent or skipped. */
-  onFinished: () => void;
+  /** Every row is sent or skipped; `saved` is how many were sent. */
+  onFinished: (saved: number) => void;
   onAnother: () => void;
 };
 
@@ -116,8 +116,8 @@ export function Review(p: Props) {
   const done = finished && !sending;
   const { onFinished } = p;
   useEffect(() => {
-    if (done) onFinished();
-  }, [done, onFinished]);
+    if (done) onFinished(savedCount);
+  }, [done, onFinished, savedCount]);
 
   if (done) {
     return (

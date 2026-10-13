@@ -434,7 +434,7 @@ test("after a send the steps are locked and a reload shows an empty form", async
   // No way back into the rows just sent.
   const progress = page.getByRole("navigation", { name: "Progress" });
   await expect(progress.getByRole("button")).toHaveCount(0);
-  expect(await page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toBeNull();
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toBeNull();
 
   // Nothing is left to lose, so the reload doesn't ask, and the form is empty.
   let asked = false;
@@ -445,6 +445,23 @@ test("after a send the steps are locked and a reload shows an empty form", async
   await page.reload();
   expect(asked).toBe(false);
   await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("");
+});
+
+test("when every row is skipped as a duplicate, nothing is locked and the draft stays", async ({ page }) => {
+  await signIn(page, [], true);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Apply (skip all)" }).click();
+  await expect(page.getByText("Nothing was sent")).toBeVisible();
+  // The user can go back and change the row they skipped.
+  await page.getByRole("navigation", { name: "Progress" }).getByRole("button", { name: /Enter values/ }).click();
+  await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("1600");
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toContain("1600");
 });
 
 test("after a send, new rows for the same category and month are guarded again", async ({ page }) => {

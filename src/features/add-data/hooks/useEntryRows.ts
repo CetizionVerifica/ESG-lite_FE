@@ -46,15 +46,16 @@ export function editRow(model: FormModel, row: ModalRow, column: string, value: 
 }
 
 export function rowsReducer(prev: State, action: Action): State {
-  // Rows already sent never come back into editing: a later change starts from an empty list.
-  const state = prev.sent && action.type !== "reset" && action.type !== "forget" && action.type !== "sent" ? { ...prev, rows: [], nextId: 1, sent: false } : prev;
+  // Rows already sent never come back into editing: a later change starts from an
+  // empty list. Ids keep counting, so a new row never takes a sent row's evidence files.
+  const state = prev.sent && action.type !== "reset" && action.type !== "forget" && action.type !== "sent" ? { ...prev, rows: [], sent: false } : prev;
   switch (action.type) {
     case "reset":
       return { rows: action.rows, nextId: nextIdOf(action.rows), key: action.key, sent: false };
     case "forget":
       return { rows: [], nextId: 1, key: null, sent: false };
     case "sent":
-      return { ...state, sent: true };
+      return state.sent ? state : { ...state, sent: true };
     case "add":
       return { ...state, rows: [...state.rows, newRow(action.model, state.nextId)], nextId: state.nextId + 1 };
     case "duplicate": {
