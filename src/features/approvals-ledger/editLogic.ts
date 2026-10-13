@@ -243,9 +243,9 @@ type EditErrors = { reason?: string; category?: string; unit?: string; amount?: 
 export const AMOUNT_ERROR = "Enter an amount greater than 0";
 
 /**
- * Number fields that stop the save, with their message: a negative is never an
- * amount, and at least one must be above 0 (the server refuses the edit
- * otherwise rather than keep the old total). `start` decides which fields are
+ * Number fields that stop the save, with their message: 0 or a negative is never
+ * an amount (the server would skip it and use another field's number), and at
+ * least one must be filled in, so the edit isn't refused for having no amount. `start` decides which fields are
  * numbers, so a cleared field still counts.
  */
 export function amountErrors(config: ColumnConfig | undefined, activity: Activity, start: Activity): Record<string, string> {
@@ -258,7 +258,7 @@ export function amountErrors(config: ColumnConfig | undefined, activity: Activit
   const anyPositive = keys.some((k) => (num(k) ?? 0) > 0);
   for (const k of keys) {
     const v = num(k);
-    if ((v !== null && v < 0) || (!anyPositive && (v === null || v <= 0))) errors[k] = AMOUNT_ERROR;
+    if ((v !== null && !(v > 0)) || (v === null && !anyPositive)) errors[k] = AMOUNT_ERROR;
   }
   return errors;
 }

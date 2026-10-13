@@ -264,10 +264,11 @@ describe("amountErrors", () => {
     expect(amountErrors(undefined, stored, stored)).toEqual({});
   });
 
-  it("allows a zero next to another positive amount, never a negative", () => {
+  it("never takes 0 or a negative as an amount, even next to a positive one", () => {
     const two = { distance: "10", passengers: "2" };
-    expect(amountErrors(undefined, { distance: "10", passengers: "0" }, two)).toEqual({});
+    expect(amountErrors(undefined, { distance: "10", passengers: "0" }, two)).toEqual({ passengers: AMOUNT_ERROR });
     expect(amountErrors(undefined, { distance: "10", passengers: "-1" }, two)).toEqual({ passengers: AMOUNT_ERROR });
+    expect(amountErrors(undefined, { distance: "10", passengers: "" }, two)).toEqual({});
   });
 });
 
