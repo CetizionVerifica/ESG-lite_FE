@@ -111,6 +111,22 @@ describe("Drawer", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("picks an option from a Combobox inside a Popover without the Popover closing first", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const options = [{ value: 1, label: "Sitra" }, { value: 2, label: "Hidd" }];
+    render(
+      <Popover label="Category" trigger={(t) => <button {...t}>Category</button>}>
+        {() => <Combobox label="Site" value={null} onChange={onChange} options={options} />}
+      </Popover>,
+    );
+    await user.click(screen.getByRole("button", { name: "Category" }));
+    await user.click(screen.getByRole("combobox", { name: "Site" }));
+    await user.click(screen.getByRole("option", { name: "Hidd" }));
+    expect(onChange).toHaveBeenCalledWith(2);
+    expect(screen.getByRole("dialog", { name: "Category" })).toBeTruthy();
+  });
+
   it("lets an open Popover inside take Esc without closing the drawer", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

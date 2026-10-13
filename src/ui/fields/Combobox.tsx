@@ -83,7 +83,8 @@ export function Combobox<V extends string | number>({
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
     };
-  }, [open, matches.length]);
+    // matches: a new set of options can change the list's height even at the same count.
+  }, [open, matches]);
 
   return (
     <Field {...field}>
@@ -138,6 +139,13 @@ export function Combobox<V extends string | number>({
                 id={listId}
                 role="listbox"
                 style={style}
+                // The list lives outside any Popover or Menu around the combobox, so its
+                // mousedown must not reach their document "click outside" handlers (which
+                // would close them before the pick), nor move focus out of the input.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
                 // Above drawers and modals (z-50) a combobox can sit in; below toasts (z-60).
                 className="fixed z-[55] max-h-64 overflow-auto rounded-control border border-line bg-panel py-1 text-sm shadow-lg"
               >
