@@ -8,10 +8,12 @@ import type { ModalRow } from "../types";
 // row state). The draft is kept in sessionStorage per site × category ×
 // period, so a reload or a detour doesn't lose typed rows.
 
-/** `key` is the draft key the rows were started or restored for; null until then. */
-type State = { rows: ModalRow[]; nextId: number; key?: string | null };
+/** `key` is the draft key the rows were started or restored for; null when none is open. */
+type State = { rows: ModalRow[]; nextId: number; key: string | null };
 type Action =
   | { type: "reset"; rows: ModalRow[]; key: string }
+  /** The open context closed or changed: drop its rows (its draft stays in storage). */
+  | { type: "forget" }
   | { type: "add"; model: FormModel }
   | { type: "duplicate"; id: number }
   | { type: "remove"; id: number }
@@ -39,6 +41,8 @@ export function rowsReducer(state: State, action: Action): State {
   switch (action.type) {
     case "reset":
       return { rows: action.rows, nextId: nextIdOf(action.rows), key: action.key };
+    case "forget":
+      return { rows: [], nextId: 1, key: null };
     case "add":
       return { ...state, rows: [...state.rows, newRow(action.model, state.nextId)], nextId: state.nextId + 1 };
     case "duplicate": {
@@ -99,11 +103,14 @@ export const rowHasInput = (row: ModalRow) =>
 export function useEntryRows(model: FormModel | null, draftKey: string | null) {
   const [state, dispatch] = useReducer(rowsReducer, { rows: [], nextId: 1, key: null });
 
-  // Start (or restore) the rows whenever the form for a new context arrives.
+  // When the open context changes, start (or restore) its rows once its form
+  // has arrived; until then, forget the previous context's rows, which live on
+  // in their own draft. A refetched form for the same context keeps the rows.
   useEffect(() => {
-    if (!model || !draftKey) return;
-    dispatch({ type: "reset", rows: readDraft(draftKey) ?? [newRow(model, 1)], key: draftKey });
-  }, [model, draftKey]);
+    if (state.key === draftKey) return;
+    if (model && draftKey) dispatch({ type: "reset", rows: readDraft(draftKey) ?? [newRow(model, 1)], key: draftKey });
+    else if (state.key !== null) dispatch({ type: "forget" });
+  }, [model, draftKey, state.key]);
 
   // Save only rows that belong to this context. Before the form arrives the
   // rows are still empty (or the previous context's), and acting on them would
@@ -134,10 +141,15 @@ export function useEntryRows(model: FormModel | null, draftKey: string | null) {
   keyRef.current = draftKey;
   const guarded = useCallback((action: Action) => {
     if (action.type === "append" && action.draftKey !== keyRef.current) return;
+    if (action.type === "reset" && action.key !== keyRef.current) return;
     dispatch(action);
   }, []);
 
-  return { rows: state.rows, dispatch: guarded, clearDraft };
+  // Rows of another context are never handed out (they'd show in the unsaved
+  // guard or the period comparison while the new form loads).
+  return { rows: state.key === draftKey ? state.rows : NO_ROWS, dispatch: guarded, clearDraft };
 }
+
+const NO_ROWS: ModalRow[] = [];
 
 export type RowsDispatch = ReturnType<typeof useEntryRows>["dispatch"];
