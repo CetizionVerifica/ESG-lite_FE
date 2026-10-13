@@ -7,6 +7,7 @@ import {
 } from "react";
 import axios from "axios";
 import api from "../api/axios";
+import { clearEntryDrafts } from "../lib/entryDrafts";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -98,6 +99,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = () => {
     localStorage.clear();
+    clearEntryDrafts();
     setToken(null);
     setRole(null);
     setUser(null); // ✅ FIX

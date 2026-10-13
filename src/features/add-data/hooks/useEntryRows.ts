@@ -5,12 +5,23 @@ import { applyChange, newRow, setExtraField, type FormModel } from "../logic/for
 import type { ModalRow } from "../types";
 
 // One reducer for the rows being entered (replaces the legacy page's modal
-// row state). The draft is kept in sessionStorage per site × category ×
-// period, so a reload or a detour doesn't lose typed rows.
+// row state). The draft is kept in sessionStorage per user × site × category
+// × period (key from `lib/entryDrafts`, cleared on sign-out), so a reload or a
+// detour doesn't lose typed rows.
 
-type State = { rows: ModalRow[]; nextId: number };
+/**
+ * `key` is the draft key the rows were started or restored for; null when none is open.
+ * `sent`: every row was sent or skipped. They stay for the success screen, are never
+ * saved as a draft again, and any later change starts from an empty list.
+ */
+type State = { rows: ModalRow[]; nextId: number; key: string | null; sent: boolean };
+/**
+ * Sent only by the hook itself: start or restore rows for `key`, drop a closed
+ * context's rows (its draft stays in storage), or mark the rows as sent.
+ */
+type ContextAction = { type: "reset"; rows: ModalRow[]; key: string } | { type: "forget" } | { type: "sent" };
 type Action =
-  | { type: "reset"; rows: ModalRow[] }
+  | ContextAction
   | { type: "add"; model: FormModel }
   | { type: "duplicate"; id: number }
   | { type: "remove"; id: number }
@@ -34,12 +45,19 @@ export function editRow(model: FormModel, row: ModalRow, column: string, value: 
   return next;
 }
 
-export function rowsReducer(state: State, action: Action): State {
+export function rowsReducer(prev: State, action: Action): State {
+  // Rows already sent never come back into editing: a later change starts from an
+  // empty list. Ids keep counting, so a new row never takes a sent row's evidence files.
+  const state = prev.sent && action.type !== "reset" && action.type !== "forget" && action.type !== "sent" ? { ...prev, rows: [], sent: false } : prev;
   switch (action.type) {
     case "reset":
-      return { rows: action.rows, nextId: nextIdOf(action.rows) };
+      return { rows: action.rows, nextId: nextIdOf(action.rows), key: action.key, sent: false };
+    case "forget":
+      return { rows: [], nextId: 1, key: null, sent: false };
+    case "sent":
+      return state.sent ? state : { ...state, sent: true };
     case "add":
-      return { rows: [...state.rows, newRow(action.model, state.nextId)], nextId: state.nextId + 1 };
+      return { ...state, rows: [...state.rows, newRow(action.model, state.nextId)], nextId: state.nextId + 1 };
     case "duplicate": {
       const i = state.rows.findIndex((r) => r.id === action.id);
       if (i < 0) return state;
@@ -48,7 +66,7 @@ export function rowsReducer(state: State, action: Action): State {
       delete source._editOf;
       delete source._editSaved;
       const copy = { ...source, id: state.nextId, _extra_data: { ...(source._extra_data ?? {}) } };
-      return { rows: [...state.rows.slice(0, i + 1), copy, ...state.rows.slice(i + 1)], nextId: state.nextId + 1 };
+      return { ...state, rows: [...state.rows.slice(0, i + 1), copy, ...state.rows.slice(i + 1)], nextId: state.nextId + 1 };
     }
     case "remove":
       return { ...state, rows: state.rows.filter((r) => r.id !== action.id) };
@@ -62,7 +80,7 @@ export function rowsReducer(state: State, action: Action): State {
     case "append": {
       // Ids are renumbered from nextId so rows read earlier never collide.
       const added = action.rows.map((r, i) => ({ ...r, id: state.nextId + i }));
-      return { rows: [...state.rows, ...added], nextId: state.nextId + added.length };
+      return { ...state, rows: [...state.rows, ...added], nextId: state.nextId + added.length };
     }
     case "confirmBill":
       return {
@@ -76,7 +94,7 @@ export function rowsReducer(state: State, action: Action): State {
       return { ...state, rows: state.rows.filter((r) => billOf(r)?.key !== action.key) };
     case "load": {
       const kept = state.rows.filter((r) => (billOf(r) || rowHasInput(r)) && (r._editOf == null || r._editOf !== action.row._editOf));
-      return { rows: [...kept, { ...action.row, id: state.nextId }], nextId: state.nextId + 1 };
+      return { ...state, rows: [...kept, { ...action.row, id: state.nextId }], nextId: state.nextId + 1 };
     }
   }
 }
@@ -96,23 +114,30 @@ export const rowHasInput = (row: ModalRow) =>
   Object.entries(row).some(([k, v]) => (k === "_extra_data" ? Object.values(v ?? {}).some(Boolean) : k !== "id" && !k.startsWith("_") && !!v));
 
 export function useEntryRows(model: FormModel | null, draftKey: string | null) {
-  const [state, dispatch] = useReducer(rowsReducer, { rows: [], nextId: 1 });
+  const [state, dispatch] = useReducer(rowsReducer, { rows: [], nextId: 1, key: null, sent: false });
 
-  // Start (or restore) the rows whenever the form for a new context arrives.
+  // When the open context changes, start (or restore) its rows once its form
+  // has arrived; until then, forget the previous context's rows, which live on
+  // in their own draft. A refetched form for the same context keeps the rows.
   useEffect(() => {
-    if (!model || !draftKey) return;
-    dispatch({ type: "reset", rows: readDraft(draftKey) ?? [newRow(model, 1)] });
-  }, [model, draftKey]);
+    if (state.key === draftKey) return;
+    if (model && draftKey) dispatch({ type: "reset", rows: readDraft(draftKey) ?? [newRow(model, 1)], key: draftKey });
+    else if (state.key !== null) dispatch({ type: "forget" });
+  }, [model, draftKey, state.key]);
 
+  // Save only rows that belong to this context. Before the form arrives the
+  // rows are still empty (or the previous context's), and acting on them would
+  // delete the stored draft before it is restored, or file the old rows under
+  // the new key.
   useEffect(() => {
-    if (!draftKey) return;
+    if (!draftKey || state.key !== draftKey || state.sent) return;
     try {
       if (state.rows.some(rowHasInput)) sessionStorage.setItem(draftKey, JSON.stringify(state.rows));
       else sessionStorage.removeItem(draftKey);
     } catch {
       // Storage full or blocked: the draft is a convenience only.
     }
-  }, [state.rows, draftKey]);
+  }, [state.rows, state.key, state.sent, draftKey]);
 
   const clearDraft = useCallback(() => {
     if (!draftKey) return;
@@ -123,16 +148,27 @@ export function useEntryRows(model: FormModel | null, draftKey: string | null) {
     }
   }, [draftKey]);
 
+  /** Every row was sent or skipped: clear the draft and keep the rows only for the success screen. */
+  const markSent = useCallback(() => {
+    clearDraft();
+    dispatch({ type: "sent" });
+  }, [clearDraft]);
+
   // A bill read finishing after the site, category or period changed must not
   // land in the new context's rows.
   const keyRef = useRef(draftKey);
   keyRef.current = draftKey;
-  const guarded = useCallback((action: Action) => {
+  const guarded = useCallback((action: Exclude<Action, ContextAction>) => {
     if (action.type === "append" && action.draftKey !== keyRef.current) return;
     dispatch(action);
   }, []);
 
-  return { rows: state.rows, dispatch: guarded, clearDraft };
+  // Rows of another context are never handed out (they'd show in the unsaved
+  // guard or the period comparison while the new form loads).
+  const own = state.key === draftKey;
+  return { rows: own ? state.rows : NO_ROWS, sent: own && state.sent, dispatch: guarded, clearDraft, markSent };
 }
+
+const NO_ROWS: ModalRow[] = [];
 
 export type RowsDispatch = ReturnType<typeof useEntryRows>["dispatch"];

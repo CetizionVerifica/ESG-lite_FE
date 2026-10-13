@@ -36,7 +36,7 @@ describe("editing a bill row", () => {
 describe("duplicating a row loaded with Edit", () => {
   it("makes a new entry that doesn't update the saved one or change the comparison", () => {
     const loaded = { id: 1, quantity: "43", emission_category: "Diesel", _editOf: 55, _editSaved: { category: "Diesel", tco2e: 4.2 } };
-    const state = rowsReducer({ rows: [loaded], nextId: 2 }, { type: "duplicate", id: 1 });
+    const state = rowsReducer({ rows: [loaded], nextId: 2, key: null, sent: false }, { type: "duplicate", id: 1 });
     expect(state.rows).toHaveLength(2);
     expect(state.rows[0]).toMatchObject({ _editOf: 55 });
     expect(state.rows[1]).toMatchObject({ id: 2, quantity: "43", emission_category: "Diesel" });

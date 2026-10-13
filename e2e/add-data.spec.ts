@@ -399,6 +399,126 @@ test("typed rows ask before leaving the page", async ({ page }) => {
   await expect(row.getByLabel("Quantity")).toHaveValue("10");
 });
 
+test("typed rows survive a page reload", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
+  // The unsaved-rows guard asks before the reload; leave anyway.
+  const asked: string[] = [];
+  page.once("dialog", (d) => {
+    asked.push(d.type());
+    void d.accept();
+  });
+  await page.reload();
+  expect(asked).toEqual(["beforeunload"]);
+  const restored = page.getByRole("region", { name: "Row 1" });
+  await expect(restored.getByLabel("Quantity")).toHaveValue("1600");
+  await expect(restored.getByText("= 4.29 tCO₂e")).toBeVisible();
+});
+
+test("after a send the steps are locked and a reload shows an empty form", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+
+  // No way back into the rows just sent.
+  const progress = page.getByRole("navigation", { name: "Progress" });
+  await expect(progress.getByRole("button")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toBeNull();
+
+  // Nothing is left to lose, so the reload doesn't ask, and the form is empty.
+  let asked = false;
+  page.once("dialog", (d) => {
+    asked = true;
+    void d.accept();
+  });
+  await page.reload();
+  expect(asked).toBe(false);
+  await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("");
+});
+
+test("when every row is skipped as a duplicate, the draft is cleared and leaving doesn't ask", async ({ page }) => {
+  await signIn(page, [], true);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Apply (skip all)" }).click();
+  await expect(page.getByText("Nothing was sent")).toBeVisible();
+  // Skipped keeps the saved entry: the send is finished, as the spec says ("cleared once every row is sent or skipped").
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toBeNull();
+  await page.getByRole("link", { name: "Back to Current Month" }).click();
+  await expect(page).toHaveURL(/\/my-month/);
+  await expect(page.getByRole("dialog", { name: "Leave with rows not sent?" })).toHaveCount(0);
+});
+
+test("after a send, new rows for the same category and month are guarded again", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+
+  // Add another category, then pick the same one again and type a new row.
+  await page.getByRole("button", { name: "Add another category" }).click();
+  await page.getByLabel("Category").selectOption({ label: "Stationary combustion · Scope 1" });
+  await page.getByRole("button", { name: "Continue" }).click();
+  const fresh = page.getByRole("region", { name: "Row 1" });
+  await expect(fresh.getByLabel("Quantity")).toHaveValue("");
+  await fresh.getByLabel("Quantity").fill("10");
+  await page.getByRole("link", { name: "Current Month" }).first().click();
+  await expect(page.getByRole("dialog", { name: "Leave with rows not sent?" })).toBeVisible();
+});
+
+test("another person signing in on the same tab doesn't get the previous person's draft", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity").fill("1600");
+  // The first person's draft is saved.
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toContain("1600");
+  // Someone else on the same site signs in on this tab.
+  const other = { user_id: 8, name: "Ola Other", email: "ola@midal.com", sites: [site] };
+  await page.addInitScript((u) => localStorage.setItem("user", u), JSON.stringify(other));
+  await page.route(/\/auth\/me$/, (route) => route.fulfill({ json: { role: "User", user: other } }));
+  const asked: string[] = [];
+  page.once("dialog", (d) => {
+    asked.push(d.type());
+    void d.accept();
+  });
+  await page.reload();
+  expect(asked).toEqual(["beforeunload"]);
+  await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("");
+});
+
+test("signing out removes the typed-rows drafts from the tab", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity").fill("1600");
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toContain("1600");
+  page.once("dialog", (d) => void d.accept());
+  await page.getByRole("button", { name: /Account menu/ }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login/);
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter((k) => k.startsWith("add-data:")))).toEqual([]);
+});
+
 test("files picked on a typed row are attached to it after it is saved", async ({ page }) => {
   const created: unknown[] = [];
   const uploads: string[] = [];
