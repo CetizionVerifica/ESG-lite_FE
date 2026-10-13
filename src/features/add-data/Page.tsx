@@ -70,11 +70,11 @@ export default function AddDataPage() {
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
   // Per user: a draft survives a reload, so the next person signing in on this tab mustn't get it.
   const draftKey = contextReady ? entryDraftKey(userIdOf(user), site.site_id, category.category_id, formatEntryPeriodParam(period)) : null;
-  const { rows, dispatch, clearDraft } = useEntryRows(model, draftKey);
+  const { rows, sent, dispatch, clearDraft, markSent } = useEntryRows(model, draftKey);
   const evidence = useRowEvidence(draftKey);
-  // Rows sent: nothing is left to lose (and the draft is cleared).
-  const [sentKey, setSentKey] = useState<string | null>(null);
-  const unsaved = !!draftKey && sentKey !== draftKey && rows.some(rowHasInput);
+  // Rows sent: nothing is left to lose (the draft is cleared). New rows for the
+  // same context after "Add another category" are unsent again.
+  const unsaved = !!draftKey && !sent && rows.some(rowHasInput);
   // The draft survives in-app navigation, but evidence files don't, and a half-entered form is easy to forget.
   const blocker = useUnsavedGuard(unsaved);
 
@@ -187,10 +187,7 @@ export default function AddDataPage() {
         evidenceFiles={evidence.filesOf}
         periodLabel={periodLabel}
         onBack={() => setStep(1)}
-        onFinished={() => {
-          clearDraft();
-          setSentKey(draftKey);
-        }}
+        onFinished={markSent}
         onAnother={() => {
           clearDraft();
           setContext({ category: null });
@@ -210,7 +207,8 @@ export default function AddDataPage() {
         steps={STEPS}
         current={step}
         completed={STEPS.slice(0, step).map((s) => s.id)}
-        canJump={(i) => i < step}
+        // Once the rows are sent there is nothing to go back to: start again with Add another category.
+        canJump={(i) => i < step && !sent}
         onStepChange={setStep}
       />
       {body}

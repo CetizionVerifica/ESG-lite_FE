@@ -420,6 +420,55 @@ test("typed rows survive a page reload", async ({ page }) => {
   await expect(restored.getByText("= 4.29 tCO₂e")).toBeVisible();
 });
 
+test("after a send the steps are locked and a reload shows an empty form", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+
+  // No way back into the rows just sent.
+  const progress = page.getByRole("navigation", { name: "Progress" });
+  await expect(progress.getByRole("button")).toHaveCount(0);
+  expect(await page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toBeNull();
+
+  // Nothing is left to lose, so the reload doesn't ask, and the form is empty.
+  let asked = false;
+  page.once("dialog", (d) => {
+    asked = true;
+    void d.accept();
+  });
+  await page.reload();
+  expect(asked).toBe(false);
+  await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("");
+});
+
+test("after a send, new rows for the same category and month are guarded again", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+
+  // Add another category, then pick the same one again and type a new row.
+  await page.getByRole("button", { name: "Add another category" }).click();
+  await page.getByLabel("Category").selectOption({ label: "Stationary combustion · Scope 1" });
+  await page.getByRole("button", { name: "Continue" }).click();
+  const fresh = page.getByRole("region", { name: "Row 1" });
+  await expect(fresh.getByLabel("Quantity")).toHaveValue("");
+  await fresh.getByLabel("Quantity").fill("10");
+  await page.getByRole("link", { name: "Current Month" }).first().click();
+  await expect(page.getByRole("dialog", { name: "Leave with rows not sent?" })).toBeVisible();
+});
+
 test("another person signing in on the same tab doesn't get the previous person's draft", async ({ page }) => {
   await signIn(page, []);
   await page.goto("/data/new?site=4&category=9&period=2025-09");

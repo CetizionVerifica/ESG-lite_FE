@@ -71,6 +71,33 @@ describe("useEntryRows", () => {
     expect(stored(SEP)).toBeNull();
   });
 
+  it("after a send the draft is cleared and the sent rows are never saved again", () => {
+    const { result } = renderHook(() => useEntryRows(model, SEP));
+    act(() => result.current.dispatch({ type: "change", model, id: 1, column: "quantity", value: "5" }));
+    act(() => result.current.markSent());
+    expect(result.current.sent).toBe(true);
+    expect(result.current.rows.map((r) => r.quantity)).toEqual(["5"]); // kept for the success screen
+    expect(stored(SEP)).toBeNull();
+
+    // Any later change starts from an empty list, so the sent row can't be filed as a draft again.
+    act(() => result.current.dispatch({ type: "change", model, id: 1, column: "quantity", value: "6" }));
+    expect(result.current.sent).toBe(false);
+    expect(result.current.rows).toEqual([]);
+    expect(stored(SEP)).toBeNull();
+  });
+
+  it("reopening the same context after a send starts unsent", () => {
+    const { result, rerender } = renderHook(({ m, key }) => useEntryRows(m, key), {
+      initialProps: { m: model as Model | null, key: SEP as string | null },
+    });
+    act(() => result.current.dispatch({ type: "change", model, id: 1, column: "quantity", value: "5" }));
+    act(() => result.current.markSent());
+    rerender({ m: null, key: null });
+    rerender({ m: model, key: SEP });
+    expect(result.current.sent).toBe(false);
+    expect(result.current.rows.map((r) => r.quantity)).toEqual([""]);
+  });
+
   it("a refetched form for the same context keeps the typed rows", () => {
     const { result, rerender } = renderHook(({ m }) => useEntryRows(m, SEP), { initialProps: { m: model } });
     act(() => result.current.dispatch({ type: "change", model, id: 1, column: "quantity", value: "5" }));

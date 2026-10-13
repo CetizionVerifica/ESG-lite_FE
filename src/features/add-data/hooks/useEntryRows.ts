@@ -9,10 +9,17 @@ import type { ModalRow } from "../types";
 // × period (key from `lib/entryDrafts`, cleared on sign-out), so a reload or a
 // detour doesn't lose typed rows.
 
-/** `key` is the draft key the rows were started or restored for; null when none is open. */
-type State = { rows: ModalRow[]; nextId: number; key: string | null };
-/** Context changes, sent only by the hook itself: start or restore rows for `key`, or drop a closed context's rows (its draft stays in storage). */
-type ContextAction = { type: "reset"; rows: ModalRow[]; key: string } | { type: "forget" };
+/**
+ * `key` is the draft key the rows were started or restored for; null when none is open.
+ * `sent`: every row was sent or skipped. They stay for the success screen, are never
+ * saved as a draft again, and any later change starts from an empty list.
+ */
+type State = { rows: ModalRow[]; nextId: number; key: string | null; sent: boolean };
+/**
+ * Sent only by the hook itself: start or restore rows for `key`, drop a closed
+ * context's rows (its draft stays in storage), or mark the rows as sent.
+ */
+type ContextAction = { type: "reset"; rows: ModalRow[]; key: string } | { type: "forget" } | { type: "sent" };
 type Action =
   | ContextAction
   | { type: "add"; model: FormModel }
@@ -38,12 +45,16 @@ export function editRow(model: FormModel, row: ModalRow, column: string, value: 
   return next;
 }
 
-export function rowsReducer(state: State, action: Action): State {
+export function rowsReducer(prev: State, action: Action): State {
+  // Rows already sent never come back into editing: a later change starts from an empty list.
+  const state = prev.sent && action.type !== "reset" && action.type !== "forget" && action.type !== "sent" ? { ...prev, rows: [], nextId: 1, sent: false } : prev;
   switch (action.type) {
     case "reset":
-      return { rows: action.rows, nextId: nextIdOf(action.rows), key: action.key };
+      return { rows: action.rows, nextId: nextIdOf(action.rows), key: action.key, sent: false };
     case "forget":
-      return { rows: [], nextId: 1, key: null };
+      return { rows: [], nextId: 1, key: null, sent: false };
+    case "sent":
+      return { ...state, sent: true };
     case "add":
       return { ...state, rows: [...state.rows, newRow(action.model, state.nextId)], nextId: state.nextId + 1 };
     case "duplicate": {
@@ -102,7 +113,7 @@ export const rowHasInput = (row: ModalRow) =>
   Object.entries(row).some(([k, v]) => (k === "_extra_data" ? Object.values(v ?? {}).some(Boolean) : k !== "id" && !k.startsWith("_") && !!v));
 
 export function useEntryRows(model: FormModel | null, draftKey: string | null) {
-  const [state, dispatch] = useReducer(rowsReducer, { rows: [], nextId: 1, key: null });
+  const [state, dispatch] = useReducer(rowsReducer, { rows: [], nextId: 1, key: null, sent: false });
 
   // When the open context changes, start (or restore) its rows once its form
   // has arrived; until then, forget the previous context's rows, which live on
@@ -118,14 +129,14 @@ export function useEntryRows(model: FormModel | null, draftKey: string | null) {
   // delete the stored draft before it is restored, or file the old rows under
   // the new key.
   useEffect(() => {
-    if (!draftKey || state.key !== draftKey) return;
+    if (!draftKey || state.key !== draftKey || state.sent) return;
     try {
       if (state.rows.some(rowHasInput)) sessionStorage.setItem(draftKey, JSON.stringify(state.rows));
       else sessionStorage.removeItem(draftKey);
     } catch {
       // Storage full or blocked: the draft is a convenience only.
     }
-  }, [state.rows, state.key, draftKey]);
+  }, [state.rows, state.key, state.sent, draftKey]);
 
   const clearDraft = useCallback(() => {
     if (!draftKey) return;
@@ -135,6 +146,12 @@ export function useEntryRows(model: FormModel | null, draftKey: string | null) {
       // ignore
     }
   }, [draftKey]);
+
+  /** Every row was sent or skipped: clear the draft and keep the rows only for the success screen. */
+  const markSent = useCallback(() => {
+    clearDraft();
+    dispatch({ type: "sent" });
+  }, [clearDraft]);
 
   // A bill read finishing after the site, category or period changed must not
   // land in the new context's rows.
@@ -147,7 +164,8 @@ export function useEntryRows(model: FormModel | null, draftKey: string | null) {
 
   // Rows of another context are never handed out (they'd show in the unsaved
   // guard or the period comparison while the new form loads).
-  return { rows: state.key === draftKey ? state.rows : NO_ROWS, dispatch: guarded, clearDraft };
+  const own = state.key === draftKey;
+  return { rows: own ? state.rows : NO_ROWS, sent: own && state.sent, dispatch: guarded, clearDraft, markSent };
 }
 
 const NO_ROWS: ModalRow[] = [];
