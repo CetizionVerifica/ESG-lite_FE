@@ -60,7 +60,9 @@ export function NumberField({ value, onChange, unit, min, max, step, placeholder
               setText(String(next));
               onChange(next);
             }}
-            className={cn(inputBase, "h-9 text-right font-num tabular-nums", unit && "pr-14")}
+            // A one- or two-character unit ("%", "kg") needs little room; a full-width
+            // gap would hide the figure in a narrow table cell.
+            className={cn(inputBase, "h-9 text-right font-num tabular-nums", unit && (unit.length <= 2 ? "pr-8" : "pr-14"))}
           />
           {unit && (
             <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted">
