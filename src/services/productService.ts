@@ -24,12 +24,15 @@ export const getProductById = async (id: number | string): Promise<Product> => {
   return response.data;
 };
 
+/** Footprint (PCF) basis; "" or null clears a field on update. */
+type DeclaredFields = { declared_unit?: string; declared_unit_qty?: number | null; mass_per_unit_kg?: number | null };
+
 export const createProduct = async (data: {
   name: string;
   description?: string;
   unit: string;
   site_id: number;
-}): Promise<{ message: string; product: Product }> => {
+} & DeclaredFields): Promise<{ message: string; product: Product }> => {
   const response = await api.post("/admin/products", data);
   return response.data;
 };
@@ -41,7 +44,7 @@ export const updateProduct = async (
     description?: string;
     unit?: string;
     site_id?: number;
-  }
+  } & DeclaredFields
 ): Promise<{ message: string; product: Product }> => {
   const response = await api.put(`/admin/products/${id}`, data);
   return response.data;
