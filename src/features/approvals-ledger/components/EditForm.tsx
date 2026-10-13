@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from "react";
-import { Button, Callout, DateField, Select, SkeletonText, TextField, Textarea } from "../../../ui";
+import { Button, Callout, Select, SkeletonText, TextField, Textarea } from "../../../ui";
 import { errorMessage, useColumnConfig, useFactorNames, useManagerEdit, useUnits } from "../api";
 import {
   type Activity,
@@ -17,6 +17,7 @@ import {
   parentPrompt,
 } from "../editLogic";
 import { type ColumnConfig, type LedgerRow, humanize } from "../logic";
+import { EditPeriodField } from "./EditPeriodField";
 
 /** Edit mode inside the record drawer (replaces the old wide edit modal). */
 /** `onDone` gets the saved entry from the server when it sends one back. */
@@ -170,7 +171,7 @@ function Loaded({
         ) : (
           <TextField id={unitId} label="Unit" value={unit} readOnly error={tried ? errors.unit : undefined} help={units.isPending ? "Loading units…" : undefined} onChange={setUnit} />
         )}
-        <DateField label="Date of reporting" required value={date} onChange={setDate} />
+        <EditPeriodField row={row} value={date} onChange={setDate} />
       </div>
 
       <Textarea
