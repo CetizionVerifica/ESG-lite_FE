@@ -38,6 +38,17 @@ describe("Field wiring", () => {
 });
 
 describe("NumberField", () => {
+  it("leaves the figure room next to a short unit", () => {
+    render(
+      <>
+        <NumberField label="Recycled" value={40} onChange={() => {}} unit="%" />
+        <NumberField label="Energy" value={40} onChange={() => {}} unit="kWh" />
+      </>,
+    );
+    expect(screen.getByLabelText("Recycled").className).toContain("pr-8");
+    expect(screen.getByLabelText("Energy").className).toContain("pr-14");
+  });
+
   it("accepts separators and reports numbers or null", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
