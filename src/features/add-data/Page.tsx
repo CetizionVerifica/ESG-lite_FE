@@ -10,6 +10,7 @@ import { billGroups, billOf } from "./logic/bill";
 import { buildPayload, comparison, entryDate, entryFactorYear, entryPeriodLabel, formatEntryPeriodParam, parseEntryPeriod, previousPeriod, rowIssue, type EntryPeriod } from "./logic/entry";
 import { formColumns, toFormModel } from "./logic/form";
 import { entryCategories, feraCategoryOf, sitesOf, userIdOf } from "./logic/sites";
+import { entryDraftKey } from "../../lib/entryDrafts";
 import { ChooseContext } from "./steps/ChooseContext";
 import { EnterRows } from "./steps/EnterRows";
 import { Review } from "./steps/Review";
@@ -67,12 +68,13 @@ export default function AddDataPage() {
   });
   const threshold = useThreshold(site?.company_id ?? null);
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
-  const draftKey = contextReady ? `add-data:${site.site_id}:${category.category_id}:${formatEntryPeriodParam(period)}` : null;
-  const { rows, dispatch, clearDraft } = useEntryRows(model, draftKey);
+  // Per user: a draft survives a reload, so the next person signing in on this tab mustn't get it.
+  const draftKey = contextReady ? entryDraftKey(userIdOf(user), site.site_id, category.category_id, formatEntryPeriodParam(period)) : null;
+  const { rows, sent, dispatch, clearDraft, markSent } = useEntryRows(model, draftKey);
   const evidence = useRowEvidence(draftKey);
-  // Rows sent: nothing is left to lose (and the draft is cleared).
-  const [sentKey, setSentKey] = useState<string | null>(null);
-  const unsaved = !!draftKey && sentKey !== draftKey && rows.some(rowHasInput);
+  // Rows sent: nothing is left to lose (the draft is cleared). New rows for the
+  // same context after "Add another category" are unsent again.
+  const unsaved = !!draftKey && !sent && rows.some(rowHasInput);
   // The draft survives in-app navigation, but evidence files don't, and a half-entered form is easy to forget.
   const blocker = useUnsavedGuard(unsaved);
 
@@ -116,6 +118,23 @@ export default function AddDataPage() {
       ? `/capture/upload?${new URLSearchParams({ site: String(site.site_id), category: String(category.category_id), period: entryDate(period).slice(0, 7) })}`
       : "/capture/upload";
 
+  const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
+    <Review
+      rows={activeRows}
+      payloads={activeRows.map((r) => buildPayload(r, { siteId: s.site_id, categoryId: c.category_id, period: p }))}
+      calc={calc}
+      evidenceFiles={evidence.filesOf}
+      periodLabel={periodLabel}
+      onBack={() => setStep(1)}
+      onFinished={markSent}
+      onAnother={() => {
+        clearDraft();
+        setContext({ category: null });
+        setStep(0);
+      }}
+    />
+  );
+
   let body;
   if (sites.length === 0) {
     body = <EmptyState title="No site is assigned to you yet" description="Ask your manager to add you to a site." />;
@@ -133,6 +152,9 @@ export default function AddDataPage() {
         onNext={() => setStep(1)}
       />
     );
+  } else if (step === 2 && sent) {
+    // The success screen stays even if the form is refetched or fails to load in the background.
+    body = renderReview(site, category, period);
   } else if (setup.isPending) {
     body = (
       <Loading label="Loading the form" className="space-y-3">
@@ -177,25 +199,7 @@ export default function AddDataPage() {
       />
     );
   } else {
-    body = (
-      <Review
-        rows={activeRows}
-        payloads={activeRows.map((r) => buildPayload(r, { siteId: site.site_id, categoryId: category.category_id, period }))}
-        calc={calc}
-        evidenceFiles={evidence.filesOf}
-        periodLabel={periodLabel}
-        onBack={() => setStep(1)}
-        onFinished={() => {
-          clearDraft();
-          setSentKey(draftKey);
-        }}
-        onAnother={() => {
-          clearDraft();
-          setContext({ category: null });
-          setStep(0);
-        }}
-      />
-    );
+    body = renderReview(site, category, period);
   }
 
   return (
@@ -208,7 +212,8 @@ export default function AddDataPage() {
         steps={STEPS}
         current={step}
         completed={STEPS.slice(0, step).map((s) => s.id)}
-        canJump={(i) => i < step}
+        // Once the rows are sent there is nothing to go back to: start again with Add another category.
+        canJump={(i) => i < step && !sent}
         onStepChange={setStep}
       />
       {body}

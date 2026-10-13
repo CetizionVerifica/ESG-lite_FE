@@ -1,6 +1,6 @@
 # CI safety checks
 
-`.github/workflows/ci.yml` runs on every pull request into `redesign/integration`
+`.github/workflows/ci.yml` runs on every pull request into `production`
 or `main`, and on pushes to them. It never reaches production: the workflow
 holds no secrets, the build overrides the committed `.env` with a dead local
 API URL, and no step calls a backend.
