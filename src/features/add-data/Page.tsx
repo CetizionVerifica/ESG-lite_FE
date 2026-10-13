@@ -67,7 +67,8 @@ export default function AddDataPage() {
   });
   const threshold = useThreshold(site?.company_id ?? null);
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
-  const draftKey = contextReady ? `add-data:${site.site_id}:${category.category_id}:${formatEntryPeriodParam(period)}` : null;
+  // Per user: a draft survives a reload, so the next person signing in on this tab mustn't get it.
+  const draftKey = contextReady ? `add-data:${userIdOf(user) ?? "anon"}:${site.site_id}:${category.category_id}:${formatEntryPeriodParam(period)}` : null;
   const { rows, dispatch, clearDraft } = useEntryRows(model, draftKey);
   const evidence = useRowEvidence(draftKey);
   // Rows sent: nothing is left to lose (and the draft is cleared).
