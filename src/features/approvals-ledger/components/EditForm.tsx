@@ -4,6 +4,8 @@ import { errorMessage, useColumnConfig, useFactorNames, useManagerEdit, useUnits
 import {
   type Activity,
   type EditStart,
+  AMOUNT_ERROR,
+  amountErrors,
   applyChange,
   blockedMessage,
   editErrors,
@@ -57,22 +59,30 @@ function Loaded({
   const payload = editPayload(activity, date, unit, reason, start);
   // The factor and unit are needed only when the values are sent; a date-only fix keeps them as stored.
   const sendsValues = !!payload.activity_data;
-  const errors = editErrors(reason, sendsValues ? category : "x", hasMapping, sendsValues ? unit : "x", units.isSuccess ? units.data.length > 0 : true);
+  // Amounts are checked only when the values are sent (a date-only fix keeps them as stored).
+  const amounts = sendsValues ? amountErrors(config, activity, start.activity) : {};
+  const errors = {
+    ...editErrors(reason, sendsValues ? category : "x", hasMapping, sendsValues ? unit : "x", units.isSuccess ? units.data.length > 0 : true),
+    ...(Object.keys(amounts).length > 0 ? { amount: AMOUNT_ERROR } : {}),
+  };
   const notSaved = tried ? blockedMessage(errors) : null;
   const reasonId = useId();
   const unitId = useId();
+  const amountId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   // Older entries have no stored factor; say where the one shown came from.
   const derivedFactor = sendsValues && !row.activity_data?.emission_category && !!category;
 
   const submit = () => {
     setTried(true);
-    if (errors.reason || errors.category || errors.unit) {
+    if (errors.reason || errors.category || errors.unit || errors.amount) {
       // Take the manager to the first field that stops the save; the message by the button says what's missing.
       const selects = [...(formRef.current?.querySelectorAll<HTMLSelectElement>("select:not(:disabled)") ?? [])];
       const target = errors.category
         ? (selects.find((el) => el.value === "" && el.id !== unitId) ?? selects[0])
-        : document.getElementById(errors.unit ? unitId : reasonId);
+        : errors.amount
+          ? document.getElementById(`${amountId}-${Object.keys(amounts)[0]}`)
+          : document.getElementById(errors.unit ? unitId : reasonId);
       target?.focus();
       return;
     }
@@ -136,12 +146,14 @@ function Loaded({
           return (
             <TextField
               key={key}
+              id={`${amountId}-${key}`}
               label={humanize(key)}
               type={isNumberField(config, key, value) ? "number" : "text"}
               step="any"
               inputMode={isNumberField(config, key, value) ? "decimal" : undefined}
               value={String(value)}
               onChange={set}
+              error={tried ? amounts[key] : undefined}
             />
           );
         })}

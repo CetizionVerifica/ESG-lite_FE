@@ -233,6 +233,39 @@ test("a date-only fix sends just the date", async ({ page }) => {
   });
 });
 
+test("an empty, zero or negative amount isn't sent", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Reason for the change").fill("Meter read corrected");
+  for (const amount of ["", "0", "-5"]) {
+    await page.getByLabel("Quantity").fill(amount);
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByText("Not saved yet: enter an amount greater than 0.")).toBeVisible();
+    await expect(page.getByLabel("Quantity")).toBeFocused();
+  }
+  await expect(page.getByText("Enter an amount greater than 0", { exact: true })).toBeVisible();
+  expect(calls.some((c) => c.path.includes("manager-edit"))).toBe(false);
+  await page.getByLabel("Quantity").fill("150");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Changes saved")).toBeVisible();
+});
+
+test("a date the server refuses (filed yearly) shows its reason and keeps the form", async ({ page }) => {
+  await signIn(page);
+  const message = "This category already has a yearly batch covering 2024-01-01 – 2024-12-31. Delete the yearly data first, or file this entry under a different period.";
+  await page.route(/\/user\/emissions\/manager-edit\//, (route) => route.fulfill({ status: 409, json: { message, mode_lock: true } }));
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Date of reporting").fill("2024-06-30");
+  await page.getByLabel("Reason for the change").fill("Wrong reporting year");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: message })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Edit · Diesel" })).toBeVisible();
+});
+
 test("an amount change on an entry without a unit waits for a unit", async ({ page }) => {
   const { rows, calls } = await signIn(page);
   rows[0].activity_data_unit = null;

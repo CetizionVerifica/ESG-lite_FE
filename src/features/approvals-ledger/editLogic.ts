@@ -238,7 +238,30 @@ export function editPayload(activity: Activity, date: string, unit: string, reas
 
 export const EDIT_REASON_MIN = 5;
 
-type EditErrors = { reason?: string; category?: string; unit?: string };
+type EditErrors = { reason?: string; category?: string; unit?: string; amount?: string };
+
+export const AMOUNT_ERROR = "Enter an amount greater than 0";
+
+/**
+ * Number fields that stop the save, with their message: a negative is never an
+ * amount, and at least one must be above 0 (the server refuses the edit
+ * otherwise rather than keep the old total). `start` decides which fields are
+ * numbers, so a cleared field still counts.
+ */
+export function amountErrors(config: ColumnConfig | undefined, activity: Activity, start: Activity): Record<string, string> {
+  const keys = editableKeys(config, activity).filter((k) => !fieldOptions(config, k, activity) && isNumberField(config, k, start[k] ?? activity[k]));
+  const num = (k: string) => {
+    const raw = String(activity[k] ?? "").trim();
+    return raw === "" ? null : Number(raw);
+  };
+  const errors: Record<string, string> = {};
+  const anyPositive = keys.some((k) => (num(k) ?? 0) > 0);
+  for (const k of keys) {
+    const v = num(k);
+    if ((v !== null && v < 0) || (!anyPositive && (v === null || v <= 0))) errors[k] = AMOUNT_ERROR;
+  }
+  return errors;
+}
 
 /**
  * `category` is the resolved emission factor. Saving without one keeps the old
@@ -264,6 +287,7 @@ export function blockedMessage(errors: EditErrors): string | null {
   const missing = [
     errors.category && lowerFirst(errors.category),
     errors.unit && lowerFirst(errors.unit),
+    errors.amount && lowerFirst(errors.amount),
     errors.reason && `add a reason for the change (at least ${EDIT_REASON_MIN} characters)`,
   ].filter(Boolean);
   return missing.length ? `Not saved yet: ${missing.join(", and ")}.` : null;

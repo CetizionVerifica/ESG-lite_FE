@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  AMOUNT_ERROR,
+  amountErrors,
   applyChange,
   blockedMessage,
   editErrors,
@@ -239,5 +241,38 @@ describe("blockedMessage", () => {
     expect(blockedMessage(editErrors("Typo in litres", "Diesel", true, ""))).toBe("Not saved yet: choose a unit, without one the total would be 0.");
     expect(editErrors("Typo in litres", "Diesel", true, "", false).unit).toMatch(/none are set up/);
     expect(editErrors("Typo in litres", "Diesel", true, "litres")).toEqual({});
+  });
+});
+
+describe("amountErrors", () => {
+  const start = { fuel_type: "1", quantity: "100", emission_category: "Diesel" };
+  const at = (quantity: string) => ({ ...start, quantity });
+
+  it("blocks an empty, zero or negative amount", () => {
+    expect(amountErrors(chained, at(""), start)).toEqual({ quantity: AMOUNT_ERROR });
+    expect(amountErrors(chained, at("0"), start)).toEqual({ quantity: AMOUNT_ERROR });
+    expect(amountErrors(chained, at("-5"), start)).toEqual({ quantity: AMOUNT_ERROR });
+  });
+
+  it("lets a positive amount through and ignores select fields", () => {
+    expect(amountErrors(chained, at("150"), start)).toEqual({});
+  });
+
+  it("without a config, judges the stored number fields, even once cleared", () => {
+    const stored = { activity_value: "1600", Fuel: "Diesel" };
+    expect(amountErrors(undefined, { ...stored, activity_value: "" }, stored)).toEqual({ activity_value: AMOUNT_ERROR });
+    expect(amountErrors(undefined, stored, stored)).toEqual({});
+  });
+
+  it("allows a zero next to another positive amount, never a negative", () => {
+    const two = { distance: "10", passengers: "2" };
+    expect(amountErrors(undefined, { distance: "10", passengers: "0" }, two)).toEqual({});
+    expect(amountErrors(undefined, { distance: "10", passengers: "-1" }, two)).toEqual({ passengers: AMOUNT_ERROR });
+  });
+});
+
+describe("blockedMessage with an amount", () => {
+  it("names the amount", () => {
+    expect(blockedMessage({ amount: AMOUNT_ERROR })).toBe("Not saved yet: enter an amount greater than 0.");
   });
 });
