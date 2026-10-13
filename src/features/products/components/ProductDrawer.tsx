@@ -6,6 +6,7 @@ import {
   Drawer,
   EmptyState,
   Modal,
+  NumberField,
   StatusPill,
   TabPanel,
   Tabs,
@@ -22,6 +23,7 @@ import {
   type Product,
   type ProductDraft,
   type SiteRef,
+  changesDeclared,
   changesUnitWithRecords,
   day,
   draftFrom,
@@ -266,6 +268,52 @@ function DetailsTab({
         <Callout tone="info">Records already entered keep the unit they were recorded in; only new records start from the new unit.</Callout>
       )}
       <Textarea label="Description" value={draft.description} onChange={(v) => set("description", v)} rows={3} maxLength={500} />
+      <section className="grid gap-4 border-t border-line pt-4" aria-label="Product footprint basis">
+        <div>
+          <h3 className="text-sm font-medium text-ink">Product footprint</h3>
+          <p className="mt-1 text-sm text-muted">What one footprint is expressed per. Needed before a footprint can be calculated.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <NumberField
+            label="Quantity"
+            value={draft.declared_unit_qty}
+            onChange={(v) => set("declared_unit_qty", v)}
+            error={error("declared_unit_qty")}
+            min={0}
+            step={0.001}
+            placeholder="1"
+            help="Leave empty for 1."
+          />
+          <TextField
+            label="Declared unit"
+            value={draft.declared_unit}
+            onChange={(v) => set("declared_unit", v)}
+            error={error("declared_unit")}
+            list={`${listId}-declared`}
+            maxLength={20}
+            autoComplete="off"
+            help="For example t, kg or km."
+          />
+          <datalist id={`${listId}-declared`}>
+            {["t", "kg", "km", "m"].map((u) => (
+              <option key={u} value={u} />
+            ))}
+          </datalist>
+        </div>
+        <NumberField
+          label="Mass per declared unit"
+          value={draft.mass_per_unit_kg}
+          onChange={(v) => set("mass_per_unit_kg", v)}
+          error={error("mass_per_unit_kg")}
+          unit="kg"
+          min={0}
+          step={0.001}
+          help="Turns production recorded in tonnes into declared units, for example 1000 kg for 1 t."
+        />
+        {changesDeclared(draft, row) && (
+          <Callout tone="warn">Footprints of this product that are in review, approved or published will be marked out of date.</Callout>
+        )}
+      </section>
     </div>
   );
 }
