@@ -10,10 +10,10 @@ import type { ModalRow } from "../types";
 
 /** `key` is the draft key the rows were started or restored for; null when none is open. */
 type State = { rows: ModalRow[]; nextId: number; key: string | null };
+/** Context changes, sent only by the hook itself: start or restore rows for `key`, or drop a closed context's rows (its draft stays in storage). */
+type ContextAction = { type: "reset"; rows: ModalRow[]; key: string } | { type: "forget" };
 type Action =
-  | { type: "reset"; rows: ModalRow[]; key: string }
-  /** The open context closed or changed: drop its rows (its draft stays in storage). */
-  | { type: "forget" }
+  | ContextAction
   | { type: "add"; model: FormModel }
   | { type: "duplicate"; id: number }
   | { type: "remove"; id: number }
@@ -139,9 +139,8 @@ export function useEntryRows(model: FormModel | null, draftKey: string | null) {
   // land in the new context's rows.
   const keyRef = useRef(draftKey);
   keyRef.current = draftKey;
-  const guarded = useCallback((action: Action) => {
+  const guarded = useCallback((action: Exclude<Action, ContextAction>) => {
     if (action.type === "append" && action.draftKey !== keyRef.current) return;
-    if (action.type === "reset" && action.key !== keyRef.current) return;
     dispatch(action);
   }, []);
 

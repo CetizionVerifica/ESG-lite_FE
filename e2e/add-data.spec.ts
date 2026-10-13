@@ -408,11 +408,29 @@ test("typed rows survive a page reload", async ({ page }) => {
   await row.getByLabel("Unit").selectOption("litre");
   await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
   // The unsaved-rows guard asks before the reload; leave anyway.
-  page.on("dialog", (d) => void d.accept());
+  const asked: string[] = [];
+  page.once("dialog", (d) => {
+    asked.push(d.type());
+    void d.accept();
+  });
   await page.reload();
+  expect(asked).toEqual(["beforeunload"]);
   const restored = page.getByRole("region", { name: "Row 1" });
   await expect(restored.getByLabel("Quantity")).toHaveValue("1600");
   await expect(restored.getByText("= 4.29 tCO₂e")).toBeVisible();
+});
+
+test("another person signing in on the same tab doesn't get the previous person's draft", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity").fill("1600");
+  // Someone else on the same site signs in on this tab.
+  const other = { user_id: 8, name: "Ola Other", email: "ola@midal.com", sites: [site] };
+  await page.addInitScript((u) => localStorage.setItem("user", u), JSON.stringify(other));
+  await page.route(/\/auth\/me$/, (route) => route.fulfill({ json: { role: "User", user: other } }));
+  page.once("dialog", (d) => void d.accept());
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("");
 });
 
 test("files picked on a typed row are attached to it after it is saved", async ({ page }) => {

@@ -77,11 +77,4 @@ describe("useEntryRows", () => {
     rerender({ m: toFormModel({ ...config }) });
     expect(result.current.rows.map((r) => r.quantity)).toEqual(["5"]);
   });
-
-  it("ignores a reset for another context", () => {
-    const { result } = renderHook(() => useEntryRows(model, SEP));
-    act(() => result.current.dispatch({ type: "change", model, id: 1, column: "quantity", value: "5" }));
-    act(() => result.current.dispatch({ type: "reset", rows: [{ id: 1, quantity: "9" }], key: OCT }));
-    expect(result.current.rows.map((r) => r.quantity)).toEqual(["5"]);
-  });
 });
