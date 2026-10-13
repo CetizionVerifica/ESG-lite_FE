@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from "axios";
+import { clearEntryDrafts } from "../lib/entryDrafts";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -40,6 +41,7 @@ export function handleUnauthorized(error: AxiosError): void {
   try {
     role = localStorage.getItem("role");
     localStorage.clear();
+    clearEntryDrafts();
   } catch {
     // Storage blocked: the reload below still drops the in-memory session.
   }

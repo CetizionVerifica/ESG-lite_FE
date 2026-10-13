@@ -424,13 +424,32 @@ test("another person signing in on the same tab doesn't get the previous person'
   await signIn(page, []);
   await page.goto("/data/new?site=4&category=9&period=2025-09");
   await page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity").fill("1600");
+  // The first person's draft is saved.
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toContain("1600");
   // Someone else on the same site signs in on this tab.
   const other = { user_id: 8, name: "Ola Other", email: "ola@midal.com", sites: [site] };
   await page.addInitScript((u) => localStorage.setItem("user", u), JSON.stringify(other));
   await page.route(/\/auth\/me$/, (route) => route.fulfill({ json: { role: "User", user: other } }));
-  page.once("dialog", (d) => void d.accept());
+  const asked: string[] = [];
+  page.once("dialog", (d) => {
+    asked.push(d.type());
+    void d.accept();
+  });
   await page.reload();
+  expect(asked).toEqual(["beforeunload"]);
   await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("");
+});
+
+test("signing out removes the typed-rows drafts from the tab", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity").fill("1600");
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toContain("1600");
+  page.once("dialog", (d) => void d.accept());
+  await page.getByRole("button", { name: /Account menu/ }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login/);
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter((k) => k.startsWith("add-data:")))).toEqual([]);
 });
 
 test("files picked on a typed row are attached to it after it is saved", async ({ page }) => {

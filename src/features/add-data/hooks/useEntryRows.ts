@@ -5,8 +5,9 @@ import { applyChange, newRow, setExtraField, type FormModel } from "../logic/for
 import type { ModalRow } from "../types";
 
 // One reducer for the rows being entered (replaces the legacy page's modal
-// row state). The draft is kept in sessionStorage per site × category ×
-// period, so a reload or a detour doesn't lose typed rows.
+// row state). The draft is kept in sessionStorage per user × site × category
+// × period (key from `lib/entryDrafts`, cleared on sign-out), so a reload or a
+// detour doesn't lose typed rows.
 
 /** `key` is the draft key the rows were started or restored for; null when none is open. */
 type State = { rows: ModalRow[]; nextId: number; key: string | null };
