@@ -158,3 +158,50 @@ export function aiUnreachable(e: unknown): boolean {
   if ([401, 403, 404, 405].includes(status)) return true;
   return res?.data?.detail === undefined;
 }
+
+// ---- supplier declaration reading (E2 phase 3, for C06) ----
+
+export type DeclarationFieldName =
+  | "product_name"
+  | "supplier_name"
+  | "declared_unit"
+  | "value_kgco2e"
+  | "boundary"
+  | "standard"
+  | "gwp_set"
+  | "reference_start"
+  | "reference_end"
+  | "valid_from"
+  | "valid_to"
+  | "verifier";
+
+export type DeclarationField = { value: string | number | null; confidence: number; reason: string; by: "pact" | "ai" | "rule" };
+
+export type DeclarationResponse = {
+  file_name: string;
+  kind: "pact" | "pdf";
+  fields: Record<DeclarationFieldName, DeclarationField>;
+  /** The boundary differs from the footprint's; the figure must not be accepted as it is. */
+  boundary_mismatch: boolean;
+  unit_mismatch: boolean;
+  low_confidence_fields: string[];
+  warnings: string[];
+  problems: string[];
+  ai_used: boolean;
+  evidence: BomEvidence | null;
+};
+
+/** A supplier's PCF/EPD (.pdf) or PACT (.json) → the fields to review, each with a confidence and a reason. */
+export const parseDeclaration = async (
+  file: File,
+  opts: { expectedBoundary?: string; expectedUnit?: string; studyId?: number; keepEvidence?: boolean } = {},
+): Promise<DeclarationResponse> => {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  if (opts.expectedBoundary) form.append("expected_boundary", opts.expectedBoundary);
+  if (opts.expectedUnit) form.append("expected_unit", opts.expectedUnit);
+  if (opts.studyId !== undefined) form.append("study_id", String(opts.studyId));
+  if (opts.keepEvidence === false) form.append("keep_evidence", "false");
+  const response = await ocrApi.post("/v1/pcf/parse-declaration", form, { headers: { "Content-Type": "multipart/form-data" } });
+  return response.data;
+};
