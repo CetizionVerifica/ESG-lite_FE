@@ -2,17 +2,19 @@ import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CheckCircle2, ChevronRight } from "lucide-react";
 import { Button, Callout, Modal, PageHeader, Stepper, cn, focusRing, useToast, useUnsavedGuard } from "../../ui";
-import { type OnboardResult, errorMessage, useOnboard, useReportingCalendar } from "./api";
-import { AccessStep, AdminStep, BrandStep, CompanyStep, ReviewStep } from "./components/OnboardSteps";
+import { type OnboardResult, errorMessage, useCompanies, useOnboard, useReportingCalendar, useSetupCopyPreview } from "./api";
+import { AccessStep, AdminStep, BrandStep, CompanyStep, ReviewStep, SetupStep } from "./components/OnboardSteps";
 import { EMPTY_ONBOARD, type OnboardDraft, type OnboardField, STEPS, firstInvalidStep, isOnboardDirty, skipBrand, validateStep } from "./onboarding";
 
-/** P17 `/clients/new`: onboard a client in four steps plus a review. */
+/** P17 `/clients/new`: onboard a client in five steps plus a review. */
 export default function OnboardPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const calendar = useReportingCalendar();
   const onboard = useOnboard();
+  const companies = useCompanies();
   const [draft, setDraft] = useState<OnboardDraft>(EMPTY_ONBOARD);
+  const copyPreview = useSetupCopyPreview(draft.setup, null);
   const [current, setCurrent] = useState(0);
   const [completed, setCompleted] = useState<string[]>([]);
   const [touched, setTouched] = useState<Set<string>>(new Set());
@@ -55,7 +57,7 @@ export default function OnboardPage() {
   const isReview = step.id === "review";
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <PageHeader title="Onboard client" description="Company, its admin user, access and brand. You can change any of it later." />
+      <PageHeader title="Onboard client" description="Company, its admin user, access, brand and the setup to start from. You can change any of it later." />
       <Stepper label="Onboarding steps" steps={[...STEPS]} current={current} completed={completed} onStepChange={go} />
       <div ref={headingRef} tabIndex={-1} className="focus:outline-none">
         <h2 className="text-lg font-semibold text-ink">{isReview ? "Review and create" : step.label}</h2>
@@ -78,6 +80,15 @@ export default function OnboardPage() {
         {step.id === "admin" && <AdminStep draft={draft} set={set} error={error} />}
         {step.id === "access" && <AccessStep draft={draft} set={set} error={error} calendar={{ rule: calendar.data?.fiscalYearRule ?? null, loading: calendar.isPending }} />}
         {step.id === "brand" && <BrandStep draft={draft} set={set} error={error} onSkip={() => setDraft(skipBrand)} />}
+        {step.id === "setup" && (
+          <SetupStep
+            draft={draft}
+            set={set}
+            error={error}
+            companies={companies.data ?? []}
+            preview={{ data: copyPreview.data, loading: copyPreview.isFetching, error: copyPreview.error ? errorMessage(copyPreview.error, "The server didn't answer.") : null }}
+          />
+        )}
         {isReview && <ReviewStep draft={draft} onEdit={go} />}
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
           <Button onClick={() => navigate("/clients")} disabled={onboard.isPending}>
@@ -110,12 +121,19 @@ export default function OnboardPage() {
 
 function Success({ result }: { result: OnboardResult }) {
   const id = result.companyId;
-  const steps = [
-    { label: "Add sites", detail: "A main site was created; add the others.", to: `/setup/sites?client=${id}&open=new` },
-    { label: "Assign categories", detail: "Pick what each site reports.", to: `/setup/sites?client=${id}` },
-    { label: "Configure capture", detail: "Set up the columns people fill in.", to: "/capture/forms" },
-    { label: "Load factors", detail: "Add the emission factors the sites need.", to: "/factors" },
-  ];
+  const steps = result.copied
+    ? [
+        { label: "Check sites", detail: `Copied: ${result.copied}. Rename the main site and fix addresses.`, to: `/setup/sites?client=${id}` },
+        { label: "Check forms", detail: "Review the copied data-entry forms.", to: "/capture/forms" },
+        { label: "Check factors", detail: "Grid and fuel factors may differ by country.", to: `/factors?client=${id}` },
+        { label: "Add people", detail: "Invite the client's team to its sites.", to: `/clients/${id}?tab=people` },
+      ]
+    : [
+        { label: "Add sites", detail: "A main site was created; add the others.", to: `/setup/sites?client=${id}&open=new` },
+        { label: "Assign categories", detail: "Pick what each site reports.", to: `/setup/sites?client=${id}` },
+        { label: "Configure capture", detail: "Set up the columns people fill in.", to: "/capture/forms" },
+        { label: "Load factors", detail: "Add the emission factors the sites need.", to: "/factors" },
+      ];
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-start gap-3">
