@@ -1,5 +1,6 @@
 // P17 Onboard client: pure logic (draft, per-step validation, payloads, logo colour). No React here.
 import { BLACK, hueSat, isHex, mix, normalizeHex } from "../../theme/color";
+import { type CopyDraft, EMPTY_COPY } from "./setupCopy";
 
 export const INDUSTRIES = [
   "Metals and mining",
@@ -44,6 +45,8 @@ export type OnboardDraft = {
   logoDark: File | null;
   /** The client's colour-guideline file (PDF or image), kept for whoever builds the theme. */
   guideline: File | null;
+  /** "Start from": setup copied from another client or a setup file once the company exists. */
+  setup: CopyDraft;
 };
 export type OnboardField = keyof OnboardDraft;
 
@@ -66,6 +69,7 @@ export const EMPTY_ONBOARD: OnboardDraft = {
   logo: null,
   logoDark: null,
   guideline: null,
+  setup: EMPTY_COPY,
 };
 
 /** Colour guidelines: a PDF or an image of the brand sheet (no SVG), up to 10 MB (backend limits). */
@@ -77,6 +81,7 @@ export const STEPS = [
   { id: "admin", label: "Admin user" },
   { id: "access", label: "Access" },
   { id: "brand", label: "Brand", optional: true },
+  { id: "setup", label: "Start from", optional: true },
   { id: "review", label: "Review" },
 ] as const;
 export type StepId = (typeof STEPS)[number]["id"];
@@ -115,7 +120,8 @@ export function firstInvalidStep(d: OnboardDraft): StepId | null {
 
 /** True once anything differs from the empty form (drives the unsaved-changes guard). */
 export function isOnboardDirty(d: OnboardDraft): boolean {
-  return (Object.keys(EMPTY_ONBOARD) as OnboardField[]).some((k) => d[k] !== EMPTY_ONBOARD[k]);
+  // The "Start from" step is only a change once a source is picked; toggling its tabs isn't.
+  return (Object.keys(EMPTY_ONBOARD) as OnboardField[]).some((k) => (k === "setup" ? d.setup.source !== null : d[k] !== EMPTY_ONBOARD[k]));
 }
 
 /** Multipart body for POST /admin/onboarding/company (field names as the backend reads them). */
