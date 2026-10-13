@@ -1,0 +1,16 @@
+{
+  "name": "esglite-tools",
+  "owner": {
+    "name": "CetizionVerifica"
+  },
+  "plugins": [
+    {
+      "name": "plan-progress",
+      "source": "./.claude/mods/plan-progress",
+      "description": "Live progress of the ESGLite redesign and PCF plan"
+    }
+  ],
+  "metadata": {
+    "description": "Claude Code mods for the ESGLite team"
+  }
+}
