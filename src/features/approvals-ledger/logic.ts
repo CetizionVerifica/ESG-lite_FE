@@ -7,11 +7,28 @@ export type FactorSnapshot = {
   emission_factor_id: number;
   emission_category_name: string;
   global_category_name?: string;
-  factor_value: number;
+  /** Postgres numeric: the API sends it as text ("2.5600"). */
+  factor_value: number | string;
   denominator_unit: string;
   source: string;
   year: number;
 };
+
+/** A factor's value as a number, whether the API sent it as text or a number; null when it isn't one. */
+export function factorValue(factor: { factor_value: number | string | null | undefined }): number | null {
+  const raw = factor.factor_value;
+  if (raw === null || raw === undefined || String(raw).trim() === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+const factorFormat = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 6 });
+
+/** The factor as shown in a calculation: up to 6 significant digits, so tiny factors don't round to 0. */
+export function formatFactorValue(factor: { factor_value: number | string | null | undefined }): string {
+  const value = factorValue(factor);
+  return value === null ? "—" : factorFormat.format(value);
+}
 
 /** A ledger row: the list API also returns these entity fields. */
 export type LedgerRow = EmissionData & {

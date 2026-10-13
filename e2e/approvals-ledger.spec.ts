@@ -116,7 +116,7 @@ async function signIn(page: Page) {
             updated_at: "2025-10-01T08:00:00Z",
             site: { site_id: 1, name: "Hidd" },
             created_by: { user_id: 4, name: "Omar Contributor" },
-            emission_factor_snapshot: { emission_factor_id: 9, emission_category_name: "Diesel (average biofuel blend)", factor_value: 0.00268, denominator_unit: "litre", source: "DEFRA", year: 2024 },
+            emission_factor_snapshot: { emission_factor_id: 9, emission_category_name: "Diesel (average biofuel blend)", factor_value: "0.002680", denominator_unit: "litre", source: "DEFRA", year: 2024 },
           }));
         const count = (s: string) => rows.filter((r) => r.status === s).length;
         return json({ data, total: data.length, summary: { total_emission: 0, pending_count: count("pending"), approved_count: count("approved"), rejected_count: count("rejected") } });
@@ -175,7 +175,7 @@ test("a row opens in the drawer with its calculation", async ({ page }) => {
   const drawer = page.getByRole("dialog", { name: "Diesel" });
   await expect(drawer).toBeVisible();
   await expect(drawer.getByTestId("calculation")).toContainText("300.00 litre");
-  await expect(drawer.getByTestId("calculation")).toContainText("per litre");
+  await expect(drawer.getByTestId("calculation")).toContainText("0.00268 per litre");
   await expect(drawer).toContainText("DEFRA");
   await expect(drawer).toContainText("No documents attached.");
   await expect(drawer).toContainText("0.804 tCO₂e");

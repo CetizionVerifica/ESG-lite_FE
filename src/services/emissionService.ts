@@ -237,7 +237,8 @@ export interface EmissionFactorDetails {
   emission_factor_id: number;
   emission_category_name: string;
   global_category_name?: string;
-  factor_value: number;
+  /** Postgres numeric: the API sends it as text ("2.5600"). */
+  factor_value: number | string;
   denominator_unit: string;
   source: string;
   year: number;
