@@ -184,3 +184,15 @@ test("the lower tabs load on demand and follow the header context", async ({ pag
   await page.getByRole("tabpanel").getByRole("radio", { name: "Table" }).click();
   await expect(page.getByRole("tabpanel").getByRole("row", { name: /Hidd/ })).toContainText("80");
 });
+
+test("submission status still shows when the overview request fails", async ({ page }) => {
+  await signIn(page);
+  await page.route(/\/manager\/overview(\?|$)/, (route) => route.fulfill({ status: 500, json: { message: "boom" } }));
+  await page.goto("/overview?period=CY2025");
+
+  await expect(page.getByText("Couldn't load").first()).toBeVisible();
+  const panel = page.locator("#submission-status");
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("Lina Late");
+  await expect(panel).toContainText("Omar Contributor");
+});
