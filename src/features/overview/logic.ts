@@ -114,7 +114,19 @@ export function submissionMonths(now: Date, n = 6): string[] {
   });
 }
 
-export type ThresholdAlert = { category_id: number; category_name: string; pct: number };
+/**
+ * The month Submission status shows for a period, as the overview API picks it:
+ * a month period's own month, else the period's last month if it has ended,
+ * never later than the previous calendar month.
+ */
+export function submissionMonthFor(kind: PeriodKind, range: { from: string; to: string }, now: Date): string {
+  if (kind === "month") return range.from.slice(0, 7);
+  const prev = submissionMonths(now, 1)[0];
+  const end = range.to.slice(0, 7);
+  return end < prev ? end : prev;
+}
+
+export type ThresholdAlert ={ category_id: number; category_name: string; pct: number };
 
 /** Categories that grew more than `threshold`% against the previous period, largest rise first. */
 export function thresholdAlerts(current: OverviewCategory[], previous: OverviewCategory[], threshold: number): ThresholdAlert[] {
