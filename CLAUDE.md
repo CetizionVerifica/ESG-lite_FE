@@ -4,8 +4,8 @@ React 19 + Vite + TypeScript + Tailwind. Backend is ESG-lite (Node), AI/OCR endp
 
 ## Branches
 
-- All redesign and PCF work targets the long-lived integration branch `redesign/integration`, not `main`. Branch from it and open PRs against it.
-- `main` stays the current production UI until the team merges `redesign/integration` into it.
+- All redesign and PCF work targets the long-lived staging branch `production` (formerly `redesign/integration`), not `main`. Branch from it and open PRs against it.
+- `main` is the legacy UI; `production` is what staging deploys from. `redesign/integration` is retired (it was renamed to `production` on 2026-10-13).
 - The same branch exists in ESG-lite and python_AI_service for the backend and AI parts.
 
 ## Where the specs live
@@ -26,7 +26,7 @@ React 19 + Vite + TypeScript + Tailwind. Backend is ESG-lite (Node), AI/OCR endp
 
 ## Routes
 
-- The redesigned app is the only UI on `redesign/integration` (M3, 2026-10-11). The `VITE_NEW_UI` flag, the old `src/pages/` and `src/components/` and `ThemeContext` were removed in that PR.
+- The redesigned app is the only UI on `production` (M3, 2026-10-11). The `VITE_NEW_UI` flag, the old `src/pages/` and `src/components/` and `ThemeContext` were removed in that PR.
 - Register a page in its module's own `src/features/<module>/routes.tsx` (see `src/features/README.md`); don't edit `src/routes/newUiRoutes.tsx` or `src/routes/legacyPages.tsx` for it. A shell route no module claims shows a placeholder.
 - Old paths redirect through `LEGACY_REDIRECTS` in `src/features/shell/routeMap.ts`.
 - Dev-only pages (never in production builds) go in `src/routes/devRoutes.tsx`. `/dev/theme` previews every theme token in PlanetPulse, Midal Classic, Midal Light and Midal Night.

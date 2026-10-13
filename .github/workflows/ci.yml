@@ -1,4 +1,4 @@
-# Safety checks for every change headed to redesign/integration or main.
+# Safety checks for every change headed to production or main.
 #
 # Nothing here can reach production: the workflow holds no secrets
 # (ci/check_ci_isolation.py enforces that), the build points the app at a
@@ -7,9 +7,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, redesign/integration]
+    branches: [main, production]
   push:
-    branches: [main, redesign/integration]
+    branches: [main, production]
 
 permissions:
   contents: read
