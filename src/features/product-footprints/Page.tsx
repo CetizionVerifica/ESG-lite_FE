@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Braces, Building2, FileText, FlaskConical, Package, Plus, SearchX } from "lucide-react";
+import { Braces, Building2, FileText, FlaskConical, Mail, Package, Plus, SearchX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { getExportFile } from "../../services/pcfExportService";
 import {
@@ -191,7 +191,10 @@ export default function ProductFootprintsPage() {
         icon: <Plus aria-hidden className="size-4" />,
         onClick: () => navigate(scopeSites.length === 1 ? `/products/new?site=${scopeSites[0]}` : "/products/new"),
       }}
-      secondaryActions={[{ label: "Material factors", icon: <FlaskConical aria-hidden className="size-4" />, onClick: () => navigate("/factors/materials") }]}
+      secondaryActions={[
+        { label: "Supplier requests", icon: <Mail aria-hidden className="size-4" />, onClick: () => navigate("/products/suppliers") },
+        { label: "Material factors", icon: <FlaskConical aria-hidden className="size-4" />, onClick: () => navigate("/factors/materials") },
+      ]}
     />
   );
 

@@ -1,9 +1,12 @@
-import { Combobox, Drawer, NumberField, Select, TextField } from "../../../ui";
+import { Link } from "react-router-dom";
+import { Combobox, Drawer, NumberField, Select, TextField, askSupplierLink, cn, focusRing } from "../../../ui";
 import { type Line, type PickerFactor, factorLabel, lineProblem } from "../logic";
 
 type Props = {
   line: Line | null;
   factors: PickerFactor[];
+  /** The study the line belongs to, for the C06 "Ask the supplier" link. */
+  studyId: number;
   onChange: (key: string, patch: Partial<Line>) => void;
   onClose: () => void;
 };
@@ -15,7 +18,7 @@ const DQR = [
 ];
 
 /** The fields a line row has no room for. Edits apply as typed, like the row. */
-export function LineDrawer({ line, factors, onChange, onClose }: Props) {
+export function LineDrawer({ line, factors, studyId, onChange, onClose }: Props) {
   const set = (patch: Partial<Line>) => line && onChange(line.key, patch);
   const recycled = factors.filter((f) => f.recycled).map((f) => ({ value: f.id, label: factorLabel(f) }));
   const problem = line ? lineProblem(line) : null;
@@ -44,6 +47,15 @@ export function LineDrawer({ line, factors, onChange, onClose }: Props) {
             onChange={(v) => set({ supplier_pcf_kgco2e: v, ...(v != null ? { data_type: "primary" as const } : {}) })}
             help="From the supplier's own declaration. Replaces the factor for this line."
           />
+          {line.pcf_input_id != null && line.supplier_pcf_kgco2e == null && (
+            <p className="text-sm text-muted">
+              Don't have it?{" "}
+              <Link to={askSupplierLink(studyId, line.pcf_input_id)} className={cn("rounded-chip font-medium text-brand-text underline underline-offset-2", focusRing)}>
+                Ask the supplier
+              </Link>{" "}
+              for their declaration; once accepted it fills this field.
+            </p>
+          )}
           {line.stage === "A1" && line.recycled_share_pct > 0 && line.supplier_pcf_kgco2e == null && (
             <Combobox
               label="Recycled factor"

@@ -33,3 +33,4 @@ Callout (right or below): "Bahrain plant energy is 96% allocated. AAAC conductor
 
 ## Built (C05 2/2, 2026-10-12)
 - Bulk actions: "Export declaration" (one selected product with a footprint → `/products/:studyId/export`, C05) and "Export PACT JSON" (every selected published footprint, one validated file each from the backend). The shared `saveBlob` / `fileNameFrom` live in `src/ui`.
+- C06 (FE 4/4, 2026-10-13): header action "Supplier requests" opens `/products/suppliers`.

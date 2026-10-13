@@ -317,7 +317,7 @@ function Result({ study, versions, back }: { study: Study; versions: Study[]; ba
           <KpiStrip items={kpis} />
           <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <StageWaterfall steps={steps} unitText={unitText} exportName={`footprint-v${study.version}`} hiddenNote={r.hidden_stages.length > 0} />
-            <Hotspots items={spots} hiddenCount={hiddenLines} onOpenInputs={() => setTab("inputs")} />
+            <Hotspots items={spots} hiddenCount={hiddenLines} studyId={study.pcf_study_id} onOpenInputs={() => setTab("inputs")} />
           </div>
           {r.warnings.length > 0 && (
             <Callout tone="info" title="Notes from the calculation">

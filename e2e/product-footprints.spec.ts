@@ -124,6 +124,7 @@ test("shows the portfolio for the year with KPIs that filter the table", async (
   await page.goto("/products?period=CY2025");
 
   await expect(page.getByRole("heading", { name: "Product footprints" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Supplier requests" })).toBeVisible();
   const rows = table(page).locator("tbody tr");
   await expect(rows).toHaveCount(3);
   const wire = rows.filter({ hasText: "EC-grade wire rod 9.5 mm" });

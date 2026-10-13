@@ -1,12 +1,13 @@
-import { cn, focusRing, panel } from "../../../ui";
+import { Link } from "react-router-dom";
+import { askSupplierLink, cn, focusRing, panel } from "../../../ui";
 import { STAGE_LABEL, type Hotspot } from "../logic";
 
 const pct = (v: number) => `${v.toLocaleString("en-GB", { maximumFractionDigits: v < 1 ? 1 : 0 })}%`;
 
-type Props = { items: Hotspot[]; hiddenCount: number; onOpenInputs: () => void };
+type Props = { items: Hotspot[]; hiddenCount: number; studyId: number; onOpenInputs: () => void };
 
 /** Top inputs by share, each with a lever written by rule. */
-export function Hotspots({ items, hiddenCount, onOpenInputs }: Props) {
+export function Hotspots({ items, hiddenCount, studyId, onOpenInputs }: Props) {
   return (
     <section aria-labelledby="hotspots-title" className={`${panel} p-4 sm:p-5`}>
       <h2 id="hotspots-title" className="text-sm font-semibold text-ink">
@@ -28,6 +29,14 @@ export function Hotspots({ items, hiddenCount, onOpenInputs }: Props) {
               <p className="text-xs text-muted">
                 <span className="sr-only">{STAGE_LABEL[line.stage]}. </span>
                 {text}
+                {line.data_type === "secondary" && !line.supplier_specific && line.pcf_input_id != null && (
+                  <>
+                    {" "}
+                    <Link to={askSupplierLink(studyId, line.pcf_input_id)} className={cn("rounded-chip font-medium text-brand-text underline underline-offset-2", focusRing)}>
+                      Ask the supplier
+                    </Link>
+                  </>
+                )}
               </p>
             </li>
           ))}

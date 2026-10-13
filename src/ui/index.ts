@@ -67,3 +67,4 @@ export { ReportFilters, type ReportFiltersProps } from "./ReportFilters";
 export { useDebounced } from "./hooks/useDebounced";
 export { productionPeriodText, shortRange, rangesOverlap, overlapsById, overlapsFor } from "./productionRecords";
 export { OverlapChip } from "./OverlapChip";
+export { askSupplierLink } from "./pcfLinks";

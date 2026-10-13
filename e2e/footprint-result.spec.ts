@@ -132,6 +132,8 @@ test("shows the latest approved version with KPIs, hotspots and inputs", async (
   await expect(page.getByText("7.200", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("vs v1")).toBeVisible();
   await expect(page.getByText("Each +10 pts of recycled input lowers the footprint by about 0.75 kgCO₂e per kg.")).toBeVisible();
+  // C06: a secondary line can be asked from its supplier.
+  await expect(page.getByRole("link", { name: "Ask the supplier" }).first()).toHaveAttribute("href", "/products/suppliers?new=1&study=12&input=70");
   await expect(page.getByRole("cell", { name: /Aluminium, primary \(placeholder\) · Test · 8 kg\/kg/ })).toBeVisible();
 
   await page.getByRole("tab", { name: "Plant energy allocation" }).click();

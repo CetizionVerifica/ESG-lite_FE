@@ -196,3 +196,28 @@ export function errorMessage(e: unknown, fallback: string): string {
 }
 
 export const isBoundaryRefusal = (e: unknown): boolean => (e as AxiosLike)?.response?.status === 409 && (e as AxiosLike)?.response?.data?.boundary_mismatch === true;
+
+export type SupplierForm = {
+  value: number | null;
+  boundary: Boundary | null;
+  standard: string;
+  reference_start: string;
+  reference_end: string;
+  valid_from: string;
+  valid_to: string;
+  verifier: string;
+  product_name: string;
+  note: string;
+};
+
+export const BLANK_SUPPLIER_FORM: SupplierForm = { value: null, boundary: null, standard: "", reference_start: "", reference_end: "", valid_from: "", valid_to: "", verifier: "", product_name: "", note: "" };
+
+/** C06 supplier page: why the answer can't be sent yet, or null. */
+export function submitProblem(f: SupplierForm, file: File | null): string | null {
+  if (f.value === null && !file) return "Upload your declaration or type the value.";
+  if (f.value !== null && (!Number.isFinite(f.value) || f.value < 0)) return "The value must be a number of 0 or more.";
+  if (f.value !== null && !f.boundary) return "Say which system boundary the value covers.";
+  if (f.reference_start && f.reference_end && f.reference_end < f.reference_start) return "The reference period's end must be on or after its start.";
+  if (f.valid_from && f.valid_to && f.valid_to < f.valid_from) return "Valid to must be on or after valid from.";
+  return null;
+}

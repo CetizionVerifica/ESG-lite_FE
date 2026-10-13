@@ -33,3 +33,4 @@ Tabs: Inputs · Plant energy allocation · Data quality · Versions · Audit
 - FE #142 (2/3): header, KpiStrip, waterfall, hotspots, out-of-date banner, Inputs and Plant energy allocation tabs.
 - 3/3: Data quality (DQR matrix weighted by contribution, primary vs secondary split, cut-off), Versions (table plus side-by-side compare from the stored stage summaries) and Audit (`AuditTimeline` on `GET /pcf/studies/:id/audit`).
 - Not built: the scenario slider (phase 2) and the verifier role.
+- C06 (FE 4/4, 2026-10-13): hotspot lines that use a secondary factor and no supplier figure carry an "Ask the supplier" link to `/products/suppliers?new=1&study=<id>&input=<id>`.

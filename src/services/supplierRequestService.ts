@@ -1,3 +1,4 @@
+import axios from "axios";
 import api from "../api/axios";
 
 // PCF supplier data requests (C06 backend, /pcf/supplier-requests and the
@@ -181,8 +182,13 @@ export type PublicSubmission = {
   note?: string | null;
 };
 
+// The supplier's page has no account. A bare client (no request interceptor)
+// keeps a manager's stored session token out of the public calls when the
+// link is opened in the same browser, and the 401 sign-out handler never sees them.
+export const publicApi = axios.create({ baseURL: import.meta.env.VITE_API_URL });
+
 export const openPublicRequest = async (token: string): Promise<PublicRequest> => {
-  const res = await api.get(`/public/supplier-requests/${encodeURIComponent(token)}`);
+  const res = await publicApi.get(`/public/supplier-requests/${encodeURIComponent(token)}`);
   return res.data;
 };
 
@@ -193,6 +199,6 @@ export const submitPublicRequest = async (token: string, s: PublicSubmission): P
     if (k === "file" || v === null || v === undefined || v === "") continue;
     form.append(k, String(v));
   }
-  const res = await api.post(`/public/supplier-requests/${encodeURIComponent(token)}/submit`, form, { headers: { "Content-Type": "multipart/form-data" } });
+  const res = await publicApi.post(`/public/supplier-requests/${encodeURIComponent(token)}/submit`, form, { headers: { "Content-Type": "multipart/form-data" } });
   return res.data;
 };
