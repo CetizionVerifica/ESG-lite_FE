@@ -36,7 +36,7 @@ export default function SupplierRequestsPage() {
   const setParam = (key: string, value: string | null) =>
     setParams(
       (p) => {
-        if (value === null) p.delete(key);
+        if (value === null) p.delete(key); // data-loss-reviewed: URL param, not data
         else p.set(key, value);
         return p;
       },
@@ -47,8 +47,8 @@ export default function SupplierRequestsPage() {
   const closeAsk = () => {
     setParams(
       (p) => {
-        p.delete("new");
-        p.delete("input");
+        p.delete("new"); // data-loss-reviewed: URL param, not data
+        p.delete("input"); // data-loss-reviewed: URL param, not data
         return p;
       },
       { replace: true },
@@ -60,8 +60,8 @@ export default function SupplierRequestsPage() {
     toast({ title: sent.mail.delivered ? "Request sent" : "Request recorded", description: sent.mail.delivered ? `Sent to ${sent.request.supplier_email}.` : "Copy the link to the supplier.", tone: "good" });
     setParams(
       (p) => {
-        p.delete("new");
-        p.delete("input");
+        p.delete("new"); // data-loss-reviewed: URL param, not data
+        p.delete("input"); // data-loss-reviewed: URL param, not data
         p.set("request", String(sent.request.supplier_request_id));
         return p;
       },

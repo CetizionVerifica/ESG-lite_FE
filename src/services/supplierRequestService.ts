@@ -119,6 +119,7 @@ export const resendSupplierRequest = async (id: number, body?: { due_date?: stri
 };
 
 export const deleteSupplierRequest = async (id: number): Promise<void> => {
+  // data-loss-reviewed: deletes one supplier request that has no answer yet, after the "Delete this request?" dialog naming the supplier is confirmed; the server refuses (409) once an answer was received. OK'd by Shyam 2026-10-13.
   await api.delete(`/pcf/supplier-requests/${id}`);
 };
 
