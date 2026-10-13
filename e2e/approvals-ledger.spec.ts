@@ -111,7 +111,7 @@ async function signIn(page: Page) {
             ...r,
             unit: "tCO2e",
             activity_data_unit: r.activity_data_unit === undefined ? "litre" : r.activity_data_unit,
-            date_of_reporting: "2025-09-30",
+            date_of_reporting: (r as { date_of_reporting?: string }).date_of_reporting ?? "2025-09-30",
             created_at: `2025-10-0${r.pk_id}T08:00:00Z`,
             updated_at: "2025-10-01T08:00:00Z",
             site: { site_id: 1, name: "Hidd" },
@@ -223,7 +223,7 @@ test("a date-only fix sends just the date", async ({ page }) => {
   await page.goto("/data/ledger");
   await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
   await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
-  await page.getByLabel("Date of reporting").fill("2025-08-31");
+  await page.getByRole("group", { name: "Reporting month" }).getByLabel("Month").selectOption({ label: "Aug" });
   await page.getByLabel("Reason for the change").fill("Wrong reporting month");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Changes saved")).toBeVisible();
@@ -254,13 +254,14 @@ test("an empty, zero or negative amount isn't sent", async ({ page }) => {
 
 test("a date the server refuses (filed yearly) shows its reason and keeps the form", async ({ page }) => {
   await signIn(page);
-  const message = "This category already has a yearly batch covering 2024-01-01 – 2024-12-31. Delete the yearly data first, or file this entry under a different period.";
+  const message = "This category already has a yearly batch covering 2024-04-01 – 2025-03-31. Delete the yearly data first, or file this entry under a different period.";
   await page.route(/\/user\/emissions\/manager-edit\//, (route) => route.fulfill({ status: 409, json: { message, mode_lock: true } }));
   await page.goto("/data/ledger");
   await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
   await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
-  await page.getByLabel("Date of reporting").fill("2024-06-30");
-  await page.getByLabel("Reason for the change").fill("Wrong reporting year");
+  // Mar 2025 falls in an FY 2024-25 yearly batch.
+  await page.getByRole("group", { name: "Reporting month" }).getByLabel("Month").selectOption({ label: "Mar" });
+  await page.getByLabel("Reason for the change").fill("Wrong reporting month");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("alert").filter({ hasText: message })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Edit · Diesel" })).toBeVisible();
@@ -294,7 +295,7 @@ test("a date-only fix on an entry without a unit sends just the date", async ({ 
   await page.goto("/data/ledger");
   await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
   await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
-  await page.getByLabel("Date of reporting").fill("2025-08-31");
+  await page.getByRole("group", { name: "Reporting month" }).getByLabel("Month").selectOption({ label: "Aug" });
   await page.getByLabel("Reason for the change").fill("Wrong reporting month");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Changes saved")).toBeVisible();
@@ -302,6 +303,36 @@ test("a date-only fix on an entry without a unit sends just the date", async ({ 
     date_of_reporting: "2025-08-31",
     reason: "Wrong reporting month",
   });
+});
+
+test("the period is a month in the entry's own year, saved as its last day", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByLabel("Date of reporting")).toHaveCount(0);
+  const month = page.getByRole("group", { name: "Reporting month" });
+  // Another year would be recalculated with the stored date's factor year.
+  await expect(month.getByLabel("Year").locator("option")).toHaveText(["2025"]);
+  await month.getByLabel("Month").selectOption({ label: "Feb" });
+  await page.getByLabel("Reason for the change").fill("Wrong reporting month");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    date_of_reporting: "2025-02-28",
+    reason: "Wrong reporting month",
+  });
+});
+
+test("a yearly entry shows its period, which the edit doesn't change", async ({ page }) => {
+  const { rows } = await signIn(page);
+  Object.assign(rows[0], { reporting_period: "yearly", year_type: "FY", date_of_reporting: "2026-03-31" });
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").filter({ hasText: "FY 2025-26" }).click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  const form = page.getByRole("dialog", { name: "Edit · Diesel" });
+  await expect(form).toContainText("Yearly · FY 2025-26");
+  await expect(form.getByRole("group", { name: "Reporting month" })).toHaveCount(0);
 });
 
 test("clearing the unit blocks the save", async ({ page }) => {
