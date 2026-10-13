@@ -69,6 +69,7 @@ export function RequestDrawer({ request: r, link, mailNote, aiAvailable, onClose
   const [rejecting, setRejecting] = useState(false);
   const [rejectComment, setRejectComment] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [resending, setResending] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
@@ -178,10 +179,10 @@ export function RequestDrawer({ request: r, link, mailNote, aiAvailable, onClose
       { id: r.supplier_request_id },
       {
         onSuccess: (res) => {
+          setResending(false);
           onLink(res.link, res.mail.delivered ? null : res.mail.reason);
           toast({ title: res.mail.delivered ? "Request sent again" : "New link ready", description: res.mail.delivered ? undefined : "Copy it to the supplier.", tone: "good" });
         },
-        onError: (e) => toast({ title: errorMessage(e, "The request couldn't be resent."), tone: "bad" }),
       },
     );
 
@@ -211,7 +212,7 @@ export function RequestDrawer({ request: r, link, mailNote, aiAvailable, onClose
         </Button>
       )}
       {canResend && (
-        <Button variant="secondary" onClick={doResend} loading={resend.isPending}>
+        <Button variant="secondary" onClick={() => setResending(true)}>
           Send again
         </Button>
       )}
@@ -388,6 +389,19 @@ export function RequestDrawer({ request: r, link, mailNote, aiAvailable, onClose
         error={reject.isError ? errorMessage(reject.error, "The figure couldn't be rejected.") : undefined}
       >
         <Textarea label="Reason" value={rejectComment} onChange={setRejectComment} rows={3} required autoFocus />
+      </Modal>
+
+      <Modal
+        open={resending}
+        onClose={() => setResending(false)}
+        title="Send the request again?"
+        description={`A new link goes to ${r.supplier_email} with the same message; the old link stops working.`}
+        primaryAction={{ label: "Send again", onClick: doResend, loading: resend.isPending }}
+        error={resend.isError ? errorMessage(resend.error, "The request couldn't be resent.") : undefined}
+      >
+        <pre className="whitespace-pre-wrap font-sans text-sm text-ink" data-testid="resend-message">
+          {r.message}
+        </pre>
       </Modal>
 
       <Modal

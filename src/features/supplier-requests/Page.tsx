@@ -49,6 +49,7 @@ export default function SupplierRequestsPage() {
       (p) => {
         p.delete("new"); // data-loss-reviewed: URL param, not data
         p.delete("input"); // data-loss-reviewed: URL param, not data
+        p.delete("study"); // data-loss-reviewed: URL param, not data
         return p;
       },
       { replace: true },
@@ -62,6 +63,7 @@ export default function SupplierRequestsPage() {
       (p) => {
         p.delete("new"); // data-loss-reviewed: URL param, not data
         p.delete("input"); // data-loss-reviewed: URL param, not data
+        p.delete("study"); // data-loss-reviewed: URL param, not data
         p.set("request", String(sent.request.supplier_request_id));
         return p;
       },

@@ -202,6 +202,6 @@ export const parseDeclaration = async (
   if (opts.expectedUnit) form.append("expected_unit", opts.expectedUnit);
   if (opts.studyId !== undefined) form.append("study_id", String(opts.studyId));
   if (opts.keepEvidence === false) form.append("keep_evidence", "false");
-  const response = await ocrApi.post("/pcf/parse-declaration", form, { headers: { "Content-Type": "multipart/form-data" } });
+  const response = await ocrApi.post("/v1/pcf/parse-declaration", form, { headers: { "Content-Type": "multipart/form-data" } });
   return response.data;
 };

@@ -103,7 +103,13 @@ async function signIn(page: Page) {
         state.requests.unshift(r);
         return json({ request: r, link: "https://app.example/supplier/AbCdEfGhIjKlMnOpQrStUvWxYz012345", mail: { mode: "sink", delivered: false, reason: "Email sending is off on this server, so the message wasn't sent. Copy the link and send it yourself." } }, 201);
       }
-      let m = /\/pcf\/supplier-requests\/(\d+)\/file$/.exec(path);
+      let m = /\/pcf\/supplier-requests\/(\d+)\/resend$/.exec(path);
+      if (m && method === "POST") {
+        calls.push({ method, path, body: route.request().postDataJSON() });
+        const r = state.requests.find((x) => x.supplier_request_id === Number(m![1]))!;
+        return json({ request: r, link: "https://app.example/supplier/NewLinkNewLinkNewLinkNewLink00", mail: { mode: "sink", delivered: false, reason: "Email sending is off on this server, so the message wasn't sent. Copy the link and send it yourself." } });
+      }
+      m = /\/pcf\/supplier-requests\/(\d+)\/file$/.exec(path);
       if (m) return route.fulfill({ status: 200, headers: { "content-type": "application/pdf", "content-disposition": 'attachment; filename="alba-epd.pdf"' }, body: "%PDF-1.4 fixture" });
       m = /\/pcf\/supplier-requests\/(\d+)\/accept$/.exec(path);
       if (m) {
@@ -119,7 +125,7 @@ async function signIn(page: Page) {
         const r = state.requests.find((x) => x.supplier_request_id === Number(m![1]));
         return r ? json({ request: r, mail_mode: "sink" }) : json({ message: "Supplier request not found" }, 404);
       }
-      if (path.endsWith("/pcf/parse-declaration")) {
+      if (path === "/v1/pcf/parse-declaration" && method === "POST") {
         calls.push({ method, path, body: null });
         return json({
           file_name: "alba-epd.pdf",
@@ -185,6 +191,22 @@ test("lists requests and sends a new one after showing the exact message", async
   await expect(page.getByTestId("supplier-link")).toHaveText("https://app.example/supplier/AbCdEfGhIjKlMnOpQrStUvWxYz012345");
   await expect(drawer.getByRole("button", { name: "Copy link" })).toBeVisible();
   await expect(page).toHaveURL(/request=3/);
+  await expect(page).not.toHaveURL(/study=/);
+
+  // Send again shows the message and waits for a confirm; Esc sends nothing.
+  await page.getByRole("status").filter({ hasText: "Request recorded" }).getByRole("button", { name: "Dismiss" }).click(); // the toast covers the footer
+  await drawer.getByRole("button", { name: "Send again" }).click();
+  const resend = page.getByRole("dialog", { name: "Send the request again?" });
+  await expect(resend.getByTestId("resend-message")).toContainText("Dear Alba,");
+  await page.keyboard.press("Escape");
+  await expect(resend).toBeHidden();
+  expect(calls.some((c) => c.path.endsWith("/resend"))).toBe(false);
+  await drawer.getByRole("button", { name: "Send again" }).click();
+  await resend.getByRole("button", { name: "Send again" }).click();
+  await expect(resend).toBeHidden();
+  expect(calls.some((c) => c.path.endsWith("/resend"))).toBe(true);
+  await expect(page.getByTestId("supplier-link")).toHaveText("https://app.example/supplier/NewLinkNewLinkNewLinkNewLink00");
+
   await page.keyboard.press("Escape");
   await expect(page).not.toHaveURL(/request=/);
   await expect(table.getByRole("row")).toHaveCount(4);
@@ -207,7 +229,7 @@ test("a received answer with another boundary is not accepted silently; the AI r
   await expect(drawer.getByRole("combobox", { name: "Boundary" })).toHaveValue("cradle_to_gate");
   await expect(drawer.getByText("Different system boundary")).toHaveCount(0);
   await expect(drawer.getByRole("textbox", { name: "Verifier" })).toHaveValue("Verifier Ltd");
-  expect(calls.some((c) => c.path.endsWith("/pcf/parse-declaration"))).toBe(true);
+  expect(calls.some((c) => c.path === "/v1/pcf/parse-declaration")).toBe(true);
 
   await drawer.getByRole("button", { name: "Accept figure" }).click();
   await expect(page.getByText("Supplier figure accepted")).toBeVisible();
