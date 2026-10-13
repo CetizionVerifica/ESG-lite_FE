@@ -1,6 +1,8 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "../cn";
+import { menuPosition } from "../menuPosition";
 import { inputBase } from "../styles";
 import { Field, type FieldBaseProps } from "./Field";
 import type { Option } from "./Select";
@@ -16,7 +18,11 @@ export type ComboboxProps<V extends string | number> = FieldBaseProps & {
   onSearch?: (query: string) => void;
 };
 
-/** Searchable single select (ARIA combobox + listbox). Arrow keys move, Enter picks, Esc closes. */
+/**
+ * Searchable single select (ARIA combobox + listbox). Arrow keys move, Enter picks, Esc closes.
+ * The list is portalled to `document.body` with fixed positioning, like Menu, so a table with
+ * overflow (the footprint builder's line tables) never clips it; it flips above near the bottom.
+ */
 export function Combobox<V extends string | number>({
   value,
   onChange,
@@ -31,6 +37,8 @@ export function Combobox<V extends string | number>({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const [style, setStyle] = useState<CSSProperties>({ top: 0, left: 0, width: 0 });
   const selected = options.find((o) => o.value === value) ?? null;
 
   const matches = useMemo(() => {
@@ -51,6 +59,31 @@ export function Combobox<V extends string | number>({
     setQuery("");
   };
   const optionId = (i: number) => `${listId}-opt-${i}`;
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const input = inputRef.current;
+      if (!input) return;
+      const rect = input.getBoundingClientRect();
+      const root = document.documentElement;
+      const pos = menuPosition(
+        rect,
+        { width: rect.width, height: listRef.current?.offsetHeight ?? 0 },
+        { width: root.clientWidth || window.innerWidth, height: root.clientHeight || window.innerHeight },
+        "start",
+      );
+      setStyle({ top: pos.top, left: pos.left, width: rect.width });
+    };
+    place();
+    // Capture: a scroll in any ancestor (the table, a drawer body) moves the input.
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open, matches.length]);
 
   return (
     <Field {...field}>
@@ -98,39 +131,44 @@ export function Combobox<V extends string | number>({
             className={cn(inputBase, "h-9 pr-8")}
           />
           <ChevronDown aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
-          {open && (
-            <ul
-              id={listId}
-              role="listbox"
-              className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-control border border-line bg-panel py-1 text-sm shadow-lg"
-            >
-              {matches.length === 0 ? (
-                <li className="px-3 py-2 text-muted">{emptyText}</li>
-              ) : (
-                matches.map((o, i) => (
-                  <li
-                    key={String(o.value)}
-                    id={optionId(i)}
-                    role="option"
-                    aria-selected={o.value === value}
-                    aria-disabled={o.disabled || undefined}
-                    // Keep focus in the input so blur doesn't close the list first.
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => pick(o)}
-                    onMouseEnter={() => setActive(i)}
-                    className={cn(
-                      "flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-ink",
-                      i === active && "bg-tint",
-                      o.disabled && "cursor-not-allowed opacity-50",
-                    )}
-                  >
-                    <span className="truncate">{o.label}</span>
-                    {o.value === value && <Check aria-hidden className="size-4 text-brand-text" />}
-                  </li>
-                ))
-              )}
-            </ul>
-          )}
+          {open &&
+            createPortal(
+              <ul
+                ref={listRef}
+                id={listId}
+                role="listbox"
+                style={style}
+                // Above drawers and modals (z-50) a combobox can sit in; below toasts (z-60).
+                className="fixed z-[55] max-h-64 overflow-auto rounded-control border border-line bg-panel py-1 text-sm shadow-lg"
+              >
+                {matches.length === 0 ? (
+                  <li className="px-3 py-2 text-muted">{emptyText}</li>
+                ) : (
+                  matches.map((o, i) => (
+                    <li
+                      key={String(o.value)}
+                      id={optionId(i)}
+                      role="option"
+                      aria-selected={o.value === value}
+                      aria-disabled={o.disabled || undefined}
+                      // Keep focus in the input so blur doesn't close the list first.
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => pick(o)}
+                      onMouseEnter={() => setActive(i)}
+                      className={cn(
+                        "flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-ink",
+                        i === active && "bg-tint",
+                        o.disabled && "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      <span className="truncate">{o.label}</span>
+                      {o.value === value && <Check aria-hidden className="size-4 text-brand-text" />}
+                    </li>
+                  ))
+                )}
+              </ul>,
+              document.body,
+            )}
         </div>
       )}
     </Field>

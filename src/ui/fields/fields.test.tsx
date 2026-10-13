@@ -78,6 +78,20 @@ describe("Combobox", () => {
     expect(onChange).toHaveBeenCalledWith(2);
   });
 
+  it("renders its list outside any clipping container, at the input's width", async () => {
+    const user = userEvent.setup();
+    render(
+      <div data-testid="box" style={{ overflowX: "auto" }}>
+        <Combobox label="Site" value={null} onChange={() => {}} options={sites} />
+      </div>,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Site" }));
+    const list = screen.getByRole("listbox");
+    expect(screen.getByTestId("box").contains(list)).toBe(false);
+    expect(list.parentElement).toBe(document.body);
+    expect(list.className).toContain("fixed");
+  });
+
   it("shows the empty text and closes on Esc", async () => {
     const user = userEvent.setup();
     render(<Combobox label="Site" value={null} onChange={() => {}} options={sites} emptyText="No sites match" />);
