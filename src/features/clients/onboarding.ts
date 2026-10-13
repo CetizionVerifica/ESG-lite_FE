@@ -120,7 +120,8 @@ export function firstInvalidStep(d: OnboardDraft): StepId | null {
 
 /** True once anything differs from the empty form (drives the unsaved-changes guard). */
 export function isOnboardDirty(d: OnboardDraft): boolean {
-  return (Object.keys(EMPTY_ONBOARD) as OnboardField[]).some((k) => d[k] !== EMPTY_ONBOARD[k]);
+  // The "Start from" step is only a change once a source is picked; toggling its tabs isn't.
+  return (Object.keys(EMPTY_ONBOARD) as OnboardField[]).some((k) => (k === "setup" ? d.setup.source !== null : d[k] !== EMPTY_ONBOARD[k]));
 }
 
 /** Multipart body for POST /admin/onboarding/company (field names as the backend reads them). */

@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { CheckCircle2 } from "lucide-react";
-import { Button, Callout, Drawer, useToast } from "../../../ui";
+import { Link } from "react-router-dom";
+import { CheckCircle2, ChevronRight } from "lucide-react";
+import { Button, Callout, Drawer, cn, focusRing, useToast } from "../../../ui";
 import { errorMessage, useApplySetupCopy, useCompanies, useDownloadSetup, useSetupCopyPreview } from "../api";
 import type { ClientRow } from "../logic";
 import { type CopyDraft, type CopyReport, EMPTY_COPY, summarize } from "../setupCopy";
@@ -64,11 +65,28 @@ export function SetupCopyDrawer({ row, onClose }: { row: ClientRow; onClose: () 
               {done.totals.skip > 0 && <p className="text-sm text-muted">{done.totals.skip} items were already here and were kept as they are.</p>}
             </div>
           </div>
-          {done.warnings.concat(done.sites.flatMap((s) => s.warnings)).map((w) => (
-            <Callout key={w} tone="warn">
+          {done.warnings.concat(done.sites.flatMap((s) => s.warnings)).map((w, i) => (
+            <Callout key={i} tone="warn">
               {w}
             </Callout>
           ))}
+          <ul className="divide-y divide-line rounded-control border border-line">
+            {[
+              { label: "Check sites", detail: "Names, addresses and categories.", to: `/setup/sites?client=${row.company_id}` },
+              { label: "Check forms", detail: "The copied data-entry forms.", to: "/capture/forms" },
+              { label: "Check factors", detail: "Grid and fuel factors may differ by country.", to: `/factors?client=${row.company_id}` },
+            ].map((s) => (
+              <li key={s.label}>
+                <Link to={s.to} onClick={onClose} className={cn("flex items-center gap-3 px-4 py-3 hover:bg-tint", focusRing)}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-ink">{s.label}</span>
+                    <span className="block text-xs text-muted">{s.detail}</span>
+                  </span>
+                  <ChevronRight aria-hidden className="size-4 text-muted" />
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : (
         <div className="space-y-4">

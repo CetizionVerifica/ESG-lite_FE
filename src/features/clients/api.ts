@@ -217,7 +217,8 @@ export function useDownloadSetup() {
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      // Some Firefox versions cancel a download whose URL is revoked in the same tick.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
       return name;
     },
   });

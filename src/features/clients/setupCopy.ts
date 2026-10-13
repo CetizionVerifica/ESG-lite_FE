@@ -22,7 +22,7 @@ export type CopyInclude = { units: boolean; forms: boolean; factors: boolean; ma
 export type CopyDraft = {
   source: SetupSource | null;
   include: CopyInclude;
-  /** null = every year the source has; set once the preview shows the years. */
+  /** null = not chosen yet: the panel picks `defaultFactorYears` once the preview shows what the source has. */
   factorYears: number[] | null;
   formConflict: "skip" | "rename";
   /** Per source site key; missing = "create". */
@@ -89,6 +89,16 @@ export function toRequest(d: CopyDraft, mode: { onboarding: boolean }): Record<s
       form_conflict: d.formConflict,
     },
   };
+}
+
+/**
+ * The plan's default (§3.4 rule 5): the source's newest year and the current year.
+ * A client onboarded now rarely wants older factors; the chips let the user add them.
+ */
+export function defaultFactorYears(available: number[], now = new Date()): number[] {
+  if (!available.length) return [];
+  const picked = new Set([Math.max(...available), now.getFullYear()]);
+  return available.filter((y) => picked.has(y)).sort((a, b) => b - a);
 }
 
 /** Years the source has, newest first, across all its sites. */

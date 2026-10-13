@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type CopyReport, EMPTY_COPY, availableYears, parseBundleFile, sourceName, summarize, toRequest } from "./setupCopy";
+import { type CopyReport, EMPTY_COPY, availableYears, defaultFactorYears, parseBundleFile, sourceName, summarize, toRequest } from "./setupCopy";
 
 const bundle = { version: 1, source: { company_id: 1, company_name: "Midal Cables", taken_at: "2026-10-13T00:00:00Z" }, sites: [{ key: "Hidd", name: "Hidd", country_name: "Bahrain", factors: [], forms: [] }, { key: "Askar", name: "Askar", country_name: null, factors: [], forms: [] }], mappings: [], threshold: null };
 const site = (key: string, kind: "create" | "reuse" | "skip", years: number[], forms = 0, factors = 0): CopyReport["sites"][number] => ({
@@ -72,5 +72,14 @@ describe("parseBundleFile", () => {
     expect(parseBundleFile(JSON.stringify(bundle))).toEqual({ bundle });
     expect(sourceName({ kind: "file", bundle, fileName: "midal.json" })).toBe("Midal Cables (file midal.json)");
     expect(sourceName({ kind: "client", companyId: 1, name: "Midal" })).toBe("Midal");
+  });
+});
+
+describe("defaultFactorYears", () => {
+  it("picks the source's newest year and the current year, newest first", () => {
+    expect(defaultFactorYears([2023, 2026, 2024, 2025], new Date("2026-10-13"))).toEqual([2026]);
+    expect(defaultFactorYears([2023, 2024, 2025], new Date("2026-10-13"))).toEqual([2025]);
+    expect(defaultFactorYears([2024, 2025, 2026, 2027], new Date("2026-10-13"))).toEqual([2027, 2026]);
+    expect(defaultFactorYears([], new Date("2026-10-13"))).toEqual([]);
   });
 });

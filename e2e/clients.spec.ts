@@ -407,8 +407,9 @@ test("a superadmin onboards a client that starts from another client's setup", a
   await page.getByLabel("Client").selectOption("Midal Cables");
   await expect(page.getByText("The new client's main site")).toBeVisible();
   await expect(page.getByText("check grid and fuel factors", { exact: false })).toBeVisible();
-  await expect(page.getByRole("checkbox", { name: "2024" })).toBeChecked();
-  await page.getByRole("checkbox", { name: "2024" }).uncheck();
+  // Newest and current year by default (the mock has 2025 and 2024): 2024 is off until ticked.
+  await expect(page.getByRole("checkbox", { name: "2025" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "2024" })).not.toBeChecked();
   await page.getByRole("checkbox", { name: "Products" }).uncheck();
   await expect(page.getByRole("row", { name: /Hidd/ })).toContainText("10");
   await page.getByRole("button", { name: "Continue" }).click();
@@ -448,11 +449,11 @@ test("a superadmin copies a setup file onto a client and downloads a client's se
   await expect(drawer.getByText("Setup of Midal Cables", { exact: false })).toBeVisible();
   await drawer.getByRole("combobox", { name: "Where Askar goes" }).selectOption("Skip this site");
   await expect(drawer.getByRole("row", { name: /Askar/ })).toContainText("0");
-  await expect(drawer.getByText("Will create: 1 new site, 4 forms, 2 units, 20 factors, 6 mappings, threshold, 1 product")).toBeVisible();
+  await expect(drawer.getByText("Will create: 1 new site, 4 forms, 2 units, 10 factors, 6 mappings, threshold, 1 product")).toBeVisible();
   await drawer.getByRole("button", { name: "Copy setup" }).click();
-  await expect(drawer.getByText("Copied: 1 new site, 4 forms, 2 units, 20 factors, 6 mappings, threshold, 1 product")).toBeVisible();
+  await expect(drawer.getByText("Copied: 1 new site, 4 forms, 2 units, 10 factors, 6 mappings, threshold, 1 product")).toBeVisible();
   const copy = calls.find((c) => c.path.endsWith("/admin/companies/3/setup-copy"))!;
-  expect(copy.body).toMatchObject({ source: { bundle: { source: { company_name: "Midal Cables" } } }, options: { sites: [{ key: "Askar", target: "skip" }] } });
+  expect(copy.body).toMatchObject({ source: { bundle: { source: { company_name: "Midal Cables" } } }, options: { sites: [{ key: "Askar", target: "skip" }], factor_years: [2025] } });
   await drawer.getByRole("button", { name: "Done" }).click();
   await expect(drawer).toBeHidden();
 });

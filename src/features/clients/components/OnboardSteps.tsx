@@ -312,7 +312,7 @@ export function ReviewStep({ draft, onEdit }: { draft: OnboardDraft; onEdit: (st
           ? [
               ["Source", sourceName(draft.setup.source)],
               ["Copy", INCLUDE_ITEMS.filter((i) => draft.setup.include[i.key]).map((i) => i.label).join(", ") || "Sites only"],
-              ["Factor years", draft.setup.include.factors ? (draft.setup.factorYears ? draft.setup.factorYears.join(", ") : "All") : ""],
+              ["Factor years", draft.setup.include.factors ? (draft.setup.factorYears ? draft.setup.factorYears.join(", ") : "Newest and current year") : ""],
             ]
           : [["Setup", "Start empty"]],
       )}

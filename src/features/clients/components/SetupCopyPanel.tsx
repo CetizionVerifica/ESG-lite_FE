@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { Button, Callout, FileDrop, SegmentedControl, Select, Skeleton, cn } from "../../../ui";
 import type { Company, Site } from "../logic";
-import { type CopyDraft, type CopyReport, type SetupSource, type SiteTarget, INCLUDE_ITEMS, availableYears, parseBundleFile, sourceName } from "../setupCopy";
+import { type CopyDraft, type CopyReport, type SetupSource, type SiteTarget, INCLUDE_ITEMS, availableYears, defaultFactorYears, parseBundleFile, sourceName } from "../setupCopy";
 
 export type PreviewState = { data: CopyReport | undefined; loading: boolean; error: string | null };
 
@@ -30,6 +30,12 @@ export function SetupCopyPanel({ draft, onChange, companies, onboarding, targetS
   const set = (patch: Partial<CopyDraft>) => onChange({ ...draft, ...patch });
   const setSource = (source: SetupSource | null) => onChange({ ...draft, source, factorYears: null, sites: {} });
   const years = availableYears(preview.data);
+  // Once the preview says which years the source has, start from the newest and the current year.
+  const yearsKey = years.join(",");
+  useEffect(() => {
+    if (draft.factorYears === null && years.length) onChange({ ...draft, factorYears: defaultFactorYears(years) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the source's years arrive, not on every draft edit
+  }, [yearsKey, draft.factorYears === null]);
 
   const readFile = async (file: File) => {
     const parsed = parseBundleFile(await file.text());
@@ -136,7 +142,7 @@ export function SetupCopyPanel({ draft, onChange, companies, onboarding, targetS
                           onChange={(e) => {
                             const current = draft.factorYears ?? years;
                             const next = e.target.checked ? [...current, y] : current.filter((x) => x !== y);
-                            set({ factorYears: next.length === years.length ? null : next.sort((a, b) => b - a) });
+                            set({ factorYears: next.sort((a, b) => b - a) });
                           }}
                         />
                         {y}
@@ -144,7 +150,7 @@ export function SetupCopyPanel({ draft, onChange, companies, onboarding, targetS
                     );
                   })}
                 </div>
-                <p className="mt-1 text-xs text-muted">A client onboarded now rarely needs old years. Untick the ones to leave out.</p>
+                <p className="mt-1 text-xs text-muted">The newest and the current year are on; tick older years to copy them too.</p>
               </fieldset>
             )}
             {!onboarding && (
@@ -198,8 +204,8 @@ export function SetupCopyPanel({ draft, onChange, companies, onboarding, targetS
                           <td className="px-3 py-2">
                             <span className="block font-medium text-ink">{s.name}</span>
                             {s.country_name && <span className="block text-xs text-muted">{s.country_name}</span>}
-                            {s.warnings.map((w) => (
-                              <span key={w} className="mt-1 block text-xs text-warn">
+                            {s.warnings.map((w, wi) => (
+                              <span key={wi} className="mt-1 block text-xs text-warn">
                                 {w}
                               </span>
                             ))}
@@ -217,7 +223,7 @@ export function SetupCopyPanel({ draft, onChange, companies, onboarding, targetS
                                   set({ sites: { ...draft.sites, [s.key]: target } });
                                 }}
                                 options={[
-                                  { value: "create", label: s.target.kind === "reuse" && !(s.key in draft.sites) ? `${s.target.site_name} (same name)` : "A new site" },
+                                  { value: "create", label: s.target.kind === "reuse" && (draft.sites[s.key] ?? "create") === "create" ? `${s.target.site_name} (same name)` : "A new site" },
                                   { value: "skip", label: "Skip this site" },
                                   ...(targetSites ?? []).map((t) => ({ value: String(t.site_id), label: t.name })),
                                 ]}
@@ -251,8 +257,8 @@ export function SetupCopyPanel({ draft, onChange, companies, onboarding, targetS
                   )}
                   {preview.data.columns_created.length > 0 && <Line label="New library columns" value={preview.data.columns_created.join(", ")} />}
                 </dl>
-                {preview.data.warnings.map((w) => (
-                  <Callout key={w} tone="warn">
+                {preview.data.warnings.map((w, wi) => (
+                  <Callout key={wi} tone="warn">
                     {w}
                   </Callout>
                 ))}
