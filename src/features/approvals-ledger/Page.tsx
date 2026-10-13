@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle2, SearchX } from "lucide-react";
+import { CheckCircle2, Layers, SearchX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import type { EmissionStatus } from "../../services/emissionService";
 import {
@@ -31,6 +31,7 @@ import {
   useRowKeys,
   useToast,
   useUndoableApprove,
+  withoutParams,
   writeContext,
   writeFilterParams,
 } from "../../ui";
@@ -104,7 +105,9 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
     [sites, ctx.siteIds],
   );
   const search = params.get("q")?.trim() || null;
-  const counts = useStatusCounts(ctx.siteIds, feraIds, { categoryId: ctx.categoryIds, ...periodQuery(ctx.period), search });
+  // On the list tabs `?batch=` narrows the list to one upload batch; on the batches tab it marks that batch's row.
+  const batchId = view === "batches" ? null : params.get("batch")?.trim() || null;
+  const counts = useStatusCounts(ctx.siteIds, feraIds, { categoryId: ctx.categoryIds, ...periodQuery(ctx.period), search, batchId });
   // No site chip = all of the manager's sites; batches must always be scoped (the endpoint isn't).
   const scopeSites = useMemo(() => (ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)), [ctx.siteIds, sites]);
   const batches = useBatches(scopeSites, ctx.categoryIds);
@@ -160,10 +163,11 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
 function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [, setParams] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [ctx] = useContextParams();
   const [filters, setFilters] = useFilterParams(FILTER_KEYS[tab]);
   const status = tab === "ledger" ? asStatus(filters.filters.status?.[0]) : null;
+  const batchId = params.get("batch")?.trim() || null;
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT[tab]);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0]);
@@ -174,7 +178,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const [deleting, setDeleting] = useState<LedgerRow[] | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const query = listParams({ tab, siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period: ctx.period, search: filters.q, status, sort, page, pageSize });
+  const query = listParams({ tab, siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period: ctx.period, search: filters.q, status, batchId, sort, page, pageSize });
   const list = useEmissionList(query);
   const review = useReviewMutations();
 
@@ -315,11 +319,12 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const actions = { open: setDrawer, approve: (r: LedgerRow) => approve(r), reject: (r: LedgerRow) => reject([r]), remove: (r: LedgerRow) => askDelete([r]) };
   const columns = ledgerColumns({ configOf, feraOf: merged.feraOf, statusOf, actions });
 
-  const filtered = !!filters.q.trim() || !!status || ctx.categoryIds.length > 0 || ctx.period !== null;
+  const filtered = !!filters.q.trim() || !!status || !!batchId || ctx.categoryIds.length > 0 || ctx.period !== null;
   // One URL write: two functional setSearchParams calls in one tick both start from the
   // same params, so the second would undo the first.
   const clearFilters = () =>
-    setParams((p) => writeContext(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS[tab]), { categoryIds: [], period: null }), { replace: true });
+    setParams((p) => writeContext(withoutParams(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS[tab]), ["batch"]), { categoryIds: [], period: null }), { replace: true });
+  const showAllRows = () => setParams((p) => withoutParams(p, ["batch"]), { replace: true });
   // Every row shown was just approved, but the server still lists them (undo window): more may follow.
   const savingApprovals = tab === "approvals" && rows.length === 0 && (list.data?.total ?? 0) > 0;
   const empty = savingApprovals ? (
@@ -356,6 +361,18 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
 
   return (
     <>
+      {batchId && (
+        <p role="status" className="flex flex-wrap items-center gap-2 rounded-control border border-line bg-panel px-3 py-2 text-sm text-ink">
+          <Layers aria-hidden className="size-4 text-muted" />
+          <span>
+            Showing the {tab === "approvals" ? "pending " : ""}rows of one upload batch.
+            {tab === "approvals" && <span className="text-muted"> Approve or reject each one here; rows you have handled leave the list.</span>}
+          </span>
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={showAllRows}>
+            Show all rows
+          </Button>
+        </p>
+      )}
       {tab === "approvals" && (
         <p className="hidden text-xs text-muted sm:block" data-testid="shortcuts">
           Keys: <Kbd>J</Kbd>/<Kbd>K</Kbd> move · <Kbd>A</Kbd> approve · <Kbd>R</Kbd> reject · <Kbd>Space</Kbd> select · <Kbd>Enter</Kbd> open

@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Inbox } from "lucide-react";
 import type { EmissionUploadBatch } from "../../../services/emissionService";
 import { Badge, type BadgeTone, Button, type Column, DataTable, EmptyState, Modal, Select, Textarea, formatDateTime, formatNumber, rejectReasonError, useToast, withoutParams } from "../../../ui";
 import { errorMessage, useBatchMutations, useBatches } from "../api";
-import { BATCH_SOURCE_LABEL, BATCH_SOURCE_OPTIONS, type BatchSource, batchSource, parseBatchSource } from "../logic";
+import { BATCH_SOURCE_LABEL, BATCH_SOURCE_OPTIONS, type BatchSource, batchSource, parseBatchSource, reviewRowsPath } from "../logic";
 
 const SOURCE_TONE: Record<BatchSource, BadgeTone> = { claude: "brand", bulk: "neutral", api: "info" };
 
@@ -37,7 +37,8 @@ function SplitBar({ batch }: { batch: EmissionUploadBatch }) {
 }
 
 /**
- * Upload batches tab: approve or reject a bulk upload's pending rows in one go.
+ * Upload batches tab: review a bulk upload's rows one by one ("Review rows"),
+ * or approve or reject its pending rows in one go.
  * `?batch=<id>` (the link in an upload notification) lands on that batch's row.
  */
 export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categoryIds: number[] }) {
@@ -56,6 +57,7 @@ export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categ
       },
       { replace: true },
     );
+  const navigate = useNavigate();
   const m = useBatchMutations();
   const { toast } = useToast();
   const [approving, setApproving] = useState<EmissionUploadBatch | null>(null);
@@ -75,26 +77,30 @@ export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categ
       hideable: false,
       value: () => null,
       exportValue: () => null,
-      cell: (b) =>
-        b.pending_count > 0 || b.approved_count > 0 ? (
-          <span className="flex justify-end gap-1.5">
-            {b.pending_count > 0 && (
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => {
-                  m.approve.reset();
-                  setApproving(b);
-                }}
-              >
-                Approve pending
-              </Button>
-            )}
+      cell: (b) => (
+        <span className="flex justify-end gap-1.5">
+          <Button size="sm" variant="ghost" onClick={() => navigate(reviewRowsPath(b))}>
+            Review rows
+          </Button>
+          {b.pending_count > 0 && (
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => {
+                m.approve.reset();
+                setApproving(b);
+              }}
+            >
+              Approve pending
+            </Button>
+          )}
+          {(b.pending_count > 0 || b.approved_count > 0) && (
             <Button size="sm" onClick={() => setRejecting(b)}>
               Reject…
             </Button>
-          </span>
-        ) : null,
+          )}
+        </span>
+      ),
     },
   ];
 

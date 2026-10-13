@@ -1,7 +1,7 @@
 /** Pure helpers for P07 Approvals and Emissions ledger. No React, no requests. */
-import type { BatchChannel, EmissionData, EmissionStatus } from "../../services/emissionService";
+import type { BatchChannel, EmissionData, EmissionStatus, EmissionUploadBatch } from "../../services/emissionService";
 import { fyEndYear, fyStartYearOf } from "../../lib/fiscalYear";
-import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatReportingYear } from "../../ui";
+import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatReportingYear, writeContext } from "../../ui";
 
 export type FactorSnapshot = {
   emission_factor_id: number;
@@ -97,6 +97,8 @@ export type ListInput = {
   search: string;
   /** Ledger status chip; the approvals tab is always pending. */
   status: EmissionStatus | null;
+  /** `?batch=`: only one upload batch's rows ("Review rows" on the Upload batches tab). */
+  batchId?: string | null;
   sort: SortState;
   page: number;
   pageSize: number;
@@ -110,6 +112,7 @@ export function listParams(input: ListInput) {
     ...periodQuery(input.period),
     status: input.tab === "approvals" ? "pending" : input.status,
     search: input.search.trim() || null,
+    batchId: input.batchId || null,
     sort: sortKey ?? null,
     order: sortKey && input.sort ? input.sort.dir : null,
     // DataTable pages are 0-based, the API's 1-based.
@@ -346,4 +349,15 @@ export const BATCH_SOURCE_OPTIONS: { value: BatchSource; label: string }[] = (["
 /** Reads `?source=` for the batches tab; anything unknown means all sources. */
 export function parseBatchSource(value: string | null): BatchSource | null {
   return value && value in BATCH_SOURCE_LABEL ? (value as BatchSource) : null;
+}
+
+/**
+ * Where "Review rows" goes: the Approvals tab while the batch has pending rows
+ * (each one is approved or rejected on its own there), else the Ledger. The
+ * batch's own site and category, over any period, become the context so every row is in view.
+ */
+export function reviewRowsPath(batch: Pick<EmissionUploadBatch, "upload_batch_id" | "site_id" | "category_id" | "pending_count">): string {
+  const params = writeContext(new URLSearchParams(), { siteIds: [batch.site_id], categoryIds: [batch.category_id], period: null });
+  params.set("batch", batch.upload_batch_id);
+  return `${batch.pending_count > 0 ? "/data/approvals" : "/data/ledger"}?${params.toString()}`;
 }

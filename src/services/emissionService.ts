@@ -115,6 +115,8 @@ export const getEmissionsPaginated = async (params: {
   sort?: string | null;
   order?: "asc" | "desc" | null;
   search?: string | null;
+  /** Only this upload batch's rows (P07 "Review rows"). */
+  batchId?: string | null;
 }): Promise<PaginatedEmissions> => {
   const query: Record<string, string | number> = {
     page: params.page,
@@ -134,6 +136,7 @@ export const getEmissionsPaginated = async (params: {
   if (params.sort) query.sort = params.sort;
   if (params.sort && params.order) query.order = params.order;
   if (params.search?.trim()) query.search = params.search.trim();
+  if (params.batchId) query.batchId = params.batchId;
 
   const response = await api.get("/user/emissions", { params: query });
   return response.data;
