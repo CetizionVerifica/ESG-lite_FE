@@ -67,7 +67,7 @@ export function LineTable({ caption, lines, factors, factorsLoading, book, unitL
                   <Select label={`Unit, row ${n}`} hideLabel value={l.unit} options={unitOptions(l.unit)} onChange={(v) => v && onChange(l.key, { unit: v })} />
                 </td>
                 {recycled && (
-                  <td className={cn(cell, "w-24")}>
+                  <td className={cn(cell, "w-28")}>
                     <NumberField
                       label={`Recycled share, row ${n}`}
                       hideLabel
