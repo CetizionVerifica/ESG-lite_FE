@@ -1,12 +1,10 @@
 import { Link } from "react-router-dom";
-import { cn, focusRing, panel } from "../../../ui";
-import { STAGE_LABEL, type Hotspot, askSupplierLink } from "../logic";
+import { askSupplierLink, cn, focusRing, panel } from "../../../ui";
+import { STAGE_LABEL, type Hotspot } from "../logic";
 
 const pct = (v: number) => `${v.toLocaleString("en-GB", { maximumFractionDigits: v < 1 ? 1 : 0 })}%`;
 
 type Props = { items: Hotspot[]; hiddenCount: number; studyId: number; onOpenInputs: () => void };
-
-
 
 /** Top inputs by share, each with a lever written by rule. */
 export function Hotspots({ items, hiddenCount, studyId, onOpenInputs }: Props) {

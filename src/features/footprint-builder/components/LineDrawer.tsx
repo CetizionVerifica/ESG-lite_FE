@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Combobox, Drawer, NumberField, Select, TextField, cn, focusRing } from "../../../ui";
+import { Combobox, Drawer, NumberField, Select, TextField, askSupplierLink, cn, focusRing } from "../../../ui";
 import { type Line, type PickerFactor, factorLabel, lineProblem } from "../logic";
 
 type Props = {
@@ -50,7 +50,7 @@ export function LineDrawer({ line, factors, studyId, onChange, onClose }: Props)
           {line.pcf_input_id != null && line.supplier_pcf_kgco2e == null && (
             <p className="text-sm text-muted">
               Don't have it?{" "}
-              <Link to={`/products/suppliers?new=1&study=${studyId}&input=${line.pcf_input_id}`} className={cn("rounded-chip font-medium text-brand-text underline underline-offset-2", focusRing)}>
+              <Link to={askSupplierLink(studyId, line.pcf_input_id)} className={cn("rounded-chip font-medium text-brand-text underline underline-offset-2", focusRing)}>
                 Ask the supplier
               </Link>{" "}
               for their declaration; once accepted it fills this field.
