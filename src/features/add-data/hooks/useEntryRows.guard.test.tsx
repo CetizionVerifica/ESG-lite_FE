@@ -86,6 +86,18 @@ describe("useEntryRows", () => {
     expect(stored(SEP)).toBeNull();
   });
 
+  it("marking sent twice changes nothing, and new rows after a send don't reuse the sent rows' ids", () => {
+    const { result } = renderHook(() => useEntryRows(model, SEP));
+    act(() => result.current.dispatch({ type: "change", model, id: 1, column: "quantity", value: "5" }));
+    act(() => result.current.markSent());
+    const afterFirst = result.current.rows;
+    act(() => result.current.markSent());
+    expect(result.current.rows).toBe(afterFirst);
+
+    act(() => result.current.dispatch({ type: "add", model }));
+    expect(result.current.rows.map((r) => r.id)).toEqual([2]);
+  });
+
   it("reopening the same context after a send starts unsent", () => {
     const { result, rerender } = renderHook(({ m, key }) => useEntryRows(m, key), {
       initialProps: { m: model as Model | null, key: SEP as string | null },

@@ -447,7 +447,7 @@ test("after a send the steps are locked and a reload shows an empty form", async
   await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("");
 });
 
-test("when every row is skipped as a duplicate, nothing is locked and the draft stays", async ({ page }) => {
+test("when every row is skipped as a duplicate, the draft is cleared and leaving doesn't ask", async ({ page }) => {
   await signIn(page, [], true);
   await page.goto("/data/new?site=4&category=9&period=2025-09");
   const row = page.getByRole("region", { name: "Row 1" });
@@ -458,10 +458,11 @@ test("when every row is skipped as a duplicate, nothing is locked and the draft 
   await page.getByRole("button", { name: "Submit for approval" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Apply (skip all)" }).click();
   await expect(page.getByText("Nothing was sent")).toBeVisible();
-  // The user can go back and change the row they skipped.
-  await page.getByRole("navigation", { name: "Progress" }).getByRole("button", { name: /Enter values/ }).click();
-  await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("1600");
-  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toContain("1600");
+  // Skipped keeps the saved entry: the send is finished, as the spec says ("cleared once every row is sent or skipped").
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("add-data:7:4:9:2025-09"))).toBeNull();
+  await page.getByRole("link", { name: "Back to Current Month" }).click();
+  await expect(page).toHaveURL(/\/my-month/);
+  await expect(page.getByRole("dialog", { name: "Leave with rows not sent?" })).toHaveCount(0);
 });
 
 test("after a send, new rows for the same category and month are guarded again", async ({ page }) => {

@@ -118,10 +118,6 @@ export default function AddDataPage() {
       ? `/capture/upload?${new URLSearchParams({ site: String(site.site_id), category: String(category.category_id), period: entryDate(period).slice(0, 7) })}`
       : "/capture/upload";
 
-  const finishSend = (saved: number) => {
-    // Rows all skipped as duplicates were not sent: they stay editable as a draft.
-    if (saved > 0) markSent();
-  };
   const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
     <Review
       rows={activeRows}
@@ -130,7 +126,7 @@ export default function AddDataPage() {
       evidenceFiles={evidence.filesOf}
       periodLabel={periodLabel}
       onBack={() => setStep(1)}
-      onFinished={finishSend}
+      onFinished={markSent}
       onAnother={() => {
         clearDraft();
         setContext({ category: null });
