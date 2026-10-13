@@ -36,6 +36,17 @@ const USERS = [
   { user_id: 4, name: "Omar", last_name: "Saleh", email: "omar@example.com", role: "Admin", site: { site_id: 1 }, sites: [] },
   { user_id: 5, name: "Mia", last_name: "Manager", email: "mia@example.com", role: "Manager", site: null, sites: [{ site_id: 1 }, { site_id: 2 }] },
 ];
+const MIDAL_BUNDLE = {
+  version: 1,
+  source: { company_id: 1, company_name: "Midal Cables", taken_at: "2026-10-13T08:00:00.000Z" },
+  sites: [
+    { key: "Hidd", name: "Hidd", address: "Hidd Industrial Area", contact_person: "Omar", country_name: "Bahrain", categories: ["Stationary Combustion"], units: [], forms: [{ category_name: "Stationary Combustion", config_name: "Diesel", columns: [] }], factors: [{ year: 2025 }, { year: 2024 }], products: [] },
+    { key: "Askar", name: "Askar", address: "Askar", contact_person: "Omar", country_name: "Bahrain", categories: [], units: [], forms: [], factors: [], products: [] },
+  ],
+  mappings: [],
+  threshold: { threshold_percentage: 4 },
+  material_factors: [],
+};
 const MIDAL_BRAND = { companyId: 1, name: "Midal", primary: "#0b5c3b", accent: "#c8a24a", coverFrom: "#0b5c3b", coverTo: "#06301f", logoUrl: null, logoPublicId: null, defaultLook: "classic", updatedAt: "2026-10-01T00:00:00Z" };
 
 async function signIn(page: Page) {
@@ -86,6 +97,44 @@ async function signIn(page: Page) {
       if (/\/brands\/1\/guideline$/.test(path) && method === "POST") {
         midal = { ...midal, guidelineUrl: "https://assets.example.invalid/brand-assets/company_1_guideline.pdf?v=1", guidelineName: "midal-colours.pdf" };
         return json({ message: "Colour guideline uploaded", brand: midal });
+      }
+      // Copy client setup (ESG-lite docs/setup-copy.md): the bundle, a preview and the copy.
+      const bundleOf = /\/admin\/companies\/(\d+)\/setup-bundle$/.exec(path);
+      if (bundleOf) return json(MIDAL_BUNDLE);
+      if (path.endsWith("/admin/setup-copy/preview") || /\/admin\/companies\/\d+\/setup-copy$/.test(path)) {
+        const opts = (body?.options ?? {}) as { sites?: { key: string; target: unknown }[]; include?: Record<string, boolean>; factor_years?: number[] | null; first_site?: string };
+        const main = opts.first_site === "main";
+        const skipped = new Set((opts.sites ?? []).filter((x) => x.target === "skip").map((x) => x.key));
+        const years = opts.factor_years ?? [2025, 2024];
+        const sites = MIDAL_BUNDLE.sites.map((s, i) => ({
+          key: s.key,
+          name: s.name,
+          target: skipped.has(s.key) ? { kind: "skip", site_id: null, site_name: null } : i === 0 && main ? { kind: "reuse", site_id: 70, site_name: "Bahrain Steel - Main Site" } : { kind: "create", site_id: null, site_name: s.name },
+          country_name: s.country_name,
+          available_factor_years: [2025, 2024],
+          counts: {
+            categories: { create: 3, skip: 0 },
+            units: { create: opts.include?.units === false || skipped.has(s.key) ? 0 : 2, skip: 0 },
+            forms: { create: skipped.has(s.key) ? 0 : 4, skip: 0 },
+            factors: { create: skipped.has(s.key) ? 0 : years.length * 10, skip: 0 },
+            products: { create: opts.include?.products === false || skipped.has(s.key) ? 0 : 1, skip: 0 },
+          },
+          skipped: { forms: [], units: [], products: [] },
+          warnings: !skipped.has(s.key) && i === 0 && main ? ["The source site is in Bahrain, this one in India: check grid and fuel factors after the copy."] : [],
+        }));
+        const create = sites.reduce((n, x) => n + x.counts.forms.create + x.counts.units.create + x.counts.factors.create + x.counts.products.create, 0);
+        return json({
+          source: { company_id: 1, company_name: "Midal Cables" },
+          target: { company_id: null, company_name: null },
+          sites,
+          mappings: { create: 6, skip: 0 },
+          threshold: "create",
+          material_factors: { create: 0, skip: 0, licensed_excluded: 0 },
+          columns_created: [],
+          errors: [],
+          warnings: [],
+          totals: { create: create + 7, skip: 0 },
+        });
       }
       if (path.endsWith("/admin/sites")) return json(SITES);
       if (path.endsWith("/admin/users")) return json(USERS);
@@ -247,6 +296,10 @@ test("a superadmin onboards a client in steps, with brand colours", async ({ pag
   await page.locator('input[type="file"]').nth(2).setInputFiles({ name: "steel-colours.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test") });
   await page.getByRole("button", { name: "Continue" }).click();
 
+  // Step 5: start empty.
+  await expect(page.getByRole("heading", { name: "Start from" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+
   // Review, then create.
   await expect(page.getByRole("heading", { name: "Review and create" })).toBeVisible();
   await expect(page.getByText("huda@steel.example")).toBeVisible();
@@ -277,6 +330,7 @@ test("a superadmin onboards a client with an invite instead of a password, and r
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Skip for now" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByText("Invite by email")).toBeVisible();
@@ -332,4 +386,74 @@ test("a superadmin allows Claude imports for a client from its overview", async 
   await expect(page.getByText("Claude imports allowed for Midal Cables")).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   expect(calls).toContainEqual({ method: "PUT", path: expect.stringMatching(/\/admin\/companies\/1$/), body: { mcp_enabled: true } });
+});
+
+test("a superadmin onboards a client that starts from another client's setup", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/clients/new");
+  await page.getByLabel("Company name").fill("Bahrain Steel");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Contact name").fill("Huda");
+  await page.getByLabel("Email").fill("huda@steel.example");
+  await page.getByLabel("Password").fill("long enough");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  // Step 5: start from Midal's setup; the preview shows where each site goes and what is created.
+  await expect(page.getByRole("heading", { name: "Start from" })).toBeVisible();
+  await page.getByRole("radio", { name: "An existing client" }).click();
+  await page.getByLabel("Client").selectOption("Midal Cables");
+  await expect(page.getByText("The new client's main site")).toBeVisible();
+  await expect(page.getByText("check grid and fuel factors", { exact: false })).toBeVisible();
+  // Newest and current year by default (the mock has 2025 and 2024): 2024 is off until ticked.
+  await expect(page.getByRole("checkbox", { name: "2025" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "2024" })).not.toBeChecked();
+  await page.getByRole("checkbox", { name: "Products" }).uncheck();
+  await expect(page.getByRole("row", { name: /Hidd/ })).toContainText("10");
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  await expect(page.getByRole("heading", { name: "Review and create" })).toBeVisible();
+  await expect(page.getByText("Midal Cables", { exact: true })).toBeVisible();
+  await expect(page.getByText("2025", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Create client" }).click();
+
+  await expect(page.getByRole("heading", { name: "Bahrain Steel is onboarded" })).toBeVisible();
+  await expect(page.getByText("Copied: 1 new site, 8 forms, 4 units, 20 factors, 6 mappings, threshold", { exact: false })).toBeVisible();
+  const copy = calls.find((c) => c.path.endsWith("/admin/companies/7/setup-copy"))!;
+  expect(copy.body).toMatchObject({
+    source: { company_id: 1 },
+    options: { first_site: "main", factor_years: [2025], form_conflict: "skip", include: { forms: true, products: false, material_factors: false } },
+  });
+  // The preview ran against no client at all; only the copy names the new one.
+  expect(calls.filter((c) => c.path.endsWith("/setup-copy/preview")).every((c) => !("target_company_id" in (c.body as object)))).toBe(true);
+});
+
+test("a superadmin copies a setup file onto a client and downloads a client's setup", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/clients/3");
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download setup" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("esglite-setup-midal-cables-2026-10-13.json");
+
+  await page.getByRole("button", { name: "Copy setup here" }).click();
+  const drawer = page.getByRole("dialog", { name: "Copy setup to Empty Co" });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole("button", { name: "Copy setup" })).toBeDisabled();
+  await drawer.getByRole("radio", { name: "A setup file" }).click();
+  await drawer.locator('input[type="file"]').setInputFiles({ name: "notes.json", mimeType: "application/json", buffer: Buffer.from('{"hello":1}') });
+  await expect(drawer.getByText("This file isn't an ESGLite setup file.")).toBeVisible();
+  await drawer.locator('input[type="file"]').setInputFiles({ name: "midal.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(MIDAL_BUNDLE)) });
+  await expect(drawer.getByText("Setup of Midal Cables", { exact: false })).toBeVisible();
+  await drawer.getByRole("combobox", { name: "Where Askar goes" }).selectOption("Skip this site");
+  await expect(drawer.getByRole("row", { name: /Askar/ })).toContainText("0");
+  await expect(drawer.getByText("Will create: 1 new site, 4 forms, 2 units, 10 factors, 6 mappings, threshold, 1 product")).toBeVisible();
+  await drawer.getByRole("button", { name: "Copy setup" }).click();
+  await expect(drawer.getByText("Copied: 1 new site, 4 forms, 2 units, 10 factors, 6 mappings, threshold, 1 product")).toBeVisible();
+  const copy = calls.find((c) => c.path.endsWith("/admin/companies/3/setup-copy"))!;
+  expect(copy.body).toMatchObject({ source: { bundle: { source: { company_name: "Midal Cables" } } }, options: { sites: [{ key: "Askar", target: "skip" }], factor_years: [2025] } });
+  await drawer.getByRole("button", { name: "Done" }).click();
+  await expect(drawer).toBeHidden();
 });

@@ -1,10 +1,11 @@
 import { useCallback, useId, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Building2 } from "lucide-react";
+import { Building2, Copy, Download } from "lucide-react";
 import { Badge, Button, EmptyState, Modal, PageHeader, Skeleton, TabPanel, Tabs, TypedDeleteModal, useToast, withoutParams } from "../../ui";
-import { errorMessage, hasBrand, useAdminUsers, useBrand, useCompanies, useDeleteCompany, useSites, useThreshold, useUpdateCompany } from "./api";
+import { errorMessage, hasBrand, useAdminUsers, useBrand, useCompanies, useDeleteCompany, useDownloadSetup, useSites, useThreshold, useUpdateCompany } from "./api";
 import { ClaudeImportsToggle } from "./components/ClaudeImportsToggle";
 import { CompanyDrawer } from "./components/CompanyDrawer";
+import { SetupCopyDrawer } from "./components/SetupCopyDrawer";
 import { ClientLogo, StatusBadge } from "./components/bits";
 import { BrandTab, DangerTab, MappingsTab, OverviewTab, PeopleTab, SitesTab, ThresholdTab } from "./components/DetailTabs";
 import { type CompanyDraft, buildRows, cascadeItems, toPayload } from "./logic";
@@ -24,6 +25,7 @@ export default function ClientDetailPage() {
   const tabParam = params.get("tab");
   const tab: Tab = isTab(tabParam) ? tabParam : "overview";
   const editing = params.get("open") === "edit";
+  const copying = params.get("open") === "copy-setup";
 
   const companies = useCompanies();
   const sites = useSites();
@@ -32,6 +34,7 @@ export default function ClientDetailPage() {
   const threshold = useThreshold(id);
   const update = useUpdateCompany();
   const remove = useDeleteCompany();
+  const download = useDownloadSetup();
 
   const company = companies.data?.find((c) => c.company_id === id) ?? null;
   const row = useMemo(() => (company ? buildRows([company], sites.data, users.data)[0] : null), [company, sites.data, users.data]);
@@ -154,6 +157,19 @@ export default function ClientDetailPage() {
           </span>
         }
         primaryAction={{ label: "Edit details", onClick: () => setParam("open", "edit") }}
+        secondaryActions={[
+          { label: "Copy setup here", icon: <Copy aria-hidden className="size-4" />, onClick: () => setParam("open", "copy-setup"), disabled: !row.active },
+          {
+            label: "Download setup",
+            icon: <Download aria-hidden className="size-4" />,
+            loading: download.isPending,
+            onClick: () =>
+              download.mutate(id, {
+                onSuccess: (name) => toast({ title: "Setup file downloaded", description: name, tone: "good" }),
+                onError: (e) => toast({ title: "Couldn't download the setup file", description: errorMessage(e, "Try again."), tone: "bad" }),
+              }),
+          },
+        ]}
       />
       <Tabs label="Client sections" idBase={idBase} items={tabs} value={tab} onChange={(v) => setParam("tab", v === "overview" ? null : v)} />
       <TabPanel idBase={idBase} value="overview" current={tab}>
@@ -207,6 +223,7 @@ export default function ClientDetailPage() {
           onSave={onSave}
         />
       )}
+      {copying && <SetupCopyDrawer key={row.company_id} row={row} onClose={() => setParam("open", null)} />}
       <Modal
         open={confirmStatus}
         onClose={() => setConfirmStatus(false)}
