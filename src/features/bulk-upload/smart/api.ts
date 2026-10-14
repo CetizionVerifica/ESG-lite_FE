@@ -5,7 +5,7 @@ import { type PatchPlanBody, deleteMappingProfile, listMappingProfiles, patchImp
 import type { PreviewData } from "../api";
 import type { ImportResult, PreviewRow } from "../logic";
 import type { MappingProfile, MappingProposal } from "./types";
-import { smartErrorMessage } from "./logic";
+import { rowHasCode, smartErrorMessage } from "./logic";
 
 export const smartKeys = {
   all: ["bulk-upload", "smart"] as const,
@@ -47,7 +47,11 @@ export function useSmartPreview(args: SmartPreviewArgs | null, lastPlan: Mutable
       const a = args as SmartPreviewArgs;
       const res = await fetchSmartPreview(a.proposal, { page: a.page, pageSize: 100, code: a.code, planId: a.planId, cancelPlanId: a.planId ? null : lastPlan.current });
       lastPlan.current = res.plan?.plan_id ?? null;
-      return { plan: res.plan, rows: (res.rows ?? []) as PreviewRow[], total: res.total_rows ?? 0, notSelected: res.not_selected ?? 0, sheetRows: res.sheet_rows ?? 0 };
+      const all = (res.rows ?? []) as PreviewRow[];
+      // The AI service pages the plan by `state`; where it doesn't pass `code` on, the page is narrowed here.
+      const rows = a.code ? all.filter((r) => rowHasCode(r, a.code as string)) : all;
+      const total = rows.length === all.length ? (res.total_rows ?? 0) : rows.length;
+      return { plan: res.plan, rows, total, notSelected: res.not_selected ?? 0, sheetRows: res.sheet_rows ?? 0 };
     },
   });
   const planId = query.data?.plan?.plan_id ?? null;

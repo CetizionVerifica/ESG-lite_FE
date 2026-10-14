@@ -12,8 +12,10 @@ const SEVERITY_LABEL = { error: "Won't import", warning: "Imports with a note", 
 /**
  * Smart import, screen 3: the plan ESG-lite made from the confirmed proposal.
  * Rows carry the factor, total and issues the engine found; the user skips or
- * fixes rows (the plan is patched and rechecked) and can't commit while rows
- * in state issue remain.
+ * fixes rows (the plan is patched and rechecked). Rows still in state issue
+ * are left out at import (ESG-lite commits with skip_rows_with_issues; rows
+ * the AI service kept back as local issues were never sent), so Import needs
+ * only one ready row.
  */
 export function SmartReviewStep(props: {
   plan: PlanSummary | null;
@@ -116,7 +118,7 @@ export function SmartReviewStep(props: {
         <KpiStrip
           items={[
             { label: "Will import", value: plan.counts.ready, format: "number", primary: true, hint: plan.counts.warnings ? `${plan.counts.warnings} with a note` : undefined },
-            { label: "Need a fix", value: plan.counts.issue, format: "number", hint: plan.counts.issue ? "Fix or skip them to import" : undefined },
+            { label: "Won't import", value: plan.counts.issue, format: "number", hint: plan.counts.issue ? "Fix them to import, or skip them" : undefined },
             { label: "Skipped", value: plan.counts.skipped, format: "number" },
             { label: "Total", value: plan.totals.tco2e, format: "emissions", hint: "of the rows that will import" },
           ]}
@@ -130,7 +132,7 @@ export function SmartReviewStep(props: {
       )}
       {blocked && (
         <Callout tone="warn" title={`${rowsText(plan?.counts.issue ?? 0)} can't be imported as they are`}>
-          Fix each one (Edit), skip it, or skip every row with the same issue. Rows for other sites are always skipped: upload the file again for that site.
+          They're left out when you import. Fix each one (Edit) to bring it in, or skip it (or every row with the same issue) to say so. Rows for other sites are always left out: upload the file again for that site.
         </Callout>
       )}
       {props.patchError && <Callout tone="warn" title="The change wasn't saved">{props.patchError}</Callout>}
@@ -186,7 +188,7 @@ export function SmartReviewStep(props: {
         <Button variant="secondary" onClick={props.onBack}>
           Back
         </Button>
-        <Button variant="primary" disabled={!plan?.plan_id || blocked || (plan?.counts.ready ?? 0) <= 0 || props.busy} onClick={props.onImport}>
+        <Button variant="primary" disabled={!plan?.plan_id || (plan?.counts.ready ?? 0) <= 0 || props.busy} onClick={props.onImport}>
           {plan && plan.counts.ready > 0 ? `Import ${rowsText(plan.counts.ready)}` : "Import"}
         </Button>
       </div>
