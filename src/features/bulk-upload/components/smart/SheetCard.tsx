@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Badge, type BadgeTone, Button, Callout, Combobox, Select, Toggle, useDebounced } from "../../../../ui";
 import { useActivityOptions } from "../../smart/api";
-import { CHIP_LABEL, type MatchChip, SOURCE_LABEL, activityChip, categoryChip, categoryText, fieldChip, notInContextText, otherSiteLines, periodText, profileDiffers, profileSummary, profileWhenText, sheetBlockers } from "../../smart/logic";
+import { CHIP_LABEL, type MatchChip, SOURCE_LABEL, activityChip, categoryChip, categoryNotFound, categoryText, fieldChip, notInContextText, otherSiteLines, periodText, profileDiffers, profileSummary, profileWhenText, sheetBlockers } from "../../smart/logic";
 import type { FieldMapping, MappingProfile, ProposedActivityMatch, SheetProposal } from "../../smart/types";
 
 const CHIP_TONE: Record<Exclude<MatchChip, null>, BadgeTone> = { matched: "good", remembered: "brand", suggested: "info", check: "warn", skipped: "neutral" };
@@ -45,12 +45,17 @@ export function SheetCard(props: {
   profile: MappingProfile | null;
   forgetting: boolean;
   forgetError: string | null;
+  /** The mapper is working out the fields for a category the user just picked. */
+  reasking?: boolean;
+  /** Why that re-ask failed, if it did. */
+  reaskError?: string | null;
   actions: SheetCardActions;
 }) {
   const { sheet, actions, index, profile } = props;
   const blockers = sheetBlockers(sheet);
   const columnOptions = props.columns.map((c) => ({ value: c, label: c }));
   const catChip = categoryChip(sheet.category);
+  const notFound = categoryNotFound(sheet);
   const otherSites = otherSiteLines(sheet, props.siteName);
   const dropped = notInContextText(sheet.not_in_context);
   const titleId = `sheet-${index}-title`;
@@ -90,23 +95,38 @@ export function SheetCard(props: {
               </dt>
               <dd className="space-y-2 text-sm text-muted">
                 {sheet.category.kind === "fixed" ? (
-                  <div className="flex flex-wrap items-end gap-2">
-                    <Select<number>
-                      label={`Category of ${sheet.sheet_name}`}
-                      hideLabel
-                      value={sheet.category.id}
-                      options={props.categories.some((c) => c.value === (sheet.category as { id: number }).id) ? props.categories : [...props.categories, { value: sheet.category.id, label: sheet.category.label }]}
-                      onChange={(v) => {
-                        const match = props.categories.find((c) => c.value === v);
-                        if (match) actions.onFixedCategory(match.value, match.label);
-                      }}
-                    />
-                    {catChip === "check" && (
-                      <Button size="sm" aria-label="Confirm category" onClick={actions.onConfirmCategory}>
-                        Confirm
-                      </Button>
+                  <>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <Select<number>
+                        label={`Category of ${sheet.sheet_name}`}
+                        hideLabel
+                        placeholder={notFound ? "Choose a category" : undefined}
+                        value={notFound ? null : sheet.category.id}
+                        disabled={props.reasking}
+                        options={notFound || props.categories.some((c) => c.value === (sheet.category as { id: number }).id) ? props.categories : [...props.categories, { value: sheet.category.id, label: sheet.category.label }]}
+                        onChange={(v) => {
+                          const match = props.categories.find((c) => c.value === v);
+                          if (match) actions.onFixedCategory(match.value, match.label);
+                        }}
+                      />
+                      {catChip === "check" && !notFound && !props.reasking && (
+                        <Button size="sm" aria-label="Confirm category" onClick={actions.onConfirmCategory}>
+                          Confirm
+                        </Button>
+                      )}
+                    </div>
+                    {notFound && <p className="text-xs text-muted">The app couldn't tell which category this sheet is. Choose one and its fields are worked out again.</p>}
+                    {props.reasking && (
+                      <p role="status" className="text-xs text-muted">
+                        Working out the fields and activities for {sheet.category.label}…
+                      </p>
                     )}
-                  </div>
+                    {props.reaskError && (
+                      <Callout tone="warn" title="Fields not worked out">
+                        {props.reaskError}
+                      </Callout>
+                    )}
+                  </>
                 ) : (
                   <>
                     <p>{categoryText(sheet.category)}</p>

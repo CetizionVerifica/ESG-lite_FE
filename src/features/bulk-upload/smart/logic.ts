@@ -115,6 +115,19 @@ export const confirmCategory = (p: MappingProposal, index: number) =>
         : { ...s.category, values: s.category.values.map((v) => ({ ...v, ...CONFIRMED })) },
   }));
 
+/**
+ * No layer worked out this sheet's category: the engine sends the site's first
+ * category as a placeholder with confidence 0 from the rules. The screen shows
+ * "Choose a category" instead of presenting the placeholder as a suggestion.
+ */
+export const categoryNotFound = (sheet: SheetProposal) => sheet.category.kind === "fixed" && sheet.category.confidence === 0 && sheet.category.source === "rules";
+
+/** Swap in the mapper's fresh answer for one sheet, keeping whether the user left it out. */
+export const replaceSheet = (p: MappingProposal, sheetName: string, next: SheetProposal): MappingProposal => ({
+  ...p,
+  sheets: p.sheets.map((s) => (s.sheet_name === sheetName ? { ...next, excluded: s.excluded } : s)),
+});
+
 export const setFixedCategory = (p: MappingProposal, index: number, id: number, label: string) =>
   withSheet(p, index, (s) => ({ ...s, category: { kind: "fixed", id, label, ...CONFIRMED } }));
 

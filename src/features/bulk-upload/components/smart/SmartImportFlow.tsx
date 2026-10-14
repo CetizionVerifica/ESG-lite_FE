@@ -4,8 +4,8 @@ import { Button, Callout, Stepper, exportMatrix, useToast } from "../../../../ui
 import { type Site, errorMessage, useUploadFile } from "../../api";
 import type { UploadContext } from "../../hooks/useUploadContext";
 import { type ImportResult, fileProblem, selectedSite, skippedMatrix } from "../../logic";
-import { type SmartPreviewArgs, useMappingProfiles, usePatchPlan, usePropose, useSkipIssue, useSmartImport, useSmartPreview } from "../../smart/api";
-import { SMART_STEPS, forgetErrorMessage, reviewRowsLink, rowsText, smartErrorMessage, smartUnavailable } from "../../smart/logic";
+import { type SmartPreviewArgs, useMappingProfiles, usePatchPlan, usePropose, useReaskSheet, useSkipIssue, useSmartImport, useSmartPreview } from "../../smart/api";
+import { SMART_STEPS, forgetErrorMessage, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, smartErrorMessage, smartUnavailable } from "../../smart/logic";
 import type { MappingProposal } from "../../smart/types";
 import { ImportStep, type ImportState } from "../ImportStep";
 import { ConfirmMappingStep } from "./ConfirmMappingStep";
@@ -39,6 +39,7 @@ export function SmartImportFlow(props: {
 
   const upload = useUploadFile();
   const propose = usePropose();
+  const reask = useReaskSheet();
   const patch = usePatchPlan();
   const skipIssue = useSkipIssue();
 
@@ -49,11 +50,45 @@ export function SmartImportFlow(props: {
   const [proposal, setProposal] = useState<MappingProposal | null>(null);
   const [previewArgs, setPreviewArgs] = useState<SmartPreviewArgs | null>(null);
   const [importState, setImportState] = useState<ImportState | null>(null);
+  /** Sheets being mapped again after a category change, and the ones whose re-ask failed (sheet name → message). */
+  const [reasking, setReasking] = useState<Record<string, true>>({});
+  const [reaskFailed, setReaskFailed] = useState<Record<string, string>>({});
   const backgrounded = useRef(false);
   const lastPlan = useRef<string | null>(null);
 
   // XI3: what the company confirmed for these layouts before. A Superadmin reads the chosen client's.
   const memory = useMappingProfiles(proposal, contributor ? null : ctx.clientId, contributor || props.clientEnabled === true);
+
+  // A new category for a sheet: show it at once, then ask the mapper for that
+  // category's own fields and activities. A failed re-ask keeps the choice and
+  // says so on the card; the columns can still be set by hand.
+  const chooseCategory = (index: number, id: number, label: string) => {
+    if (!proposal || !workbook || ctx.siteId === null) return;
+    const sheetName = proposal.sheets[index].sheet_name;
+    setProposal((p) => (p ? setFixedCategory(p, index, id, label) : p));
+    setReasking((r) => ({ ...r, [sheetName]: true }));
+    setReaskFailed((f) => {
+      const next = { ...f };
+      delete next[sheetName];
+      return next;
+    });
+    reask.mutate(
+      { documentId: workbook.documentId, siteId: ctx.siteId, sheetName, categoryId: id },
+      {
+        onSuccess: (res) => {
+          const fresh = res.sheets.find((s) => s.sheet_name === sheetName);
+          if (fresh) setProposal((p) => (p ? replaceSheet(p, sheetName, fresh) : p));
+        },
+        onError: (e) => setReaskFailed((f) => ({ ...f, [sheetName]: smartErrorMessage(e, `The fields for ${label} couldn't be worked out. Choose the columns below.`) })),
+        onSettled: () =>
+          setReasking((r) => {
+            const next = { ...r };
+            delete next[sheetName];
+            return next;
+          }),
+      },
+    );
+  };
 
   const onPlanned = useCallback((planId: string) => setPreviewArgs((a) => (a && a.planId === null ? { ...a, planId } : a)), []);
   const preview = useSmartPreview(previewArgs, lastPlan, onPlanned);
@@ -199,6 +234,9 @@ export function SmartImportFlow(props: {
             fileName={workbook.fileName}
             proposal={proposal}
             onChange={setProposal}
+            onFixedCategory={chooseCategory}
+            reasking={reasking}
+            reaskFailed={reaskFailed}
             siteName={site?.name ?? "this site"}
             headers={workbook.headers}
             categories={categories}

@@ -193,11 +193,19 @@ export type SmartProposal = { document_id: number; site_id: number; sheets: unkn
  * caller doesn't hold is refused by ESG-lite (403 IMPORT_FORBIDDEN), a client
  * with Smart import off gets 403 AI_IMPORT_DISABLED_FOR_CLIENT.
  */
-export async function proposeMapping(documentId: number, siteId: number): Promise<SmartProposal> {
+/**
+ * `POST /v1/excel/propose`. With `opts`, re-asks for the named sheets only,
+ * taking `sheetCategories` (sheet name → category id) as the user's choice so
+ * the engine maps that category's own fields and activities.
+ */
+export async function proposeMapping(documentId: number, siteId: number, opts?: { sheets?: string[]; sheetCategories?: Record<string, number> }): Promise<SmartProposal> {
+  const body: Record<string, unknown> = { document_id: documentId, site_id: siteId };
+  if (opts?.sheets) body.sheets = opts.sheets;
+  if (opts?.sheetCategories) body.sheet_categories = opts.sheetCategories;
   const response = await fetch(`${PYTHON_API_URL}/v1/excel/propose`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...ocrAuthHeaders() },
-    body: JSON.stringify({ document_id: documentId, site_id: siteId }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) await refuse(response, "The mapper couldn't read the workbook.");
   return response.json();

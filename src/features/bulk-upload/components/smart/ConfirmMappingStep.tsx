@@ -27,6 +27,11 @@ export function ConfirmMappingStep(props: {
   fileName: string;
   proposal: MappingProposal;
   onChange: (next: MappingProposal) => void;
+  /** A category picked for a sheet; the flow re-asks the mapper for that category's fields. */
+  onFixedCategory?: (index: number, id: number, label: string) => void;
+  /** Sheets being mapped again (by name), and why a re-ask failed. */
+  reasking?: Record<string, true>;
+  reaskFailed?: Record<string, string>;
   siteName: string;
   headers: string[];
   categories: CategoryOption[];
@@ -43,7 +48,8 @@ export function ConfirmMappingStep(props: {
   const columnsOf = useMemo(() => proposal.sheets.map((s) => knownColumns(s, props.headers)), [proposal.sheets, props.headers]);
   const included = proposal.sheets.filter((s) => !s.excluded).length;
   const profiles = proposal.sheets.map((s) => profileFor(s, props.profiles));
-  const ready = canContinue(proposal);
+  const busy = Object.keys(props.reasking ?? {}).length > 0;
+  const ready = canContinue(proposal) && !busy;
 
   if (proposal.sheets.length === 0) {
     return (
@@ -77,6 +83,8 @@ export function ConfirmMappingStep(props: {
           profile={profiles[i]}
           forgetting={!!profiles[i] && props.forgetting?.id === profiles[i]?.id}
           forgetError={profiles[i] && props.forgetFailed?.profile.id === profiles[i]?.id ? props.forgetFailed.message : null}
+          reasking={Boolean(props.reasking?.[sheet.sheet_name])}
+          reaskError={props.reaskFailed?.[sheet.sheet_name] ?? null}
           actions={{
             onExclude: (excluded) => onChange(setSheetExcluded(proposal, i, excluded)),
             onFieldColumn: (key, column) => onChange(setFieldColumn(proposal, i, key, column)),
@@ -86,7 +94,7 @@ export function ConfirmMappingStep(props: {
             onConfirmActivity: (text) => onChange(confirmActivity(proposal, i, text)),
             onSaveMapping: (text) => onChange(toggleSaveMapping(proposal, i, text)),
             onConfirmCategory: () => onChange(confirmCategory(proposal, i)),
-            onFixedCategory: (id, label) => onChange(setFixedCategory(proposal, i, id, label)),
+            onFixedCategory: (id, label) => (props.onFixedCategory ? props.onFixedCategory(i, id, label) : onChange(setFixedCategory(proposal, i, id, label))),
             onCategoryValue: (text, id) => onChange(setCategoryValue(proposal, i, text, id)),
             onUseProfile: (profile) => onChange(applyProfile(proposal, i, profile)),
             onForgetProfile: props.onForgetProfile,
