@@ -37,7 +37,12 @@ export function userColumns(actions: RowActions): Column<UserRow>[] {
       sortable: true,
       width: "8rem",
       value: (r) => r.role,
-      cell: (r) => <Badge tone={ROLE_TONE[r.role] ?? "neutral"}>{r.role}</Badge>,
+      cell: (r) => (
+        <span className="flex flex-wrap gap-1">
+          <Badge tone={ROLE_TONE[r.role] ?? "neutral"}>{r.role}</Badge>
+          {r.is_internal && <Badge tone="info">Internal</Badge>}
+        </span>
+      ),
     },
     {
       id: "sites",
