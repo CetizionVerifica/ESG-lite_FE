@@ -99,6 +99,8 @@ export type ListInput = {
   status: EmissionStatus | null;
   /** `?batch=`: only one upload batch's rows ("Review rows" on the Upload batches tab). */
   batchId?: string | null;
+  /** With a batch: only its rows that need attention (XI5). */
+  attention?: boolean;
   sort: SortState;
   page: number;
   pageSize: number;
@@ -113,6 +115,7 @@ export function listParams(input: ListInput) {
     status: input.tab === "approvals" ? "pending" : input.status,
     search: input.search.trim() || null,
     batchId: input.batchId || null,
+    attention: input.batchId && input.attention ? true : null,
     sort: sortKey ?? null,
     order: sortKey && input.sort ? input.sort.dir : null,
     // DataTable pages are 0-based, the API's 1-based.
@@ -322,6 +325,55 @@ export function reportOptions(period: Period | null, fyStartMonth = DEFAULT_FY_S
   return options;
 }
 
+// ─── Smart import provenance (XI5) ──────────────────────────────────────────
+
+export type ImportProvenance = {
+  /** "Sheet!Cell" of the sheet line the row came from. */
+  row_ref: string | null;
+  /** How the smart import matched the row, when it went through the mapper. */
+  meta: { source: "profile" | "rules" | "llm"; confidence: number } | null;
+};
+
+/** What the import stored on the row (`extra_data.import`, IM1), or null for a typed entry. */
+export function importProvenance(row: Pick<EmissionData, "extra_data">): ImportProvenance | null {
+  const imp = row.extra_data?.import as { row_ref?: unknown; meta?: { source?: unknown; confidence?: unknown } } | undefined;
+  if (!imp || typeof imp !== "object") return null;
+  const row_ref = typeof imp.row_ref === "string" && imp.row_ref ? imp.row_ref : null;
+  const m = imp.meta;
+  const source: ImportProvenance["meta"] extends infer M ? (M extends { source: infer S } ? S | null : never) : never =
+    m?.source === "profile" || m?.source === "rules" || m?.source === "llm" ? (m.source as "profile" | "rules" | "llm") : null;
+  const meta: ImportProvenance["meta"] = source && typeof m?.confidence === "number" ? { source, confidence: m.confidence } : null;
+  return row_ref || meta ? { row_ref, meta } : null;
+}
+
+/** "Matched by: remembered", "suggested (64 %)" or "matched by name". */
+export function matchedByText(meta: NonNullable<ImportProvenance["meta"]>): string {
+  const pct = `${Math.round(meta.confidence * 100)} %`;
+  if (meta.source === "profile") return "remembered from an earlier upload";
+  if (meta.source === "llm") return `suggested (${pct})`;
+  return meta.confidence < 1 ? `matched by name (${pct})` : "matched by name";
+}
+
+/** `?attention=`: on by default while the batch has rows that need attention; "0" turns it off. */
+export function attentionOn(param: string | null, count: number | undefined): boolean {
+  if (param === "0") return false;
+  if (param === "1") return true;
+  return (count ?? 0) > 0;
+}
+
+/** The batch "Approve pending" dialog, which names the rows the smart import was least sure about. */
+export function approveBatchCopy(pending: number, attention: number | undefined): { title: string; description: string; reviewFirst: boolean } {
+  const n = attention ?? 0;
+  if (n > 0) {
+    return {
+      title: `Approve all ${pending} pending rows?`,
+      description: `${n} of ${pending} pending ${pending === 1 ? "row was" : "rows were"} matched by the smart import below 80 % or changed before the import. Review them first, or approve everything now.`,
+      reviewFirst: true,
+    };
+  }
+  return { title: `Approve ${pending} pending rows?`, description: "", reviewFirst: false };
+}
+
 // ─── Upload batch source (IM10) ─────────────────────────────────────────────
 
 export type BatchSource = "claude" | "bulk" | "api";
@@ -356,8 +408,9 @@ export function parseBatchSource(value: string | null): BatchSource | null {
  * (each one is approved or rejected on its own there), else the Ledger. The
  * batch's own site and category, over any period, become the context so every row is in view.
  */
-export function reviewRowsPath(batch: Pick<EmissionUploadBatch, "upload_batch_id" | "site_id" | "category_id" | "pending_count">): string {
+export function reviewRowsPath(batch: Pick<EmissionUploadBatch, "upload_batch_id" | "site_id" | "category_id" | "pending_count">, attention = false): string {
   const params = writeContext(new URLSearchParams(), { siteIds: [batch.site_id], categoryIds: [batch.category_id], period: null });
   params.set("batch", batch.upload_batch_id);
+  if (attention) params.set("attention", "1");
   return `${batch.pending_count > 0 ? "/data/approvals" : "/data/ledger"}?${params.toString()}`;
 }

@@ -63,6 +63,8 @@ export interface EmissionsSummary {
   pending_review_count?: number;
   approved_count: number;
   rejected_count: number;
+  /** With `batchId`: rows the smart import matched below 80 % or edited in the plan (XI5); absent on older APIs. */
+  attention?: number;
 }
 
 export interface PaginatedEmissions {
@@ -117,6 +119,8 @@ export const getEmissionsPaginated = async (params: {
   search?: string | null;
   /** Only this upload batch's rows (P07 "Review rows"). */
   batchId?: string | null;
+  /** With `batchId`: only the rows that need attention (XI5 "Needs attention"). */
+  attention?: boolean | null;
 }): Promise<PaginatedEmissions> => {
   const query: Record<string, string | number> = {
     page: params.page,
@@ -137,6 +141,7 @@ export const getEmissionsPaginated = async (params: {
   if (params.sort && params.order) query.order = params.order;
   if (params.search?.trim()) query.search = params.search.trim();
   if (params.batchId) query.batchId = params.batchId;
+  if (params.batchId && params.attention) query.attention = 1;
 
   const response = await api.get("/user/emissions", { params: query });
   return response.data;

@@ -12,6 +12,10 @@ import {
   formatFactorValue,
   humanize,
   listParams,
+  approveBatchCopy,
+  attentionOn,
+  importProvenance,
+  matchedByText,
   reviewRowsPath,
   mergeFera,
   optionLabel,
@@ -65,6 +69,12 @@ describe("listParams", () => {
   it("passes one upload batch through, and nothing when there is none", () => {
     expect(listParams({ ...base, tab: "approvals", batchId: "b-2" })).toMatchObject({ batchId: "b-2", status: "pending" });
     expect(listParams({ ...base, tab: "ledger" })).toMatchObject({ batchId: null });
+  });
+
+  it("asks for the rows that need attention only with a batch (XI5)", () => {
+    expect(listParams({ ...base, tab: "approvals", batchId: "b-2", attention: true })).toMatchObject({ batchId: "b-2", attention: true });
+    expect(listParams({ ...base, tab: "approvals", batchId: "b-2" })).toMatchObject({ attention: null });
+    expect(listParams({ ...base, tab: "approvals", attention: true })).toMatchObject({ batchId: null, attention: null });
   });
 
   it("drops sorts the server can't do", () => {
@@ -256,5 +266,42 @@ describe("reviewRowsPath", () => {
   });
   it("opens the ledger once nothing is pending", () => {
     expect(reviewRowsPath({ ...batch, pending_count: 0 })).toBe("/data/ledger?period=all&site=1&category=20&batch=b-2");
+  });
+});
+
+describe("needs attention (XI5)", () => {
+  it("is on by default while the batch has such rows, and ?attention= overrides", () => {
+    expect(attentionOn(null, 3)).toBe(true);
+    expect(attentionOn(null, 0)).toBe(false);
+    expect(attentionOn(null, undefined)).toBe(false);
+    expect(attentionOn("0", 3)).toBe(false);
+    expect(attentionOn("1", 0)).toBe(true);
+  });
+
+  it("reads the sheet reference and the match off the import row", () => {
+    expect(importProvenance({ extra_data: {} })).toBeNull();
+    expect(importProvenance({ extra_data: { import: { channel: "bulk_upload", row_ref: "Fuel!A5" } } })).toEqual({ row_ref: "Fuel!A5", meta: null });
+    const p = importProvenance({ extra_data: { import: { channel: "bulk_upload", row_ref: "Fuel!A6", meta: { source: "llm", confidence: 0.64 } } } });
+    expect(p).toEqual({ row_ref: "Fuel!A6", meta: { source: "llm", confidence: 0.64 } });
+    expect(matchedByText(p!.meta!)).toBe("suggested (64 %)");
+    expect(matchedByText({ source: "profile", confidence: 1 })).toBe("remembered from an earlier upload");
+    expect(matchedByText({ source: "rules", confidence: 1 })).toBe("matched by name");
+    expect(importProvenance({ extra_data: { import: { meta: { source: "magic", confidence: 0.5 } } } })).toBeNull();
+  });
+
+  it("names the attention count in the batch approval dialog", () => {
+    expect(approveBatchCopy(300, 12)).toEqual({
+      title: "Approve all 300 pending rows?",
+      description: "12 of 300 pending rows were matched by the smart import below 80 % or changed before the import. Review them first, or approve everything now.",
+      reviewFirst: true,
+    });
+    expect(approveBatchCopy(5, 0)).toMatchObject({ title: "Approve 5 pending rows?", reviewFirst: false });
+    expect(approveBatchCopy(5, undefined).reviewFirst).toBe(false);
+  });
+
+  it("links Review rows with the attention filter on", () => {
+    const batch = { upload_batch_id: "b-2", site_id: 1, category_id: 20, pending_count: 2 };
+    expect(reviewRowsPath(batch, true)).toContain("attention=1");
+    expect(reviewRowsPath(batch)).not.toContain("attention");
   });
 });

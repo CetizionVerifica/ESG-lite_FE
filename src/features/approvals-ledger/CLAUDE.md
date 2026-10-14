@@ -64,3 +64,11 @@ Two select-all bars → one selection model · 12 wide columns + tall Activity c
 - Undo restores status and removes the AuditLog entry or adds a reversal entry.
 - Drawer opens < 300ms from cached row data; configs fetched lazily.
 - Same table component as P04, P05, P08.
+
+## Needs attention (XI5, smart Excel import; spec `/mnt/project-files/excel-import/modules/XI5-review-polish/CLAUDE.md`, ESG-lite `docs/excel-import/`)
+After a smart import the manager reviews the batch one row at a time, sees first the rows the mapper was least sure about, and approves the rest together. Per-row approve/undo, reject-with-reason and batch "Approve pending" stay as they are.
+- **Chip** "Needs attention (n)" on the Review rows status line (Approvals tab with `?batch=`): sends `attention=1` with `GET /user/emissions?batchId=`; `n` is the summary's `attention` count. On by itself while n > 0; `?attention=0` turns it off, `?attention=1` forces it (`attentionOn`). Hidden when the API has no count and the param isn't set. "Show all rows" and "Clear filters" drop it.
+- **Drawer**: "Imported from Sheet!Cell · Matched by: remembered from an earlier upload / suggested (64 %) / matched by name", read off `extra_data.import` (`row_ref` since IM1; `meta { source, confidence }` is what the ESG-lite half of XI5 adds for smart-import rows). A typed entry shows nothing.
+- **Batch "Approve pending"**: the dialog asks the API for the batch's attention count (`useBatchAttention`, `status=pending&batchId=`, `summary.attention`); with n > 0 it reads "Approve all N pending rows?" with "n of N pending rows were matched by the smart import below 80 % or changed before the import", a "Review them first" button (Review rows with `attention=1`) and "Approve all". Without the count (older API) the dialog is unchanged.
+- Decision 6 (uploader = approver audit note) is the backend's; nothing to show here.
+- Tests: `logic.test.ts` ("needs attention (XI5)"), `e2e/approvals-ledger.spec.ts` (chip on by default and off by click, drawer line, approve dialog → Review them first).

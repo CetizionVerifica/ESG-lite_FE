@@ -222,6 +222,22 @@ export function useBatchMutations() {
   return { approve, reject };
 }
 
+/**
+ * How many of a batch's pending rows need attention (XI5): matched by the smart
+ * import below 80 % or changed in the plan. Undefined on an API without the count.
+ */
+export function useBatchAttention(batch: Pick<EmissionUploadBatch, "upload_batch_id" | "site_id"> | null) {
+  return useQuery({
+    queryKey: [...keys.all, "batch-attention", batch?.upload_batch_id ?? null],
+    enabled: batch !== null,
+    queryFn: async () => {
+      const b = batch as EmissionUploadBatch;
+      const { summary } = await getEmissionsPaginated({ siteIds: [b.site_id], batchId: b.upload_batch_id, status: "pending", page: 1, limit: 1 });
+      return typeof summary?.attention === "number" ? summary.attention : null;
+    },
+  });
+}
+
 /** The most rows "Export" fetches for the current filter in one go. */
 export const EXPORT_CAP = 10000;
 
