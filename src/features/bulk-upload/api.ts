@@ -1,4 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { getCompanySites } from "../../services/companyAdminService";
+import type { RawCompanySite } from "./logic";
 import type { MutableRefObject } from "react";
 import { getColumnConfigsBySiteAndCategory, getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { ExcelServiceError, type PlanSummary, type SheetArgs, fetchPreviewRows, fetchUniqueCategories, importAllRows, uploadExcelGetHeaders } from "../../services/excelService";
@@ -13,7 +15,8 @@ import type { ImportResult, PreviewRow } from "./logic";
 export type Site = {
   site_id: number;
   name: string;
-  company?: { company_id: number; name: string } | null;
+  /** `ai_import_enabled` is the client's Smart import switch (XI0); absent on older servers = off. */
+  company?: { company_id: number; name: string; ai_import_enabled?: boolean | null } | null;
   categories?: { category_id: number; category_name: string; scope?: string | null }[] | null;
 };
 
@@ -37,6 +40,15 @@ function asList<T>(data: unknown, key: string): T[] {
   const inner = (data as Record<string, unknown> | null)?.[key];
   return Array.isArray(inner) ? (inner as T[]) : [];
 }
+
+/** Every site of the signed-in Admin's own client (`/company-admin/sites`), with categories but without the company. */
+export const useCompanySites = (enabled: boolean) =>
+  useQuery<RawCompanySite[]>({
+    queryKey: [...keys.sites(), "company-admin"],
+    enabled,
+    staleTime: 5 * 60_000,
+    queryFn: async () => asList<RawCompanySite>(await getCompanySites(), "sites"),
+  });
 
 /** Every site, for a Superadmin. Contributors use their own sites from the signed-in user instead. */
 export const useSites = (enabled = true) =>

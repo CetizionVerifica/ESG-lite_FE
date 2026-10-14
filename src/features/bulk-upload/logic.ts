@@ -279,7 +279,7 @@ export function fileProblem(file: File): string | null {
 type RawSite = {
   site_id: number;
   name: string;
-  company?: { company_id: number; name?: string } | null;
+  company?: { company_id: number; name?: string; ai_import_enabled?: boolean | null } | null;
   categories?: { category_id: number; category_name: string; scope?: string | null }[] | null;
 };
 
@@ -294,7 +294,26 @@ export function contributorSites(user: unknown) {
   return raw.map((s) => ({
     site_id: s.site_id,
     name: s.name,
-    company: s.company ? { company_id: s.company.company_id, name: s.company.name ?? "" } : null,
+    company: s.company ? { company_id: s.company.company_id, name: s.company.name ?? "", ai_import_enabled: s.company.ai_import_enabled ?? null } : null,
+    categories: (s.categories ?? []).filter((c) => c.category_name.toLowerCase() !== "fera"),
+  }));
+}
+
+/** A site as `/company-admin/sites` returns it: the Admin's client's, with categories, without the company. */
+export type RawCompanySite = { site_id: number; name: string; categories?: { category_id: number; category_name: string; scope?: string | null }[] | null };
+
+/**
+ * An Admin's sites: every site of their client (`/company-admin/sites`), each
+ * carrying the client (and its Smart import switch) the session user names.
+ * Anyone else, or before that list loads, keeps the session user's own sites.
+ */
+export function withClientSites<S extends ReturnType<typeof contributorSites>[number]>(own: S[], clientSites: RawCompanySite[] | undefined): ReturnType<typeof contributorSites> {
+  const company = own.find((s) => s.company)?.company ?? null;
+  if (!clientSites?.length || !company) return own;
+  return clientSites.map((s) => ({
+    site_id: s.site_id,
+    name: s.name,
+    company,
     categories: (s.categories ?? []).filter((c) => c.category_name.toLowerCase() !== "fera"),
   }));
 }

@@ -1,42 +1,73 @@
-import { useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { PageHeader, Stepper, exportMatrix, useToast } from "../../ui";
-import { type PreviewArgs, errorMessage, useFormConfig, useImportRows, usePreview, useSheetCategories, useSites, useUploadFile } from "./api";
+import { Callout, type HeaderAction, PageHeader, Stepper, exportMatrix, useToast } from "../../ui";
+import { type PreviewArgs, errorMessage, useCompanySites, useFormConfig, useImportRows, usePreview, useSheetCategories, useSites, useUploadFile } from "./api";
 import { HistoricalImport } from "./components/HistoricalImport";
 import { ImportStep, type ImportState } from "./components/ImportStep";
 import { MapStep } from "./components/MapStep";
 import { PreviewStep } from "./components/PreviewStep";
 import { UploadStep } from "./components/UploadStep";
+import { SmartImportFlow } from "./components/smart/SmartImportFlow";
 import { useUploadContext } from "./hooks/useUploadContext";
-import { type ImportResult, type MapField, STEPS, autoMap, buildFields, contributorSites, fileProblem, mappingsFor, monthEndDate, setHeader, skippedMatrix, toggleSkip } from "./logic";
+import { smartImportEnabled } from "./smart/logic";
+import { type ImportResult, type MapField, STEPS, autoMap, buildFields, contributorSites, fileProblem, mappingsFor, monthEndDate, setHeader, skippedMatrix, toggleSkip, withClientSites } from "./logic";
 
 type Sheet = { documentId: number; headers: string[]; fileName: string };
 
 const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
+
+type Mode = "smart" | "manual" | "historical";
 
 /**
  * P27 `/capture/upload`: upload a sheet, map its columns, preview the
  * calculation and import the rows as pending entries. A Superadmin picks any
  * client's site and also has the historical import (`?mode=historical`); a
  * contributor, coming from Add data, uploads for their own sites only.
+ *
+ * Smart import (XI4, `?mode=smart`): Managers, Admins and Superadmins drop any
+ * workbook for one site and confirm what the app worked out. It is the default
+ * when the client's switch (`company.ai_import_enabled`) is on; `?mode=manual`
+ * keeps the column mapper. Users keep the contributor path.
  */
 export default function BulkUploadPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user, role } = useAuth();
   const contributor = role !== "Superadmin";
-  const [params, setParams] = useSearchParams();
-  const historical = !contributor && params.get("mode") === "historical";
   // Set while a historical import is saving: leaving the screen then would lose its result.
   const [historicalBusy, setHistoricalBusy] = useState(false);
   const [ctx, setCtx] = useUploadContext();
 
   const allSites = useSites(!contributor);
-  const ownSites = useMemo(() => contributorSites(user), [user]);
+  const sessionSites = useMemo(() => contributorSites(user), [user]);
+  // An Admin may import into every site of their client; the session user carries only their own site.
+  const companySites = useCompanySites(role === "Admin");
+  const ownSites = useMemo(() => withClientSites(sessionSites, companySites.data), [sessionSites, companySites.data]);
   const siteList = contributor
     ? { data: ownSites, loading: false, error: null, retry: () => undefined }
     : { data: allSites.data ?? [], loading: allSites.isLoading, error: allSites.error ? errorMessage(allSites.error, "Try again in a moment.") : null, retry: () => void allSites.refetch() };
+
+  // Smart import: never for a User; for a Manager or Admin only when their client's switch is on;
+  // a Superadmin always has the mode, and it is the default once a client with the switch on is chosen.
+  const smartOffered = role === "Superadmin" || ((role === "Manager" || role === "Admin") && smartImportEnabled(ownSites));
+  const smartOff = (role === "Manager" || role === "Admin") && !smartImportEnabled(ownSites);
+  const clientEnabled = contributor || ctx.clientId === null ? null : smartImportEnabled((allSites.data ?? []).filter((s) => s.company?.company_id === ctx.clientId));
+  const smartDefault = smartOffered && (contributor || clientEnabled === true);
+  const requested = ctx.mode;
+  const mode: Mode =
+    requested === "historical" && !contributor ? "historical" : requested === "smart" && smartOffered ? "smart" : requested === "manual" || !smartDefault ? "manual" : "smart";
+  const historical = mode === "historical";
+  // Set while a smart import runs or has finished: switching mode then would lose its result.
+  const [smartLocked, setSmartLocked] = useState(false);
+
+  // A manager with one site doesn't need to pick it.
+  useEffect(() => {
+    const smartSites = ownSites.filter((s) => s.company?.ai_import_enabled === true);
+    if (mode === "smart" && contributor && ctx.siteId === null && smartSites.length === 1) setCtx({ siteId: smartSites[0].site_id, clientId: smartSites[0].company?.company_id ?? null });
+    // ctx and setCtx read the URL; the first render after it settles is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, contributor, ownSites.length]);
   const form = useFormConfig(ctx.siteId, ctx.categoryId, contributor);
   const upload = useUploadFile();
 
@@ -160,31 +191,50 @@ export default function BulkUploadPage() {
   const completed = STEPS.slice(0, step).map((s) => s.id);
   const locked = importState !== null;
 
-  const switchMode = (toHistorical: boolean) => {
-    const next = new URLSearchParams([...params].filter(([k]) => k !== "mode"));
-    if (toHistorical) next.set("mode", "historical");
-    setParams(next, { replace: true });
-  };
+  // The mode is written out in full, so it sticks when the client changes.
+  const switchMode = (to: Mode) => setCtx({ mode: to, categoryId: null });
+
+  const headerActions: HeaderAction[] = [];
+  if (!locked && !smartLocked && !historicalBusy) {
+    if (smartOffered && mode !== "smart") headerActions.push({ label: "Smart import", onClick: () => switchMode("smart") });
+    if (smartOffered && mode === "smart") headerActions.push({ label: "Manual upload", onClick: () => switchMode("manual") });
+    if (!contributor) headerActions.push({ label: historical ? "Back to bulk upload" : "Historical import", onClick: () => switchMode(historical ? (smartDefault ? "smart" : "manual") : "historical") });
+  }
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title={historical ? "Historical import" : "Bulk upload"}
+        title={historical ? "Historical import" : mode === "smart" ? "Smart import" : "Bulk upload"}
         description={
           historical
             ? "Import a sheet in the old year and month format for one site and category. Rows are saved as Pending."
-            : "Import a sheet of emission rows for one site and category. Rows are saved as Pending for the site's manager to approve."
+            : mode === "smart"
+              ? "Drop any workbook for one site. The app works out the sheets, columns, periods and activities; you confirm, review the rows and import them as Pending."
+              : "Import a sheet of emission rows for one site and category. Rows are saved as Pending for the site's manager to approve."
         }
-        secondaryActions={
-          contributor || locked ? [] : [{ label: historical ? "Back to bulk upload" : "Historical import", disabled: historicalBusy, onClick: () => switchMode(!historical) }]
-        }
+        secondaryActions={headerActions}
       />
-      {historical ? (
+      {mode === "smart" ? (
+        <SmartImportFlow
+          ctx={ctx}
+          onContext={(p) => setCtx(!contributor && "clientId" in p ? { ...p, mode: "smart" } : p)}
+          sites={siteList}
+          contributor={contributor}
+          clientEnabled={clientEnabled}
+          onUseManual={() => switchMode("manual")}
+          onLocked={setSmartLocked}
+        />
+      ) : historical ? (
         <section aria-label="Historical import" className="rounded-card border border-line bg-panel p-4 sm:p-5">
           <HistoricalImport ctx={ctx} onContext={setCtx} sites={siteList} onBusy={setHistoricalBusy} />
         </section>
       ) : (
         <>
+      {smartOff && (
+        <Callout tone="info" title="Smart import is off for your organisation">
+          With it on, you can drop any workbook and the app works out the mapping. ESGLite staff turn it on per client.
+        </Callout>
+      )}
       <Stepper
         label="Bulk upload steps"
         steps={STEPS.map((s) => ({ id: s.id, label: s.label }))}

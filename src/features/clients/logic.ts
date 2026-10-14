@@ -19,6 +19,8 @@ export type Company = {
   esgMitraAccess?: boolean | null;
   /** "Allow Claude imports" (MCP import plan); absent on servers without IM5 = off. */
   mcp_enabled?: boolean | null;
+  /** "Smart import" for the client's Managers and Admins (XI0); absent on servers without migrate:ai-import = off. */
+  ai_import_enabled?: boolean | null;
 };
 export type Site = { site_id: number; name: string; address?: string | null; company?: { company_id: number } | null; country?: { name: string } | null };
 export type AdminUser = {

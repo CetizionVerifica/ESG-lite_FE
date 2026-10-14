@@ -33,13 +33,14 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Approvals", "/data/approvals"),
       link("Emissions ledger", "/data/ledger"),
       link("Production data", "/data/production"),
+      link("Bulk upload", "/capture/upload"),
     ]),
     group("Reports", [link("GHG report", "/reports/ghg"), link("EDE report", "/reports/ede")]),
     link("Targets (SBTi)", "/targets"),
     link("Products (PCF)", "/products"),
     link("Team", "/team"),
   ],
-  Admin: [link("Users", "/users"), link("Brand theme", "/brand")],
+  Admin: [link("Users", "/users"), link("Bulk upload", "/capture/upload"), link("Brand theme", "/brand")],
   Superadmin: [
     link("Console", "/console"),
     group("Clients", [
