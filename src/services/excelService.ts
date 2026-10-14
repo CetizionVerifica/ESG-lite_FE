@@ -67,12 +67,14 @@ export class ExcelServiceError extends Error {
 /** Rows changed between the preview and the import (ESG-lite re-checks them on commit). */
 export const PLAN_CHANGED_MESSAGE = "Some rows changed since the preview. Go back to the preview, check them again and import from there.";
 
-async function refuse(response: Response, fallback: string): Promise<never> {
-  const error = await response.json().catch(() => ({}));
-  const detail = error?.detail;
+async function refuse(response: Response, fallback: string, parsed?: unknown): Promise<never> {
+  // A body can be read once: a caller that already parsed it passes it on.
+  const error = parsed !== undefined ? parsed : await response.json().catch(() => ({}));
+  const detail = (error as { detail?: unknown } | null)?.detail;
   if (typeof detail === "string") throw new ExcelServiceError(detail, response.status);
-  const code = typeof detail?.code === "string" ? detail.code : null;
-  const message = typeof detail?.message === "string" ? detail.message : fallback;
+  const body = (detail ?? {}) as { code?: unknown; message?: unknown };
+  const code = typeof body.code === "string" ? body.code : null;
+  const message = typeof body.message === "string" ? body.message : fallback;
   throw new ExcelServiceError(code === "IMPORT_PLAN_VERSION_CONFLICT" ? PLAN_CHANGED_MESSAGE : message, response.status, code);
 }
 
@@ -174,7 +176,7 @@ export async function importAllRows(args: SheetArgs, plan: { plan_id: string; ve
     const error = await response.json().catch(() => ({}));
     const detail = error?.detail;
     if (response.status === 409 && (typeof detail === "string" || !detail)) throw new ExcelServiceError(detail || ALREADY_IMPORTED_MESSAGE, 409);
-    await refuse(response, "Import failed.");
+    await refuse(response, "Import failed.", error);
   }
 
   return response.json();
