@@ -261,7 +261,7 @@ export function UserDrawer(props: Props) {
                 required
                 error={fieldError("site_ids")}
                 loading={props.sites.loading}
-                empty={draft.company_id === null ? "Choose a client first." : "This client has no sites yet."}
+                empty={internal ? "There are no sites yet." : draft.company_id === null ? "Choose a client first." : "This client has no sites yet."}
                 items={siteItems}
                 selected={draft.site_ids}
                 onChange={setSites}

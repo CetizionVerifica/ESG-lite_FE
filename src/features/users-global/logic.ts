@@ -241,10 +241,6 @@ export type UserPayload = {
   category_ids?: number[];
 };
 
-/**
- * Request body. On edit only changed fields go out: re-sending sites makes the
- * backend re-seed categories, which would undo a Manager's own narrowing.
- */
 /** An internal account (the team's own): a Manager or User that may hold several clients' sites. */
 export const internalAccount = (d: Pick<UserDraft, "role" | "is_internal">) => d.is_internal && multiSite(d.role);
 
@@ -257,11 +253,13 @@ export function allClientSites(sites: Site[]): { site_id: number; label: string 
 
 /**
  * Turns "internal account" on or off. Off, the person needs one client again:
- * the one owning most of their sites when none is chosen yet.
+ * the one owning most of their sites, unless the chosen client still owns one.
  */
 export function withInternal(d: UserDraft, on: boolean, sites: Site[]): UserDraft {
   if (on) return { ...d, is_internal: true };
-  let company_id = d.company_id;
+  // Keep the chosen client only if it still owns one of the picked sites.
+  const owns = (id: number) => sites.some((s) => d.site_ids.includes(s.site_id) && s.company?.company_id === id);
+  let company_id = d.company_id !== null && (d.site_ids.length === 0 || owns(d.company_id)) ? d.company_id : null;
   if (company_id === null) {
     const count = new Map<number, number>();
     for (const s of sites) if (d.site_ids.includes(s.site_id) && s.company) count.set(s.company.company_id, (count.get(s.company.company_id) ?? 0) + 1);
@@ -276,6 +274,10 @@ export function sendsSites(d: UserDraft, row: UserRow | null): boolean {
   return !base || !sameIds(d.site_ids, base.site_ids) || d.role !== base.role;
 }
 
+/**
+ * Request body. On edit only changed fields go out: re-sending sites makes the
+ * backend re-seed categories, which would undo a Manager's own narrowing.
+ */
 export function toPayload(d: UserDraft, row: UserRow | null): UserPayload {
   const base = row ? draftFrom(row) : null;
   const p: UserPayload = {};

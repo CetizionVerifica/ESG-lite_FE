@@ -212,6 +212,9 @@ describe("internal accounts", () => {
     const d = { ...emptyDraft(), role: "Manager" as const, is_internal: true, company_id: null, site_ids: [1, 2, 3] };
     expect(withInternal(d, false, SITES)).toMatchObject({ is_internal: false, company_id: 1 });
     expect(withInternal({ ...d, is_internal: false }, true, SITES).is_internal).toBe(true);
+    // A client kept from before that owns none of the picked sites gives way.
+    expect(withInternal({ ...d, company_id: 1, site_ids: [3] }, false, SITES).company_id).toBe(2);
+    expect(withInternal({ ...d, company_id: 1, site_ids: [1, 3] }, false, SITES).company_id).toBe(1);
   });
 
   it("sends is_internal when it changes, and on create only when on", () => {
