@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ManagerUser } from "../../services/managerService";
 import {
+  isContributor,
   accessCount,
   currentMonth,
   displayName,
@@ -127,5 +128,15 @@ describe("month status", () => {
   it("formats the current month", () => {
     expect(currentMonth(new Date(2026, 0, 31))).toBe("2026-01");
     expect(currentMonth(new Date(2026, 9, 9))).toBe("2026-10");
+  });
+});
+
+describe("isContributor", () => {
+  it("keeps role User (and rows without a role), not Admins or managers", () => {
+    expect(isContributor({ role: "User" })).toBe(true);
+    expect(isContributor({ role: "" })).toBe(true);
+    expect(isContributor({ role: "Manager" })).toBe(false);
+    expect(isContributor({ role: "Admin" })).toBe(false);
+    expect(isContributor({ role: "Superadmin" })).toBe(false);
   });
 });
