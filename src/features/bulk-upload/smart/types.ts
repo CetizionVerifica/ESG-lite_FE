@@ -10,8 +10,8 @@ export type SheetSource = MappingSource | "mixed";
 export type SheetLayout = "rows" | "months_as_columns";
 
 export type ResolvedCategory =
-  | { kind: "fixed"; id: number; label: string; confidence: number; source: MappingSource }
-  | { kind: "column"; column: string; values: { text: string; id: number | null; confidence: number; source: MappingSource }[] };
+  | { kind: "fixed"; id: number; label: string; confidence: number; source: MappingSource; confirmed?: boolean }
+  | { kind: "column"; column: string; values: { text: string; id: number | null; confidence: number; source: MappingSource; confirmed?: boolean }[] };
 
 export type SheetPeriod =
   | { kind: "column"; column: string }
@@ -26,6 +26,8 @@ export interface FieldMapping {
   column: string | null;
   confidence: number;
   source: MappingSource;
+  /** The user kept this proposal as is: no Check chip, but its own confidence and source stay, so the approver still sees a low-confidence match. */
+  confirmed?: boolean;
   skipped: boolean;
 }
 
@@ -35,6 +37,8 @@ export interface ProposedActivityMatch {
   factor_name: string | null;
   confidence: number;
   source: MappingSource;
+  /** The user kept this proposal as is: no Check chip, but its own confidence and source stay, so the approver still sees a low-confidence match. */
+  confirmed?: boolean;
   save_mapping: boolean;
 }
 

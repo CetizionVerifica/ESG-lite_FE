@@ -22,6 +22,7 @@ import {
   reviewRowsLink,
   rowSeverity,
   setActivityFactor,
+  setFixedCategory,
   setFieldColumn,
   setSheetExcluded,
   sheetBlockers,
@@ -83,7 +84,8 @@ describe("continue gating", () => {
     expect(sheetBlockers(p.sheets[0])).toEqual([]);
     expect(canContinue(p)).toBe(true);
     expect(p.sheets[0].fields[1]).toMatchObject({ column: "UoM", confidence: 1 });
-    expect(p.sheets[0].activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 1 });
+    // Confirmed in place: the model's own confidence stays for the approver.
+    expect(p.sheets[0].activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 0.64, source: "llm", confirmed: true });
   });
 
   it("an excluded sheet blocks nothing, and all sheets excluded blocks Continue", () => {
@@ -94,7 +96,8 @@ describe("continue gating", () => {
 
   it("confirming keeps the proposed column; an optional field can be skipped, a required one not", () => {
     const p = confirmField(MOCK_PROPOSAL, 0, "extra_invoice");
-    expect(p.sheets[0].fields[2]).toMatchObject({ column: "Inv #", confidence: 1 });
+    expect(p.sheets[0].fields[2]).toMatchObject({ column: "Inv #", confidence: 0.7, source: "llm", confirmed: true });
+    expect(fieldChip(p.sheets[0].fields[2])).toBe("suggested");
     const skipped = toggleFieldSkip(MOCK_PROPOSAL, 0, "extra_invoice");
     expect(skipped.sheets[0].fields[2]).toMatchObject({ skipped: true, column: null });
     expect(toggleFieldSkip(skipped, 0, "extra_invoice").sheets[0].fields[2].skipped).toBe(false);
@@ -107,6 +110,43 @@ describe("continue gating", () => {
     const changed = setActivityFactor(saved, 0, "Gasoline 95", "Diesel");
     expect(changed.sheets[0].activities[1]).toMatchObject({ factor_name: "Diesel", confidence: 1, save_mapping: true });
     expect(setActivityFactor(saved, 0, "Gasoline 95", null).sheets[0].activities[1]).toMatchObject({ factor_name: null, save_mapping: false });
+  });
+});
+
+describe("confirming keeps the mapper's confidence", () => {
+  const low = {
+    ...MOCK_PROPOSAL,
+    sheets: [{ ...fuel, activities: [{ sheet_text: "Gasoline 95", category_id: 1, factor_name: "Petrol", confidence: 0.5, source: "llm" as const, save_mapping: false }] }],
+  };
+
+  it("a confirmed 0.5 model match keeps 0.5 and llm, and is no longer Check", () => {
+    expect(activityChip(low.sheets[0].activities[0])).toBe("check");
+    const kept = confirmActivity(low, 0, "Gasoline 95").sheets[0].activities[0];
+    expect(kept).toMatchObject({ factor_name: "Petrol", confidence: 0.5, source: "llm", confirmed: true });
+    expect(activityChip(kept)).not.toBe("check");
+    expect(activityChip(kept)).toBe("suggested");
+  });
+
+  it("picking another factor still counts as the user's own rule match", () => {
+    const picked = setActivityFactor(low, 0, "Gasoline 95", "Diesel").sheets[0].activities[0];
+    expect(picked).toMatchObject({ factor_name: "Diesel", confidence: 1, source: "rules" });
+    expect(activityChip(picked)).toBe("matched");
+  });
+
+  it("a confirmed category keeps its confidence; a picked one is 1 from the rules", () => {
+    const unsure = { ...low, sheets: [{ ...low.sheets[0], category: { kind: "fixed" as const, id: 1, label: "Fuel", confidence: 0.4, source: "llm" as const } }] };
+    expect(categoryChip(unsure.sheets[0].category)).toBe("check");
+    const kept = confirmCategory(unsure, 0).sheets[0].category;
+    expect(kept).toMatchObject({ confidence: 0.4, source: "llm", confirmed: true });
+    expect(categoryChip(kept)).toBe("suggested");
+    expect(setFixedCategory(unsure, 0, 3, "Electricity").sheets[0].category).toMatchObject({ id: 3, confidence: 1, source: "rules" });
+  });
+
+  it("confirmed column values keep theirs too", () => {
+    const col = { ...low, sheets: [{ ...low.sheets[0], category: { kind: "column" as const, column: "Cat", values: [{ text: "Fuel", id: 1, confidence: 0.6, source: "llm" as const }] } }] };
+    const kept = confirmCategory(col, 0).sheets[0].category;
+    expect(kept.kind === "column" && kept.values[0]).toMatchObject({ confidence: 0.6, source: "llm", confirmed: true });
+    expect(categoryChip(kept)).toBe("suggested");
   });
 });
 
