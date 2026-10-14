@@ -297,6 +297,13 @@ describe("needs attention (XI5)", () => {
     });
     expect(approveBatchCopy(5, 0)).toMatchObject({ title: "Approve 5 pending rows?", reviewFirst: false });
     expect(approveBatchCopy(5, undefined).reviewFirst).toBe(false);
+    expect(approveBatchCopy(12000, 1)).toEqual({
+      title: "Approve all 12,000 pending rows?",
+      description: "1 of 12,000 pending rows was matched by the smart import below 80 % or changed before the import. Review them first, or approve everything now.",
+      reviewFirst: true,
+    });
+    expect(approveBatchCopy(1, 0).title).toBe("Approve 1 pending row?");
+    expect(approveBatchCopy(1, 1).title).toBe("Approve the 1 pending row?");
   });
 
   it("links Review rows with the attention filter on", () => {

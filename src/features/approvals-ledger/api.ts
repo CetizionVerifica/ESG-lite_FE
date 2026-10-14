@@ -41,9 +41,10 @@ export function errorMessage(e: unknown, fallback: string): string {
   return typeof msg === "string" && msg ? msg : fallback;
 }
 
-export function useEmissionList(params: ReturnType<typeof listParams>) {
+export function useEmissionList(params: ReturnType<typeof listParams>, enabled = true) {
   return useQuery({
     queryKey: keys.list(params),
+    enabled,
     queryFn: async () => {
       const res = await getEmissionsPaginated(params);
       return { ...res, data: res.data as LedgerRow[] };
@@ -235,6 +236,25 @@ export function useBatchAttention(batch: Pick<EmissionUploadBatch, "upload_batch
       const { summary } = await getEmissionsPaginated({ siteIds: [b.site_id], batchId: b.upload_batch_id, status: "pending", page: 1, limit: 1 });
       return typeof summary?.attention === "number" ? summary.attention : null;
     },
+  });
+}
+
+/**
+ * XI5: how many rows of the list the smart import was least sure about. Same
+ * filters as the list (pending only on Approvals), without the attention
+ * filter, paging or sort, so the chip counts exactly the rows it would show.
+ * `null` params turn it off.
+ */
+export function useListAttention(params: ReturnType<typeof listParams> | null) {
+  const narrow = params ? { ...params, attention: null, sort: null, order: null, page: 1, limit: 1 } : null;
+  return useQuery({
+    queryKey: [...keys.all, "list-attention", narrow],
+    enabled: narrow !== null,
+    queryFn: async () => {
+      const { summary } = await getEmissionsPaginated(narrow as NonNullable<typeof narrow>);
+      return typeof summary?.attention === "number" ? summary.attention : 0;
+    },
+    placeholderData: keepPreviousData,
   });
 }
 

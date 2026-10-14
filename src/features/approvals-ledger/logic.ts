@@ -1,7 +1,7 @@
 /** Pure helpers for P07 Approvals and Emissions ledger. No React, no requests. */
 import type { BatchChannel, EmissionData, EmissionStatus, EmissionUploadBatch } from "../../services/emissionService";
 import { fyEndYear, fyStartYearOf } from "../../lib/fiscalYear";
-import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatReportingYear, writeContext } from "../../ui";
+import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatNumber, formatReportingYear, writeContext } from "../../ui";
 
 export type FactorSnapshot = {
   emission_factor_id: number;
@@ -364,14 +364,15 @@ export function attentionOn(param: string | null, count: number | undefined): bo
 /** The batch "Approve pending" dialog, which names the rows the smart import was least sure about. */
 export function approveBatchCopy(pending: number, attention: number | undefined): { title: string; description: string; reviewFirst: boolean } {
   const n = attention ?? 0;
+  const rows = (k: number) => `${formatNumber(k)} pending ${k === 1 ? "row" : "rows"}`;
   if (n > 0) {
     return {
-      title: `Approve all ${pending} pending rows?`,
-      description: `${n} of ${pending} pending ${pending === 1 ? "row was" : "rows were"} matched by the smart import below 80 % or changed before the import. Review them first, or approve everything now.`,
+      title: pending === 1 ? "Approve the 1 pending row?" : `Approve all ${rows(pending)}?`,
+      description: `${formatNumber(n)} of ${rows(pending)} ${n === 1 ? "was" : "were"} matched by the smart import below 80 % or changed before the import. Review them first, or approve everything now.`,
       reviewFirst: true,
     };
   }
-  return { title: `Approve ${pending} pending rows?`, description: "", reviewFirst: false };
+  return { title: `Approve ${rows(pending)}?`, description: "", reviewFirst: false };
 }
 
 // ─── Upload batch source (IM10) ─────────────────────────────────────────────

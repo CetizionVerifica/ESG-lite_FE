@@ -44,6 +44,7 @@ import {
   useBatches,
   useColumnConfigs,
   useEmissionList,
+  useListAttention,
   useReviewMutations,
   useStatusCounts,
 } from "./api";
@@ -154,13 +155,13 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
       {view === "batches" ? (
         <BatchesView siteIds={scopeSites} categoryIds={ctx.categoryIds} />
       ) : (
-        <ListView key={view} tab={view} showFera={ctx.categoryIds.some((id) => feraIds.includes(id))} attentionCount={counts.data?.attention} />
+        <ListView key={view} tab={view} showFera={ctx.categoryIds.some((id) => feraIds.includes(id))} />
       )}
     </div>
   );
 }
 
-function ListView({ tab, showFera, attentionCount }: { tab: Tab; showFera: boolean; attentionCount: number | undefined }) {
+function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [params, setParams] = useSearchParams();
@@ -168,10 +169,6 @@ function ListView({ tab, showFera, attentionCount }: { tab: Tab; showFera: boole
   const [filters, setFilters] = useFilterParams(FILTER_KEYS[tab]);
   const status = tab === "ledger" ? asStatus(filters.filters.status?.[0]) : null;
   const batchId = params.get("batch")?.trim() || null;
-  // XI5: a batch's rows the smart import was least sure about come first, as a filter chip that is on while there are any.
-  const attentionOffered = tab === "approvals" && !!batchId && ((attentionCount ?? 0) > 0 || params.get("attention") === "1");
-  const attention = attentionOffered && attentionOn(params.get("attention"), attentionCount);
-  const setAttention = (on: boolean) => setParams((p) => { const next = new URLSearchParams(p); next.set("attention", on ? "1" : "0"); return next; }, { replace: true });
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT[tab]);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0]);
@@ -182,8 +179,22 @@ function ListView({ tab, showFera, attentionCount }: { tab: Tab; showFera: boole
   const [deleting, setDeleting] = useState<LedgerRow[] | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const query = listParams({ tab, siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period: ctx.period, search: filters.q, status, batchId, attention, sort, page, pageSize });
-  const list = useEmissionList(query);
+  // XI5: a batch's pending rows the smart import was least sure about come first, as a filter chip
+  // that is on while there are any. The count uses the list's own filters (pending only), so the
+  // chip never opens on approved rows.
+  const base = { tab, siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period: ctx.period, search: filters.q, status, batchId, sort, page, pageSize };
+  const attentionParam = params.get("attention");
+  const attentionCountQ = useListAttention(tab === "approvals" && batchId ? listParams({ ...base, attention: false }) : null);
+  const attentionCount = attentionCountQ.data;
+  const attentionOffered = tab === "approvals" && !!batchId && ((attentionCount ?? 0) > 0 || attentionParam === "1");
+  const attention = attentionOffered && attentionOn(attentionParam, attentionCount);
+  const setAttention = (on: boolean) => setParams((p) => { const next = new URLSearchParams(p); next.set("attention", on ? "1" : "0"); return next; }, { replace: true });
+  // With the chip on by default, wait for the count before the first list fetch, so the list
+  // doesn't load once without the filter and then again with it (resetting page and selection).
+  const waitForAttention = tab === "approvals" && !!batchId && attentionParam === null && attentionCount === undefined && !attentionCountQ.isError;
+
+  const query = listParams({ ...base, attention });
+  const list = useEmissionList(query, !waitForAttention);
   const review = useReviewMutations();
 
   // New filters start again on page 1 with nothing selected.

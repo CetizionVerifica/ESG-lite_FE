@@ -53,6 +53,8 @@ const config = [
 async function signIn(page: Page) {
   const rows = makeRows();
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  // Every list request's query (limit > 1), to check what the page fetched.
+  const lists: URLSearchParams[] = [];
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Manager");
@@ -128,13 +130,15 @@ async function signIn(page: Page) {
             emission_factor_snapshot: { emission_factor_id: 9, emission_category_name: "Diesel (average biofuel blend)", factor_value: "0.002680", denominator_unit: "litre", source: "DEFRA", year: 2024 },
           }));
         const count = (s: string) => rows.filter((r) => r.status === s && (!batchId || r.upload_batch_id === batchId)).length;
-        const attentionCount = batchId ? rows.filter((r) => r.status === "pending" && r.upload_batch_id === batchId && needsAttention(r)).length : undefined;
+        // Like ESG-lite: the attention count follows the request's filters, status included.
+        const attentionCount = batchId ? rows.filter((r) => (!status || r.status === status) && r.upload_batch_id === batchId && needsAttention(r)).length : undefined;
+        if (url.searchParams.get("limit") !== "1") lists.push(url.searchParams);
         return json({ data, total: data.length, summary: { total_emission: 0, pending_count: count("pending"), approved_count: count("approved"), rejected_count: count("rejected"), ...(attentionCount !== undefined && { attention: attentionCount }) } });
       }
       return json({});
     },
   );
-  return { rows, calls };
+  return { rows, calls, lists };
 }
 
 test("a manager clears the queue with the keyboard, with undo", async ({ page }) => {
@@ -455,13 +459,29 @@ test("Review rows shows the rows that need attention first, with how each was ma
   await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(2);
 });
 
+test("the attention chip counts pending rows only, and the list loads once with it", async ({ page }) => {
+  const { rows, lists } = await signIn(page);
+  await page.goto("/data/approvals?site=1&category=20&period=all&batch=b-2");
+  await expect(page.getByRole("button", { name: "Needs attention (1)" })).toHaveAttribute("aria-pressed", "true");
+  const batchLists = lists.filter((q) => q.get("batchId") === "b-2");
+  expect(batchLists.length).toBeGreaterThan(0);
+  expect(batchLists.every((q) => q.get("attention") === "true" || q.get("attention") === "1")).toBe(true);
+
+  // Once the low-confidence row is approved, the pending queue has none: no chip, both other rows show.
+  rows.find((r) => r.pk_id === 2)!.status = "approved";
+  await page.reload();
+  const queue = page.getByRole("table", { name: "Entries waiting for approval" });
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /Needs attention/ })).toHaveCount(0);
+});
+
 test("Approve pending names the rows that need attention and offers to review them first", async ({ page }) => {
   await signIn(page);
   await page.goto("/data/approvals?view=batches");
   const batches = page.getByRole("table", { name: "Upload batches" });
   await batches.getByRole("row", { name: /Electricity/ }).getByRole("button", { name: "Approve pending" }).click();
   await expect(page.getByRole("dialog", { name: "Approve all 12 pending rows?" })).toBeVisible();
-  await expect(page.getByText("1 of 12 pending rows were matched by the smart import below 80 %", { exact: false })).toBeVisible();
+  await expect(page.getByText("1 of 12 pending rows was matched by the smart import below 80 %", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve all" })).toBeVisible();
   await page.getByRole("button", { name: "Review them first" }).click();
   await expect(page).toHaveURL(/batch=b-2/);
