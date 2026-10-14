@@ -169,8 +169,8 @@ test("a manager uploads a workbook, confirms the mapping, skips the other site's
   await expect(table.getByRole("row")).toHaveCount(6);
   await expect(table).toContainText("Note");
   await expect(table).toContainText("Imports with a note");
-  const importButton = page.getByRole("button", { name: /^Import/ });
-  await expect(importButton).toBeDisabled();
+  // Rows with issues are left out at import, so importing is possible before they're skipped.
+  await expect(page.getByRole("button", { name: "Import 3 rows" })).toBeEnabled();
 
   await page.getByLabel("Issue").selectOption("SITE_NOT_ALLOWED");
   await expect(table.getByRole("row")).toHaveCount(3);
