@@ -203,6 +203,32 @@ describe("mapping memory (XI4 2/2)", () => {
     expect(profileDiffers(setFieldColumn(applyProfile(MOCK_PROPOSAL, 0, MOCK_PROFILE), 0, "activity_unit", "Unit").sheets[0], MOCK_PROFILE)).toBe(true);
   });
 
+  it("keeps this upload's own wordings when the profile is used", () => {
+    const lpg = { sheet_text: "LPG", category_id: 1, factor_name: null, confidence: 0.3, source: "llm" as const, save_mapping: false };
+    const withNew = { ...MOCK_PROPOSAL, sheets: [{ ...fuel, activities: [fuel.activities[1], lpg] }, MOCK_PROPOSAL.sheets[1]] };
+    const applied = applyProfile(withNew, 0, MOCK_PROFILE).sheets[0];
+    // The remembered match for a known wording, the new wording as it was, nothing only the profile knows.
+    expect(applied.activities.map((a) => [a.sheet_text, a.factor_name, a.source])).toEqual([["Gasoline 95", "Petrol", "profile"], ["LPG", null, "llm"]]);
+    expect(sheetBlockers(applied)).toEqual(['"LPG"']);
+    expect(applied.source).toBe("mixed");
+    // A wording only one side has doesn't make the card differ.
+    expect(profileDiffers(applied, MOCK_PROFILE)).toBe(false);
+  });
+
+  it("compares mappings whatever the order of keys and lists", () => {
+    const shuffled = {
+      ...MOCK_PROFILE,
+      sheet_proposal: {
+        ...MOCK_PROFILE.sheet_proposal,
+        fields: [...MOCK_PROFILE.sheet_proposal.fields].reverse(),
+        activities: [...MOCK_PROFILE.sheet_proposal.activities].reverse(),
+        period: { column: "Month", kind: "column" as const },
+      },
+    };
+    const applied = applyProfile(MOCK_PROPOSAL, 0, MOCK_PROFILE).sheets[0];
+    expect(profileDiffers(applied, shuffled)).toBe(false);
+  });
+
   it("says what the profile remembers and when", () => {
     expect(profileSummary(MOCK_PROFILE)).toBe(
       'Fuel, each row\'s date from column "Month"; Quantity from "Litres used", Unit from "UoM", Invoice number from "Inv #"; "Diesel (gen-set)" as Diesel, "Gasoline 95" as Petrol',

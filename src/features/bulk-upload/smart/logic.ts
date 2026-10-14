@@ -268,39 +268,89 @@ export function profileFor(sheet: SheetProposal, profiles: MappingProfile[] | un
   return same.find((p) => p.category_id === key) ?? same[0];
 }
 
-type Shape = { category: unknown; period: SheetPeriod; fields: [string, string | null, boolean][]; activities: [string, string | null][] };
+/** JSON with object keys sorted, so the same value always reads the same (jsonb reorders keys). */
+const canonical = (v: unknown): string =>
+  Array.isArray(v)
+    ? `[${v.map(canonical).join(",")}]`
+    : v !== null && typeof v === "object"
+      ? `{${Object.keys(v as Record<string, unknown>)
+          .sort()
+          .map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`)
+          .join(",")}}`
+      : JSON.stringify(v);
 
-const shapeOf = (s: SheetProposal): Shape => ({
-  category: s.category.kind === "fixed" ? { id: s.category.id } : { column: s.category.column, values: s.category.values.map((v) => [v.text, v.id]) },
-  period: s.period,
-  fields: s.fields.map((f) => [f.key, f.skipped ? null : f.column, f.skipped]),
-  activities: s.activities.map((a) => [a.sheet_text, a.factor_name]),
-});
+const byFirst = (a: [string, ...unknown[]], b: [string, ...unknown[]]) => a[0].localeCompare(b[0]);
 
-/** True when what's on the card is not what the profile remembers, so "Use it" has something to do. */
-export const profileDiffers = (sheet: SheetProposal, profile: MappingProfile): boolean => JSON.stringify(shapeOf(sheet)) !== JSON.stringify(shapeOf(profile.sheet_proposal));
+/** What a mapping decides, in a fixed order: the profile and the card compare equal when they map the sheet the same way. */
+const shapeOf = (s: SheetProposal) =>
+  canonical({
+    category: s.category.kind === "fixed" ? { id: s.category.id } : { column: s.category.column, values: s.category.values.map((v): [string, number | null] => [v.text, v.id]).sort(byFirst) },
+    period: s.period.kind === "months_as_columns" ? { kind: s.period.kind, columns: [...s.period.columns].sort((a, b) => a.column.localeCompare(b.column)) } : s.period,
+    fields: s.fields.map((f): [string, string | null, boolean] => [f.key, f.skipped ? null : f.column, f.skipped]).sort(byFirst),
+    activities: s.activities.map((a): [string, string | null] => [a.sheet_text, a.factor_name]).sort(byFirst),
+  });
+
+/**
+ * True when "Use it" would change the card: the remembered category, period
+ * and fields differ, or a wording on the card was matched differently last
+ * time. Wordings only one side has don't count (a new name keeps its own match).
+ */
+export function profileDiffers(sheet: SheetProposal, profile: MappingProfile): boolean {
+  const wordings = (s: SheetProposal) => [...s.activities.map((a) => a.sheet_text), ...(s.category.kind === "column" ? s.category.values.map((v) => v.text) : [])];
+  const theirs = new Set(wordings(profile.sheet_proposal));
+  const texts = new Set(wordings(sheet).filter((t) => theirs.has(t)));
+  const restrict = (s: SheetProposal): SheetProposal => ({
+    ...s,
+    activities: s.activities.filter((a) => texts.has(a.sheet_text)),
+    category: s.category.kind === "column" ? { ...s.category, values: s.category.values.filter((v) => texts.has(v.text)) } : s.category,
+  });
+  return shapeOf(restrict(sheet)) !== shapeOf(restrict(profile.sheet_proposal));
+}
 
 const remembered = <T extends { confidence: number; source: MappingSource }>(x: T): T => ({ ...x, confidence: 1, source: "profile" });
 
 /**
- * Puts the remembered mapping on the sheet: category, period, fields and
- * activities as confirmed last time, every part marked Remembered. What the
- * reader found (name, rows, header row, site column, names out of scope)
- * stays; so does whether the sheet is left out.
+ * Puts the remembered mapping on the sheet: category, period and fields as
+ * confirmed last time, marked Remembered. Activities and column-category
+ * values stay the ones this upload holds: a wording the profile knows takes
+ * its remembered match, a new wording keeps its own (and its Check chip), and
+ * a wording only the profile knows is not added. What the reader found (name,
+ * rows, header row, site column, names out of scope) stays; so does whether
+ * the sheet is left out.
  */
 export const applyProfile = (p: MappingProposal, index: number, profile: MappingProfile) =>
   withSheet(p, index, (s) => {
     const r = profile.sheet_proposal;
-    const category: ResolvedCategory = r.category.kind === "fixed" ? remembered(r.category) : { ...r.category, values: r.category.values.map((v) => (v.id === null ? v : remembered(v))) };
+    const rememberedMatch = new Map(r.activities.map((a) => [a.sheet_text, a]));
+    const activities = s.activities.map((a) => {
+      const m = rememberedMatch.get(a.sheet_text);
+      return m ? { ...a, factor_name: m.factor_name, category_id: m.category_id, confidence: 1, source: "profile" as const, save_mapping: false } : a;
+    });
+    let category: ResolvedCategory;
+    if (r.category.kind === "fixed") {
+      category = remembered(r.category);
+    } else {
+      const rememberedValue = new Map(r.category.values.map((v) => [v.text, v]));
+      const current = s.category.kind === "column" ? s.category.values : [];
+      category = {
+        kind: "column",
+        column: r.category.column,
+        values: current.map((v) => {
+          const m = rememberedValue.get(v.text);
+          return m ? { ...v, id: m.id, confidence: 1, source: "profile" as const } : v;
+        }),
+      };
+    }
+    const keepsOwnParts = activities.some((a) => a.source !== "profile") || (category.kind === "column" && category.values.some((v) => v.source !== "profile"));
     return {
       ...s,
       layout: r.layout,
       category,
       period: r.period,
       fields: r.fields.map(remembered),
-      activities: r.activities.map((a) => ({ ...remembered(a), save_mapping: false })),
-      confidence: 1,
-      source: "profile",
+      activities,
+      confidence: keepsOwnParts ? Math.min(1, ...activities.map((a) => a.confidence)) : 1,
+      source: keepsOwnParts ? "mixed" : "profile",
     };
   });
 

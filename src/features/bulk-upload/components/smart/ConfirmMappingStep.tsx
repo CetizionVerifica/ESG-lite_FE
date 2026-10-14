@@ -42,6 +42,7 @@ export function ConfirmMappingStep(props: {
   const { proposal, onChange } = props;
   const columnsOf = useMemo(() => proposal.sheets.map((s) => knownColumns(s, props.headers)), [proposal.sheets, props.headers]);
   const included = proposal.sheets.filter((s) => !s.excluded).length;
+  const profiles = proposal.sheets.map((s) => profileFor(s, props.profiles));
   const ready = canContinue(proposal);
 
   if (proposal.sheets.length === 0) {
@@ -73,9 +74,9 @@ export function ConfirmMappingStep(props: {
           siteName={props.siteName}
           columns={columnsOf[i]}
           categories={props.categories}
-          profile={profileFor(sheet, props.profiles)}
-          forgetting={props.forgetting?.fingerprint === sheet.fingerprint}
-          forgetError={props.forgetFailed?.profile.fingerprint === sheet.fingerprint ? props.forgetFailed.message : null}
+          profile={profiles[i]}
+          forgetting={!!profiles[i] && props.forgetting?.id === profiles[i]?.id}
+          forgetError={profiles[i] && props.forgetFailed?.profile.id === profiles[i]?.id ? props.forgetFailed.message : null}
           actions={{
             onExclude: (excluded) => onChange(setSheetExcluded(proposal, i, excluded)),
             onFieldColumn: (key, column) => onChange(setFieldColumn(proposal, i, key, column)),

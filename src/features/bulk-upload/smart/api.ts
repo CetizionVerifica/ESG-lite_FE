@@ -128,7 +128,15 @@ export function useMappingProfiles(proposal: MappingProposal | null, companyId: 
   });
   const profiles: MappingProfile[] = results.flatMap((r) => r.data ?? []);
   const forget = useMutation({
-    mutationFn: (profile: MappingProfile) => deleteMappingProfile(profile.id),
+    // A 404 means it is gone already (forgotten elsewhere): the same outcome as a delete.
+    mutationFn: async (profile: MappingProfile) => {
+      try {
+        return await deleteMappingProfile(profile.id);
+      } catch (e) {
+        if ((e as { status?: number }).status === 404) return { id: profile.id, deleted: true as const };
+        throw e;
+      }
+    },
     onSuccess: (_res, profile) => {
       qc.setQueryData<MappingProfile[]>(smartKeys.profiles(siteId, profile.fingerprint, companyId), (old) => (old ?? []).filter((p) => p.id !== profile.id));
     },
