@@ -50,8 +50,8 @@ function makeTeam(): TeamUser[] {
   ];
 }
 
-async function signIn(page: Page, opts: { failSave?: boolean } = {}) {
-  const team = makeTeam();
+async function signIn(page: Page, opts: { failSave?: boolean; extra?: TeamUser[] } = {}) {
+  const team = [...makeTeam(), ...(opts.extra ?? [])];
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
@@ -158,4 +158,21 @@ test("the site filter narrows people and save errors stay in the drawer", async 
   await expect(page.getByText("No one matches these filters.")).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
   await expect(table.getByRole("row")).toHaveCount(3);
+});
+
+test("the team is the contributors: Admins and managers on the sites are left out", async ({ page }) => {
+  // An older server still sent everyone on the manager's sites.
+  const hidd = [{ site_id: 1, site_name: "Hidd", categories: [cat(1, "Fuel", true)] }];
+  await signIn(page, {
+    extra: [
+      { user_id: 8, name: "Ravi", last_name: "Admin", email: "ravi@example.com", role: "Admin", sites: hidd },
+      { user_id: 9, name: "Mia", last_name: "Manager", email: "mia@example.com", role: "Manager", sites: hidd },
+    ],
+  });
+  await page.goto("/team");
+  const table = teamTable(page);
+  await expect(table.getByRole("row")).toHaveCount(3);
+  await expect(table).not.toContainText("Ravi");
+  await expect(table).not.toContainText("Mia");
+  await expect(page.getByTestId("people-count")).toContainText("2 people");
 });

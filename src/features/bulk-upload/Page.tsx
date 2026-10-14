@@ -98,8 +98,8 @@ export default function BulkUploadPage() {
       });
     }
   };
-  const onFail = (message: string) => {
-    setImportState({ status: "error", message });
+  const onFail = (message: string, planChanged: boolean) => {
+    setImportState({ status: "error", message, planChanged });
     if (backgrounded.current) toast({ title: "Bulk upload didn't finish", description: message, tone: "bad" });
   };
   const importRows = useImportRows(onDone, onFail);

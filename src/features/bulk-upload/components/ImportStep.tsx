@@ -3,7 +3,11 @@ import { Link } from "react-router-dom";
 import { Button, Callout, KpiStrip, cn, focusRing } from "../../../ui";
 import type { ImportResult } from "../logic";
 
-export type ImportState = { status: "running" } | { status: "done"; result: ImportResult } | { status: "error"; message: string };
+export type ImportState =
+  | { status: "running" }
+  | { status: "done"; result: ImportResult }
+  /** `planChanged`: the plan moved since the preview, so the same import would be refused again and only "Back to preview" helps. */
+  | { status: "error"; message: string; planChanged?: boolean };
 
 export function ImportStep(props: {
   state: ImportState;
@@ -46,12 +50,14 @@ export function ImportStep(props: {
           {state.message}
         </Callout>
         <div className="flex flex-wrap justify-between gap-3">
-          <Button variant="secondary" onClick={props.onBack}>
+          <Button variant={state.planChanged ? "primary" : "secondary"} onClick={props.onBack}>
             Back to preview
           </Button>
-          <Button variant="primary" onClick={props.onRetry}>
-            Try again
-          </Button>
+          {!state.planChanged && (
+            <Button variant="primary" onClick={props.onRetry}>
+              Try again
+            </Button>
+          )}
         </div>
       </div>
     );

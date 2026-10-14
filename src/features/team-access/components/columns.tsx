@@ -1,5 +1,5 @@
 import type { ManagerUser } from "../../../services/managerService";
-import { Avatar, Badge, Button, type Column } from "../../../ui";
+import { Avatar, Button, type Column } from "../../../ui";
 import { type MonthStatus, accessCount, displayName } from "../logic";
 
 /** Table columns. `siteIds` narrows the Sites and Categories cells to the site filter. */
@@ -23,7 +23,6 @@ export function teamColumns(opts: {
           <span className="min-w-0">
             <span className="flex items-center gap-1.5">
               <span className="truncate font-medium text-ink">{displayName(u)}</span>
-              {u.role && u.role !== "User" && <Badge>{u.role}</Badge>}
             </span>
             <span className="block truncate text-xs text-muted">{u.email}</span>
           </span>
