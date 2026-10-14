@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ManagerUser, getManagerUsers, updateUserCategories } from "../../services/managerService";
 import { type SubmissionUser, getSubmissionStatus } from "../../services/overviewService";
+import { isContributor } from "./logic";
 
 export const keys = {
   all: ["team-access"] as const,
@@ -14,9 +15,9 @@ export function errorMessage(e: unknown, fallback: string): string {
   return typeof msg === "string" && msg ? msg : fallback;
 }
 
-/** Everyone on the manager's sites, with category access per site. */
+/** The contributors on the manager's sites, with category access per site (the server lists only them; older servers sent everyone). */
 export function useTeam() {
-  return useQuery<ManagerUser[]>({ queryKey: keys.users(), queryFn: getManagerUsers });
+  return useQuery<ManagerUser[], Error, ManagerUser[]>({ queryKey: keys.users(), queryFn: getManagerUsers, select: (users) => users.filter(isContributor) });
 }
 
 /** Who has submitted for a month. Only feeds the "This month" column, so a failure just blanks it. */
