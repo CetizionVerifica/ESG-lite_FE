@@ -316,6 +316,23 @@ test("an Admin picks from every site of their client", async ({ page }) => {
   await expect(page.getByRole("option", { name: "Hidd" })).toBeVisible();
 });
 
+test("an Admin's import result says the site's manager approves the rows (no Approvals link)", async ({ page }) => {
+  await signIn(page, "Admin", { user_id: 6, name: "Ada Admin", email: "ada@example.com", site: HIDD, sites: [] }, [HIDD]);
+  await page.goto("/capture/upload?site=1");
+  await page.locator('input[type="file"]').setInputFiles(WORKBOOK);
+  await page.getByRole("button", { name: "Upload and work out the mapping" }).click();
+  const unit = page.getByRole("combobox", { name: "Column for Unit in Fuel 2026" });
+  await unit.click();
+  await unit.fill("UoM");
+  await page.getByRole("option", { name: "UoM" }).click();
+  await page.getByRole("button", { name: "Confirm Gasoline 95" }).click();
+  await page.getByRole("button", { name: "Continue to the rows" }).click();
+  await page.getByRole("button", { name: "Import 3 rows, leave 2 out" }).click();
+  await expect(page.getByText("Imported 3 rows.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Review rows" })).toHaveCount(0);
+  await expect(page.getByText("The site's manager approves them in Approvals, under Upload batches.")).toBeVisible();
+});
+
 test("a manager's site of a client with the switch off isn't offered in smart mode", async ({ page }) => {
   const off = { site_id: 4, name: "Pune", company: { company_id: 2, name: "Gulf Foods", ai_import_enabled: false }, categories: HIDD.categories };
   await signIn(page, "Manager", { ...MANAGER, sites: [HIDD, off] });
