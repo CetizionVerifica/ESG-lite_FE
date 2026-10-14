@@ -159,9 +159,15 @@ describe("one client per person", () => {
   // A Manager given Steel Co's Plant A and Other Co's plant before mixes were refused.
   const [mixed] = buildRows([{ user_id: 4, email: "mix@x.io", role: "Manager", sites: [{ site_id: 1, name: "Plant A" }, { site_id: 3, name: "Other plant" }] }], SITES);
 
+  it("takes the client owning most of their sites, whatever the site names", () => {
+    // Steel Co owns Plant A and Plant B; Other Co owns "Other plant", first by name.
+    const [most] = buildRows([{ user_id: 8, email: "most@x.io", role: "Manager", sites: [{ site_id: 1, name: "Plant A" }, { site_id: 2, name: "Plant B" }, { site_id: 3, name: "Other plant" }] }], SITES);
+    expect(draftFrom(most).company_id).toBe(1);
+  });
+
   it("finds picked sites of another client than the draft's", () => {
     const d = draftFrom(mixed);
-    expect(d.company_id).toBe(2); // the first client by site name ("Other plant")
+    expect(d.company_id).toBe(2); // a tie: the first client by site name ("Other plant")
     expect(otherClientSites(SITES, d).map((s) => s.site_id)).toEqual([1]);
     expect(otherClientSites(SITES, { company_id: 1, site_ids: [1, 2] })).toEqual([]);
     expect(otherClientSites(SITES, { company_id: null, site_ids: [1, 3] })).toEqual([]);

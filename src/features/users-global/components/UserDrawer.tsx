@@ -235,7 +235,7 @@ export function UserDrawer(props: Props) {
                 }
               >
                 A person works for one client.{" "}
-                {blockedByForeign ? "Remove the other client's sites to save these changes." : "Changing their sites or role removes the other client's sites."}
+                {blockedByForeign ? "Remove the other client's sites to save these changes." : "To change their sites or role, first remove the other client's sites."}
               </Callout>
             )}
 

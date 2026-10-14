@@ -113,6 +113,17 @@ export function emptyDraft(defaultCompanyId: number | null = null): UserDraft {
   return { name: "", last_name: "", email: "", phone_number: "", role: null, company_id: defaultCompanyId, site_ids: [], category_ids: [], timezone: null };
 }
 
+/** The client a person works for: the one owning most of their sites (several only for someone given a mix before it was refused). */
+function mainClientId(row: UserRow): number | null {
+  let best: number | null = null;
+  let most = 0;
+  for (const c of row.clients) {
+    const n = row.siteList.filter((s) => s.company?.company_id === c.company_id).length;
+    if (n > most) [best, most] = [c.company_id, n];
+  }
+  return best;
+}
+
 export function draftFrom(row: UserRow): UserDraft {
   const role = isRole(row.role) ? row.role : null;
   return {
@@ -121,7 +132,7 @@ export function draftFrom(row: UserRow): UserDraft {
     email: row.email,
     phone_number: row.phone_number ?? "",
     role,
-    company_id: row.clients[0]?.company_id ?? null,
+    company_id: mainClientId(row),
     site_ids: row.siteList.map((s) => s.site_id),
     category_ids: (row.categories ?? []).map((c) => c.category_id).sort((a, b) => a - b),
     timezone: row.timezone ?? null,
