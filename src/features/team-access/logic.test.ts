@@ -132,9 +132,9 @@ describe("month status", () => {
 });
 
 describe("isContributor", () => {
-  it("keeps role User (and rows without a role), not Admins or managers", () => {
+  it("keeps role User only: not Admins, managers, or rows without a role", () => {
     expect(isContributor({ role: "User" })).toBe(true);
-    expect(isContributor({ role: "" })).toBe(true);
+    expect(isContributor({ role: "" })).toBe(false);
     expect(isContributor({ role: "Manager" })).toBe(false);
     expect(isContributor({ role: "Admin" })).toBe(false);
     expect(isContributor({ role: "Superadmin" })).toBe(false);

@@ -86,7 +86,7 @@ export function matchesSearch(user: ManagerUser, q: string): boolean {
 }
 
 /** A manager's team is the contributors (role User) on their sites; Admins and other managers aren't theirs to manage. */
-export const isContributor = (user: Pick<ManagerUser, "role">): boolean => !user.role || user.role === "User";
+export const isContributor = (user: Pick<ManagerUser, "role">): boolean => user.role === "User";
 
 export function onSites(user: ManagerUser, siteIds: number[]): boolean {
   return siteIds.length === 0 || user.sites.some((s) => siteIds.includes(s.site_id));
