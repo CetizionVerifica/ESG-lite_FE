@@ -8,6 +8,8 @@ import {
   profileFor,
   profileSummary,
   profileWhenText,
+  confirmCategory,
+  setCategoryValue,
   canContinue,
   categoryChip,
   confirmActivity,
@@ -51,6 +53,22 @@ describe("chips", () => {
     expect(categoryChip(fuel.category)).toBe("matched");
     expect(categoryChip(power.category)).toBe("remembered");
     expect(categoryChip({ kind: "column", column: "Cat", values: [{ text: "Fuel", id: 1, confidence: 0.9, source: "llm" }, { text: "??", id: null, confidence: 0.2, source: "llm" }] })).toBe("check");
+  });
+
+  it("clears Check once a column value is left out on purpose, but not when every value is", () => {
+    const col = (values: { text: string; id: number | null; confidence: number }[]) => ({
+      ...MOCK_PROPOSAL,
+      sheets: [{ ...MOCK_PROPOSAL.sheets[0], category: { kind: "column" as const, column: "Cat", values: values.map((v) => ({ ...v, source: "rules" as const })) } }],
+    });
+    const unsure = col([{ text: "Fuel", id: 1, confidence: 0.95 }, { text: "Misc", id: null, confidence: 0 }]);
+    expect(categoryChip(unsure.sheets[0].category)).toBe("check");
+    // "Not imported" picked for Misc.
+    expect(categoryChip(setCategoryValue(unsure, 0, "Misc", null).sheets[0].category)).toBe("matched");
+    // Or Confirm these.
+    expect(categoryChip(confirmCategory(unsure, 0).sheets[0].category)).toBe("matched");
+    // Nothing left to import from the column.
+    const none = setCategoryValue(confirmCategory(unsure, 0), 0, "Fuel", null);
+    expect(categoryChip(none.sheets[0].category)).toBe("check");
   });
 });
 

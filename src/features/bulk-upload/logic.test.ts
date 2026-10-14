@@ -5,6 +5,7 @@ import {
   autoMap,
   buildFields,
   contributorSites,
+  withClientSites,
   fileProblem,
   findCategoryColumn,
   findValueColumn,
@@ -187,5 +188,24 @@ describe("historical import", () => {
     };
     expect(historicalSkippedMatrix(result)).toEqual([["Row", "Month", "Reason"], ["3", "", "Year or month is missing or not recognised."]]);
     expect(historicalSkippedMatrix({ ...result, skippedRows: [] })).toBeNull();
+  });
+});
+
+describe("withClientSites (Admin)", () => {
+  const company = { company_id: 1, name: "Midal", ai_import_enabled: true };
+  const own = contributorSites({ site: { site_id: 2, name: "Hidd", company, categories: [] } });
+
+  it("lists every site of the Admin's client with the client's switch", () => {
+    const sites = withClientSites(own, [
+      { site_id: 2, name: "Hidd", categories: [{ category_id: 1, category_name: "Fuel" }, { category_id: 9, category_name: "FERA" }] },
+      { site_id: 3, name: "Askar", categories: [] },
+    ]);
+    expect(sites.map((s) => [s.site_id, s.company?.ai_import_enabled])).toEqual([[2, true], [3, true]]);
+    expect(sites[0].categories.map((c) => c.category_name)).toEqual(["Fuel"]);
+  });
+
+  it("keeps the session sites until the list loads or when no client is known", () => {
+    expect(withClientSites(own, undefined)).toBe(own);
+    expect(withClientSites([], [{ site_id: 3, name: "Askar" }])).toEqual([]);
   });
 });

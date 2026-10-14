@@ -21,6 +21,8 @@ export function SmartReviewStep(props: {
   plan: PlanSummary | null;
   rows: PreviewRow[] | null;
   total: number | null;
+  /** The issue filter narrowed this page only; other pages may hold more matches. */
+  pageOnly?: boolean;
   page: number;
   onPage: (page: number) => void;
   code: string | null;
@@ -139,7 +141,13 @@ export function SmartReviewStep(props: {
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="text-sm text-muted" role="status">
-          {props.rows ? (total > rows.length ? `Showing ${rows.length} of ${rowsText(total)}.` : rowsText(total) + ".") : " "}
+          {!props.rows
+            ? " "
+            : props.pageOnly
+              ? `${rowsText(rows.length)} with this issue on page ${props.page + 1}; use the pages below for the rest.`
+              : total > rows.length
+                ? `Showing ${rows.length} of ${rowsText(total)}.`
+                : rowsText(total) + "."}
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <Select<string>
@@ -188,8 +196,11 @@ export function SmartReviewStep(props: {
         <Button variant="secondary" onClick={props.onBack}>
           Back
         </Button>
-        <Button variant="primary" disabled={!plan?.plan_id || (plan?.counts.ready ?? 0) <= 0 || props.busy} onClick={props.onImport}>
-          {plan && plan.counts.ready > 0 ? `Import ${rowsText(plan.counts.ready)}` : "Import"}
+        {/* Rows with issues are left out at import (they can't all be skipped: some never reach the plan), so the
+            button says so instead of blocking. Off while a change is saving or the plan is being reread,
+            so the commit always carries the plan's current version. */}
+        <Button variant="primary" disabled={!plan?.plan_id || (plan?.counts.ready ?? 0) <= 0 || props.busy || props.loading} onClick={props.onImport}>
+          {plan && plan.counts.ready > 0 ? `Import ${rowsText(plan.counts.ready)}${blocked ? `, leave ${plan.counts.issue} out` : ""}` : "Import"}
         </Button>
       </div>
     </div>
