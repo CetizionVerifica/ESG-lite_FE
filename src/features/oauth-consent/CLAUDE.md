@@ -31,3 +31,6 @@ Where the four parts live (the FE rule "pages never import from another feature 
 4. **Client switch**: `src/features/clients/components/ClaudeImportsToggle.tsx` under the Overview tab, bound to `mcp_enabled` via `PUT /admin/companies/:id` (IM5).
 
 Tests: `logic.test.ts` here; `settings/logic.test.ts`, `approvals-ledger/logic.test.ts`, `sign-in/logic.test.ts` extended; Playwright `e2e/oauth-consent.spec.ts` (allow, deny, three refused roles, expired request, sign-in round trip, 390 px), plus new cases in `settings.spec.ts`, `approvals-ledger.spec.ts`, `clients.spec.ts`.
+
+## Update 2026-10-14 (Superadmin-only route)
+Shyam: only Superadmin may see any Claude MCP option in the portal. The `oauth-consent` shell route is now `roles: ["Superadmin"]`, so a Manager, Admin or User who follows an `/oauth/authorize` link gets the shell's 403 page and never the consent screen (the server still refuses their decision, `MCP_SUPERADMIN_ONLY`). `refusalMessage` stays for a server-side `can_allow: false` on a Superadmin. Connected apps in Settings and the client switch were already Superadmin only.
