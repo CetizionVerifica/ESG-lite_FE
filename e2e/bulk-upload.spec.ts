@@ -71,6 +71,9 @@ const HISTORICAL_SUMMARY = { totalRows: 2, toImport: 1, toSkip: 1, newPeople: 1,
 const SUPERADMIN = { user_id: 9, name: "Sam Staff", email: "sam@example.com" };
 const CONTRIBUTOR = { user_id: 4, name: "Cara Contributor", email: "cara@example.com", sites: [SITES[0]] };
 
+/** When set, `/v1/excel/import` answers with this instead of a committed batch. */
+let importAnswer: { status: number; body: unknown } | null = null;
+
 async function signIn(page: Page, role = "Superadmin", user: object = SUPERADMIN) {
   const ai: Array<{ path: string; body: unknown }> = [];
   const historical: string[] = [];
@@ -99,6 +102,7 @@ async function signIn(page: Page, role = "Superadmin", user: object = SUPERADMIN
         if (path.endsWith("/unique-categories")) return json({ unique_categories: ["Diesel", "Petrol", "Biogas"], total_rows: 3 });
         if (path.endsWith("/preview")) return json({ plan: PLAN, rows: PREVIEW, total_rows: 3, page: 1, page_size: 100, not_selected: 0, sheet_rows: 3 });
         if (path.endsWith("/import")) {
+          if (importAnswer) return json(importAnswer.body, importAnswer.status);
           return json({ inserted: 2, fera_inserted: 0, skipped: 1, skipped_rows: [{ row: 3, emission_category: "Biogas", reason: PREVIEW[2].row_error }], not_selected: 0, total_rows: 3, upload_batch_id: "b-1", plan_id: PLAN.plan_id, plan: { ...PLAN, status: "committed", version: 2 } });
         }
       }
@@ -198,6 +202,29 @@ test("a superadmin uploads a sheet, maps it, previews and imports the rows", asy
 
   await page.getByRole("button", { name: "Start another upload" }).click();
   await expect(page.locator("[aria-current=step]")).toContainText("Upload");
+});
+
+test("a plan that moved since the preview offers Back to preview, not Try again", async ({ page }) => {
+  importAnswer = { status: 409, body: { detail: { code: "IMPORT_PLAN_VERSION_CONFLICT", message: "Version moved.", details: { current_version: 2 } } } };
+  try {
+    const { ai } = await signIn(page);
+    await page.goto("/capture/upload?period=2026-08&client=1&site=1&category=1");
+    await page.locator('input[type="file"]').setInputFiles({ name: "fuel-aug.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("x") });
+    await page.getByRole("button", { name: "Upload and map columns" }).click();
+    await page.getByLabel("Sheet column for Activity unit").selectOption("Unit");
+    await page.getByRole("button", { name: "Preview rows" }).click();
+    await page.getByRole("button", { name: "Import 2 rows" }).click();
+
+    // The same plan and version would be refused again, so the only way on is a fresh preview.
+    await expect(page.getByText("Some rows changed since the preview.", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
+    const previews = ai.filter((c) => c.path.endsWith("/preview")).length;
+    await page.getByRole("button", { name: "Back to preview" }).click();
+    await expect(page.locator("[aria-current=step]")).toContainText("Preview");
+    await expect.poll(() => ai.filter((c) => c.path.endsWith("/preview")).length).toBe(previews + 1);
+  } finally {
+    importAnswer = null;
+  }
 });
 
 test("a superadmin previews a historical sheet, imports it and sees the invite warning", async ({ page }) => {

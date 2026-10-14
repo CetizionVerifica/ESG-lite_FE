@@ -86,7 +86,7 @@ export function PreviewStep(props: {
         <p className="text-sm text-muted" role="status">
           {props.rows
             ? total > rows.length
-              ? `Showing the first ${rows.length} of ${total} rows. ${counts.valid} ready, ${counts.issues} need a look.`
+              ? `Showing the first ${rows.length} of ${total} rows. In the whole sheet, ${counts.valid} ready, ${counts.issues} need a look.`
               : `${rowsText(total)}. ${counts.valid} ready, ${counts.issues} need a look.`
             : " "}
         </p>
