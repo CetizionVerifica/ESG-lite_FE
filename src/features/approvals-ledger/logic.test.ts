@@ -309,7 +309,7 @@ describe("needs attention (XI5)", () => {
   });
 
   it("explains a refused batch approve by the uploader", () => {
-    expect(batchApproveError({ response: { status: 403, data: { message: "You can't approve or reject your own entries" } } })).toMatch(/Someone else must approve/);
+    expect(batchApproveError({ response: { status: 403, data: { message: "You can't approve or reject your own entries" } } })).toBe("You can't approve this batch yourself. Ask another manager to approve it.");
     expect(batchApproveError({ response: { status: 500 } })).toBeNull();
     expect(batchApproveError(new Error("x"))).toBeNull();
   });
