@@ -176,7 +176,8 @@ test("a manager uploads a workbook, confirms the mapping, skips the other site's
   // The services page from 1.
   expect(preview.page).toBe(1);
   expect(preview.proposal.sheets[0].fields.find((f) => f.key === "activity_unit")).toMatchObject({ column: "UoM", confidence: 1 });
-  expect(preview.proposal.sheets[0].activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 1 });
+  // Confirmed as proposed: the model's own confidence reaches the plan, so the approver still sees it.
+  expect(preview.proposal.sheets[0].activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 0.64, source: "llm", confirmed: true });
   await expect(page.getByText("2 rows can't be imported as they are")).toBeVisible();
   const table = page.getByRole("table", { name: "Rows of the plan" });
   await expect(table.getByRole("row")).toHaveCount(6);

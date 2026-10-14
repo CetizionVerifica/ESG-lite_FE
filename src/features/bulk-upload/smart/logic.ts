@@ -11,8 +11,15 @@ export const SMART_STEPS = [
   { id: "import", label: "Import" },
 ] as const;
 
-/** Where a confirmed part comes from: the user's own pick counts as a rule match. */
+/** A value the user picked themselves counts as a rule match. */
 const CONFIRMED: Pick<FieldMapping, "confidence" | "source"> = { confidence: 1, source: "rules" };
+
+/**
+ * The user kept the proposed value as is. Its confidence and source stay as the
+ * mapper sent them, so a low-confidence match still reaches the approver's
+ * "Needs attention" list; only the Check chip goes.
+ */
+const KEPT = { confirmed: true } as const;
 
 type SiteLike = { company?: { ai_import_enabled?: boolean | null } | null };
 
@@ -23,28 +30,30 @@ export const needsConfirmation = (confidence: number) => confidence < CONFIRM_BE
 
 export type MatchChip = "matched" | "remembered" | "suggested" | "check" | "skipped" | null;
 
-const chipFor = (source: MappingSource, confidence: number): MatchChip =>
-  needsConfirmation(confidence) ? "check" : source === "profile" ? "remembered" : source === "llm" ? "suggested" : "matched";
+const sourceChip = (source: MappingSource): MatchChip => (source === "profile" ? "remembered" : source === "llm" ? "suggested" : "matched");
+
+/** A confirmed part is never Check, whatever its confidence. */
+const chipFor = (part: { source: MappingSource; confidence: number; confirmed?: boolean }): MatchChip =>
+  !part.confirmed && needsConfirmation(part.confidence) ? "check" : sourceChip(part.source);
 
 /** Matched (rules), Remembered (profile), Suggested (model) or Check (low confidence or empty required). */
 export function fieldChip(f: FieldMapping): MatchChip {
   if (f.skipped) return "skipped";
   if (!f.column) return f.required ? "check" : null;
-  return chipFor(f.source, f.confidence);
+  return chipFor(f);
 }
 
 export function activityChip(a: ProposedActivityMatch): MatchChip {
-  if (!a.factor_name) return needsConfirmation(a.confidence) ? "check" : "skipped";
-  return chipFor(a.source, a.confidence);
+  if (!a.factor_name) return !a.confirmed && needsConfirmation(a.confidence) ? "check" : "skipped";
+  return chipFor(a);
 }
 
 export function categoryChip(c: ResolvedCategory): MatchChip {
-  if (c.kind === "fixed") return chipFor(c.source, c.confidence);
+  if (c.kind === "fixed") return chipFor(c);
   // Every value left out means nothing to import from the sheet.
   if (c.values.length === 0 || c.values.every((v) => v.id === null)) return "check";
-  // A value the mapper couldn't place has confidence 0; once the user picks "Not imported" it is confirmed.
-  const worst = c.values.reduce((m, v) => Math.min(m, v.confidence), 1);
-  return needsConfirmation(worst) ? "check" : chipFor(c.values[0].source, worst);
+  // A value the mapper couldn't place has confidence 0; once the user picks "Not imported" or confirms it, it is settled.
+  return c.values.some((v) => chipFor(v) === "check") ? "check" : sourceChip(c.values[0].source);
 }
 
 export const CHIP_LABEL: Record<Exclude<MatchChip, null>, string> = {
@@ -84,9 +93,9 @@ export const setSheetExcluded = (p: MappingProposal, index: number, excluded: bo
 export const setFieldColumn = (p: MappingProposal, index: number, key: string, column: string | null) =>
   withSheet(p, index, (s) => ({ ...s, fields: s.fields.map((f) => (f.key === key ? { ...f, column, skipped: false, ...CONFIRMED } : f)) }));
 
-/** Keeps the proposed column and marks it confirmed. */
+/** Keeps the proposed column and marks it confirmed; its confidence and source stay. */
 export const confirmField = (p: MappingProposal, index: number, key: string) =>
-  withSheet(p, index, (s) => ({ ...s, fields: s.fields.map((f) => (f.key === key && f.column ? { ...f, ...CONFIRMED } : f)) }));
+  withSheet(p, index, (s) => ({ ...s, fields: s.fields.map((f) => (f.key === key && f.column ? { ...f, ...KEPT } : f)) }));
 
 export const toggleFieldSkip = (p: MappingProposal, index: number, key: string) =>
   withSheet(p, index, (s) => ({
@@ -101,7 +110,7 @@ export const setActivityFactor = (p: MappingProposal, index: number, sheetText: 
   }));
 
 export const confirmActivity = (p: MappingProposal, index: number, sheetText: string) =>
-  withSheet(p, index, (s) => ({ ...s, activities: s.activities.map((a) => (a.sheet_text === sheetText && a.factor_name ? { ...a, ...CONFIRMED } : a)) }));
+  withSheet(p, index, (s) => ({ ...s, activities: s.activities.map((a) => (a.sheet_text === sheetText && a.factor_name ? { ...a, ...KEPT } : a)) }));
 
 export const toggleSaveMapping = (p: MappingProposal, index: number, sheetText: string) =>
   withSheet(p, index, (s) => ({ ...s, activities: s.activities.map((a) => (a.sheet_text === sheetText ? { ...a, save_mapping: !a.save_mapping } : a)) }));
@@ -111,8 +120,8 @@ export const confirmCategory = (p: MappingProposal, index: number) =>
     ...s,
     category:
       s.category.kind === "fixed"
-        ? { ...s.category, ...CONFIRMED }
-        : { ...s.category, values: s.category.values.map((v) => ({ ...v, ...CONFIRMED })) },
+        ? { ...s.category, ...KEPT }
+        : { ...s.category, values: s.category.values.map((v) => ({ ...v, ...KEPT })) },
   }));
 
 export const setFixedCategory = (p: MappingProposal, index: number, id: number, label: string) =>
