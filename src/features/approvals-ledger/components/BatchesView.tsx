@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Inbox } from "lucide-react";
 import type { EmissionUploadBatch } from "../../../services/emissionService";
 import { Badge, type BadgeTone, Button, type Column, DataTable, EmptyState, Modal, Select, Textarea, cn, focusRing, formatDateTime, formatNumber, rejectReasonError, useToast, withoutParams } from "../../../ui";
-import { errorMessage, useBatchMutations, useBatches } from "../api";
-import { BATCH_SOURCE_LABEL, BATCH_SOURCE_OPTIONS, type BatchSource, batchSource, parseBatchSource, reviewRowsPath } from "../logic";
+import { errorMessage, useBatchAttention, useBatchMutations, useBatches } from "../api";
+import { BATCH_SOURCE_LABEL, BATCH_SOURCE_OPTIONS, type BatchSource, approveBatchCopy, batchApproveError, batchSource, parseBatchSource, reviewRowsPath } from "../logic";
 
 const SOURCE_TONE: Record<BatchSource, BadgeTone> = { claude: "brand", bulk: "neutral", api: "info" };
 
@@ -57,10 +57,14 @@ export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categ
       },
       { replace: true },
     );
+  const navigate = useNavigate();
   const m = useBatchMutations();
   const { toast } = useToast();
   const [approving, setApproving] = useState<EmissionUploadBatch | null>(null);
   const [rejecting, setRejecting] = useState<EmissionUploadBatch | null>(null);
+  // XI5: the dialog names the rows the smart import was least sure about.
+  const attention = useBatchAttention(approving);
+  const copy = approving ? approveBatchCopy(approving.pending_count, attention.data ?? undefined) : null;
 
   const columns: Column<EmissionUploadBatch>[] = [
     { id: "source", header: "Source", value: (b) => BATCH_SOURCE_LABEL[batchSource(b.channel)], sortable: true, cell: (b) => <SourceChip source={batchSource(b.channel)} /> },
@@ -139,12 +143,13 @@ export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categ
       <Modal
         open={approving !== null}
         onClose={() => setApproving(null)}
-        title={`Approve ${approving ? formatNumber(approving.pending_count) : ""} pending rows?`}
+        title={copy?.title ?? "Approve pending rows?"}
         description={approving ? `${approving.category_name} · ${approving.site_name}, uploaded ${formatDateTime(approving.uploaded_at)}. Approved and rejected rows stay as they are.` : undefined}
-        error={m.approve.isError ? errorMessage(m.approve.error, "Couldn't approve. Nothing was changed.") : null}
+        error={m.approve.isError ? (batchApproveError(m.approve.error) ?? errorMessage(m.approve.error, "Couldn't approve. Nothing was changed.")) : null}
         primaryAction={{
-          label: "Approve pending",
+          label: copy?.reviewFirst ? "Approve all" : "Approve pending",
           loading: m.approve.isPending,
+          disabled: attention.isPending,
           onClick: () =>
             approving &&
             m.approve.mutate(approving.upload_batch_id, {
@@ -154,7 +159,16 @@ export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categ
               },
             }),
         }}
-      />
+      >
+        {copy?.reviewFirst && approving && (
+          <div className="space-y-3">
+            <p className="text-sm text-ink">{copy.description}</p>
+            <Button variant="secondary" onClick={() => navigate(reviewRowsPath(approving, true))}>
+              Review them first
+            </Button>
+          </div>
+        )}
+      </Modal>
       <BatchRejectModal
         batch={rejecting}
         busy={m.reject.isPending}
