@@ -161,7 +161,8 @@ describe("switch and errors", () => {
     expect(smartUnavailable({ status: 404 })).toBe(true);
     expect(smartUnavailable({ status: 403 })).toBe(false);
     expect(smartErrorMessage({ status: 403, code: "AI_IMPORT_DISABLED_FOR_CLIENT", message: "x" }, "f")).toBe("Smart import is switched off for this client.");
-    expect(smartErrorMessage({ status: 429 }, "f")).toMatch(/Too many/);
+    expect(smartErrorMessage({ status: 429 }, "f")).toMatch(/Too many smart imports/);
+    expect(smartErrorMessage({ status: 429, code: "IMPORT_TOO_MANY_PLANS" }, "f")).toBe("You have 10 unfinished imports. Finish one, or try again once older drafts expire (after 24 hours).");
     expect(smartErrorMessage({ status: 503 }, "f")).toMatch(/map the columns yourself/);
     expect(smartErrorMessage(new Error("boom"), "f")).toBe("boom");
     expect(smartErrorMessage({}, "f")).toBe("f");
