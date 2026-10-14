@@ -28,6 +28,8 @@ export interface SmartPreviewArgs {
 
 export interface SmartPreviewData extends PreviewData {
   sheetRows: number;
+  /** The issue filter was applied to this page only (the service paged the whole plan). */
+  pageOnly: boolean;
 }
 
 /**
@@ -44,13 +46,15 @@ export function useSmartPreview(args: SmartPreviewArgs | null, lastPlan: Mutable
     staleTime: Infinity,
     queryFn: async () => {
       const a = args as SmartPreviewArgs;
-      const res = await fetchSmartPreview(a.proposal, { page: a.page, pageSize: 100, code: a.code, planId: a.planId, cancelPlanId: a.planId ? null : lastPlan.current });
+      // DataTable pages from 0; the AI service and ESG-lite page from 1.
+      const res = await fetchSmartPreview(a.proposal, { page: a.page + 1, pageSize: 100, code: a.code, planId: a.planId, cancelPlanId: a.planId ? null : lastPlan.current });
       lastPlan.current = res.plan?.plan_id ?? null;
       const all = (res.rows ?? []) as PreviewRow[];
-      // The AI service pages the plan by `state`; where it doesn't pass `code` on, the page is narrowed here.
+      // Where the AI service doesn't pass `code` on to ESG-lite, its page holds every kind of row:
+      // narrow it here and keep paging over the whole plan, so every matching row stays reachable.
       const rows = a.code ? all.filter((r) => rowHasCode(r, a.code as string)) : all;
-      const total = rows.length === all.length ? (res.total_rows ?? 0) : rows.length;
-      return { plan: res.plan, rows, total, notSelected: res.not_selected ?? 0, sheetRows: res.sheet_rows ?? 0 };
+      const pageOnly = a.code !== null && rows.length !== all.length;
+      return { plan: res.plan, rows, total: res.total_rows ?? 0, pageOnly, notSelected: res.not_selected ?? 0, sheetRows: res.sheet_rows ?? 0 };
     },
   });
   const planId = query.data?.plan?.plan_id ?? null;

@@ -208,6 +208,7 @@ export function SmartImportFlow(props: {
             plan={plan}
             rows={preview.data?.rows ?? null}
             total={preview.data?.total ?? null}
+            pageOnly={preview.data?.pageOnly ?? false}
             page={previewArgs?.page ?? 0}
             onPage={(page) => setPreviewArgs((a) => (a ? { ...a, page } : a))}
             code={previewArgs?.code ?? null}
@@ -218,7 +219,8 @@ export function SmartImportFlow(props: {
             onSkip={(ref, skip) => patchRows([{ row_ref: ref, skip }])}
             onEdit={(ref, edit: RowEdit) => patchRows([{ row_ref: ref, set: { activity_name: edit.activity_name, activity_value: edit.activity_value, activity_unit: edit.activity_unit } }])}
             onSkipIssue={(code) => plan?.plan_id && skipIssue.mutate({ planId: plan.plan_id, version: plan.version, code })}
-            busy={patch.isPending || skipIssue.isPending}
+            // Also while the plan is reread after a change: patches carry its version.
+            busy={patch.isPending || skipIssue.isPending || preview.isFetching}
             patchError={patch.error ? smartErrorMessage(patch.error, "The row couldn't be changed.") : skipIssue.error ? smartErrorMessage(skipIssue.error, "The rows couldn't be skipped.") : null}
             onBack={backToConfirm}
             onImport={runImport}

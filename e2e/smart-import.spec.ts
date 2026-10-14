@@ -114,6 +114,7 @@ async function signIn(page: Page, role: string, user: object, companySites = [HI
       if (path.endsWith("/brands/mine")) return json({});
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
+      if (path.endsWith("/company-admin/sites")) return json(companySites.map(({ company: _c, ...s }) => s));
       if (path.endsWith("/admin/sites")) return json(companySites);
       return json({});
     },
@@ -160,8 +161,10 @@ test("a manager uploads a workbook, confirms the mapping, skips the other site's
 
   // Review rows: ESG-lite's plan for the confirmed proposal.
   await expect(page.locator("[aria-current=step]")).toContainText("Review rows");
-  const preview = calls.find((c) => c.path.endsWith("/preview"))?.body as { proposal: typeof MOCK_PROPOSAL; plan_id?: string };
+  const preview = calls.find((c) => c.path.endsWith("/preview"))?.body as { proposal: typeof MOCK_PROPOSAL; plan_id?: string; page: number };
   expect(preview.plan_id).toBeUndefined();
+  // The services page from 1.
+  expect(preview.page).toBe(1);
   expect(preview.proposal.sheets[0].fields.find((f) => f.key === "activity_unit")).toMatchObject({ column: "UoM", confidence: 1 });
   expect(preview.proposal.sheets[0].activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 1 });
   await expect(page.getByText("2 rows can't be imported as they are")).toBeVisible();
@@ -169,14 +172,27 @@ test("a manager uploads a workbook, confirms the mapping, skips the other site's
   await expect(table.getByRole("row")).toHaveCount(6);
   await expect(table).toContainText("Note");
   await expect(table).toContainText("Imports with a note");
-  // Rows with issues are left out at import, so importing is possible before they're skipped.
-  await expect(page.getByRole("button", { name: "Import 3 rows" })).toBeEnabled();
+  // Rows with issues are left out at import, and the button says so.
+  await expect(page.getByRole("button", { name: "Import 3 rows, leave 2 out" })).toBeEnabled();
+
+  // Editing one row, then another, opens each with its own values.
+  await table.getByRole("row", { name: /Fuel 2026!A3/ }).getByRole("button", { name: "Edit" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Value")).toHaveValue("100");
+  await dialog.getByLabel("Value").fill("120");
+  await dialog.getByRole("button", { name: "Save and recheck" }).click();
+  await expect.poll(() => calls.find((c) => c.method === "PATCH")?.body).toEqual({ version: 1, changes: [{ row_ref: "Fuel 2026!A3", set: { activity_name: "Diesel (gen-set)", activity_value: 120, activity_unit: "litres" } }] });
+  await expect(dialog).toHaveCount(0);
+  await table.getByRole("row", { name: /Fuel 2026!A4/ }).getByRole("button", { name: "Edit" }).click();
+  await expect(dialog.getByLabel("Value")).toHaveValue("50");
+  await expect(dialog.getByLabel("Activity")).toHaveValue("Gasoline 95");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
 
   await page.getByLabel("Issue").selectOption("SITE_NOT_ALLOWED");
   await expect(table.getByRole("row")).toHaveCount(3);
   await page.getByRole("button", { name: "Skip all 2 rows with this issue" }).click();
   // The row refs are read from ESG-lite first, then patched in one call at the plan's version.
-  await expect.poll(() => calls.find((c) => c.method === "PATCH")?.body).toEqual({ version: 1, changes: [{ row_ref: "Fuel 2026!A5", skip: true }, { row_ref: "Fuel 2026!A6", skip: true }] });
+  await expect.poll(() => calls.filter((c) => c.method === "PATCH")[1]?.body).toEqual({ version: 2, changes: [{ row_ref: "Fuel 2026!A5", skip: true }, { row_ref: "Fuel 2026!A6", skip: true }] });
   await page.getByLabel("Issue").selectOption("");
   await expect(table.getByRole("row")).toHaveCount(6);
   await expect(table).toContainText("Skipped");
@@ -186,7 +202,7 @@ test("a manager uploads a workbook, confirms the mapping, skips the other site's
   // Import: committed at the plan's current version, with Review rows for the batch.
   await expect(page.getByText("Imported 3 rows.")).toBeVisible();
   const sent = calls.find((c) => c.path.endsWith("/import"))?.body as Record<string, unknown>;
-  expect(sent).toMatchObject({ document_id: 42, site_id: 1, plan_id: PLAN_ID, version: 2 });
+  expect(sent).toMatchObject({ document_id: 42, site_id: 1, plan_id: PLAN_ID, version: 3 });
   expect((sent.proposal as { sheets: unknown[] }).sheets).toHaveLength(2);
   await expect(page.getByRole("link", { name: "Review rows" })).toHaveAttribute("href", "/data/approvals?period=all&site=1&category=all&batch=b-9");
 });
@@ -229,4 +245,34 @@ test("a superadmin sees the switch per client and can fall back to the manual ma
   await expect(page.getByRole("heading", { name: "Bulk upload" })).toBeVisible();
   await page.getByRole("button", { name: "Smart import" }).click();
   await expect(page.getByRole("heading", { name: "Smart import" })).toBeVisible();
+});
+
+test("an Admin picks from every site of their client", async ({ page }) => {
+  const askar = { site_id: 3, name: "Askar", categories: HIDD.categories };
+  await signIn(page, "Admin", { user_id: 6, name: "Ada Admin", email: "ada@example.com", site: HIDD, sites: [] }, [HIDD, { ...askar, company: COMPANY_ON }]);
+  await page.goto("/capture/upload");
+  await expect(page.getByRole("heading", { name: "Smart import" })).toBeVisible();
+  const site = page.getByRole("combobox", { name: "Site" });
+  await site.click();
+  await expect(page.getByRole("option", { name: "Askar" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Hidd" })).toBeVisible();
+});
+
+test("a manager's site of a client with the switch off isn't offered in smart mode", async ({ page }) => {
+  const off = { site_id: 4, name: "Pune", company: { company_id: 2, name: "Gulf Foods", ai_import_enabled: false }, categories: HIDD.categories };
+  await signIn(page, "Manager", { ...MANAGER, sites: [HIDD, off] });
+  await page.goto("/capture/upload");
+  // Only Hidd has the switch on, so it is picked already.
+  await expect(page.getByRole("combobox", { name: "Site" })).toHaveValue("Hidd");
+  await page.getByRole("combobox", { name: "Site" }).click();
+  await expect(page.getByRole("option", { name: "Pune" })).toHaveCount(0);
+});
+
+test("leaving the historical import goes back to the client's default mode", async ({ page }) => {
+  const pune = { site_id: 2, name: "Pune", company: { company_id: 2, name: "Gulf Foods", ai_import_enabled: false }, categories: [] };
+  await signIn(page, "Superadmin", { user_id: 9, name: "Sam Staff", email: "sam@example.com" }, [HIDD, pune]);
+  await page.goto("/capture/upload?client=2&mode=historical");
+  await page.getByRole("button", { name: "Back to bulk upload" }).click();
+  await expect(page).toHaveURL(/mode=manual/);
+  await expect(page.getByRole("heading", { name: "Bulk upload" })).toBeVisible();
 });

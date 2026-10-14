@@ -33,7 +33,8 @@ export function SmartUploadStep(props: {
     return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sites.data]);
   const siteOptions = sites.data
-    .filter((s) => contributor || s.company?.company_id === ctx.clientId)
+    // A contributor's sites of a client with Smart import off would be refused after the upload.
+    .filter((s) => (contributor ? s.company?.ai_import_enabled === true : s.company?.company_id === ctx.clientId))
     .map((s) => ({ value: s.site_id, label: s.name }))
     .sort((a, b) => a.label.localeCompare(b.label));
 

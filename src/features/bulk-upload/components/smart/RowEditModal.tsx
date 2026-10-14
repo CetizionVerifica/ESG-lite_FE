@@ -11,7 +11,11 @@ export interface RowEdit {
 /** Edits the three things the engine calculates from, as a plan row change (`PATCH /imports/plans/:id`, `set`). */
 export function RowEditModal(props: { row: PreviewRow | null; saving: boolean; error: string | null; onClose: () => void; onSave: (rowRef: string, edit: RowEdit) => void }) {
   const { row } = props;
-  const [draft, setDraft] = useState<RowEdit | null>(null);
+  // The draft belongs to one row: opening another row starts from that row's values.
+  const [drafted, setDrafted] = useState<{ ref: string; edit: RowEdit } | null>(null);
+  const ref = row?.row_ref ?? "";
+  const draft = drafted && drafted.ref === ref ? drafted.edit : null;
+  const setDraft = (edit: RowEdit | null) => setDrafted(edit ? { ref, edit } : null);
   const current: RowEdit = draft ?? {
     activity_name: String(row?.emission_category ?? ""),
     activity_value: row?.activity_value == null || row.activity_value === "" ? null : Number(row.activity_value),

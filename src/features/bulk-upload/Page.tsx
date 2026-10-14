@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Callout, type HeaderAction, PageHeader, Stepper, exportMatrix, useToast } from "../../ui";
-import { type PreviewArgs, errorMessage, useFormConfig, useImportRows, usePreview, useSheetCategories, useSites, useUploadFile } from "./api";
+import { type PreviewArgs, errorMessage, useCompanySites, useFormConfig, useImportRows, usePreview, useSheetCategories, useSites, useUploadFile } from "./api";
 import { HistoricalImport } from "./components/HistoricalImport";
 import { ImportStep, type ImportState } from "./components/ImportStep";
 import { MapStep } from "./components/MapStep";
@@ -11,7 +11,7 @@ import { UploadStep } from "./components/UploadStep";
 import { SmartImportFlow } from "./components/smart/SmartImportFlow";
 import { useUploadContext } from "./hooks/useUploadContext";
 import { smartImportEnabled } from "./smart/logic";
-import { type ImportResult, type MapField, STEPS, autoMap, buildFields, contributorSites, fileProblem, mappingsFor, monthEndDate, setHeader, skippedMatrix, toggleSkip } from "./logic";
+import { type ImportResult, type MapField, STEPS, autoMap, buildFields, contributorSites, fileProblem, mappingsFor, monthEndDate, setHeader, skippedMatrix, toggleSkip, withClientSites } from "./logic";
 
 type Sheet = { documentId: number; headers: string[]; fileName: string };
 
@@ -40,7 +40,10 @@ export default function BulkUploadPage() {
   const [ctx, setCtx] = useUploadContext();
 
   const allSites = useSites(!contributor);
-  const ownSites = useMemo(() => contributorSites(user), [user]);
+  const sessionSites = useMemo(() => contributorSites(user), [user]);
+  // An Admin may import into every site of their client; the session user carries only their own site.
+  const companySites = useCompanySites(role === "Admin");
+  const ownSites = useMemo(() => withClientSites(sessionSites, companySites.data), [sessionSites, companySites.data]);
   const siteList = contributor
     ? { data: ownSites, loading: false, error: null, retry: () => undefined }
     : { data: allSites.data ?? [], loading: allSites.isLoading, error: allSites.error ? errorMessage(allSites.error, "Try again in a moment.") : null, retry: () => void allSites.refetch() };
@@ -60,7 +63,8 @@ export default function BulkUploadPage() {
 
   // A manager with one site doesn't need to pick it.
   useEffect(() => {
-    if (mode === "smart" && contributor && ctx.siteId === null && ownSites.length === 1) setCtx({ siteId: ownSites[0].site_id, clientId: ownSites[0].company?.company_id ?? null });
+    const smartSites = ownSites.filter((s) => s.company?.ai_import_enabled === true);
+    if (mode === "smart" && contributor && ctx.siteId === null && smartSites.length === 1) setCtx({ siteId: smartSites[0].site_id, clientId: smartSites[0].company?.company_id ?? null });
     // ctx and setCtx read the URL; the first render after it settles is enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, contributor, ownSites.length]);
@@ -194,7 +198,7 @@ export default function BulkUploadPage() {
   if (!locked && !smartLocked && !historicalBusy) {
     if (smartOffered && mode !== "smart") headerActions.push({ label: "Smart import", onClick: () => switchMode("smart") });
     if (smartOffered && mode === "smart") headerActions.push({ label: "Manual upload", onClick: () => switchMode("manual") });
-    if (!contributor) headerActions.push({ label: historical ? "Back to bulk upload" : "Historical import", onClick: () => switchMode(historical ? (smartOffered ? "smart" : "manual") : "historical") });
+    if (!contributor) headerActions.push({ label: historical ? "Back to bulk upload" : "Historical import", onClick: () => switchMode(historical ? (smartDefault ? "smart" : "manual") : "historical") });
   }
 
   return (

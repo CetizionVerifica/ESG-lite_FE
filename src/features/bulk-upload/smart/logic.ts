@@ -40,8 +40,10 @@ export function activityChip(a: ProposedActivityMatch): MatchChip {
 
 export function categoryChip(c: ResolvedCategory): MatchChip {
   if (c.kind === "fixed") return chipFor(c.source, c.confidence);
-  if (c.values.length === 0) return "check";
-  const worst = c.values.reduce((m, v) => (v.id === null ? 0 : Math.min(m, v.confidence)), 1);
+  // Every value left out means nothing to import from the sheet.
+  if (c.values.length === 0 || c.values.every((v) => v.id === null)) return "check";
+  // A value the mapper couldn't place has confidence 0; once the user picks "Not imported" it is confirmed.
+  const worst = c.values.reduce((m, v) => Math.min(m, v.confidence), 1);
   return needsConfirmation(worst) ? "check" : chipFor(c.values[0].source, worst);
 }
 
@@ -110,7 +112,7 @@ export const confirmCategory = (p: MappingProposal, index: number) =>
     category:
       s.category.kind === "fixed"
         ? { ...s.category, ...CONFIRMED }
-        : { ...s.category, values: s.category.values.map((v) => (v.id === null ? v : { ...v, ...CONFIRMED })) },
+        : { ...s.category, values: s.category.values.map((v) => ({ ...v, ...CONFIRMED })) },
   }));
 
 export const setFixedCategory = (p: MappingProposal, index: number, id: number, label: string) =>
