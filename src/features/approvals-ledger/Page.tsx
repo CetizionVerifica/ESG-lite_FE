@@ -186,8 +186,9 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const attentionParam = params.get("attention");
   const attentionCountQ = useListAttention(tab === "approvals" && batchId ? listParams({ ...base, attention: false }) : null);
   const attentionCount = attentionCountQ.data;
-  const attentionOffered = tab === "approvals" && !!batchId && ((attentionCount ?? 0) > 0 || attentionParam === "1");
-  const attention = attentionOffered && attentionOn(attentionParam, attentionCount);
+  // Offered only when the API counts attention rows; an older API ignores the filter, so `?attention=1` alone isn't enough.
+  const attentionOffered = tab === "approvals" && !!batchId && typeof attentionCount === "number" && (attentionCount > 0 || attentionParam === "1");
+  const attention = attentionOffered && attentionOn(attentionParam, attentionCount ?? undefined);
   const setAttention = (on: boolean) => setParams((p) => { const next = new URLSearchParams(p); next.set("attention", on ? "1" : "0"); return next; }, { replace: true });
   // With the chip on by default, wait for the count before the first list fetch, so the list
   // doesn't load once without the filter and then again with it (resetting page and selection).

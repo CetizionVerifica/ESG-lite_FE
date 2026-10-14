@@ -244,7 +244,7 @@ export function useBatchAttention(batch: Pick<EmissionUploadBatch, "upload_batch
  * XI5: how many rows of the list the smart import was least sure about. Same
  * filters as the list (pending only on Approvals), without the attention
  * filter, paging or sort, so the chip counts exactly the rows it would show.
- * `null` params turn it off.
+ * `null` params turn it off; the count is `null` when the API sends none (older API).
  */
 export function useListAttention(params: ReturnType<typeof listParams> | null) {
   const narrow = params ? { ...params, attention: null, sort: null, order: null, page: 1, limit: 1 } : null;
@@ -253,9 +253,8 @@ export function useListAttention(params: ReturnType<typeof listParams> | null) {
     enabled: narrow !== null,
     queryFn: async () => {
       const { summary } = await getEmissionsPaginated(narrow as NonNullable<typeof narrow>);
-      return attentionOf(summary) ?? 0;
+      return attentionOf(summary);
     },
-    placeholderData: keepPreviousData,
   });
 }
 

@@ -55,6 +55,8 @@ async function signIn(page: Page) {
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
   // Every list request's query (limit > 1), to check what the page fetched.
   const lists: URLSearchParams[] = [];
+  // `attention: false` plays an ESG-lite without XI5: no count in the summary and the filter ignored.
+  const api = { attention: true };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Manager");
@@ -112,7 +114,7 @@ async function signIn(page: Page) {
       if (path.endsWith("/user/emissions")) {
         const status = url.searchParams.get("status");
         const batchId = url.searchParams.get("batchId");
-        const attention = batchId && url.searchParams.get("attention") === "1";
+        const attention = api.attention && batchId && url.searchParams.get("attention") === "1";
         const needsAttention = (r: Row) => (r.extra_data as { import?: { meta?: unknown } } | undefined)?.import?.meta !== undefined;
         const data = rows
           .filter((r) => !status || r.status === status)
@@ -131,14 +133,14 @@ async function signIn(page: Page) {
           }));
         const count = (s: string) => rows.filter((r) => r.status === s && (!batchId || r.upload_batch_id === batchId)).length;
         // Like ESG-lite: the attention count follows the request's filters, status included.
-        const attentionCount = batchId ? rows.filter((r) => (!status || r.status === status) && r.upload_batch_id === batchId && needsAttention(r)).length : undefined;
+        const attentionCount = api.attention && batchId ? rows.filter((r) => (!status || r.status === status) && r.upload_batch_id === batchId && needsAttention(r)).length : undefined;
         if (url.searchParams.get("limit") !== "1") lists.push(url.searchParams);
         return json({ data, total: data.length, summary: { total_emission: 0, pending_count: count("pending"), approved_count: count("approved"), rejected_count: count("rejected"), ...(attentionCount !== undefined && { attention: attentionCount }) } });
       }
       return json({});
     },
   );
-  return { rows, calls, lists };
+  return { rows, calls, lists, api };
 }
 
 test("a manager clears the queue with the keyboard, with undo", async ({ page }) => {
@@ -473,6 +475,16 @@ test("the attention chip counts pending rows only, and the list loads once with 
   const queue = page.getByRole("table", { name: "Entries waiting for approval" });
   await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(1);
   await expect(page.getByRole("button", { name: /Needs attention/ })).toHaveCount(0);
+});
+
+test("an API without the attention count shows no chip, even with ?attention=1", async ({ page }) => {
+  const { api } = await signIn(page);
+  api.attention = false;
+  await page.goto("/data/approvals?site=1&category=20&period=all&batch=b-2&attention=1");
+  const queue = page.getByRole("table", { name: "Entries waiting for approval" });
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: /Needs attention/ })).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "need attention" })).toHaveCount(0);
 });
 
 test("Approve pending names the rows that need attention and offers to review them first", async ({ page }) => {
