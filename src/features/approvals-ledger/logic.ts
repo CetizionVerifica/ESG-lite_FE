@@ -362,12 +362,13 @@ export function attentionOn(param: string | null, count: number | undefined): bo
 }
 
 /**
- * Why a batch approve failed. ESG-lite lets the uploader approve their own bulk upload only while
- * none of its rows was edited after the upload; otherwise the whole batch is refused with 403.
+ * A refused batch approve (403). ESG-lite refuses the whole batch when the caller may not approve some
+ * of its rows: their own rows edited after the upload, their own Claude or API batch, or rows outside
+ * their sites. The cause isn't in the response, so the text doesn't guess it.
  */
 export function batchApproveError(e: unknown): string | null {
   const status = (e as { response?: { status?: unknown } })?.response?.status;
-  return status === 403 ? "Someone else must approve this batch: rows you uploaded were edited after the upload." : null;
+  return status === 403 ? "You can't approve this batch yourself. Ask another manager to approve it." : null;
 }
 
 /** The summary's "Needs attention" count, under either name the API may use; `null` when it sends none (older API). */
