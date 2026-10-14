@@ -246,6 +246,7 @@ export function smartUnavailable(e: unknown): boolean {
 export function smartErrorMessage(e: unknown, fallback: string): string {
   const err = (e as ServiceError) ?? {};
   if (err.code === "AI_IMPORT_DISABLED_FOR_CLIENT") return "Smart import is switched off for this client.";
+  if (err.code === "IMPORT_TOO_MANY_PLANS") return "You have 10 unfinished imports. Finish one, or try again once older drafts expire (after 24 hours).";
   if (err.status === 429) return "Too many smart imports in a short time. Wait a few minutes and try again.";
   if (smartUnavailable(e)) return "The mapper isn't available right now. You can still map the columns yourself.";
   return typeof err.message === "string" && err.message ? err.message : fallback;
