@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Badge, type BadgeTone, Button, Callout, Combobox, Select, Toggle, useDebounced } from "../../../../ui";
 import { useActivityOptions } from "../../smart/api";
-import { CHIP_LABEL, type MatchChip, SOURCE_LABEL, activityChip, categoryChip, categoryText, fieldChip, notInContextText, otherSiteLines, periodText, sheetBlockers } from "../../smart/logic";
-import type { FieldMapping, ProposedActivityMatch, SheetProposal } from "../../smart/types";
+import { CHIP_LABEL, type MatchChip, SOURCE_LABEL, activityChip, categoryChip, categoryText, fieldChip, notInContextText, otherSiteLines, periodText, profileDiffers, profileSummary, profileWhenText, sheetBlockers } from "../../smart/logic";
+import type { FieldMapping, MappingProfile, ProposedActivityMatch, SheetProposal } from "../../smart/types";
 
 const CHIP_TONE: Record<Exclude<MatchChip, null>, BadgeTone> = { matched: "good", remembered: "brand", suggested: "info", check: "warn", skipped: "neutral" };
 
@@ -23,6 +23,10 @@ export interface SheetCardActions {
   onConfirmCategory: () => void;
   onFixedCategory: (id: number, label: string) => void;
   onCategoryValue: (text: string, id: number | null) => void;
+  /** Puts the remembered mapping back on the card. */
+  onUseProfile: (profile: MappingProfile) => void;
+  /** "Forget this mapping": the profile is deleted on the server. */
+  onForgetProfile: (profile: MappingProfile) => void;
 }
 
 /**
@@ -37,9 +41,13 @@ export function SheetCard(props: {
   /** Column names the sheet is known to have (the workbook's headers plus every column the proposal names). */
   columns: string[];
   categories: CategoryOption[];
+  /** What the company confirmed last time for this sheet's layout (XI3), if anything. */
+  profile: MappingProfile | null;
+  forgetting: boolean;
+  forgetError: string | null;
   actions: SheetCardActions;
 }) {
-  const { sheet, actions, index } = props;
+  const { sheet, actions, index, profile } = props;
   const blockers = sheetBlockers(sheet);
   const columnOptions = props.columns.map((c) => ({ value: c, label: c }));
   const catChip = categoryChip(sheet.category);
@@ -56,7 +64,6 @@ export function SheetCard(props: {
           </h2>
           <p className="text-sm text-muted">
             {sheet.data_rows} data {sheet.data_rows === 1 ? "row" : "rows"}, header on row {sheet.header_row}, {SOURCE_LABEL[sheet.source]}.
-            {sheet.source === "profile" && " Last time you mapped this sheet the same way."}
           </p>
         </div>
         <Toggle label={`Include ${sheet.sheet_name}`} hideLabel checked={!sheet.excluded} onChange={(on) => actions.onExclude(!on)} inlineLabel={sheet.excluded ? "Left out" : "Included"} />
@@ -64,6 +71,7 @@ export function SheetCard(props: {
 
       {!sheet.excluded && (
         <div className="mt-4 space-y-5">
+          {profile && <ProfileLine sheet={sheet} profile={profile} forgetting={props.forgetting} error={props.forgetError} actions={actions} />}
           {dropped && <Callout tone="warn" title="Some names aren't in your scope">{dropped}</Callout>}
           {otherSites.length > 0 && (
             <Callout tone="info" title="Other sites in this sheet">
@@ -161,6 +169,38 @@ export function SheetCard(props: {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * "Last time you mapped this as…": the mapping the company confirmed for this
+ * layout before (XI3). "Use it" shows only while the card differs from it;
+ * "Forget this mapping" deletes the profile, so the next upload starts afresh.
+ * Whatever is confirmed here is remembered again when the import commits.
+ */
+function ProfileLine({ sheet, profile, forgetting, error, actions }: { sheet: SheetProposal; profile: MappingProfile; forgetting: boolean; error: string | null; actions: SheetCardActions }) {
+  const differs = profileDiffers(sheet, profile);
+  return (
+    <Callout tone="brand" title="Last time you mapped this as…">
+      <p>
+        {profileSummary(profile)} ({profileWhenText(profile)}).{differs ? " The card below differs; use it, or change anything and the new mapping is remembered on import." : " Change anything and the new mapping is remembered on import."}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {differs && (
+          <Button size="sm" variant="secondary" aria-label={`Use the remembered mapping for ${sheet.sheet_name}`} onClick={() => actions.onUseProfile(profile)}>
+            Use it
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" aria-label={`Forget the remembered mapping for ${sheet.sheet_name}`} disabled={forgetting} onClick={() => actions.onForgetProfile(profile)}>
+          {forgetting ? "Forgetting…" : "Forget this mapping"}
+        </Button>
+      </div>
+      {error && (
+        <p className="mt-2 text-bad" role="alert">
+          {error}
+        </p>
+      )}
+    </Callout>
   );
 }
 

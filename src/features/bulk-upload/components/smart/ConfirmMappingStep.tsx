@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { Button, Callout, EmptyState } from "../../../../ui";
 import {
+  applyProfile,
   canContinue,
   knownColumns,
+  profileFor,
   confirmActivity,
   confirmCategory,
   confirmField,
@@ -14,7 +16,7 @@ import {
   toggleFieldSkip,
   toggleSaveMapping,
 } from "../../smart/logic";
-import type { MappingProposal } from "../../smart/types";
+import type { MappingProfile, MappingProposal } from "../../smart/types";
 import { type CategoryOption, SheetCard } from "./SheetCard";
 
 /**
@@ -28,6 +30,12 @@ export function ConfirmMappingStep(props: {
   siteName: string;
   headers: string[];
   categories: CategoryOption[];
+  /** The company's remembered mappings for these sheets (XI3); empty until read. */
+  profiles: MappingProfile[];
+  onForgetProfile: (profile: MappingProfile) => void;
+  /** The profile being forgotten right now, and the one whose forget failed, with why. */
+  forgetting: MappingProfile | null;
+  forgetFailed: { profile: MappingProfile; message: string } | null;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -65,6 +73,9 @@ export function ConfirmMappingStep(props: {
           siteName={props.siteName}
           columns={columnsOf[i]}
           categories={props.categories}
+          profile={profileFor(sheet, props.profiles)}
+          forgetting={props.forgetting?.fingerprint === sheet.fingerprint}
+          forgetError={props.forgetFailed?.profile.fingerprint === sheet.fingerprint ? props.forgetFailed.message : null}
           actions={{
             onExclude: (excluded) => onChange(setSheetExcluded(proposal, i, excluded)),
             onFieldColumn: (key, column) => onChange(setFieldColumn(proposal, i, key, column)),
@@ -76,6 +87,8 @@ export function ConfirmMappingStep(props: {
             onConfirmCategory: () => onChange(confirmCategory(proposal, i)),
             onFixedCategory: (id, label) => onChange(setFixedCategory(proposal, i, id, label)),
             onCategoryValue: (text, id) => onChange(setCategoryValue(proposal, i, text, id)),
+            onUseProfile: (profile) => onChange(applyProfile(proposal, i, profile)),
+            onForgetProfile: props.onForgetProfile,
           }}
         />
       ))}

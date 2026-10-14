@@ -2,7 +2,7 @@
 import { writeContext } from "../../../ui";
 import type { PlanSummary } from "../../../services/excelService";
 import type { PreviewRow } from "../logic";
-import { CONFIRM_BELOW, type FieldMapping, type IssueSeverity, type MappingProposal, type MappingSource, type ProposedActivityMatch, type ResolvedCategory, type SheetPeriod, type SheetProposal, type SheetSource } from "./types";
+import { CONFIRM_BELOW, type FieldMapping, type IssueSeverity, type MappingProfile, type MappingProposal, type MappingSource, type ProposedActivityMatch, type ResolvedCategory, type SheetPeriod, type SheetProposal, type SheetSource } from "./types";
 
 export const SMART_STEPS = [
   { id: "upload", label: "Upload" },
@@ -250,3 +250,82 @@ export function smartErrorMessage(e: unknown, fallback: string): string {
 }
 
 export const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
+
+// ── Mapping memory (XI3 profiles, "Last time you mapped this as…") ───────────
+
+/**
+ * The profile that fits a sheet: same fingerprint and, when several exist,
+ * the one keyed on the sheet's category (its fixed id, or none when the
+ * category comes from a column); else the newest. `undefined` while loading.
+ */
+export function profileFor(sheet: SheetProposal, profiles: MappingProfile[] | undefined): MappingProfile | null {
+  if (!profiles) return null;
+  const same = profiles.filter((p) => p.fingerprint === sheet.fingerprint && p.site_id === sheet.site_id);
+  if (same.length === 0) return null;
+  const key = sheet.category.kind === "fixed" ? sheet.category.id : null;
+  return same.find((p) => p.category_id === key) ?? same[0];
+}
+
+type Shape = { category: unknown; period: SheetPeriod; fields: [string, string | null, boolean][]; activities: [string, string | null][] };
+
+const shapeOf = (s: SheetProposal): Shape => ({
+  category: s.category.kind === "fixed" ? { id: s.category.id } : { column: s.category.column, values: s.category.values.map((v) => [v.text, v.id]) },
+  period: s.period,
+  fields: s.fields.map((f) => [f.key, f.skipped ? null : f.column, f.skipped]),
+  activities: s.activities.map((a) => [a.sheet_text, a.factor_name]),
+});
+
+/** True when what's on the card is not what the profile remembers, so "Use it" has something to do. */
+export const profileDiffers = (sheet: SheetProposal, profile: MappingProfile): boolean => JSON.stringify(shapeOf(sheet)) !== JSON.stringify(shapeOf(profile.sheet_proposal));
+
+const remembered = <T extends { confidence: number; source: MappingSource }>(x: T): T => ({ ...x, confidence: 1, source: "profile" });
+
+/**
+ * Puts the remembered mapping on the sheet: category, period, fields and
+ * activities as confirmed last time, every part marked Remembered. What the
+ * reader found (name, rows, header row, site column, names out of scope)
+ * stays; so does whether the sheet is left out.
+ */
+export const applyProfile = (p: MappingProposal, index: number, profile: MappingProfile) =>
+  withSheet(p, index, (s) => {
+    const r = profile.sheet_proposal;
+    const category: ResolvedCategory = r.category.kind === "fixed" ? remembered(r.category) : { ...r.category, values: r.category.values.map((v) => (v.id === null ? v : remembered(v))) };
+    return {
+      ...s,
+      layout: r.layout,
+      category,
+      period: r.period,
+      fields: r.fields.map(remembered),
+      activities: r.activities.map((a) => ({ ...remembered(a), save_mapping: false })),
+      confidence: 1,
+      source: "profile",
+    };
+  });
+
+/** "Fuel, each row's date from column "Month"; Quantity from "Litres used", Unit from "UoM"; "Diesel (gen-set)" as Diesel". */
+export function profileSummary(profile: MappingProfile): string {
+  const s = profile.sheet_proposal;
+  const fields = s.fields.filter((f) => f.column && !f.skipped).map((f) => `${f.label} from "${f.column}"`);
+  const activities = s.activities.filter((a) => a.factor_name).map((a) => `"${a.sheet_text}" as ${a.factor_name}`);
+  const parts = [`${categoryText(s.category)}, ${periodText(s.period).replace(/^Each/, "each").replace(/^Every/, "every")}`];
+  if (fields.length) parts.push(fields.join(", "));
+  if (activities.length) parts.push(activities.join(", "));
+  return parts.join("; ");
+}
+
+/** "on 3 Oct 2026, used 4 times" for the profile line. */
+export function profileWhenText(profile: MappingProfile): string {
+  const when = profile.confirmed_at ?? profile.updated_at;
+  const d = new Date(when);
+  const date = Number.isNaN(d.getTime()) ? null : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  const uses = profile.uses === 1 ? "used once" : `used ${profile.uses} times`;
+  return date ? `on ${date}, ${uses}` : uses;
+}
+
+/** Why a DELETE was refused, in the reader's words. */
+export function forgetErrorMessage(e: unknown): string {
+  const err = (e as ServiceError) ?? {};
+  if (err.status === 403) return "Only the person who confirmed this mapping, or an admin, can forget it.";
+  if (err.status === 404) return "This mapping was already forgotten.";
+  return smartErrorMessage(e, "The mapping couldn't be forgotten. Try again.");
+}

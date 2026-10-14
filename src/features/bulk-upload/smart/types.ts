@@ -83,3 +83,24 @@ export interface RowMeta {
   source: MappingSource;
   confidence: number;
 }
+
+/**
+ * `MappingProfile` (XI0, stored by XI3): one confirmed sheet mapping of one
+ * company for one header fingerprint, site and category. Read through
+ * `GET /imports/mapping-profiles?fingerprint=&site_id=`; forgotten with
+ * `DELETE /imports/mapping-profiles/:id`.
+ */
+export interface MappingProfile {
+  id: string;
+  company_id: number;
+  site_id: number;
+  /** null when the sheet takes its category from a column. */
+  category_id: number | null;
+  fingerprint: string;
+  sheet_proposal: SheetProposal;
+  confirmed_by: number | null;
+  confirmed_at: string | null;
+  uses: number;
+  created_at: string;
+  updated_at: string;
+}

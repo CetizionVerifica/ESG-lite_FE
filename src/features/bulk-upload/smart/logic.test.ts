@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { MOCK_PROPOSAL } from "./fixtures";
+import { FINGERPRINT_POWER, MOCK_PROFILE, MOCK_PROPOSAL } from "./fixtures";
 import {
   activityChip,
+  applyProfile,
+  forgetErrorMessage,
+  profileDiffers,
+  profileFor,
+  profileSummary,
+  profileWhenText,
   canContinue,
   categoryChip,
   confirmActivity,
@@ -147,5 +153,49 @@ describe("switch and errors", () => {
     expect(smartErrorMessage({ status: 503 }, "f")).toMatch(/map the columns yourself/);
     expect(smartErrorMessage(new Error("boom"), "f")).toBe("boom");
     expect(smartErrorMessage({}, "f")).toBe("f");
+  });
+});
+
+describe("mapping memory (XI4 2/2)", () => {
+  const fuel = MOCK_PROPOSAL.sheets[0];
+
+  it("picks the profile of the sheet's fingerprint, site and category, newest first otherwise", () => {
+    expect(profileFor(fuel, undefined)).toBeNull();
+    expect(profileFor(fuel, [])).toBeNull();
+    const other = { ...MOCK_PROFILE, id: "x", category_id: 3 };
+    expect(profileFor(fuel, [other, MOCK_PROFILE])?.id).toBe(MOCK_PROFILE.id);
+    expect(profileFor(fuel, [other])?.id).toBe("x");
+    expect(profileFor(fuel, [{ ...MOCK_PROFILE, fingerprint: FINGERPRINT_POWER }])).toBeNull();
+    expect(profileFor(fuel, [{ ...MOCK_PROFILE, site_id: 2 }])).toBeNull();
+  });
+
+  it("knows when the card differs from the profile and puts the profile back", () => {
+    expect(profileDiffers(fuel, MOCK_PROFILE)).toBe(true);
+    const applied = applyProfile(MOCK_PROPOSAL, 0, MOCK_PROFILE).sheets[0];
+    expect(profileDiffers(applied, MOCK_PROFILE)).toBe(false);
+    expect(applied.fields.find((f) => f.key === "activity_unit")).toMatchObject({ column: "UoM", confidence: 1, source: "profile" });
+    expect(applied.activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 1, source: "profile", save_mapping: false });
+    expect(applied.source).toBe("profile");
+    // What the reader found stays.
+    expect(applied.site_column).toEqual(fuel.site_column);
+    expect(applied.not_in_context).toEqual(["Plant 9"]);
+    expect(applied.data_rows).toBe(48);
+    expect(sheetBlockers(applied)).toEqual([]);
+    // A user's own change differs again.
+    expect(profileDiffers(setFieldColumn(applyProfile(MOCK_PROPOSAL, 0, MOCK_PROFILE), 0, "activity_unit", "Unit").sheets[0], MOCK_PROFILE)).toBe(true);
+  });
+
+  it("says what the profile remembers and when", () => {
+    expect(profileSummary(MOCK_PROFILE)).toBe(
+      'Fuel, each row\'s date from column "Month"; Quantity from "Litres used", Unit from "UoM", Invoice number from "Inv #"; "Diesel (gen-set)" as Diesel, "Gasoline 95" as Petrol',
+    );
+    expect(profileWhenText(MOCK_PROFILE)).toBe("on 12 Sep 2026, used 3 times");
+    expect(profileWhenText({ ...MOCK_PROFILE, uses: 1, confirmed_at: null, updated_at: "not a date" })).toBe("used once");
+  });
+
+  it("explains a refused forget", () => {
+    expect(forgetErrorMessage({ status: 403, code: "IMPORT_FORBIDDEN", message: "Forbidden" })).toBe("Only the person who confirmed this mapping, or an admin, can forget it.");
+    expect(forgetErrorMessage({ status: 404 })).toBe("This mapping was already forgotten.");
+    expect(forgetErrorMessage({ status: 500, message: "boom" })).toBe("boom");
   });
 });

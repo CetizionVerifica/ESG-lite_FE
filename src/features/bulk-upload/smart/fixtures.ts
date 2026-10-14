@@ -1,4 +1,4 @@
-import type { MappingProposal } from "./types";
+import type { MappingProfile, MappingProposal } from "./types";
 
 /**
  * A mocked mapping proposal for a two-sheet workbook of Hidd (site 1):
@@ -72,4 +72,36 @@ export const MOCK_PROPOSAL: MappingProposal = {
       excluded: false,
     },
   ],
+};
+
+/**
+ * A profile XI3 remembered for the fuel sheet of Hidd: the same layout
+ * confirmed last month with the unit column and the Petrol match filled in.
+ */
+export const MOCK_PROFILE: MappingProfile = {
+  id: "7d2f6c1e-9b3a-4e58-8c1f-2a6d4b9e0f11",
+  company_id: 1,
+  site_id: 1,
+  category_id: 1,
+  fingerprint: FINGERPRINT_FUEL,
+  sheet_proposal: {
+    ...MOCK_PROPOSAL.sheets[0],
+    category: { kind: "fixed", id: 1, label: "Fuel", confidence: 1, source: "profile" },
+    fields: [
+      { key: "activity_value", label: "Quantity", required: true, column: "Litres used", confidence: 1, source: "profile", skipped: false },
+      { key: "activity_unit", label: "Unit", required: true, column: "UoM", confidence: 1, source: "profile", skipped: false },
+      { key: "extra_invoice", label: "Invoice number", required: false, column: "Inv #", confidence: 1, source: "profile", skipped: false },
+    ],
+    activities: [
+      { sheet_text: "Diesel (gen-set)", category_id: 1, factor_name: "Diesel", confidence: 1, source: "profile", save_mapping: false },
+      { sheet_text: "Gasoline 95", category_id: 1, factor_name: "Petrol", confidence: 1, source: "profile", save_mapping: false },
+    ],
+    confidence: 1,
+    source: "profile",
+  },
+  confirmed_by: 5,
+  confirmed_at: "2026-09-12T08:30:00.000Z",
+  uses: 3,
+  created_at: "2026-08-01T08:00:00.000Z",
+  updated_at: "2026-09-12T08:30:00.000Z",
 };
