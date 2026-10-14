@@ -65,6 +65,8 @@ export interface EmissionsSummary {
   rejected_count: number;
   /** With `batchId`: rows the smart import matched below 80 % or edited in the plan (XI5); absent on older APIs. */
   attention?: number;
+  /** The same count under the name ESG-lite #127 first shipped; read through `attentionOf`. */
+  attention_count?: number;
 }
 
 export interface PaginatedEmissions {

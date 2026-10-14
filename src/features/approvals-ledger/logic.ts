@@ -361,6 +361,12 @@ export function attentionOn(param: string | null, count: number | undefined): bo
   return (count ?? 0) > 0;
 }
 
+/** The summary's "Needs attention" count, under either name the API may use; `null` when it sends none (older API). */
+export function attentionOf(summary: { attention?: unknown; attention_count?: unknown } | null | undefined): number | null {
+  const n = summary?.attention ?? summary?.attention_count;
+  return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
 /** The batch "Approve pending" dialog, which names the rows the smart import was least sure about. */
 export function approveBatchCopy(pending: number, attention: number | undefined): { title: string; description: string; reviewFirst: boolean } {
   const n = attention ?? 0;

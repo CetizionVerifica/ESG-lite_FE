@@ -21,6 +21,7 @@ import {
   rejectEmission,
 } from "../../services/emissionService";
 import type { ColumnConfig, LedgerRow, listParams } from "./logic";
+import { attentionOf } from "./logic";
 
 export const keys = {
   all: ["approvals-ledger"] as const,
@@ -234,7 +235,7 @@ export function useBatchAttention(batch: Pick<EmissionUploadBatch, "upload_batch
     queryFn: async () => {
       const b = batch as EmissionUploadBatch;
       const { summary } = await getEmissionsPaginated({ siteIds: [b.site_id], batchId: b.upload_batch_id, status: "pending", page: 1, limit: 1 });
-      return typeof summary?.attention === "number" ? summary.attention : null;
+      return attentionOf(summary);
     },
   });
 }
@@ -252,7 +253,7 @@ export function useListAttention(params: ReturnType<typeof listParams> | null) {
     enabled: narrow !== null,
     queryFn: async () => {
       const { summary } = await getEmissionsPaginated(narrow as NonNullable<typeof narrow>);
-      return typeof summary?.attention === "number" ? summary.attention : 0;
+      return attentionOf(summary) ?? 0;
     },
     placeholderData: keepPreviousData,
   });

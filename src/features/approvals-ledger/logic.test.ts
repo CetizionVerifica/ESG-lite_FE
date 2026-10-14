@@ -13,6 +13,7 @@ import {
   humanize,
   listParams,
   approveBatchCopy,
+  attentionOf,
   attentionOn,
   importProvenance,
   matchedByText,
@@ -304,6 +305,14 @@ describe("needs attention (XI5)", () => {
     });
     expect(approveBatchCopy(1, 0).title).toBe("Approve 1 pending row?");
     expect(approveBatchCopy(1, 1).title).toBe("Approve the 1 pending row?");
+  });
+
+  it("reads the attention count under either summary name", () => {
+    expect(attentionOf({ attention: 3 })).toBe(3);
+    expect(attentionOf({ attention_count: 2 })).toBe(2);
+    expect(attentionOf({ attention: 0, attention_count: 5 })).toBe(0);
+    expect(attentionOf({})).toBeNull();
+    expect(attentionOf(undefined)).toBeNull();
   });
 
   it("links Review rows with the attention filter on", () => {
