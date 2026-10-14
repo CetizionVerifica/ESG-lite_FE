@@ -1,6 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import type { MutableRefObject } from "react";
 import { getColumnConfigsBySiteAndCategory, getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
-import { fetchPreviewRows, fetchUniqueCategories, importAllRows, uploadExcelGetHeaders } from "../../services/excelService";
+import { type PlanSummary, type SheetArgs, fetchPreviewRows, fetchUniqueCategories, importAllRows, uploadExcelGetHeaders } from "../../services/excelService";
+export type { PlanSummary } from "../../services/excelService";
 import { type HistoricalArgs, previewHistoricalImport, runHistoricalImport } from "../../services/historicalImportService";
 
 export type { HistoricalPlanRow, HistoricalResult } from "../../services/historicalImportService";
@@ -83,28 +85,45 @@ export interface PreviewArgs {
   date: string;
 }
 
-/** The first 100 rows, calculated the way the import will. */
-export function usePreview(args: PreviewArgs | null) {
-  return useQuery({
+const sheetArgs = (a: PreviewArgs): SheetArgs => ({ documentId: a.documentId, mappings: a.mappings, selectedCategories: a.categories, siteId: a.siteId, categoryId: a.categoryId, dateOfReporting: a.date });
+
+export interface PreviewData {
+  /** The plan ESG-lite made (null when every row was refused before planning). */
+  plan: PlanSummary;
+  rows: PreviewRow[];
+  /** Rows planned plus rows refused before planning, the number the Import step reports. */
+  total: number;
+  notSelected: number;
+}
+
+/**
+ * Plans the sheet on ESG-lite and returns the plan with its first 100 rows,
+ * calculated the way the import will. `lastPlan` holds the plan of the
+ * previous preview of this upload: it is cancelled when a new one is made,
+ * so re-mapping doesn't pile up drafts (ESG-lite allows ten per user).
+ */
+export function usePreview(args: PreviewArgs | null, lastPlan: MutableRefObject<string | null>) {
+  return useQuery<PreviewData>({
     queryKey: keys.preview(args),
     enabled: args !== null,
     staleTime: Infinity,
     queryFn: async () => {
       const a = args as PreviewArgs;
-      const res = await fetchPreviewRows(a.documentId, a.mappings, a.categories, a.siteId, a.categoryId, a.date, 1, 100);
-      return { rows: (res.rows ?? []) as PreviewRow[], total: res.total_rows ?? 0 };
+      const res = await fetchPreviewRows(sheetArgs(a), { page: 1, pageSize: 100, cancelPlanId: lastPlan.current });
+      lastPlan.current = res.plan?.plan_id ?? null;
+      return { plan: res.plan, rows: (res.rows ?? []) as PreviewRow[], total: res.total_rows ?? 0, notSelected: res.not_selected ?? 0 };
     },
   });
 }
 
 /**
- * Saves every row as a pending entry. Callbacks given here still run when the
- * page has been left ("Continue in background"); ones passed to mutate don't.
+ * Commits the previewed plan: every ready row becomes a pending entry in one
+ * upload batch. Callbacks given here still run when the page has been left
+ * ("Continue in background"); ones passed to mutate don't.
  */
 export function useImportRows(onDone: (result: ImportResult) => void, onFail: (message: string) => void) {
   return useMutation({
-    mutationFn: async ({ args, userId }: { args: PreviewArgs; userId?: number }): Promise<ImportResult> =>
-      importAllRows(args.documentId, args.mappings, args.categories, args.siteId, args.categoryId, args.date, userId),
+    mutationFn: async ({ args, plan }: { args: PreviewArgs; plan: { plan_id: string; version: number } }): Promise<ImportResult> => importAllRows(sheetArgs(args), plan),
     onSuccess: onDone,
     onError: (e) => onFail(errorMessage(e, "The import didn't finish. Nothing was saved, so you can try again.")),
   });

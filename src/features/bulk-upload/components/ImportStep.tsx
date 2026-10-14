@@ -26,7 +26,7 @@ export function ImportStep(props: {
         <div role="progressbar" aria-label="Import progress" aria-busy="true" className="h-2 overflow-hidden rounded-full bg-tint">
           <span className="block h-full w-full animate-pulse bg-accent" />
         </div>
-        <p className="text-sm text-muted">The rows are saved together, so a failed import saves nothing. You can leave this page; the import keeps running and you'll get a message when it's done.</p>
+        <p className="text-sm text-muted">The rows are checked again and saved together, so a failed import saves nothing. You can leave this page; the import keeps running and you'll get a message when it's done.</p>
         <div className="flex justify-end">
           <Button variant="secondary" onClick={props.onBackground}>
             Continue in background
@@ -62,7 +62,7 @@ export function ImportStep(props: {
       </p>
       <KpiStrip
         items={[
-          { label: "Imported", value: result.inserted, format: "number", primary: true },
+          { label: "Imported", value: result.inserted, format: "number", primary: true, hint: result.fera_inserted ? `plus ${result.fera_inserted} FERA ${result.fera_inserted === 1 ? "row" : "rows"}` : undefined },
           { label: "Skipped", value: result.skipped, format: "number" },
           { label: "Rows in the sheet", value: result.total_rows, format: "number" },
         ]}

@@ -83,8 +83,9 @@ describe("mapping", () => {
 
     fields = toggleSkip(fields, "Supplier");
     expect(matchChip(fields.find((f) => f.key === "Supplier")!)).toBe("skipped");
-    // Category and unit drive the factor lookup and can't be skipped.
+    // Category, unit and value drive the calculation and can't be skipped.
     expect(toggleSkip(fields, "activity_data_unit")).toEqual(fields);
+    expect(toggleSkip(fields, "activity_value")).toEqual(fields);
 
     fields = setHeader(fields, "activity_value", "QUANTITY");
     expect(fields.find((f) => f.key === "activity_value")).toMatchObject({ header: "QUANTITY", auto: false });
@@ -112,14 +113,20 @@ describe("mapping", () => {
 });
 
 describe("preview issues", () => {
-  const ok = { emission_category: "Diesel", global_category_name: "Diesel", total_emission: 1.2 };
+  const ok = { row: 1, state: "ready", issues: [], emission_category: "Diesel", global_category_name: "Diesel", total_emission: 1.2 };
+  const bad = { ...ok, row: 2, state: "issue", row_error: '"Unobtainium" matches no emission factor or mapping.', total_emission: null };
+  const warned = { ...ok, row: 3, row_warning: "Factor from 2024 used for 2026." };
 
-  it("flags skipped, unmatched and zero rows", () => {
+  it("flags rows ESG-lite won't import and rows with a warning", () => {
     expect(rowIssue(ok)).toBeNull();
-    expect(rowIssue({ ...ok, row_error: "Missing Units sold" })?.kind).toBe("skip");
-    expect(rowIssue({ ...ok, global_category_name: null })?.kind).toBe("no-factor");
-    expect(rowIssue({ ...ok, total_emission: 0 })?.kind).toBe("zero");
-    expect(previewCounts([ok, { ...ok, total_emission: 0 }])).toEqual({ valid: 1, issues: 1 });
+    expect(rowIssue(bad)).toEqual({ kind: "skip", text: "Won't import: \"Unobtainium\" matches no emission factor or mapping." });
+    expect(rowIssue({ ...ok, state: "skipped" })?.kind).toBe("skip");
+    expect(rowIssue(warned)).toEqual({ kind: "warn", text: "Factor from 2024 used for 2026." });
+  });
+
+  it("counts from the plan when there is one, else from the rows shown", () => {
+    expect(previewCounts([ok, bad, warned], { rows: 300, ready: 250, issue: 40, skipped: 10, warnings: 5 })).toEqual({ valid: 250, issues: 50, warnings: 5 });
+    expect(previewCounts([ok, bad, warned])).toEqual({ valid: 2, issues: 1, warnings: 1 });
   });
 });
 
@@ -130,8 +137,8 @@ describe("skippedMatrix", () => {
   });
 
   it("falls back to preview rows with an error, and is null with nothing skipped", () => {
-    const preview = [{ emission_category: "A" }, { emission_category: "B", row_error: "Missing field" }];
-    expect(skippedMatrix({ inserted: 1, skipped: 1, total_rows: 2 }, preview)?.matrix[1]).toEqual(["", "B", "Missing field"]);
+    const preview = [{ emission_category: "A" }, { row: 2, emission_category: "B", state: "issue", row_error: "Missing field" }];
+    expect(skippedMatrix({ inserted: 1, skipped: 1, total_rows: 2 }, preview)?.matrix[1]).toEqual(["2", "B", "Missing field"]);
     expect(skippedMatrix({ inserted: 2, skipped: 0, total_rows: 2 }, preview)).toBeNull();
   });
 });

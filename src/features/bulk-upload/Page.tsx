@@ -50,14 +50,18 @@ export default function BulkUploadPage() {
   const [previewArgs, setPreviewArgs] = useState<PreviewArgs | null>(null);
   const [importState, setImportState] = useState<ImportState | null>(null);
   const backgrounded = useRef(false);
+  // The plan of the last preview of this upload, cancelled when a new preview is made.
+  const lastPlan = useRef<string | null>(null);
 
   const mappings = useMemo(() => mappingsFor(fields), [fields]);
   const sheetCategories = useSheetCategories(sheet?.documentId ?? null, mappings);
   const categoryList = sheetCategories.data?.unique_categories ?? null;
   const selected = useMemo(() => new Set((categoryList ?? []).filter((c) => !excluded.has(c))), [categoryList, excluded]);
-  const preview = usePreview(previewArgs);
+  const preview = usePreview(previewArgs, lastPlan);
 
   const onDone = (result: ImportResult) => {
+    // Committed: nothing to cancel if the user previews again.
+    lastPlan.current = null;
     setImportState({ status: "done", result });
     if (backgrounded.current) {
       toast({
@@ -114,11 +118,19 @@ export default function BulkUploadPage() {
   };
 
   const runImport = () => {
-    if (!previewArgs) return;
+    const plan = preview.data?.plan;
+    if (!previewArgs || !plan?.plan_id) return;
     backgrounded.current = false;
     setImportState({ status: "running" });
     setStep(3);
-    importRows.mutate({ args: previewArgs, userId: user?.user_id });
+    importRows.mutate({ args: previewArgs, plan: { plan_id: plan.plan_id, version: plan.version } });
+  };
+
+  // After a failed import the plan may have changed (rows re-checked): preview afresh.
+  const backToPreview = () => {
+    setImportState(null);
+    setStep(2);
+    void preview.refetch();
   };
 
   const startAgain = () => {
@@ -130,6 +142,7 @@ export default function BulkUploadPage() {
     setExcluded(new Set());
     setPreviewArgs(null);
     setImportState(null);
+    lastPlan.current = null;
     upload.reset();
     importRows.reset();
   };
@@ -219,6 +232,7 @@ export default function BulkUploadPage() {
         )}
         {step === 2 && (
           <PreviewStep
+            plan={preview.data?.plan ?? null}
             rows={preview.data?.rows ?? null}
             total={preview.data?.total ?? null}
             loading={preview.isFetching}
@@ -231,7 +245,7 @@ export default function BulkUploadPage() {
         {step === 3 && importState && (
           <ImportStep
             state={importState}
-            total={preview.data?.total ?? 0}
+            total={preview.data?.plan.counts.ready ?? 0}
             skippedFile={skipped ? { partial: skipped.partial } : null}
             onDownloadSkipped={downloadSkipped}
             onBackground={() => {
@@ -240,10 +254,7 @@ export default function BulkUploadPage() {
               navigate("/");
             }}
             onRetry={runImport}
-            onBack={() => {
-              setImportState(null);
-              setStep(2);
-            }}
+            onBack={backToPreview}
             onAnother={startAgain}
           />
         )}
