@@ -116,3 +116,43 @@ export async function searchImportActivities(siteId: number, categoryId: number,
     throw asPlanError(e, "Couldn't load the factor names.");
   }
 }
+
+/** A remembered sheet mapping as XI0 shapes it (`MappingProfile`); the feature types `sheet_proposal`. See src/features/bulk-upload/smart/types.ts. */
+export type MappingProfileRow = {
+  id: string;
+  company_id: number;
+  site_id: number;
+  category_id: number | null;
+  fingerprint: string;
+  sheet_proposal: unknown;
+  confirmed_by: number | null;
+  confirmed_at: string | null;
+  uses: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * The company's remembered mappings for a sheet's header fingerprint and the
+ * upload's site (XI3 `GET /imports/mapping-profiles`), newest confirmation
+ * first. A Superadmin names the client with `companyId`.
+ */
+export async function listMappingProfiles(fingerprint: string, siteId: number, companyId?: number | null): Promise<MappingProfileRow[]> {
+  try {
+    const res = await api.get("/imports/mapping-profiles", { params: { fingerprint, site_id: siteId, ...(companyId && { company_id: companyId }) } });
+    return Array.isArray(res.data) ? res.data : (res.data?.profiles ?? []);
+  } catch (e) {
+    throw asPlanError(e, "Couldn't load the remembered mappings.");
+  }
+}
+
+/** "Forget this mapping" (XI3 `DELETE /imports/mapping-profiles/:id`). */
+export async function deleteMappingProfile(id: string): Promise<{ id: string; deleted: true }> {
+  try {
+    // data-loss-reviewed: deletes one remembered mapping (import_mapping_profile row), never emission data; the user confirms "Forget it" on the sheet card first, and rows already imported don't change.
+    const res = await api.delete(`/imports/mapping-profiles/${encodeURIComponent(id)}`);
+    return res.data;
+  } catch (e) {
+    throw asPlanError(e, "The mapping couldn't be forgotten.");
+  }
+}

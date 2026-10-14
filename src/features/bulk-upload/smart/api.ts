@@ -1,16 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type MutableRefObject, useEffect } from "react";
 import { fetchSmartPreview, importProposal, proposeMapping } from "../../../services/excelService";
-import { type PatchPlanBody, patchImportPlan, searchImportActivities, skipRowsWithIssue } from "../../../services/importPlansService";
+import { type PatchPlanBody, deleteMappingProfile, listMappingProfiles, patchImportPlan, searchImportActivities, skipRowsWithIssue } from "../../../services/importPlansService";
 import type { PreviewData } from "../api";
 import type { ImportResult, PreviewRow } from "../logic";
-import type { MappingProposal } from "./types";
+import type { MappingProfile, MappingProposal } from "./types";
 import { rowHasCode, smartErrorMessage } from "./logic";
 
 export const smartKeys = {
   all: ["bulk-upload", "smart"] as const,
   preview: (args: SmartPreviewArgs | null) => [...smartKeys.all, "preview", args] as const,
   activities: (siteId: number, categoryId: number, q: string) => [...smartKeys.all, "activities", siteId, categoryId, q] as const,
+  profiles: (siteId: number, fingerprint: string, companyId: number | null) => [...smartKeys.all, "profiles", siteId, fingerprint, companyId] as const,
 };
 
 /** `POST /v1/excel/propose`: the mapper's proposal for the uploaded workbook and the chosen site. */
@@ -105,4 +106,40 @@ export function useSmartImport(onDone: (result: ImportResult) => void, onFail: (
     onSuccess: onDone,
     onError: (e) => onFail(smartErrorMessage(e, "The import didn't finish. Nothing was saved, so you can try again.")),
   });
+}
+
+/**
+ * The company's remembered mappings for every sheet of the proposal (XI3,
+ * one read per distinct fingerprint, cached for the session). A Superadmin
+ * names the client. Off until the client switch is known to be on, because
+ * ESG-lite refuses the read otherwise.
+ */
+export function useMappingProfiles(proposal: MappingProposal | null, companyId: number | null, enabled: boolean) {
+  const qc = useQueryClient();
+  const siteId = proposal?.site_id ?? 0;
+  const fingerprints = [...new Set((proposal?.sheets ?? []).map((s) => s.fingerprint))];
+  const results = useQueries({
+    queries: fingerprints.map((fingerprint) => ({
+      queryKey: smartKeys.profiles(siteId, fingerprint, companyId),
+      enabled: enabled && proposal !== null,
+      staleTime: 5 * 60_000,
+      queryFn: () => listMappingProfiles(fingerprint, siteId, companyId) as Promise<MappingProfile[]>,
+    })),
+  });
+  const profiles: MappingProfile[] = results.flatMap((r) => r.data ?? []);
+  const forget = useMutation({
+    // A 404 means it is gone already (forgotten elsewhere): the same outcome as a delete.
+    mutationFn: async (profile: MappingProfile) => {
+      try {
+        return await deleteMappingProfile(profile.id);
+      } catch (e) {
+        if ((e as { status?: number }).status === 404) return { id: profile.id, deleted: true as const };
+        throw e;
+      }
+    },
+    onSuccess: (_res, profile) => {
+      qc.setQueryData<MappingProfile[]>(smartKeys.profiles(siteId, profile.fingerprint, companyId), (old) => (old ?? []).filter((p) => p.id !== profile.id));
+    },
+  });
+  return { profiles, loading: results.some((r) => r.isLoading), forget };
 }

@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { Button, Callout, EmptyState } from "../../../../ui";
 import {
+  applyProfile,
   canContinue,
   knownColumns,
+  profileFor,
   confirmActivity,
   confirmCategory,
   confirmField,
@@ -14,7 +16,7 @@ import {
   toggleFieldSkip,
   toggleSaveMapping,
 } from "../../smart/logic";
-import type { MappingProposal } from "../../smart/types";
+import type { MappingProfile, MappingProposal } from "../../smart/types";
 import { type CategoryOption, SheetCard } from "./SheetCard";
 
 /**
@@ -28,12 +30,19 @@ export function ConfirmMappingStep(props: {
   siteName: string;
   headers: string[];
   categories: CategoryOption[];
+  /** The company's remembered mappings for these sheets (XI3); empty until read. */
+  profiles: MappingProfile[];
+  onForgetProfile: (profile: MappingProfile) => void;
+  /** The profile being forgotten right now, and the one whose forget failed, with why. */
+  forgetting: MappingProfile | null;
+  forgetFailed: { profile: MappingProfile; message: string } | null;
   onBack: () => void;
   onNext: () => void;
 }) {
   const { proposal, onChange } = props;
   const columnsOf = useMemo(() => proposal.sheets.map((s) => knownColumns(s, props.headers)), [proposal.sheets, props.headers]);
   const included = proposal.sheets.filter((s) => !s.excluded).length;
+  const profiles = proposal.sheets.map((s) => profileFor(s, props.profiles));
   const ready = canContinue(proposal);
 
   if (proposal.sheets.length === 0) {
@@ -65,6 +74,9 @@ export function ConfirmMappingStep(props: {
           siteName={props.siteName}
           columns={columnsOf[i]}
           categories={props.categories}
+          profile={profiles[i]}
+          forgetting={!!profiles[i] && props.forgetting?.id === profiles[i]?.id}
+          forgetError={profiles[i] && props.forgetFailed?.profile.id === profiles[i]?.id ? props.forgetFailed.message : null}
           actions={{
             onExclude: (excluded) => onChange(setSheetExcluded(proposal, i, excluded)),
             onFieldColumn: (key, column) => onChange(setFieldColumn(proposal, i, key, column)),
@@ -76,6 +88,8 @@ export function ConfirmMappingStep(props: {
             onConfirmCategory: () => onChange(confirmCategory(proposal, i)),
             onFixedCategory: (id, label) => onChange(setFixedCategory(proposal, i, id, label)),
             onCategoryValue: (text, id) => onChange(setCategoryValue(proposal, i, text, id)),
+            onUseProfile: (profile) => onChange(applyProfile(proposal, i, profile)),
+            onForgetProfile: props.onForgetProfile,
           }}
         />
       ))}

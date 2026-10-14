@@ -4,8 +4,8 @@ import { Button, Callout, Stepper, exportMatrix, useToast } from "../../../../ui
 import { type Site, errorMessage, useUploadFile } from "../../api";
 import type { UploadContext } from "../../hooks/useUploadContext";
 import { type ImportResult, fileProblem, selectedSite, skippedMatrix } from "../../logic";
-import { type SmartPreviewArgs, usePatchPlan, usePropose, useSkipIssue, useSmartImport, useSmartPreview } from "../../smart/api";
-import { SMART_STEPS, reviewRowsLink, rowsText, smartErrorMessage, smartUnavailable } from "../../smart/logic";
+import { type SmartPreviewArgs, useMappingProfiles, usePatchPlan, usePropose, useSkipIssue, useSmartImport, useSmartPreview } from "../../smart/api";
+import { SMART_STEPS, forgetErrorMessage, reviewRowsLink, rowsText, smartErrorMessage, smartUnavailable } from "../../smart/logic";
 import type { MappingProposal } from "../../smart/types";
 import { ImportStep, type ImportState } from "../ImportStep";
 import { ConfirmMappingStep } from "./ConfirmMappingStep";
@@ -27,6 +27,8 @@ export function SmartImportFlow(props: {
   sites: { data: Site[]; loading: boolean; error: string | null; retry: () => void };
   contributor: boolean;
   clientEnabled: boolean | null;
+  /** Only a Manager can open Approvals; others get the "site's manager approves them" note instead of the link. */
+  canReview: boolean;
   /** The mapper couldn't be reached: offer the manual mapper instead. */
   onUseManual: () => void;
   onLocked: (locked: boolean) => void;
@@ -51,6 +53,9 @@ export function SmartImportFlow(props: {
   const [importState, setImportState] = useState<ImportState | null>(null);
   const backgrounded = useRef(false);
   const lastPlan = useRef<string | null>(null);
+
+  // XI3: what the company confirmed for these layouts before. A Superadmin reads the chosen client's.
+  const memory = useMappingProfiles(proposal, contributor ? null : ctx.clientId, contributor || props.clientEnabled === true);
 
   const onPlanned = useCallback((planId: string) => setPreviewArgs((a) => (a && a.planId === null ? { ...a, planId } : a)), []);
   const preview = useSmartPreview(previewArgs, lastPlan, onPlanned);
@@ -199,6 +204,10 @@ export function SmartImportFlow(props: {
             siteName={site?.name ?? "this site"}
             headers={workbook.headers}
             categories={categories}
+            profiles={memory.profiles}
+            onForgetProfile={(profile) => memory.forget.mutate(profile)}
+            forgetting={memory.forget.isPending ? (memory.forget.variables ?? null) : null}
+            forgetFailed={memory.forget.error && memory.forget.variables ? { profile: memory.forget.variables, message: forgetErrorMessage(memory.forget.error) } : null}
             onBack={() => setStep(0)}
             onNext={toReview}
           />
@@ -232,7 +241,7 @@ export function SmartImportFlow(props: {
             total={plan?.counts.ready ?? 0}
             skippedFile={skipped ? { partial: skipped.partial } : null}
             onDownloadSkipped={downloadSkipped}
-            reviewLink={result?.upload_batch_id && ctx.siteId !== null ? reviewRowsLink(ctx.siteId, result.upload_batch_id) : null}
+            reviewLink={props.canReview && result?.upload_batch_id && ctx.siteId !== null ? reviewRowsLink(ctx.siteId, result.upload_batch_id) : null}
             onBackground={() => {
               backgrounded.current = true;
               toast({ title: "Import running in the background", description: "You'll get a message here when it's done." });

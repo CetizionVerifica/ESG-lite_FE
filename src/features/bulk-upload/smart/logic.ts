@@ -2,7 +2,7 @@
 import { writeContext } from "../../../ui";
 import type { PlanSummary } from "../../../services/excelService";
 import type { PreviewRow } from "../logic";
-import { CONFIRM_BELOW, type FieldMapping, type IssueSeverity, type MappingProposal, type MappingSource, type ProposedActivityMatch, type ResolvedCategory, type SheetPeriod, type SheetProposal, type SheetSource } from "./types";
+import { CONFIRM_BELOW, type FieldMapping, type IssueSeverity, type MappingProfile, type MappingProposal, type MappingSource, type ProposedActivityMatch, type ResolvedCategory, type SheetPeriod, type SheetProposal, type SheetSource } from "./types";
 
 export const SMART_STEPS = [
   { id: "upload", label: "Upload" },
@@ -253,3 +253,132 @@ export function smartErrorMessage(e: unknown, fallback: string): string {
 }
 
 export const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
+
+// ── Mapping memory (XI3 profiles, "Last time you mapped this as…") ───────────
+
+/**
+ * The profile that fits a sheet: same fingerprint and, when several exist,
+ * the one keyed on the sheet's category (its fixed id, or none when the
+ * category comes from a column); else the newest. `undefined` while loading.
+ */
+export function profileFor(sheet: SheetProposal, profiles: MappingProfile[] | undefined): MappingProfile | null {
+  if (!profiles) return null;
+  const same = profiles.filter((p) => p.fingerprint === sheet.fingerprint && p.site_id === sheet.site_id);
+  if (same.length === 0) return null;
+  const key = sheet.category.kind === "fixed" ? sheet.category.id : null;
+  return same.find((p) => p.category_id === key) ?? same[0];
+}
+
+/** JSON with object keys sorted, so the same value always reads the same (jsonb reorders keys). */
+const canonical = (v: unknown): string =>
+  Array.isArray(v)
+    ? `[${v.map(canonical).join(",")}]`
+    : v !== null && typeof v === "object"
+      ? `{${Object.keys(v as Record<string, unknown>)
+          .sort()
+          .map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`)
+          .join(",")}}`
+      : JSON.stringify(v);
+
+const byFirst = (a: [string, ...unknown[]], b: [string, ...unknown[]]) => a[0].localeCompare(b[0]);
+
+/** What a mapping decides, in a fixed order: the profile and the card compare equal when they map the sheet the same way. */
+const shapeOf = (s: SheetProposal) =>
+  canonical({
+    category: s.category.kind === "fixed" ? { id: s.category.id } : { column: s.category.column, values: s.category.values.map((v): [string, number | null] => [v.text, v.id]).sort(byFirst) },
+    period: s.period.kind === "months_as_columns" ? { kind: s.period.kind, columns: [...s.period.columns].sort((a, b) => a.column.localeCompare(b.column)) } : s.period,
+    fields: s.fields.map((f): [string, string | null, boolean] => [f.key, f.skipped ? null : f.column, f.skipped]).sort(byFirst),
+    activities: s.activities.map((a): [string, string | null] => [a.sheet_text, a.factor_name]).sort(byFirst),
+  });
+
+/**
+ * True when "Use it" would change the card: the remembered category, period
+ * and fields differ, or a wording on the card was matched differently last
+ * time. Wordings only one side has don't count (a new name keeps its own match).
+ */
+export function profileDiffers(sheet: SheetProposal, profile: MappingProfile): boolean {
+  const wordings = (s: SheetProposal) => [...s.activities.map((a) => a.sheet_text), ...(s.category.kind === "column" ? s.category.values.map((v) => v.text) : [])];
+  const theirs = new Set(wordings(profile.sheet_proposal));
+  const texts = new Set(wordings(sheet).filter((t) => theirs.has(t)));
+  const restrict = (s: SheetProposal): SheetProposal => ({
+    ...s,
+    activities: s.activities.filter((a) => texts.has(a.sheet_text)),
+    category: s.category.kind === "column" ? { ...s.category, values: s.category.values.filter((v) => texts.has(v.text)) } : s.category,
+  });
+  return shapeOf(restrict(sheet)) !== shapeOf(restrict(profile.sheet_proposal));
+}
+
+const remembered = <T extends { confidence: number; source: MappingSource }>(x: T): T => ({ ...x, confidence: 1, source: "profile" });
+
+/**
+ * Puts the remembered mapping on the sheet: category, period and fields as
+ * confirmed last time, marked Remembered. Activities and column-category
+ * values stay the ones this upload holds: a wording the profile knows takes
+ * its remembered match, a new wording keeps its own (and its Check chip), and
+ * a wording only the profile knows is not added. What the reader found (name,
+ * rows, header row, site column, names out of scope) stays; so does whether
+ * the sheet is left out.
+ */
+export const applyProfile = (p: MappingProposal, index: number, profile: MappingProfile) =>
+  withSheet(p, index, (s) => {
+    const r = profile.sheet_proposal;
+    const rememberedMatch = new Map(r.activities.map((a) => [a.sheet_text, a]));
+    const activities = s.activities.map((a) => {
+      const m = rememberedMatch.get(a.sheet_text);
+      return m ? { ...a, factor_name: m.factor_name, category_id: m.category_id, confidence: 1, source: "profile" as const, save_mapping: false } : a;
+    });
+    let category: ResolvedCategory;
+    if (r.category.kind === "fixed") {
+      category = remembered(r.category);
+    } else {
+      const rememberedValue = new Map(r.category.values.map((v) => [v.text, v]));
+      const current = s.category.kind === "column" ? s.category.values : [];
+      category = {
+        kind: "column",
+        column: r.category.column,
+        values: current.map((v) => {
+          const m = rememberedValue.get(v.text);
+          return m ? { ...v, id: m.id, confidence: 1, source: "profile" as const } : v;
+        }),
+      };
+    }
+    const keepsOwnParts = activities.some((a) => a.source !== "profile") || (category.kind === "column" && category.values.some((v) => v.source !== "profile"));
+    return {
+      ...s,
+      layout: r.layout,
+      category,
+      period: r.period,
+      fields: r.fields.map(remembered),
+      activities,
+      confidence: keepsOwnParts ? Math.min(1, ...activities.map((a) => a.confidence)) : 1,
+      source: keepsOwnParts ? "mixed" : "profile",
+    };
+  });
+
+/** "Fuel, each row's date from column "Month"; Quantity from "Litres used", Unit from "UoM"; "Diesel (gen-set)" as Diesel". */
+export function profileSummary(profile: MappingProfile): string {
+  const s = profile.sheet_proposal;
+  const fields = s.fields.filter((f) => f.column && !f.skipped).map((f) => `${f.label} from "${f.column}"`);
+  const activities = s.activities.filter((a) => a.factor_name).map((a) => `"${a.sheet_text}" as ${a.factor_name}`);
+  const parts = [`${categoryText(s.category)}, ${periodText(s.period).replace(/^Each/, "each").replace(/^Every/, "every")}`];
+  if (fields.length) parts.push(fields.join(", "));
+  if (activities.length) parts.push(activities.join(", "));
+  return parts.join("; ");
+}
+
+/** "on 3 Oct 2026, used 4 times" for the profile line. */
+export function profileWhenText(profile: MappingProfile): string {
+  const when = profile.confirmed_at ?? profile.updated_at;
+  const d = new Date(when);
+  const date = Number.isNaN(d.getTime()) ? null : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  const uses = profile.uses === 1 ? "used once" : `used ${profile.uses} times`;
+  return date ? `on ${date}, ${uses}` : uses;
+}
+
+/** Why a DELETE was refused, in the reader's words. */
+export function forgetErrorMessage(e: unknown): string {
+  const err = (e as ServiceError) ?? {};
+  if (err.status === 403) return "Only the person who confirmed this mapping, or an admin, can forget it.";
+  if (err.status === 404) return "This mapping was already forgotten.";
+  return smartErrorMessage(e, "The mapping couldn't be forgotten. Try again.");
+}

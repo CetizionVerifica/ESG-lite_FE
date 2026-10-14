@@ -221,6 +221,7 @@ export default function BulkUploadPage() {
           sites={siteList}
           contributor={contributor}
           clientEnabled={clientEnabled}
+          canReview={role === "Manager"}
           onUseManual={() => switchMode("manual")}
           onLocked={setSmartLocked}
         />

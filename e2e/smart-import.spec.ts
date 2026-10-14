@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test";
-import { MOCK_PROPOSAL } from "../src/features/bulk-upload/smart/fixtures";
+import { MOCK_PROFILE, MOCK_PROPOSAL } from "../src/features/bulk-upload/smart/fixtures";
 
 /**
  * XI4 Smart import smoke test. The AI service (`/v1/excel/*`) and ESG-lite
@@ -54,11 +54,11 @@ function planFor(version: number, skippedOtherSite: boolean) {
   };
 }
 
-type Call = { method: string; path: string; body: unknown };
+type Call = { method: string; path: string; body: unknown; query: string };
 
-async function signIn(page: Page, role: string, user: object, companySites = [HIDD]) {
+async function signIn(page: Page, role: string, user: object, companySites = [HIDD], profiles: (typeof MOCK_PROFILE)[] = []) {
   const calls: Call[] = [];
-  const state = { version: 1, skippedOtherSite: false };
+  const state = { version: 1, skippedOtherSite: false, profiles: [...profiles], forgetRefusals: 1 };
   await page.addInitScript(
     ([r, u]) => {
       localStorage.setItem("token", "test-token");
@@ -78,7 +78,7 @@ async function signIn(page: Page, role: string, user: object, companySites = [HI
         return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*" } });
       }
       const body = request.method() === "GET" || path.endsWith("/upload") ? null : request.postDataJSON();
-      calls.push({ method: request.method(), path, body });
+      calls.push({ method: request.method(), path, body, query: url.search });
 
       if (path.startsWith("/v1/excel/")) {
         if (path.endsWith("/upload")) return json({ document_id: 42, headers: HEADERS });
@@ -102,6 +102,16 @@ async function signIn(page: Page, role: string, user: object, companySites = [HI
         const code = url.searchParams.get("code");
         const rows = ROWS.filter((r) => !code || r.issues.some((i) => i.code === code)).map((r) => ({ row_ref: r.row_ref, state: r.state }));
         return json({ ...planFor(state.version, state.skippedOtherSite), rows, page: 1, page_size: 200, total_rows: rows.length });
+      }
+      if (path === "/imports/mapping-profiles") {
+        const fp = url.searchParams.get("fingerprint");
+        return json(state.profiles.filter((p) => p.fingerprint === fp && String(p.site_id) === url.searchParams.get("site_id")));
+      }
+      if (path.startsWith("/imports/mapping-profiles/") && request.method() === "DELETE") {
+        if (state.forgetRefusals-- > 0) return json({ code: "IMPORT_FORBIDDEN", message: "Forbidden" }, 403);
+        const id = decodeURIComponent(path.split("/").pop() as string);
+        state.profiles = state.profiles.filter((p) => p.id !== id);
+        return json({ id, deleted: true });
       }
       if (path.endsWith("/imports/context/activities")) {
         return json([
@@ -247,6 +257,60 @@ test("a superadmin sees the switch per client and can fall back to the manual ma
   await expect(page.getByRole("heading", { name: "Smart import" })).toBeVisible();
 });
 
+test("a remembered mapping is shown on its sheet, can be used and can be forgotten", async ({ page }) => {
+  const calls = await signIn(page, "Manager", MANAGER, [HIDD], [MOCK_PROFILE]);
+  await page.goto("/capture/upload");
+  await page.locator('input[type="file"]').setInputFiles(WORKBOOK);
+  await page.getByRole("button", { name: "Upload and work out the mapping" }).click();
+  await expect(page.getByRole("heading", { name: "Fuel 2026" })).toBeVisible();
+
+  // One read per sheet fingerprint, for the upload's site, with the user's own token (no client id).
+  await expect.poll(() => calls.filter((c) => c.path === "/imports/mapping-profiles").length).toBe(2);
+  const reads = calls.filter((c) => c.path === "/imports/mapping-profiles");
+  expect(reads.map((c) => c.query).sort()).toEqual([`?fingerprint=${MOCK_PROPOSAL.sheets[0].fingerprint}&site_id=1`, `?fingerprint=${MOCK_PROPOSAL.sheets[1].fingerprint}&site_id=1`]);
+  const fuelCard = page.getByRole("region", { name: "Fuel 2026" });
+  const line = fuelCard.getByText("Last time you mapped this as…");
+  await expect(line).toBeVisible();
+  await expect(fuelCard).toContainText('Unit from "UoM"');
+  await expect(fuelCard).toContainText("on 12 Sep 2026, used 3 times");
+  await expect(page.getByRole("region", { name: "Power" }).getByText("Last time you mapped this as…")).toHaveCount(0);
+  await expect(page.getByText('Still to check: Unit, "Gasoline 95".')).toBeVisible();
+
+  // Use it: the card takes the remembered mapping, nothing is left to check.
+  await page.getByRole("button", { name: "Use the remembered mapping for Fuel 2026" }).click();
+  await expect(page.getByText("Still to check:", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Column for Unit in Fuel 2026" })).toHaveValue("UoM");
+  await expect(page.getByRole("button", { name: "Use the remembered mapping for Fuel 2026" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Continue to the rows" })).toBeEnabled();
+
+  // Forget: refused once (not the person who confirmed it), then gone.
+  // It asks first; "Keep it" sends nothing.
+  const forget = page.getByRole("button", { name: "Forget the remembered mapping for Fuel 2026" });
+  await forget.click();
+  await page.getByRole("button", { name: "Keep it" }).click();
+  expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+  await forget.click();
+  await page.getByRole("button", { name: "Forget it" }).click();
+  await expect(fuelCard.getByRole("alert")).toHaveText("Only the person who confirmed this mapping, or an admin, can forget it.");
+  await forget.click();
+  await page.getByRole("button", { name: "Forget it" }).click();
+  await expect(line).toHaveCount(0);
+  const deletes = calls.filter((c) => c.method === "DELETE");
+  expect(deletes.map((c) => c.path)).toEqual([`/imports/mapping-profiles/${MOCK_PROFILE.id}`, `/imports/mapping-profiles/${MOCK_PROFILE.id}`]);
+  // The mapping taken from the profile stays on the card.
+  await expect(page.getByRole("combobox", { name: "Column for Unit in Fuel 2026" })).toHaveValue("UoM");
+});
+
+test("a superadmin reads the chosen client's remembered mappings", async ({ page }) => {
+  const calls = await signIn(page, "Superadmin", { user_id: 9, name: "Sam Staff", email: "sam@example.com" }, [HIDD], [MOCK_PROFILE]);
+  await page.goto("/capture/upload?client=1&site=1");
+  await expect(page.getByRole("heading", { name: "Smart import" })).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles(WORKBOOK);
+  await page.getByRole("button", { name: "Upload and work out the mapping" }).click();
+  await expect(page.getByRole("region", { name: "Fuel 2026" }).getByText("Last time you mapped this as…")).toBeVisible();
+  expect(calls.find((c) => c.path === "/imports/mapping-profiles")?.query).toBe(`?fingerprint=${MOCK_PROPOSAL.sheets[0].fingerprint}&site_id=1&company_id=1`);
+});
+
 test("an Admin picks from every site of their client", async ({ page }) => {
   const askar = { site_id: 3, name: "Askar", categories: HIDD.categories };
   await signIn(page, "Admin", { user_id: 6, name: "Ada Admin", email: "ada@example.com", site: HIDD, sites: [] }, [HIDD, { ...askar, company: COMPANY_ON }]);
@@ -256,6 +320,23 @@ test("an Admin picks from every site of their client", async ({ page }) => {
   await site.click();
   await expect(page.getByRole("option", { name: "Askar" })).toBeVisible();
   await expect(page.getByRole("option", { name: "Hidd" })).toBeVisible();
+});
+
+test("an Admin's import result says the site's manager approves the rows (no Approvals link)", async ({ page }) => {
+  await signIn(page, "Admin", { user_id: 6, name: "Ada Admin", email: "ada@example.com", site: HIDD, sites: [] }, [HIDD]);
+  await page.goto("/capture/upload?site=1");
+  await page.locator('input[type="file"]').setInputFiles(WORKBOOK);
+  await page.getByRole("button", { name: "Upload and work out the mapping" }).click();
+  const unit = page.getByRole("combobox", { name: "Column for Unit in Fuel 2026" });
+  await unit.click();
+  await unit.fill("UoM");
+  await page.getByRole("option", { name: "UoM" }).click();
+  await page.getByRole("button", { name: "Confirm Gasoline 95" }).click();
+  await page.getByRole("button", { name: "Continue to the rows" }).click();
+  await page.getByRole("button", { name: "Import 3 rows, leave 2 out" }).click();
+  await expect(page.getByText("Imported 3 rows.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Review rows" })).toHaveCount(0);
+  await expect(page.getByText("The site's manager approves them in Approvals, under Upload batches.")).toBeVisible();
 });
 
 test("a manager's site of a client with the switch off isn't offered in smart mode", async ({ page }) => {
