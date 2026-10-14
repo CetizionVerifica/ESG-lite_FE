@@ -1,5 +1,6 @@
 import { Download } from "lucide-react";
-import { Button, Callout, KpiStrip } from "../../../ui";
+import { Link } from "react-router-dom";
+import { Button, Callout, KpiStrip, cn, focusRing } from "../../../ui";
 import type { ImportResult } from "../logic";
 
 export type ImportState = { status: "running" } | { status: "done"; result: ImportResult } | { status: "error"; message: string };
@@ -10,6 +11,8 @@ export function ImportStep(props: {
   /** Null when there is nothing to download (no skips, or an older service with no row list and no skips in the preview). */
   skippedFile: { partial: boolean } | null;
   onDownloadSkipped: () => void;
+  /** Smart import: "Review rows" in Approvals for the batch just made. */
+  reviewLink?: string | null;
   onBackground: () => void;
   onRetry: () => void;
   onBack: () => void;
@@ -68,8 +71,18 @@ export function ImportStep(props: {
         ]}
       />
       {result.inserted > 0 && (
-        <Callout tone="info" title="Rows arrive as Pending">
-          The site's manager approves them in Approvals, under Upload batches.
+        <Callout
+          tone="info"
+          title="Rows arrive as Pending"
+          action={
+            props.reviewLink ? (
+              <Link to={props.reviewLink} className={cn("text-sm font-medium text-accent underline", focusRing)}>
+                Review rows
+              </Link>
+            ) : undefined
+          }
+        >
+          {props.reviewLink ? "Approve or reject each row in Approvals, or approve all pending rows of the batch at once." : "The site's manager approves them in Approvals, under Upload batches."}
         </Callout>
       )}
       {result.skipped > 0 && (

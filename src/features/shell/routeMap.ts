@@ -91,7 +91,7 @@ export const SHELL_ROUTES = [
   { id: "capture-forms", path: "/capture/forms", title: "Data-entry forms", crumb: ["Capture", "Data-entry forms"], roles: ["Superadmin"], spec: "P24" },
   { id: "capture-form", path: "/capture/forms/:id", title: "Form", crumb: ["Capture", "Data-entry forms", "Edit"], roles: ["Superadmin"], spec: "P24" },
   // Contributors reach it from Add data, for their own sites (P27).
-  { id: "bulk-upload", path: "/capture/upload", title: "Bulk upload", crumb: ["Capture", "Bulk upload"], roles: ["Superadmin", "User"], spec: "P27" },
+  { id: "bulk-upload", path: "/capture/upload", title: "Bulk upload", crumb: ["Capture", "Bulk upload"], roles: ["Superadmin", "Admin", "Manager", "User"], spec: "P27" },
 ] as const satisfies readonly ShellRoute[];
 
 export type ShellRouteId = (typeof SHELL_ROUTES)[number]["id"];

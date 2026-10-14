@@ -166,7 +166,9 @@ describe("contributorSites", () => {
       { category_id: 5, category_name: "FERA" },
     ];
     const sites = contributorSites({ sites: [{ site_id: 2, name: "Hidd", company: { company_id: 1, name: "Midal" }, categories: cats }] });
-    expect(sites).toEqual([{ site_id: 2, name: "Hidd", company: { company_id: 1, name: "Midal" }, categories: [cats[0]] }]);
+    expect(sites).toEqual([{ site_id: 2, name: "Hidd", company: { company_id: 1, name: "Midal", ai_import_enabled: null }, categories: [cats[0]] }]);
+    // The client's Smart import switch (XI0) rides along when the server sends it.
+    expect(contributorSites({ sites: [{ site_id: 2, name: "Hidd", company: { company_id: 1, name: "Midal", ai_import_enabled: true } }] })[0].company?.ai_import_enabled).toBe(true);
     expect(contributorSites({ site: { site_id: 3, name: "Pune" } })).toEqual([{ site_id: 3, name: "Pune", company: null, categories: [] }]);
     expect(contributorSites(null)).toEqual([]);
   });

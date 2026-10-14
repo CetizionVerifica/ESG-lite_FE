@@ -279,7 +279,7 @@ export function fileProblem(file: File): string | null {
 type RawSite = {
   site_id: number;
   name: string;
-  company?: { company_id: number; name?: string } | null;
+  company?: { company_id: number; name?: string; ai_import_enabled?: boolean | null } | null;
   categories?: { category_id: number; category_name: string; scope?: string | null }[] | null;
 };
 
@@ -294,7 +294,7 @@ export function contributorSites(user: unknown) {
   return raw.map((s) => ({
     site_id: s.site_id,
     name: s.name,
-    company: s.company ? { company_id: s.company.company_id, name: s.company.name ?? "" } : null,
+    company: s.company ? { company_id: s.company.company_id, name: s.company.name ?? "", ai_import_enabled: s.company.ai_import_enabled ?? null } : null,
     categories: (s.categories ?? []).filter((c) => c.category_name.toLowerCase() !== "fera"),
   }));
 }

@@ -13,7 +13,8 @@ import type { ImportResult, PreviewRow } from "./logic";
 export type Site = {
   site_id: number;
   name: string;
-  company?: { company_id: number; name: string } | null;
+  /** `ai_import_enabled` is the client's Smart import switch (XI0); absent on older servers = off. */
+  company?: { company_id: number; name: string; ai_import_enabled?: boolean | null } | null;
   categories?: { category_id: number; category_name: string; scope?: string | null }[] | null;
 };
 
