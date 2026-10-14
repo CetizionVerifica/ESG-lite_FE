@@ -34,8 +34,9 @@ function makeRows(): Row[] {
     activity_data: { fuel_type: "1", quantity: String(100 * n), emission_category: "Diesel (average biofuel blend)" },
     total_emission: (0.268 * n).toFixed(4),
     category: diesel,
-    // Rows 1 and 2 came in Claude's batch b-2; row 3 was typed in.
+    // Rows 1 and 2 came in Claude's batch b-2; row 3 was typed in. Row 2 was matched below 80 % (XI5).
     upload_batch_id: n < 3 ? "b-2" : null,
+    extra_data: n < 3 ? { import: { channel: "mcp", row_ref: `Fuel!A${n + 1}`, ...(n === 2 && { meta: { source: "llm", confidence: 0.64 } }) } } : undefined,
   }));
 }
 
@@ -52,6 +53,10 @@ const config = [
 async function signIn(page: Page) {
   const rows = makeRows();
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  // Every list request's query (limit > 1), to check what the page fetched.
+  const lists: URLSearchParams[] = [];
+  // `attention: false` plays an ESG-lite without XI5: no count in the summary and the filter ignored.
+  const api = { attention: true };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Manager");
@@ -109,9 +114,12 @@ async function signIn(page: Page) {
       if (path.endsWith("/user/emissions")) {
         const status = url.searchParams.get("status");
         const batchId = url.searchParams.get("batchId");
+        const attention = api.attention && batchId && url.searchParams.get("attention") === "1";
+        const needsAttention = (r: Row) => (r.extra_data as { import?: { meta?: unknown } } | undefined)?.import?.meta !== undefined;
         const data = rows
           .filter((r) => !status || r.status === status)
           .filter((r) => !batchId || r.upload_batch_id === batchId)
+          .filter((r) => !attention || needsAttention(r))
           .map((r) => ({
             ...r,
             unit: "tCO2e",
@@ -124,12 +132,15 @@ async function signIn(page: Page) {
             emission_factor_snapshot: { emission_factor_id: 9, emission_category_name: "Diesel (average biofuel blend)", factor_value: "0.002680", denominator_unit: "litre", source: "DEFRA", year: 2024 },
           }));
         const count = (s: string) => rows.filter((r) => r.status === s && (!batchId || r.upload_batch_id === batchId)).length;
-        return json({ data, total: data.length, summary: { total_emission: 0, pending_count: count("pending"), approved_count: count("approved"), rejected_count: count("rejected") } });
+        // Like ESG-lite: the attention count follows the request's filters, status included.
+        const attentionCount = api.attention && batchId ? rows.filter((r) => (!status || r.status === status) && r.upload_batch_id === batchId && needsAttention(r)).length : undefined;
+        if (url.searchParams.get("limit") !== "1") lists.push(url.searchParams);
+        return json({ data, total: data.length, summary: { total_emission: 0, pending_count: count("pending"), approved_count: count("approved"), rejected_count: count("rejected"), ...(attentionCount !== undefined && { attention: attentionCount }) } });
       }
       return json({});
     },
   );
-  return { rows, calls };
+  return { rows, calls, lists, api };
 }
 
 test("a manager clears the queue with the keyboard, with undo", async ({ page }) => {
@@ -399,14 +410,16 @@ test("Review rows opens the approvals queue with only that batch's rows, one by 
   await expect(page).toHaveURL(/category=20/);
   await expect(page.getByRole("status").filter({ hasText: "Showing the pending rows of one upload batch" })).toBeVisible();
   const queue = page.getByRole("table", { name: "Entries waiting for approval" });
-  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(2);
+  // The batch has one row that needs attention (XI5), so that chip is on and the row comes first.
+  await expect(page.getByRole("button", { name: "Needs attention (1)" })).toHaveAttribute("aria-pressed", "true");
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(1);
   await expect(page.getByRole("tab", { name: /Approvals/ })).toContainText("2");
 
   // Each row is still reviewed on its own: A approves the focused row only.
   await queue.locator("tbody tr").first().focus();
   await page.keyboard.press("a");
   await expect(page.getByText("Entry approved")).toBeVisible();
-  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(1);
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(0);
   expect(calls.filter((c) => c.path.endsWith("/batch/b-2/approve"))).toHaveLength(0);
 
   await page.getByRole("button", { name: "Show all rows" }).click();
@@ -426,4 +439,64 @@ test("an upload notification's link lands on its batch, and a missing batch says
   await page.goto("/data/approvals?view=batches&batch=b-gone");
   await expect(page.getByRole("status").filter({ hasText: "That upload batch isn't in this list" })).toBeVisible();
   await expect(table.getByRole("row", { name: /Diesel/ })).not.toHaveAttribute("aria-current", "true");
+});
+
+test("Review rows shows the rows that need attention first, with how each was matched", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/approvals?site=1&category=20&period=all&batch=b-2");
+  // The chip is on by itself while the batch has such rows.
+  const chip = page.getByRole("button", { name: "Needs attention (1)" });
+  await expect(chip).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("status").filter({ hasText: "rows of one upload batch that need attention" })).toBeVisible();
+  const queue = page.getByRole("table", { name: "Entries waiting for approval" });
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(1);
+
+  await queue.getByRole("row", { name: /Diesel · Hidd/ }).first().click();
+  await expect(page.getByTestId("drawer-provenance")).toHaveText("Imported from Fuel!A3 · Matched by: suggested (64 %)");
+  await page.keyboard.press("Escape");
+
+  await chip.click();
+  await expect(page).toHaveURL(/attention=0/);
+  await expect(chip).toHaveAttribute("aria-pressed", "false");
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(2);
+});
+
+test("the attention chip counts pending rows only, and the list loads once with it", async ({ page }) => {
+  const { rows, lists } = await signIn(page);
+  await page.goto("/data/approvals?site=1&category=20&period=all&batch=b-2");
+  await expect(page.getByRole("button", { name: "Needs attention (1)" })).toHaveAttribute("aria-pressed", "true");
+  const batchLists = lists.filter((q) => q.get("batchId") === "b-2");
+  expect(batchLists.length).toBeGreaterThan(0);
+  expect(batchLists.every((q) => q.get("attention") === "true" || q.get("attention") === "1")).toBe(true);
+
+  // Once the low-confidence row is approved, the pending queue has none: no chip, both other rows show.
+  rows.find((r) => r.pk_id === 2)!.status = "approved";
+  await page.reload();
+  const queue = page.getByRole("table", { name: "Entries waiting for approval" });
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /Needs attention/ })).toHaveCount(0);
+});
+
+test("an API without the attention count shows no chip, even with ?attention=1", async ({ page }) => {
+  const { api } = await signIn(page);
+  api.attention = false;
+  await page.goto("/data/approvals?site=1&category=20&period=all&batch=b-2&attention=1");
+  const queue = page.getByRole("table", { name: "Entries waiting for approval" });
+  await expect(queue.getByRole("row", { name: /Diesel · Hidd/ })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: /Needs attention/ })).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "need attention" })).toHaveCount(0);
+});
+
+test("Approve pending names the rows that need attention and offers to review them first", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/approvals?view=batches");
+  const batches = page.getByRole("table", { name: "Upload batches" });
+  await batches.getByRole("row", { name: /Electricity/ }).getByRole("button", { name: "Approve pending" }).click();
+  await expect(page.getByRole("dialog", { name: "Approve all 12 pending rows?" })).toBeVisible();
+  await expect(page.getByText("1 of 12 pending rows was matched by the smart import below 80 %", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve all" })).toBeVisible();
+  await page.getByRole("button", { name: "Review them first" }).click();
+  await expect(page).toHaveURL(/batch=b-2/);
+  await expect(page).toHaveURL(/attention=1/);
+  await expect(page.getByRole("button", { name: "Needs attention (1)" })).toHaveAttribute("aria-pressed", "true");
 });

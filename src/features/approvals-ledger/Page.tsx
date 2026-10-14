@@ -44,6 +44,7 @@ import {
   useBatches,
   useColumnConfigs,
   useEmissionList,
+  useListAttention,
   useReviewMutations,
   useStatusCounts,
 } from "./api";
@@ -52,7 +53,7 @@ import { BatchesView } from "./components/BatchesView";
 import { ReportMenu } from "./components/ReportMenu";
 import { RecordDrawer } from "./components/RecordDrawer";
 import { ledgerColumns } from "./components/columns";
-import { DEFAULT_SORT, type LedgerRow, PAGE_SIZES, type Tab, asStatus, effectiveStatus, listParams, mergeFera, periodQuery, rowPeriodLabel } from "./logic";
+import { DEFAULT_SORT, type LedgerRow, PAGE_SIZES, type Tab, asStatus, attentionOn, effectiveStatus, listParams, mergeFera, periodQuery, rowPeriodLabel } from "./logic";
 
 type SiteOption = { site_id: number; name: string; categories?: { category_id: number; category_name: string }[] };
 
@@ -178,8 +179,23 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const [deleting, setDeleting] = useState<LedgerRow[] | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const query = listParams({ tab, siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period: ctx.period, search: filters.q, status, batchId, sort, page, pageSize });
-  const list = useEmissionList(query);
+  // XI5: a batch's pending rows the smart import was least sure about come first, as a filter chip
+  // that is on while there are any. The count uses the list's own filters (pending only), so the
+  // chip never opens on approved rows.
+  const base = { tab, siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period: ctx.period, search: filters.q, status, batchId, sort, page, pageSize };
+  const attentionParam = params.get("attention");
+  const attentionCountQ = useListAttention(tab === "approvals" && batchId ? listParams({ ...base, attention: false }) : null);
+  const attentionCount = attentionCountQ.data;
+  // Offered only when the API counts attention rows; an older API ignores the filter, so `?attention=1` alone isn't enough.
+  const attentionOffered = tab === "approvals" && !!batchId && typeof attentionCount === "number" && (attentionCount > 0 || attentionParam === "1");
+  const attention = attentionOffered && attentionOn(attentionParam, attentionCount ?? undefined);
+  const setAttention = (on: boolean) => setParams((p) => { const next = new URLSearchParams(p); next.set("attention", on ? "1" : "0"); return next; }, { replace: true });
+  // With the chip on by default, wait for the count before the first list fetch, so the list
+  // doesn't load once without the filter and then again with it (resetting page and selection).
+  const waitForAttention = tab === "approvals" && !!batchId && attentionParam === null && attentionCount === undefined && !attentionCountQ.isError;
+
+  const query = listParams({ ...base, attention });
+  const list = useEmissionList(query, !waitForAttention);
   const review = useReviewMutations();
 
   // New filters start again on page 1 with nothing selected.
@@ -323,8 +339,8 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   // One URL write: two functional setSearchParams calls in one tick both start from the
   // same params, so the second would undo the first.
   const clearFilters = () =>
-    setParams((p) => writeContext(withoutParams(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS[tab]), ["batch"]), { categoryIds: [], period: null }), { replace: true });
-  const showAllRows = () => setParams((p) => withoutParams(p, ["batch"]), { replace: true });
+    setParams((p) => writeContext(withoutParams(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS[tab]), ["batch", "attention"]), { categoryIds: [], period: null }), { replace: true });
+  const showAllRows = () => setParams((p) => withoutParams(p, ["batch", "attention"]), { replace: true });
   // Every row shown was just approved, but the server still lists them (undo window): more may follow.
   const savingApprovals = tab === "approvals" && rows.length === 0 && (list.data?.total ?? 0) > 0;
   const empty = savingApprovals ? (
@@ -365,9 +381,20 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
         <p role="status" className="flex flex-wrap items-center gap-2 rounded-control border border-line bg-panel px-3 py-2 text-sm text-ink">
           <Layers aria-hidden className="size-4 text-muted" />
           <span>
-            Showing the {tab === "approvals" ? "pending " : ""}rows of one upload batch.
+            Showing the {tab === "approvals" ? "pending " : ""}rows of one upload batch{attention ? " that need attention" : ""}.
             {tab === "approvals" && <span className="text-muted"> Approve or reject each one here; rows you have handled leave the list.</span>}
           </span>
+          {attentionOffered && (
+            <Button
+              size="sm"
+              variant={attention ? "primary" : "secondary"}
+              aria-pressed={attention}
+              title="Rows the smart import matched below 80 % or that were changed before the import"
+              onClick={() => setAttention(!attention)}
+            >
+              Needs attention{attentionCount != null ? ` (${attentionCount})` : ""}
+            </Button>
+          )}
           <Button size="sm" variant="ghost" className="ml-auto" onClick={showAllRows}>
             Show all rows
           </Button>
