@@ -284,10 +284,16 @@ test("a remembered mapping is shown on its sheet, can be used and can be forgott
   await expect(page.getByRole("button", { name: "Continue to the rows" })).toBeEnabled();
 
   // Forget: refused once (not the person who confirmed it), then gone.
+  // It asks first; "Keep it" sends nothing.
   const forget = page.getByRole("button", { name: "Forget the remembered mapping for Fuel 2026" });
   await forget.click();
+  await page.getByRole("button", { name: "Keep it" }).click();
+  expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+  await forget.click();
+  await page.getByRole("button", { name: "Forget it" }).click();
   await expect(fuelCard.getByRole("alert")).toHaveText("Only the person who confirmed this mapping, or an admin, can forget it.");
   await forget.click();
+  await page.getByRole("button", { name: "Forget it" }).click();
   await expect(line).toHaveCount(0);
   const deletes = calls.filter((c) => c.method === "DELETE");
   expect(deletes.map((c) => c.path)).toEqual([`/imports/mapping-profiles/${MOCK_PROFILE.id}`, `/imports/mapping-profiles/${MOCK_PROFILE.id}`]);

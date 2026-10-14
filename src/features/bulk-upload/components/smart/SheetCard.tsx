@@ -180,6 +180,8 @@ export function SheetCard(props: {
  */
 function ProfileLine({ sheet, profile, forgetting, error, actions }: { sheet: SheetProposal; profile: MappingProfile; forgetting: boolean; error: string | null; actions: SheetCardActions }) {
   const differs = profileDiffers(sheet, profile);
+  // Forgetting deletes the company's remembered mapping, so it asks first.
+  const [confirming, setConfirming] = useState(false);
   return (
     <Callout tone="brand" title="Last time you mapped this as…">
       <p>
@@ -191,10 +193,33 @@ function ProfileLine({ sheet, profile, forgetting, error, actions }: { sheet: Sh
             Use it
           </Button>
         )}
-        <Button size="sm" variant="ghost" aria-label={`Forget the remembered mapping for ${sheet.sheet_name}`} disabled={forgetting} onClick={() => actions.onForgetProfile(profile)}>
-          {forgetting ? "Forgetting…" : "Forget this mapping"}
-        </Button>
+        {!confirming && (
+          <Button size="sm" variant="ghost" aria-label={`Forget the remembered mapping for ${sheet.sheet_name}`} disabled={forgetting} onClick={() => setConfirming(true)}>
+            {forgetting ? "Forgetting…" : "Forget this mapping"}
+          </Button>
+        )}
       </div>
+      {confirming && (
+        <div className="mt-2" role="group" aria-label={`Confirm forgetting the mapping for ${sheet.sheet_name}`}>
+          <p>Forget this mapping for everyone at your company? The next upload of this layout is worked out afresh. Rows already imported don't change.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="danger"
+              autoFocus
+              onClick={() => {
+                setConfirming(false);
+                actions.onForgetProfile(profile);
+              }}
+            >
+              Forget it
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>
+              Keep it
+            </Button>
+          </div>
+        </div>
+      )}
       {error && (
         <p className="mt-2 text-bad" role="alert">
           {error}
