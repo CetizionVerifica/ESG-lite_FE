@@ -15,7 +15,9 @@ import {
   isRole,
   lostPermissions,
   multiSite,
+  otherClientSites,
   retargetCategories,
+  sendsSites,
   sitesForClient,
   timezoneOptions,
   validate,
@@ -75,12 +77,18 @@ export function UserDrawer(props: Props) {
 
   const clientSites = sitesForClient(props.sites.data, draft.company_id);
   const categories = availableCategories(props.sites.data, draft.site_ids);
-  const setSites = (ids: number[]) =>
+  // Picking sites keeps only the chosen client's: a person works for one client.
+  const setSites = (picked: number[]) => {
+    const ids = picked.filter((id) => clientSites.some((s) => s.site_id === id));
     setDraft((d) => ({
       ...d,
       site_ids: ids,
       category_ids: retargetCategories(d.category_ids, availableCategories(props.sites.data, d.site_ids), availableCategories(props.sites.data, ids)),
     }));
+  };
+  const foreign = otherClientSites(props.sites.data, draft);
+  // The server refuses a mix only when the save sends the sites.
+  const blockedByForeign = foreign.length > 0 && sendsSites(draft, row);
   const setRole = (role: Role | null) =>
     setDraft((d) => {
       const next = withRole(d, role);
@@ -92,7 +100,7 @@ export function UserDrawer(props: Props) {
   const close = () => (dirty && !props.saving ? setConfirmClose(true) : props.onClose());
   const save = () => {
     setTouched(true);
-    if (!invalid) props.onSave(draft);
+    if (!invalid && !blockedByForeign) props.onSave(draft);
   };
 
   const title = creating ? "Add user" : row!.displayName;
@@ -214,6 +222,21 @@ export function UserDrawer(props: Props) {
                 emptyText={draft.company_id === null ? "Choose a client first" : "This client has no sites"}
                 loading={props.sites.loading}
               />
+            )}
+
+            {foreign.length > 0 && (
+              <Callout
+                tone="warn"
+                title={`Also has sites of another client: ${foreign.map((s) => s.name).join(", ")}`}
+                action={
+                  <Button size="sm" onClick={() => setSites(draft.site_ids)}>
+                    Keep only this client's sites
+                  </Button>
+                }
+              >
+                A person works for one client.{" "}
+                {blockedByForeign ? "Remove the other client's sites to save these changes." : "Changing their sites or role removes the other client's sites."}
+              </Callout>
             )}
 
             {multiSite(draft.role) && (

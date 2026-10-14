@@ -10,7 +10,9 @@ import {
   lastActive,
   lostPermissions,
   matchesFilters,
+  otherClientSites,
   retargetCategories,
+  sendsSites,
   sitesForClient,
   timezoneOptions,
   toPayload,
@@ -150,5 +152,26 @@ describe("timezoneOptions", () => {
   it("includes the browser's zones and keeps an unknown current one", () => {
     expect(timezoneOptions(null)).toContain("UTC");
     expect(timezoneOptions("Mars/Base")[0]).toBe("Mars/Base");
+  });
+});
+
+describe("one client per person", () => {
+  // A Manager given Steel Co's Plant A and Other Co's plant before mixes were refused.
+  const [mixed] = buildRows([{ user_id: 4, email: "mix@x.io", role: "Manager", sites: [{ site_id: 1, name: "Plant A" }, { site_id: 3, name: "Other plant" }] }], SITES);
+
+  it("finds picked sites of another client than the draft's", () => {
+    const d = draftFrom(mixed);
+    expect(d.company_id).toBe(2); // the first client by site name ("Other plant")
+    expect(otherClientSites(SITES, d).map((s) => s.site_id)).toEqual([1]);
+    expect(otherClientSites(SITES, { company_id: 1, site_ids: [1, 2] })).toEqual([]);
+    expect(otherClientSites(SITES, { company_id: null, site_ids: [1, 3] })).toEqual([]);
+  });
+
+  it("sends the sites on create and when the sites or the role change, not for a name change", () => {
+    const d = draftFrom(mixed);
+    expect(sendsSites({ ...d, name: "Mia" }, mixed)).toBe(false);
+    expect(sendsSites({ ...d, site_ids: [3] }, mixed)).toBe(true);
+    expect(sendsSites({ ...d, role: "User" }, mixed)).toBe(true);
+    expect(sendsSites(d, null)).toBe(true);
   });
 });

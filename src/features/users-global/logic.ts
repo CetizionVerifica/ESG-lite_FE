@@ -149,6 +149,16 @@ export function sitesForClient(sites: Site[], companyId: number | null): Site[] 
   return sites.filter((s) => s.company?.company_id === companyId).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Picked sites that belong to another client than the draft's (a person given
+ * several clients' sites before that was refused). A person works for one
+ * client, so the server refuses a mix.
+ */
+export function otherClientSites(sites: Site[], d: Pick<UserDraft, "company_id" | "site_ids">): Site[] {
+  if (d.company_id === null) return [];
+  return sites.filter((s) => d.site_ids.includes(s.site_id) && !!s.company && s.company.company_id !== d.company_id);
+}
+
 /** Every category the chosen sites report, by id. */
 export function availableCategories(sites: Site[], siteIds: number[]): Category[] {
   const out = new Map<number, Category>();
@@ -217,6 +227,12 @@ export type UserPayload = {
  * Request body. On edit only changed fields go out: re-sending sites makes the
  * backend re-seed categories, which would undo a Manager's own narrowing.
  */
+/** Whether a save sends the sites: on create, or when the sites or the role change. */
+export function sendsSites(d: UserDraft, row: UserRow | null): boolean {
+  const base = row ? draftFrom(row) : null;
+  return !base || !sameIds(d.site_ids, base.site_ids) || d.role !== base.role;
+}
+
 export function toPayload(d: UserDraft, row: UserRow | null): UserPayload {
   const base = row ? draftFrom(row) : null;
   const p: UserPayload = {};
@@ -228,7 +244,7 @@ export function toPayload(d: UserDraft, row: UserRow | null): UserPayload {
   if (!base || d.role !== base.role) p.role = d.role ?? undefined;
   if (!base || d.timezone !== base.timezone) p.timezone = d.timezone;
 
-  const sitesChanged = !base || !sameIds(d.site_ids, base.site_ids) || d.role !== base.role;
+  const sitesChanged = sendsSites(d, row);
   if (sitesChanged) {
     if (multiSite(d.role)) p.site_ids = d.site_ids;
     else p.site_id = d.role === "Admin" ? (d.site_ids[0] ?? null) : null;

@@ -30,8 +30,8 @@ function makeUsers() {
   ];
 }
 
-async function signIn(page: Page) {
-  let users = makeUsers();
+async function signIn(page: Page, extra: ReturnType<typeof makeUsers> = []) {
+  let users = [...makeUsers(), ...extra];
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
   const me = { user_id: 1, name: "Sam", last_name: "Staff", email: "sam@example.com" };
   await page.addInitScript((u) => {
@@ -210,4 +210,26 @@ test("a superadmin demotes a manager, sends a reset link and sees why someone ca
   const self = page.getByRole("dialog", { name: "Sam Staff" });
   await expect(self.getByLabel("Role")).toBeDisabled();
   await expect(self.getByRole("button", { name: "Remove" })).toHaveCount(0);
+});
+
+test("someone with sites of two clients can't be saved with both", async ({ page }) => {
+  // Given sites of two clients before that was refused: Hidd (first client) and Pune (Gulf client).
+  const zara = { user_id: 7, name: "Zara", last_name: undefined, email: "zara@example.com", role: "Manager", site: null, sites: [SITES[0], SITES[2]], categories: [FUEL, POWER], last_login_at: null };
+  const { calls } = await signIn(page, [zara]);
+  await page.goto("/setup/users");
+  await usersTable(page).getByRole("row", { name: /Zara/ }).click();
+  const drawer = page.getByRole("dialog", { name: "Zara" });
+  const warning = drawer.getByText("Also has sites of another client: Pune");
+  await expect(warning).toBeVisible();
+
+  await drawer.getByLabel("Role").selectOption("User");
+  await drawer.getByRole("button", { name: "Save" }).click();
+  await expect(drawer.getByText("Remove the other client's sites to save these changes.")).toBeVisible();
+  expect(calls.some((c) => c.path.endsWith("/admin/users/7"))).toBe(false);
+
+  await drawer.getByRole("button", { name: "Keep only this client's sites" }).click();
+  await expect(warning).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Zara saved")).toBeVisible();
+  expect(calls.find((c) => c.path.endsWith("/admin/users/7"))?.body).toMatchObject({ role: "User", site_ids: [1] });
 });
