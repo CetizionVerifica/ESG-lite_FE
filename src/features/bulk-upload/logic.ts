@@ -84,8 +84,12 @@ export function buildFields(config: ColumnConfig | null): MapField[] {
   return fields;
 }
 
-/** Category and unit drive the factor lookup, so they can't be skipped. */
-export const canSkip = (f: MapField) => f.kind !== "category" && f.kind !== "unit";
+/**
+ * Category, unit and the value drive the calculation, so they can't be skipped:
+ * ESG-lite refuses a row with no value (the old service guessed one from any
+ * number column). Multi-field forms have no value field, only their own columns.
+ */
+export const canSkip = (f: MapField) => f.kind !== "category" && f.kind !== "unit" && f.kind !== "value";
 
 /** Match each field to a header with the same name (its key, its extra key, or the site's column name). */
 export function autoMap(fields: MapField[], headers: string[]): MapField[] {
@@ -141,42 +145,78 @@ export function mappingsFor(fields: MapField[]): Record<string, string> {
 /** Header row for "Download template": the names autoMap recognises. */
 export const templateHeaders = (fields: MapField[]) => fields.map((f) => f.sourceColumn || (f.kind === "date" ? "Reporting date" : f.label));
 
-/** One preview row as `/v1/excel/preview` returns it: the mapped cells plus the calculation. */
+/** One issue on a planned row, as ESG-lite reports it (IM0 `RowIssue`). */
+export interface PreviewIssue {
+  code: string;
+  severity: "error" | "warning" | string;
+  message: string;
+  field?: string | null;
+  /** True when the AI service refused the row before planning (no category, unit or value). */
+  local?: boolean;
+}
+
+/**
+ * One preview row as `/v1/excel/preview` returns it: ESG-lite's planned row
+ * (state, issues, factor, total, FERA twin) flattened with the sheet's cells.
+ */
 export interface PreviewRow {
+  /** Data row number in the sheet, 1 = the first row under the header. */
+  row?: number;
+  row_ref?: string;
+  state?: "ready" | "issue" | "skipped" | string;
+  issues?: PreviewIssue[];
   emission_category?: string;
+  activity_value?: number | string | null;
   activity_data_unit?: string;
   global_category_name?: string | null;
   factor_value?: number | null;
+  factor_year?: number | null;
   denominator_unit?: string | null;
   total_emission?: number | null;
+  fera_total_emission?: number | null;
   date_of_reporting?: string;
+  /** The error messages, joined: the row won't import. */
   row_error?: string;
+  /** The warning messages, joined: the row imports as shown. */
+  row_warning?: string;
   [column: string]: unknown;
 }
 
-export type IssueKind = "skip" | "no-factor" | "zero";
+export type IssueKind = "skip" | "warn";
 export interface RowIssue {
   kind: IssueKind;
   text: string;
 }
 
 /**
- * What is wrong with a preview row, if anything. `row_error` rows are skipped on
- * import (multi-field categories). Other categories still save a row with no
- * factor match or no value, at 0 tCO₂e, so those are flagged rather than hidden.
+ * What ESG-lite found on a preview row, if anything. A row in state `issue`
+ * (or `skipped`) is left out on import; a warning (a factor from another year,
+ * a client total ignored) imports as shown.
  */
 export function rowIssue(row: PreviewRow): RowIssue | null {
-  if (row.row_error) return { kind: "skip", text: `Won't import: ${row.row_error}` };
-  if (!row.global_category_name) {
-    return { kind: "no-factor", text: row.emission_category ? `No factor for "${row.emission_category}", saved as 0 tCO₂e` : "No emission category, saved as 0 tCO₂e" };
-  }
-  if (!Number(row.total_emission)) return { kind: "zero", text: "Works out to 0 tCO₂e. Check the value and unit." };
+  if (row.state === "issue" || row.state === "skipped" || row.row_error) return { kind: "skip", text: `Won't import: ${row.row_error || "see the issue on this row"}` };
+  if (row.row_warning) return { kind: "warn", text: row.row_warning };
   return null;
 }
 
-export function previewCounts(rows: PreviewRow[]) {
-  const issues = rows.filter((r) => rowIssue(r)).length;
-  return { valid: rows.length - issues, issues };
+export interface PlanCounts {
+  rows: number;
+  ready: number;
+  issue: number;
+  skipped: number;
+  warnings: number;
+}
+
+/**
+ * Rows that will import, rows that won't and rows with a warning, from the
+ * plan's own counts (the whole sheet), or from the rows shown when the plan
+ * couldn't be made.
+ */
+export function previewCounts(rows: PreviewRow[], counts?: PlanCounts | null) {
+  if (counts) return { valid: counts.ready, issues: counts.issue + counts.skipped, warnings: counts.warnings };
+  const issues = rows.filter((r) => rowIssue(r)?.kind === "skip").length;
+  const warnings = rows.filter((r) => rowIssue(r)?.kind === "warn").length;
+  return { valid: rows.length - issues, issues, warnings };
 }
 
 /** One skipped row as `/v1/excel/import` lists it (python_AI_service #21). */
@@ -192,12 +232,15 @@ export interface ImportResult {
   total_rows: number;
   upload_batch_id?: string | null;
   skipped_rows?: SkippedRow[];
+  fera_inserted?: number;
+  not_selected?: number;
+  plan_id?: string | null;
 }
 
 /**
- * Rows for the skipped-rows CSV. The service lists them since #21; an older
- * service only gives a count, so fall back to the preview rows it would skip
- * (the first page only, which the file says).
+ * Rows for the skipped-rows CSV. The service lists them; should it only give a
+ * count, fall back to the preview rows ESG-lite flagged (the first page only,
+ * which the file says).
  */
 export function skippedMatrix(result: ImportResult, preview: PreviewRow[]): { matrix: string[][]; partial: boolean } | null {
   if (!result.skipped) return null;
@@ -207,11 +250,10 @@ export function skippedMatrix(result: ImportResult, preview: PreviewRow[]): { ma
       partial: result.skipped_rows.length < result.skipped,
     };
   }
-  const fromPreview = preview.filter((r) => r.row_error);
+  const fromPreview = preview.filter((r) => rowIssue(r)?.kind === "skip");
   if (!fromPreview.length) return null;
   return {
-    // Row stays empty: the preview holds only the ticked categories, so its positions aren't sheet rows.
-    matrix: [["Row", "Emission category", "Reason"], ...fromPreview.map((r) => ["", String(r.emission_category ?? ""), String(r.row_error)])],
+    matrix: [["Row", "Emission category", "Reason"], ...fromPreview.map((r) => [r.row == null ? "" : String(r.row), String(r.emission_category ?? ""), String(r.row_error ?? "")])],
     partial: true,
   };
 }
