@@ -4,7 +4,7 @@ import { Inbox } from "lucide-react";
 import type { EmissionUploadBatch } from "../../../services/emissionService";
 import { Badge, type BadgeTone, Button, type Column, DataTable, EmptyState, Modal, Select, Textarea, cn, focusRing, formatDateTime, formatNumber, rejectReasonError, useToast, withoutParams } from "../../../ui";
 import { errorMessage, useBatchAttention, useBatchMutations, useBatches } from "../api";
-import { BATCH_SOURCE_LABEL, BATCH_SOURCE_OPTIONS, type BatchSource, approveBatchCopy, batchSource, parseBatchSource, reviewRowsPath } from "../logic";
+import { BATCH_SOURCE_LABEL, BATCH_SOURCE_OPTIONS, type BatchSource, approveBatchCopy, batchApproveError, batchSource, parseBatchSource, reviewRowsPath } from "../logic";
 
 const SOURCE_TONE: Record<BatchSource, BadgeTone> = { claude: "brand", bulk: "neutral", api: "info" };
 
@@ -145,7 +145,7 @@ export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categ
         onClose={() => setApproving(null)}
         title={copy?.title ?? "Approve pending rows?"}
         description={approving ? `${approving.category_name} · ${approving.site_name}, uploaded ${formatDateTime(approving.uploaded_at)}. Approved and rejected rows stay as they are.` : undefined}
-        error={m.approve.isError ? errorMessage(m.approve.error, "Couldn't approve. Nothing was changed.") : null}
+        error={m.approve.isError ? (batchApproveError(m.approve.error) ?? errorMessage(m.approve.error, "Couldn't approve. Nothing was changed.")) : null}
         primaryAction={{
           label: copy?.reviewFirst ? "Approve all" : "Approve pending",
           loading: m.approve.isPending,

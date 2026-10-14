@@ -14,6 +14,7 @@ import {
   listParams,
   approveBatchCopy,
   attentionOf,
+  batchApproveError,
   attentionOn,
   importProvenance,
   matchedByText,
@@ -305,6 +306,12 @@ describe("needs attention (XI5)", () => {
     });
     expect(approveBatchCopy(1, 0).title).toBe("Approve 1 pending row?");
     expect(approveBatchCopy(1, 1).title).toBe("Approve the 1 pending row?");
+  });
+
+  it("explains a refused batch approve by the uploader", () => {
+    expect(batchApproveError({ response: { status: 403, data: { message: "You can't approve or reject your own entries" } } })).toMatch(/Someone else must approve/);
+    expect(batchApproveError({ response: { status: 500 } })).toBeNull();
+    expect(batchApproveError(new Error("x"))).toBeNull();
   });
 
   it("reads the attention count under either summary name", () => {
