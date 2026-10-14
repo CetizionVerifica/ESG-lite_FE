@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { getColumnConfigsBySiteAndCategory, getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
-import { type PlanSummary, type SheetArgs, fetchPreviewRows, fetchUniqueCategories, importAllRows, uploadExcelGetHeaders } from "../../services/excelService";
+import { ExcelServiceError, type PlanSummary, type SheetArgs, fetchPreviewRows, fetchUniqueCategories, importAllRows, uploadExcelGetHeaders } from "../../services/excelService";
 export type { PlanSummary } from "../../services/excelService";
 import { type HistoricalArgs, previewHistoricalImport, runHistoricalImport } from "../../services/historicalImportService";
 
@@ -121,11 +121,16 @@ export function usePreview(args: PreviewArgs | null, lastPlan: MutableRefObject<
  * upload batch. Callbacks given here still run when the page has been left
  * ("Continue in background"); ones passed to mutate don't.
  */
-export function useImportRows(onDone: (result: ImportResult) => void, onFail: (message: string) => void) {
+/** True when the plan moved under the preview: the same plan_id and version would be refused again, so only a fresh preview helps. */
+export function isPlanConflict(e: unknown): boolean {
+  return e instanceof ExcelServiceError && e.code === "IMPORT_PLAN_VERSION_CONFLICT";
+}
+
+export function useImportRows(onDone: (result: ImportResult) => void, onFail: (message: string, planChanged: boolean) => void) {
   return useMutation({
     mutationFn: async ({ args, plan }: { args: PreviewArgs; plan: { plan_id: string; version: number } }): Promise<ImportResult> => importAllRows(sheetArgs(args), plan),
     onSuccess: onDone,
-    onError: (e) => onFail(errorMessage(e, "The import didn't finish. Nothing was saved, so you can try again.")),
+    onError: (e) => onFail(errorMessage(e, "The import didn't finish. Nothing was saved, so you can try again."), isPlanConflict(e)),
   });
 }
 

@@ -397,7 +397,7 @@ test("Review rows opens the approvals queue with only that batch's rows, one by 
   const { calls } = await signIn(page);
   await page.goto("/data/approvals?view=batches");
   const batches = page.getByRole("table", { name: "Upload batches" });
-  await batches.getByRole("row", { name: /Electricity/ }).getByRole("button", { name: "Review rows" }).click();
+  await batches.getByRole("row", { name: /Electricity/ }).getByRole("link", { name: "Review rows" }).click();
   await expect(page).toHaveURL(/\/data\/approvals\?/);
   await expect(page).toHaveURL(/batch=b-2/);
   await expect(page).toHaveURL(/site=1/);

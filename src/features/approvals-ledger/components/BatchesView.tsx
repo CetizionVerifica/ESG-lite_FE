@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Inbox } from "lucide-react";
 import type { EmissionUploadBatch } from "../../../services/emissionService";
-import { Badge, type BadgeTone, Button, type Column, DataTable, EmptyState, Modal, Select, Textarea, formatDateTime, formatNumber, rejectReasonError, useToast, withoutParams } from "../../../ui";
+import { Badge, type BadgeTone, Button, type Column, DataTable, EmptyState, Modal, Select, Textarea, cn, focusRing, formatDateTime, formatNumber, rejectReasonError, useToast, withoutParams } from "../../../ui";
 import { errorMessage, useBatchAttention, useBatchMutations, useBatches } from "../api";
 import { BATCH_SOURCE_LABEL, BATCH_SOURCE_OPTIONS, type BatchSource, approveBatchCopy, batchSource, parseBatchSource, reviewRowsPath } from "../logic";
 
@@ -82,9 +82,9 @@ export function BatchesView({ siteIds, categoryIds }: { siteIds: number[]; categ
       exportValue: () => null,
       cell: (b) => (
         <span className="flex justify-end gap-1.5">
-          <Button size="sm" variant="ghost" onClick={() => navigate(reviewRowsPath(b))}>
+          <Link to={reviewRowsPath(b)} className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-xs font-medium text-ink transition-colors hover:bg-tint", focusRing)}>
             Review rows
-          </Button>
+          </Link>
           {b.pending_count > 0 && (
             <Button
               size="sm"
