@@ -36,6 +36,12 @@ React 19 + Vite + TypeScript + Tailwind. Backend is ESG-lite (Node), AI/OCR endp
 - Consent and Connected apps screens follow the redesign rules (src/ui, tokens only). Consent copy must say what Claude can't do (approve, edit, delete).
 - Upload batches show their `channel` (Claude, Bulk upload, API; no channel = Bulk upload).
 
+## Scope 3 — see docs/scope3/ (in ESG-lite)
+- New Scope 3 pages live in `src/features/scope3/` (Boundary, Suppliers, Screening); changes to existing modules follow the S3 module spec that names them.
+- Category names, method labels, DQ labels and review check labels come from `src/lib/scope3/` only; never hard-code "Cat 1" strings in a page.
+- The FE never saves a total: previews mirror the engine; method and DQ chips read server fields.
+- Copy: "Category 1 · Purchased goods and services" (number then exact GHG Protocol name); plain method labels from contracts §1; status words Draft / Pending / Approved / Rejected / Missing / Locked.
+
 ## Definition of done (every module)
 
 1. Matches its spec's layout and the screen in the previews artifact.
