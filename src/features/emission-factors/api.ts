@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCategories } from "../../services/categoryService";
 import { getCompanies } from "../../services/companyService";
+import { getCountries } from "../../services/countryService";
 import { getEmissionFactorUploads, parseEmissionFactorExcel, reAnalyzeEmissionFactors, updateUploadResults } from "../../services/emissionFactorParseService";
 import {
   bulkCreateEmissionFactors,
@@ -26,6 +27,7 @@ export const keys = {
   companies: () => [...keys.all, "companies"] as const,
   categories: () => [...keys.all, "categories"] as const,
   users: () => [...keys.all, "users"] as const,
+  countries: () => [...keys.all, "countries"] as const,
 };
 
 /** Server message from an axios (or FastAPI `detail`) error, or the fallback. 5xx bodies are never shown. */
@@ -44,6 +46,12 @@ function asList<T>(data: unknown, key: string): T[] {
 }
 
 const LONG = 5 * 60_000;
+
+export type Country = { country_id: number; name: string; code?: string | null };
+
+/** Countries for the factor's Geography select (reference data, Superadmin). */
+export const useCountries = (enabled: boolean) =>
+  useQuery<Country[]>({ queryKey: keys.countries(), queryFn: async () => asList<Country>(await getCountries(), "countries"), staleTime: LONG, enabled });
 
 export const useFactors = (p: ListParams) =>
   useQuery<FactorPage>({

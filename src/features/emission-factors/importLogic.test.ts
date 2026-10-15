@@ -72,7 +72,9 @@ describe("preview", () => {
     expect(rowProblem(row("r2"))).toBeNull();
     expect(rowProblem(row("r2", { year: NaN }))).toMatch(/Year/);
     expect(rowProblem(row("r2", { factor_value: -1 }))).toMatch(/0 or more/);
-    expect(rowProblem(row("r2", { factor_value: 2_000_000 }))).toMatch(/below/);
+    expect(rowProblem(row("r2", { factor_value: 2_000_000 }))).toBeNull();
+    expect(rowProblem(row("r2", { factor_value: 20_000_000_000 }))).toMatch(/below/);
+    expect(rowProblem(row("r2", { denominator_unit: " " }))).toBe("Unit is required.");
   });
   it("filters by year and search and lists years newest first", () => {
     const rows = [row("r2"), row("r3", { year: 2023, emission_category_name: "Petrol" }), row("r4", { source: "IPCC" })];
@@ -179,5 +181,71 @@ describe("AI read", () => {
     expect(needsValueColumn(sub)).toBe(false);
     expect(detectedColumns(sub).value).toBeNull();
     expect(schemaOverride(sub, { ...detectedColumns(sub), unit: null }, columns)!.years).toEqual(sub.years);
+  });
+});
+
+describe("factor metadata on import (S3-2)", () => {
+  it("reads the metadata columns of a simple sheet", () => {
+    const { rows, errors } = parseSimpleRows([
+      { year: 2026, factor_value: "0.00012345", unit: "kg", emission_category_name: "Trace", "Factor Type": "Well-to-tank (WTT)", GWP: "ar6", dataset: "DEFRA", co2_kg: 0.0001, includes_wtt: "yes" },
+      { year: 2026, factor_value: 2.68, unit: "litre", emission_category_name: "Diesel" },
+    ]);
+    expect(errors).toEqual([]);
+    expect(rows[0].factor_value).toBe(0.00012345);
+    expect(rows[0].meta).toEqual({ factor_type: "wtt", gwp_set: "AR6", dataset: "DEFRA", co2_kg: "0.0001", includes_wtt: true });
+    expect(rows[1].meta).toBeUndefined();
+  });
+
+  it("reports an unknown type or GWP set", () => {
+    expect(rowProblem(row("r2", { meta: { factor_type: "scope 3" } }))).toMatch(/isn't one of the factor types/);
+    expect(rowProblem(row("r2", { meta: { gwp_set: "AR3" } }))).toMatch(/AR4, AR5 or AR6/);
+    expect(rowProblem(row("r2", { meta: { factor_type: "combustion", gwp_set: "AR5" } }))).toBeNull();
+  });
+
+  const subColumns: ParseResult = {
+    factors: [
+      { year: 2026, factor_value: 2.51279, factor_value_text: "2.51279", denominator_unit: "litre", emission_category_name: "Diesel - Direct", factor_type: "combustion", sub_column: "Direct", primary: false, co2_kg: "2.47703" },
+      { year: 2026, factor_value: 0.61101, factor_value_text: "0.61101", denominator_unit: "litre", emission_category_name: "Diesel - WTT", factor_type: "wtt", sub_column: "WTT", primary: false },
+      { year: 2026, factor_value: 3.1238, factor_value_text: "3.12380000", denominator_unit: "litre", emission_category_name: "Diesel", factor_type: "life_cycle", sub_column: "Total", primary: true, includes_wtt: true },
+    ],
+    schema_detected: { layout_type: "sub_columns", descriptor_columns: [], years: [] },
+    warnings: [],
+    available_years: [2026],
+    parent_categories: [],
+    category_suggestions: [{ parent_category: "Fuels", suggested_category_id: 1, suggested_category_name: "Fuel", confidence: "high" }],
+    sheet_names: ["Fuels"],
+    available_columns: [],
+  };
+
+  it("keeps WTT as its own group and starts Direct excluded", () => {
+    expect(groupsOf(subColumns)).toEqual(["", "WTT"]);
+    const rows = rowsFromParse(subColumns);
+    expect(rows.map((r) => [r.emission_category_name, r.group, r.excluded, !!r.wtt])).toEqual([
+      ["Diesel - Direct", null, true, false],
+      ["Diesel - WTT", "WTT", false, true],
+      ["Diesel", null, false, false],
+    ]);
+    expect(rows[0].meta).toEqual({ factor_type: "combustion", co2_kg: "2.47703" });
+    expect(rows[2].meta).toEqual({ factor_type: "life_cycle", includes_wtt: true });
+    // The suggestion still lands on the sheet's single group; WTT starts skipped.
+    expect(initialMap(subColumns, [1])).toEqual({ "": 1, WTT: null });
+  });
+
+  it("names WTT groups after their parent group when the sheet has groups", () => {
+    const grouped: ParseResult = {
+      ...subColumns,
+      parent_categories: ["Fuels", "Grid"],
+      factors: subColumns.factors.map((f) => ({ ...f, parent_category: "Fuels" })),
+    };
+    expect(groupsOf(grouped)).toEqual(["Fuels", "Grid", "Fuels · WTT"]);
+    expect(initialMap(grouped, [1])).toEqual({ Fuels: 1, Grid: null, "Fuels · WTT": null });
+  });
+
+  it("sends each row's metadata with its factor", () => {
+    const rows = rowsFromParse(subColumns).filter((r) => !r.excluded);
+    const plan = planUpload(rows, { "": 1, WTT: 3 }, { kind: "site", siteId: 1 }, SITES, [FUEL, POWER]);
+    const bodies = plan.jobs.flatMap((j) => j.factors);
+    expect(bodies.find((b) => b.emission_category_name === "Diesel")).toMatchObject({ factor_type: "life_cycle", includes_wtt: true, factor_value: 3.1238, category_id: 1 });
+    expect(bodies.find((b) => b.emission_category_name === "Diesel - WTT")).toMatchObject({ factor_type: "wtt", category_id: 3 });
   });
 });

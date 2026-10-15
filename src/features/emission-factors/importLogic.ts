@@ -1,5 +1,21 @@
 // P22 Import factors: pure logic shared by the simple-sheet and AI paths. No React here.
+import { FACTOR_TYPES, FACTOR_TYPE_LABEL, GWP_SETS, type FactorType, isFactorType } from "../../lib/scope3/factor";
 import type { Category, Site } from "./logic";
+
+/** S3-2 metadata a sheet may carry for a factor (sent as is; the server validates it). */
+export type ImportMeta = {
+  factor_type?: string;
+  gwp_set?: string;
+  geography?: string;
+  dataset?: string;
+  dataset_version?: string;
+  co2_kg?: string;
+  ch4_kg?: string;
+  n2o_kg?: string;
+  other_kgco2e?: string;
+  biogenic_co2_kg?: string;
+  includes_wtt?: boolean;
+};
 
 /** One factor read from a sheet, editable in the Preview step. */
 export type ImportRow = {
@@ -12,6 +28,9 @@ export type ImportRow = {
   /** Excel parent group (AI path); null on simple sheets. */
   group: string | null;
   excluded: boolean;
+  meta?: ImportMeta;
+  /** The sheet's WTT sub-column, kept as its own factor (S3-2). */
+  wtt?: boolean;
 };
 
 export type SimpleParse = { rows: ImportRow[]; errors: string[] };
@@ -32,6 +51,41 @@ const COLS = {
   source: ["source", "Source", "SOURCE"],
   name: ["emission_category_name", "Emission Category", "emission_category", "Emission Category Name"],
 };
+
+/** S3-2 metadata columns a simple sheet may add. */
+const META_COLS: { field: Exclude<keyof ImportMeta, "includes_wtt">; names: string[] }[] = [
+  { field: "factor_type", names: ["factor_type", "Factor Type", "Type"] },
+  { field: "gwp_set", names: ["gwp_set", "GWP Set", "GWP set", "GWP"] },
+  { field: "geography", names: ["geography", "Geography"] },
+  { field: "dataset", names: ["dataset", "Dataset"] },
+  { field: "dataset_version", names: ["dataset_version", "Dataset Version", "Dataset version"] },
+  { field: "co2_kg", names: ["co2_kg", "CO2 kg", "kg CO2"] },
+  { field: "ch4_kg", names: ["ch4_kg", "CH4 kg", "kg CH4"] },
+  { field: "n2o_kg", names: ["n2o_kg", "N2O kg", "kg N2O"] },
+  { field: "other_kgco2e", names: ["other_kgco2e", "Other kgCO2e"] },
+  { field: "biogenic_co2_kg", names: ["biogenic_co2_kg", "Biogenic CO2 kg"] },
+];
+const WTT_COLS = ["includes_wtt", "Includes WTT"];
+
+/** A type cell: the key ("wtt") or its label ("Well-to-tank (WTT)"), any case; anything else is kept to be reported. */
+export function readFactorType(cell: unknown): string {
+  const s = String(cell ?? "").trim();
+  const lower = s.toLowerCase();
+  const hit = FACTOR_TYPES.find((t) => t === lower || FACTOR_TYPE_LABEL[t].toLowerCase() === lower);
+  return hit ?? s;
+}
+
+function readMeta(r: Record<string, unknown>): ImportMeta | undefined {
+  const meta: ImportMeta = {};
+  for (const { field, names } of META_COLS) {
+    const v = pick(r, names);
+    if (v === undefined) continue;
+    meta[field] = field === "factor_type" ? readFactorType(v) : field === "gwp_set" ? String(v).trim().toUpperCase() : String(v).trim();
+  }
+  const wtt = pick(r, WTT_COLS);
+  if (wtt !== undefined) meta.includes_wtt = /^(true|yes|y|1)$/i.test(String(wtt).trim());
+  return Object.keys(meta).length ? meta : undefined;
+}
 
 /**
  * A factor from a cell. Numbers pass through; text may use comma thousands
@@ -76,6 +130,7 @@ export function parseSimpleRows(json: Record<string, unknown>[]): SimpleParse {
       emission_category_name: String(pick(r, COLS.name) ?? "").trim(),
       group: null,
       excluded: false,
+      ...(readMeta(r) ? { meta: readMeta(r) } : {}),
     });
   });
   return { rows, errors };
@@ -85,7 +140,13 @@ export function parseSimpleRows(json: Record<string, unknown>[]): SimpleParse {
 export function rowProblem(r: ImportRow): string | null {
   if (!Number.isInteger(r.year) || r.year < 1990 || r.year > 2100) return "Year must be between 1990 and 2100.";
   if (!Number.isFinite(r.factor_value) || r.factor_value < 0) return "Factor must be 0 or more.";
-  if (Math.abs(r.factor_value) >= 1_000_000) return "Factor must be below 1,000,000.";
+  // numeric(18,8) since S3-2.
+  if (Math.abs(r.factor_value) >= 10_000_000_000) return "Factor must be below 10,000,000,000.";
+  if (!r.denominator_unit.trim()) return "Unit is required.";
+  const t = r.meta?.factor_type;
+  if (t && !isFactorType(t)) return `Type "${t}" isn't one of the factor types.`;
+  const g = r.meta?.gwp_set;
+  if (g && !(GWP_SETS as readonly string[]).includes(g)) return "GWP set must be AR4, AR5 or AR6.";
   return null;
 }
 
@@ -119,7 +180,7 @@ export type FactorBody = {
   source?: string;
   emission_category_name?: string;
   global_category_name?: string;
-};
+} & ImportMeta;
 
 export type UploadJob = { site: Site; categoryId: number; factors: FactorBody[] };
 export type UploadPlan = {
@@ -168,7 +229,7 @@ export function planUpload(rows: ImportRow[], map: CategoryMap, target: Target, 
     for (const site of targets) {
       const factors = groupRows.map((r) => {
         const name = r.emission_category_name.trim() || undefined;
-        const body: FactorBody = { site_id: site.site_id, category_id: categoryId, year: r.year, factor_value: r.factor_value };
+        const body: FactorBody = { ...r.meta, site_id: site.site_id, category_id: categoryId, year: r.year, factor_value: r.factor_value };
         if (r.denominator_unit.trim()) body.denominator_unit = r.denominator_unit.trim();
         if (r.source.trim()) body.source = r.source.trim();
         // The full composite name: column configs split it on " - " and entries look factors up by it.
@@ -203,10 +264,22 @@ export const SHEET_MAX = 10 * 1024 * 1024;
 export type ParsedFactor = {
   year: number;
   factor_value: number;
+  /** The exact figure (S3-2); preferred over `factor_value` when present. */
+  factor_value_text?: string | null;
   denominator_unit?: string | null;
   source?: string | null;
   emission_category_name?: string | null;
   parent_category?: string | null;
+  // S3-2: one candidate per sub-column, with its type and gas parts.
+  factor_type?: string | null;
+  sub_column?: string | null;
+  /** The sub-column older imports took ("Total"). Absent = true. */
+  primary?: boolean | null;
+  includes_wtt?: boolean | null;
+  co2_kg?: string | null;
+  ch4_kg?: string | null;
+  n2o_kg?: string | null;
+  biogenic_co2_kg?: string | null;
 };
 export type Suggestion = { parent_category: string; suggested_category_id: number | null; suggested_category_name: string | null; confidence: "high" | "medium" | "low" };
 export type ColumnRef = { column_index: number; header_name: string };
@@ -232,40 +305,75 @@ export type ParseResult = {
   available_columns: SheetColumn[];
 };
 
-/** Groups only matter when the sheet has more than one; otherwise everything is one group (""). */
+/** The sheet's own groups matter only when it has more than one. */
+const sheetGrouped = (p: ParseResult) => p.parent_categories.length > 1;
+
+/** A WTT sub-column kept as its own factor (S3-2): not the primary column, typed wtt. */
+const isWttCandidate = (f: ParsedFactor) => f.factor_type === "wtt" && f.primary === false;
+
+/** WTT factors get a group of their own, so they can be mapped to a FERA / Category 3 category or skipped. */
+export const WTT_GROUP_SUFFIX = "WTT";
+function groupOf(p: ParseResult, f: ParsedFactor): string | null {
+  const base = sheetGrouped(p) ? (f.parent_category ?? "") : null;
+  if (!isWttCandidate(f)) return base;
+  return base ? `${base} · ${WTT_GROUP_SUFFIX}` : WTT_GROUP_SUFFIX;
+}
+const isWttGroup = (g: string) => g === WTT_GROUP_SUFFIX || g.endsWith(` · ${WTT_GROUP_SUFFIX}`);
+
+/** Groups only matter when the sheet has more than one, or has WTT factors; otherwise everything is one group (""). */
 export function groupsOf(p: ParseResult): string[] {
-  return p.parent_categories.length > 1 ? p.parent_categories : [""];
+  const base = sheetGrouped(p) ? p.parent_categories : [""];
+  const wtt = [...new Set(p.factors.filter(isWttCandidate).map((f) => groupOf(p, f) ?? ""))].sort();
+  return [...base, ...wtt];
 }
 
+/** A factor of the AI read as a Preview row: exact value, its type and gas parts carried along. */
 export function rowsFromParse(p: ParseResult): ImportRow[] {
-  const grouped = p.parent_categories.length > 1;
-  return p.factors.map((f, i) => ({
-    key: `a${i + 1}`,
-    year: f.year,
-    factor_value: f.factor_value,
-    denominator_unit: f.denominator_unit ?? "",
-    source: f.source ?? "",
-    emission_category_name: f.emission_category_name ?? "",
-    group: grouped ? (f.parent_category ?? "") : null,
-    excluded: false,
-  }));
+  return p.factors.map((f, i) => {
+    const exact = f.factor_value_text != null ? Number(f.factor_value_text) : NaN;
+    const meta: ImportMeta = {};
+    if (f.factor_type) meta.factor_type = f.factor_type;
+    if (f.includes_wtt) meta.includes_wtt = true;
+    for (const k of ["co2_kg", "ch4_kg", "n2o_kg", "biogenic_co2_kg"] as const) if (f[k] != null) meta[k] = f[k]!;
+    const wtt = isWttCandidate(f);
+    return {
+      key: `a${i + 1}`,
+      year: f.year,
+      factor_value: Number.isFinite(exact) ? exact : f.factor_value,
+      denominator_unit: f.denominator_unit ?? "",
+      source: f.source ?? "",
+      emission_category_name: f.emission_category_name ?? "",
+      group: groupOf(p, f),
+      // Other non-primary sub-columns (e.g. "Direct") start excluded: the primary keeps the name entries look up.
+      excluded: f.primary === false && !wtt,
+      ...(Object.keys(meta).length ? { meta } : {}),
+      ...(wtt ? { wtt: true } : {}),
+    };
+  });
 }
 
-/** Starts each group on the AI's suggestion when it is high or medium confidence. */
+/** Starts each group on the AI's suggestion when it is high or medium confidence. WTT groups start skipped. */
 export function initialMap(p: ParseResult, allowed: number[]): CategoryMap {
   const groups = groupsOf(p);
   const map: CategoryMap = Object.fromEntries(groups.map((g) => [g, null]));
   for (const s of p.category_suggestions ?? []) {
     if (s.suggested_category_id === null || s.confidence === "low" || !allowed.includes(s.suggested_category_id)) continue;
-    const key = groups.length > 1 ? s.parent_category : "";
+    const key = sheetGrouped(p) ? s.parent_category : "";
     if (key in map) map[key] = s.suggested_category_id;
   }
   return map;
 }
 
 export function suggestionFor(p: ParseResult, group: string): Suggestion | undefined {
+  if (isWttGroup(group)) return undefined;
   const list = p.category_suggestions ?? [];
-  return groupsOf(p).length > 1 ? list.find((s) => s.parent_category === group) : list[0];
+  return sheetGrouped(p) ? list.find((s) => s.parent_category === group) : list[0];
+}
+
+/** The plain label of a row's type, for the Preview. */
+export function rowTypeLabel(r: ImportRow): string {
+  const t = r.meta?.factor_type;
+  return t ? (isFactorType(t) ? FACTOR_TYPE_LABEL[t as FactorType] : t) : "";
 }
 
 export type Columns = { name: number | null; value: number | null; unit: number | null; source: number | null };

@@ -1,4 +1,5 @@
 // P22 Emission factors: pure logic (list query, form draft, imports). No React here.
+import { DEFAULT_GWP_SET, FACTOR_TYPES, GWP100, type FactorType, type GwpSet, isFactorType } from "../../lib/scope3/factor";
 
 export type Company = { company_id: number; name: string };
 export type Category = { category_id: number; category_name: string; scope?: string | null };
@@ -22,6 +23,18 @@ export type Factor = {
   created_at?: string | null;
   site?: { site_id: number; name: string } | null;
   category?: { category_id: number; category_name: string; scope?: string | null } | null;
+  // S3-2 metadata (decimals arrive as strings).
+  factor_type?: string | null;
+  gwp_set?: string | null;
+  geography?: string | null;
+  dataset?: string | null;
+  dataset_version?: string | null;
+  co2_kg?: string | number | null;
+  ch4_kg?: string | number | null;
+  n2o_kg?: string | number | null;
+  other_kgco2e?: string | number | null;
+  biogenic_co2_kg?: string | number | null;
+  includes_wtt?: boolean | null;
 };
 
 export type FactorPage = { data: Factor[]; total: number; page: number; limit: number; totalPages: number };
@@ -54,7 +67,8 @@ export type UploadRecord = {
 
 export const PAGE_SIZE = 50;
 
-export type ListFilters = { clientId: number | null; siteId: number | null; categoryId: number | null; year: number | null; q: string };
+/** `factorType` is a FactorType, or "none" for factors with no type yet. */
+export type ListFilters = { clientId: number | null; siteId: number | null; categoryId: number | null; year: number | null; q: string; factorType?: string | null };
 
 /** Query params for GET /admin/emission-factors. `page` is 0-based here, 1-based on the server. */
 export type ListParams = {
@@ -65,6 +79,7 @@ export type ListParams = {
   category_id?: number;
   year?: number;
   search?: string;
+  factor_type?: string;
 };
 
 export function listParams(f: ListFilters, page: number): ListParams {
@@ -74,6 +89,7 @@ export function listParams(f: ListFilters, page: number): ListParams {
   else if (f.clientId) out.company_id = f.clientId;
   if (f.categoryId) out.category_id = f.categoryId;
   if (f.year) out.year = f.year;
+  if (f.factorType && (f.factorType === "none" || isFactorType(f.factorType))) out.factor_type = f.factorType;
   const q = f.q.trim();
   if (q) out.search = q;
   return out;
@@ -115,11 +131,11 @@ export function factorNumber(v: string | number | null | undefined): number | nu
   return Number.isFinite(n) ? n : null;
 }
 
-/** Up to 4 decimals (the column's scale), trailing zeros dropped. */
+/** Up to 8 decimals (the column's scale since S3-2), trailing zeros dropped. */
 export function formatFactor(v: string | number | null | undefined): string {
   const n = factorNumber(v);
   if (n === null) return "—";
-  return n.toLocaleString("en-US", { maximumFractionDigits: 4, useGrouping: false });
+  return n.toLocaleString("en-US", { maximumFractionDigits: 8, useGrouping: false });
 }
 
 /** One-line description of a factor for confirm dialogs and toasts. */
@@ -133,6 +149,17 @@ export function factorSummary(r: Factor): string {
 // Add / edit form
 // ---------------------------------------------------------------------------
 
+/** Gas parts in kg of gas per unit (Other in kgCO₂e); biogenic CO₂ is reported apart from the total. */
+export type GasParts = { co2: number | null; ch4: number | null; n2o: number | null; other: number | null; biogenic: number | null };
+export const GAS_KEYS: { key: keyof GasParts; field: "co2_kg" | "ch4_kg" | "n2o_kg" | "other_kgco2e" | "biogenic_co2_kg" }[] = [
+  { key: "co2", field: "co2_kg" },
+  { key: "ch4", field: "ch4_kg" },
+  { key: "n2o", field: "n2o_kg" },
+  { key: "other", field: "other_kgco2e" },
+  { key: "biogenic", field: "biogenic_co2_kg" },
+];
+const NO_GASES: GasParts = { co2: null, ch4: null, n2o: null, other: null, biogenic: null };
+
 export type FactorDraft = {
   siteId: number | null;
   categoryId: number | null;
@@ -141,13 +168,37 @@ export type FactorDraft = {
   value: number | null;
   unit: string;
   source: string;
+  factorType: FactorType | null;
+  gwpSet: GwpSet | null;
+  /** ISO-3166 alpha-2, GLO or a region code. */
+  geography: string | null;
+  dataset: string;
+  datasetVersion: string;
+  gases: GasParts;
 };
-export type DraftField = "siteId" | "categoryId" | "year" | "value";
+export type DraftField = "siteId" | "categoryId" | "year" | "value" | "unit" | keyof GasParts;
 export type DraftErrors = Partial<Record<DraftField, string>>;
 
 export function emptyDraft(defaults: { siteId?: number | null; categoryId?: number | null; year?: number | null } = {}): FactorDraft {
-  return { siteId: defaults.siteId ?? null, categoryId: defaults.categoryId ?? null, name: "", year: defaults.year ?? null, value: null, unit: "", source: "" };
+  return {
+    siteId: defaults.siteId ?? null,
+    categoryId: defaults.categoryId ?? null,
+    name: "",
+    year: defaults.year ?? null,
+    value: null,
+    unit: "",
+    source: "",
+    factorType: null,
+    // D7: new factors are AR6 unless the source says otherwise.
+    gwpSet: DEFAULT_GWP_SET,
+    geography: null,
+    dataset: "",
+    datasetVersion: "",
+    gases: { ...NO_GASES },
+  };
 }
+
+const asGwpSet = (v: string | null | undefined): GwpSet | null => (v === "AR4" || v === "AR5" || v === "AR6" ? v : null);
 
 export function draftFrom(f: Factor): FactorDraft {
   return {
@@ -158,7 +209,38 @@ export function draftFrom(f: Factor): FactorDraft {
     value: factorNumber(f.factor_value),
     unit: f.denominator_unit ?? "",
     source: f.source ?? "",
+    factorType: isFactorType(f.factor_type) ? f.factor_type : null,
+    gwpSet: asGwpSet(f.gwp_set),
+    geography: f.geography ?? null,
+    dataset: f.dataset ?? "",
+    datasetVersion: f.dataset_version ?? "",
+    gases: {
+      co2: factorNumber(f.co2_kg),
+      ch4: factorNumber(f.ch4_kg),
+      n2o: factorNumber(f.n2o_kg),
+      other: factorNumber(f.other_kgco2e),
+      biogenic: factorNumber(f.biogenic_co2_kg),
+    },
   };
+}
+
+/** Decimal places a number is written with ("0.00012345" → 8). */
+export function decimalsOf(n: number): number {
+  const s = n.toString();
+  const exp = /e-(\d+)$/.exec(s);
+  if (exp) return Number(exp[1]) + (s.split("e")[0].split(".")[1]?.length ?? 0);
+  return s.split(".")[1]?.length ?? 0;
+}
+
+/** numeric(18,8): up to 10 digits before the point and 8 after. */
+const MAX_FACTOR = 10_000_000_000;
+
+function amountError(v: number | null, what: string): string | undefined {
+  if (v === null) return undefined;
+  if (v < 0) return `${what} can't be negative.`;
+  if (v >= MAX_FACTOR) return `Enter ${what.toLowerCase()} below 10,000,000,000.`;
+  if (decimalsOf(v) > 8) return "Use at most 8 decimals.";
+  return undefined;
 }
 
 export function validate(d: FactorDraft): DraftErrors {
@@ -168,20 +250,55 @@ export function validate(d: FactorDraft): DraftErrors {
   if (!d.year) e.year = "Choose a year.";
   else if (d.year < 1990 || d.year > 2100) e.year = "Enter a year between 1990 and 2100.";
   if (d.value === null) e.value = "Enter the factor.";
-  else if (d.value < 0) e.value = "The factor can't be negative.";
-  // decimal(10,4): at most 6 digits before the point.
-  else if (Math.abs(d.value) >= 1_000_000) e.value = "Enter a factor below 1,000,000.";
+  else {
+    const err = amountError(d.value, "The factor");
+    if (err) e.value = err;
+  }
+  // The server refuses a factor with no unit (UNIT_REQUIRED).
+  if (!d.unit.trim()) e.unit = "Enter the unit, e.g. litre or kWh.";
+  for (const { key } of GAS_KEYS) {
+    const err = amountError(d.gases[key], "A gas part");
+    if (err) e[key] = err;
+  }
   return e;
 }
 
+/**
+ * A hint (never a block) when the gas parts don't add up to the factor within
+ * 1%: CO₂ + CH₄ × GWP + N₂O × GWP + other. Biogenic CO₂ sits outside the total.
+ */
+export function gasSumHint(d: FactorDraft): string | null {
+  const { co2, ch4, n2o, other } = d.gases;
+  if (d.value === null || [co2, ch4, n2o, other].every((v) => v === null)) return null;
+  const gwp = GWP100[d.gwpSet ?? DEFAULT_GWP_SET];
+  const sum = (co2 ?? 0) + (ch4 ?? 0) * gwp.CH4 + (n2o ?? 0) * gwp.N2O + (other ?? 0);
+  const total = d.value;
+  const off = total === 0 ? sum !== 0 : Math.abs(sum - total) / total > 0.01;
+  if (!off) return null;
+  const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  return `The gas parts add up to ${fmt(sum)} kgCO₂e with ${d.gwpSet ?? DEFAULT_GWP_SET} GWPs, not the factor's ${fmt(total)}. Check them; you can still save.`;
+}
+
+const sameValue = (a: unknown, b: unknown) =>
+  typeof a === "string" && typeof b === "string" ? a.trim() === b.trim() : typeof a === "object" && a && b ? JSON.stringify(a) === JSON.stringify(b) : a === b;
+
 export function isDirty(d: FactorDraft, row: Factor | null): boolean {
   const base = row ? draftFrom(row) : emptyDraft();
-  return (Object.keys(d) as (keyof FactorDraft)[]).some((k) => {
-    const a = d[k];
-    const b = base[k];
-    return typeof a === "string" && typeof b === "string" ? a.trim() !== b.trim() : a !== b;
-  });
+  return (Object.keys(d) as (keyof FactorDraft)[]).some((k) => !sameValue(d[k], base[k]));
 }
+
+export type FactorMetaPayload = {
+  factor_type?: FactorType | null;
+  gwp_set?: GwpSet | null;
+  geography?: string | null;
+  dataset?: string | null;
+  dataset_version?: string | null;
+  co2_kg?: number | null;
+  ch4_kg?: number | null;
+  n2o_kg?: number | null;
+  other_kgco2e?: number | null;
+  biogenic_co2_kg?: number | null;
+};
 
 export type FactorPayload = {
   site_id: number;
@@ -191,11 +308,22 @@ export type FactorPayload = {
   denominator_unit?: string;
   source?: string;
   emission_category_name?: string;
-};
+} & FactorMetaPayload;
+
+function metaPayload(d: FactorDraft): FactorMetaPayload {
+  const out: FactorMetaPayload = {};
+  if (d.factorType) out.factor_type = d.factorType;
+  if (d.gwpSet) out.gwp_set = d.gwpSet;
+  if (d.geography) out.geography = d.geography;
+  if (d.dataset.trim()) out.dataset = d.dataset.trim();
+  if (d.datasetVersion.trim()) out.dataset_version = d.datasetVersion.trim();
+  for (const { key, field } of GAS_KEYS) if (d.gases[key] !== null) out[field] = d.gases[key];
+  return out;
+}
 
 /** Body for POST. Blank text fields are left out (the server stores null). */
 export function toPayload(d: FactorDraft): FactorPayload {
-  const out: FactorPayload = { site_id: d.siteId!, category_id: d.categoryId!, year: d.year!, factor_value: d.value! };
+  const out: FactorPayload = { site_id: d.siteId!, category_id: d.categoryId!, year: d.year!, factor_value: d.value!, ...metaPayload(d) };
   if (d.unit.trim()) out.denominator_unit = d.unit.trim();
   if (d.source.trim()) out.source = d.source.trim();
   if (d.name.trim()) out.emission_category_name = d.name.trim();
@@ -216,8 +344,18 @@ export function toUpdatePayload(d: FactorDraft, row: Factor): Partial<FactorPayl
   if (d.unit.trim() !== base.unit.trim()) out.denominator_unit = d.unit.trim();
   if (d.source.trim() !== base.source.trim()) out.source = d.source.trim();
   if (d.name.trim() !== base.name.trim()) out.emission_category_name = d.name.trim();
+  // Metadata: a cleared field is sent as null so the server clears it.
+  if (d.factorType !== base.factorType) out.factor_type = d.factorType;
+  if (d.gwpSet !== base.gwpSet) out.gwp_set = d.gwpSet;
+  if (d.geography !== base.geography) out.geography = d.geography;
+  if (d.dataset.trim() !== base.dataset.trim()) out.dataset = d.dataset.trim() || null;
+  if (d.datasetVersion.trim() !== base.datasetVersion.trim()) out.dataset_version = d.datasetVersion.trim() || null;
+  for (const { key, field } of GAS_KEYS) if (d.gases[key] !== base.gases[key]) out[field] = d.gases[key];
   return out;
 }
+
+/** Type filter options: every factor type, plus "Not set" for factors saved before S3-2. */
+export const TYPE_FILTER_VALUES: string[] = [...FACTOR_TYPES, "none"];
 
 /** Factors for one year are used by entries dated the year after (the P03 rule). */
 export function yearHint(year: number | null): string {
