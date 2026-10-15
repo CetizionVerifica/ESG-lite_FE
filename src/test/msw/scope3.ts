@@ -8,12 +8,25 @@
  *   beforeEach(() => resetScope3Mocks());
  *
  * Paths match any API origin (`*`). Where §4/§5 give no response shape yet
- * (categories list, screening, the Scope 3 report), the shape here is a mock
- * the owning module confirms or changes in its own PR.
+ * (categories list, screening, the report envelope, plan and survey
+ * answers), the shape here is a mock the owning module confirms or changes in
+ * its own PR. Report rows follow `Scope3ReportRow` (§5).
  */
 import { http, HttpResponse } from "msw";
 import {
   BOUNDARY_STATUSES,
+  type BulkApproveBody,
+  type CommutingSurveyBody,
+  type ExtrapolateBody,
+  type Investment,
+  type InvestmentsPlanBody,
+  type NothingThisMonthBody,
+  type ProductSale,
+  type PutScreeningInputsBody,
+  type Scope3ReportRow,
+  type ScreeningInput,
+  type SoldProductsPlanBody,
+  type UseProfileBody,
   type BoundaryStatus,
   type CategoryGhgMapProposal,
   type CompanyBaseYear,
@@ -56,11 +69,13 @@ export interface ScreeningRow {
   basis: string;
 }
 
-/** `GET /reports/ghg/scope3` (mock shape, S3-13 confirms). */
+/** `GET /reports/ghg/scope3`: rows per §5 (`Scope3ReportRow`); the envelope is a mock shape S3-13 confirms. */
 export interface Scope3Report {
   year: number;
+  consolidation_approach: ConsolidationApproach;
+  gwp_sets: ("AR4" | "AR5" | "AR6")[];
   total_tco2e: number;
-  categories: { ghg_category: GhgCategoryNumber; status: BoundaryStatus; total_tco2e: number; reason?: string | null }[];
+  rows: Scope3ReportRow[];
 }
 
 const error = (code: Scope3ErrorCode, status: number, message: string) =>
@@ -152,11 +167,21 @@ const initialBaseYear = (): CompanyBaseYear => ({
 });
 
 const initialRecalculations = (): RecalculationEvent[] => [
-  { id: 1, company_id: COMPANY_ID, reason: "error", affected_years: [2023], delta_tco2e: -412.6, approved_by: 4, created_at: "2026-03-14T10:12:00.000Z", status: "applied", note: "Copper rod factor was per tonne, not per kg." },
+  { id: 1, company_id: COMPANY_ID, reason: "error", affected_years: [2023], delta_tco2e: -412.6, approved_by: 4, created_at: "2026-03-14T10:12:00.000Z", status: "approved", note: "Copper rod factor was per tonne, not per kg." },
 ];
 
 const initialLocks = (): PeriodLock[] => [
   { company_id: COMPANY_ID, site_id: 1, year: 2026, month: 8, locked_by: 4, locked_at: "2026-09-10T08:00:00.000Z" },
+];
+
+const initialInvestments = (): Investment[] => [
+  { id: 1, company_id: COMPANY_ID, investee: "Gulf Cable Services WLL", type: "equity", share_pct: 25, investee_scope12_tco2e: 1840, year: 2025, source: "Investee sustainability report 2025" },
+  { id: 2, company_id: COMPANY_ID, investee: "Copper Recyclers Co.", type: "equity", share_pct: 10, revenue: 5_500_000, currency: "USD", eeio_sector: "331420", sector_split: { "331420": 0.6, "562920": 0.4 }, year: 2025 },
+];
+
+const initialProductSales = (): ProductSale[] => [
+  { id: 1, company_id: COMPANY_ID, product_id: 21, period: "2026-08-01", quantity: 120_000, unit: "m", region: "GCC" },
+  { id: 2, company_id: COMPANY_ID, product_id: 22, period: "2026-08-01", quantity: 4_500, unit: "kg", region: "EU" },
 ];
 
 let categories = initialCategories();
@@ -166,6 +191,10 @@ let supplierFactors = initialSupplierFactors();
 let baseYear = initialBaseYear();
 let recalculations = initialRecalculations();
 let locks = initialLocks();
+let investments = initialInvestments();
+let productSales = initialProductSales();
+let screeningInputs: ScreeningInput[] = [];
+let nothing: NothingThisMonthBody[] = [];
 
 /** Restore the sample data (call in beforeEach). */
 export function resetScope3Mocks(): void {
@@ -176,6 +205,10 @@ export function resetScope3Mocks(): void {
   baseYear = initialBaseYear();
   recalculations = initialRecalculations();
   locks = initialLocks();
+  investments = initialInvestments();
+  productSales = initialProductSales();
+  screeningInputs = [];
+  nothing = [];
 }
 
 const needsReason = (status: BoundaryStatus, reason?: string | null) => status !== "included" && !reason?.trim();
@@ -262,23 +295,117 @@ export const scope3Handlers = [
 
   // S3-12 screening and extrapolation
   http.get("*/scope3/screening", () => HttpResponse.json(SCREENING)),
-  http.post<never, { basis?: string }>("*/scope3/extrapolate", async ({ request }) => {
+  http.put<never, Partial<PutScreeningInputsBody>>("*/scope3/screening/inputs", async ({ request }) => {
     const body = await request.json();
-    if (!body.basis) return error("EXTRAPOLATION_BASIS_INVALID", 400, "The extrapolation basis isn't valid.");
+    if (!body.year || !Array.isArray(body.inputs)) return invalid("inputs", "Give the year and the inputs.");
+    screeningInputs = body.inputs;
+    return HttpResponse.json({ year: body.year, inputs: screeningInputs });
+  }),
+  http.post<never, Partial<ExtrapolateBody>>("*/scope3/extrapolate", async ({ request }) => {
+    const body = await request.json();
+    const badCoverage = body.basis === "coverage" && !(body.coverage_pct !== undefined && body.coverage_pct >= 1 && body.coverage_pct <= 99);
+    if ((body.basis !== "coverage" && body.basis !== "intensity") || badCoverage) {
+      return error("EXTRAPOLATION_BASIS_INVALID", 400, "The extrapolation basis isn't valid.");
+    }
     return HttpResponse.json({ created: 3, status: "pending" }, { status: 201 });
+  }),
+  // python_AI_service: EEIO sector suggestions for spend lines (S3-12).
+  http.post<never, { lines?: { description: string }[] }>("*/v1/scope3/eeio-sector", async ({ request }) => {
+    const lines = (await request.json()).lines ?? [];
+    return HttpResponse.json({ lines: lines.map(() => ({ suggestions: [{ code: "331420", confidence: 86 }, { code: "423510", confidence: 41 }] })) });
+  }),
+
+  // S3-9 commuting survey → an import plan (mock answer)
+  http.post<never, Partial<CommutingSurveyBody>>("*/scope3/commuting/surveys", async ({ request }) => {
+    const body = await request.json();
+    const responses = body.responses ?? [];
+    if (!body.site_id || !body.year || !body.total_employees || responses.length === 0 || responses.length > 20_000) {
+      return invalid("responses", "Give the site, year, headcount and 1 to 20,000 responses.");
+    }
+    const modes = [...new Set(responses.map((r) => r.mode))];
+    return HttpResponse.json({ plan_id: 501, rows: modes.length, respondents: responses.length, total_employees: body.total_employees }, { status: 201 });
+  }),
+
+  // S3-10 sold products
+  http.get("*/scope3/product-sales", () => HttpResponse.json(productSales)),
+  http.post<never, Omit<ProductSale, "id" | "company_id">>("*/scope3/product-sales", async ({ request }) => {
+    const { product_id, period, quantity, unit, region } = await request.json();
+    if (!product_id || !/^\d{4}-\d{2}-01$/.test(period ?? "") || !(quantity > 0) || !unit) return invalid("period", "Give the product, a month (first day), a quantity and a unit.");
+    const sale: ProductSale = { id: Math.max(0, ...productSales.map((x) => x.id)) + 1, company_id: COMPANY_ID, product_id, period, quantity, unit, region: region ?? null };
+    productSales.push(sale);
+    return HttpResponse.json(sale, { status: 201 });
+  }),
+  http.put<{ id: string }, Partial<ProductSale>>("*/scope3/product-sales/:id", async ({ params, request }) => {
+    const sale = productSales.find((x) => x.id === Number(params.id));
+    if (!sale) return notFound("Sale not found");
+    const { quantity, unit, region, period } = await request.json();
+    if (quantity !== undefined) sale.quantity = quantity;
+    if (unit !== undefined) sale.unit = unit;
+    if (region !== undefined) sale.region = region;
+    if (period !== undefined) sale.period = period;
+    return HttpResponse.json(sale);
+  }),
+  http.put<{ id: string }, UseProfileBody>("*/scope3/products/:id/use-profile", async ({ params, request }) => {
+    const body = await request.json();
+    const mix = body.eol_mix ?? [];
+    if (mix.length && Math.abs(mix.reduce((t, x) => t + x.share, 0) - 1) > 1e-6) return invalid("eol_mix", "Treatment shares must add up to 1.");
+    return HttpResponse.json({ product_id: Number(params.id), lifetime_uses: body.lifetime_uses ?? null, eol_mix: body.eol_mix ?? null });
+  }),
+  http.post<never, Partial<SoldProductsPlanBody>>("*/scope3/sold-products/plan", async ({ request }) => {
+    const body = await request.json();
+    if (!body.site_id || !body.year || ![10, 11, 12].includes(body.ghg_category ?? 0)) return invalid("ghg_category", "Category must be 10, 11 or 12.");
+    return HttpResponse.json({ plan_id: 502, rows: productSales.length }, { status: 201 });
+  }),
+
+  // S3-11 investments
+  http.get("*/scope3/investments", () => HttpResponse.json(investments)),
+  http.post<never, Omit<Investment, "id" | "company_id">>("*/scope3/investments", async ({ request }) => {
+    const body = await request.json();
+    if (!body.investee?.trim() || !(body.share_pct >= 0 && body.share_pct <= 100)) return invalid("share_pct", "Give the investee and a share from 0 to 100 %.");
+    const investment: Investment = { ...body, id: Math.max(0, ...investments.map((x) => x.id)) + 1, company_id: COMPANY_ID };
+    investments.push(investment);
+    return HttpResponse.json(investment, { status: 201 });
+  }),
+  http.put<{ id: string }, Partial<Investment>>("*/scope3/investments/:id", async ({ params, request }) => {
+    const investment = investments.find((x) => x.id === Number(params.id));
+    if (!investment) return notFound("Investment not found");
+    const changes = await request.json();
+    // Server-owned fields stay as they are.
+    Object.assign(investment, { ...changes, id: investment.id, company_id: investment.company_id });
+    return HttpResponse.json(investment);
+  }),
+  http.post<never, Partial<InvestmentsPlanBody>>("*/scope3/investments/plan", async ({ request }) => {
+    const body = await request.json();
+    if (!body.site_id || !body.year) return invalid("year", "Give the site and the year.");
+    return HttpResponse.json({ plan_id: 503, rows: investments.length }, { status: 201 });
   }),
 
   // S3-13 report
   http.get("*/reports/ghg/scope3", ({ request }) => {
     const year = Number(new URL(request.url).searchParams.get("year") ?? 2026);
     // Only included categories carry a total; the report total is their sum.
-    const rows = categories.map((c) => ({
-      ghg_category: c.ghg_category,
+    const tco2e = (c: Scope3CategoryRow) => (c.status === "included" ? (SCREENING.find((x) => x.ghg_category === c.ghg_category)?.estimate_tco2e ?? 0) : 0);
+    const total = categories.reduce((sum, c) => sum + tco2e(c), 0);
+    const rows: Scope3ReportRow[] = categories.map((c) => ({
+      n: c.ghg_category,
+      name: c.name,
+      direction: c.direction,
       status: c.status,
-      reason: c.reason,
-      total_tco2e: c.status === "included" ? (SCREENING.find((x) => x.ghg_category === c.ghg_category)?.estimate_tco2e ?? 0) : 0,
+      reason: c.reason ?? null,
+      method_note: c.method_note ?? null,
+      tco2e: tco2e(c),
+      share_pct: total ? Math.round((tco2e(c) / total) * 1000) / 10 : 0,
+      methods: tco2e(c) ? { spend_based: 100 } : {},
+      primary_pct: 0,
+      value_chain_pct: 0,
+      proxy_pct: 0,
+      dq: { overall: tco2e(c) ? 3 : null, good_pct: 0, fair_pct: 0, poor_pct: tco2e(c) ? 100 : 0 },
+      datasets: tco2e(c) ? [{ dataset: "USEEIO", version: "2.0", factor_type: "eeio_spend" }] : [],
+      gwp_sets: tco2e(c) ? ["AR6"] : [],
+      biogenic_tco2e: null,
+      mapped_categories: c.mapped_categories,
     }));
-    const report: Scope3Report = { year, total_tco2e: rows.reduce((sum, r) => sum + r.total_tco2e, 0), categories: rows };
+    const report: Scope3Report = { year, consolidation_approach: consolidation, gwp_sets: ["AR6"], total_tco2e: total, rows };
     return HttpResponse.json(report);
   }),
 
@@ -332,5 +459,36 @@ export const scope3Handlers = [
     if (!lock) return notFound("That month isn't locked.");
     Object.assign(lock, { reopened_by: 4, reopened_at: new Date().toISOString(), reopened_reason: body.reason });
     return HttpResponse.json(lock);
+  }),
+
+  http.put<never, Partial<BulkApproveBody>>("*/user/emissions/bulk-approve", async ({ request }) => {
+    const body = await request.json();
+    const ids = body.ids ?? [];
+    if (ids.length === 0) return invalid("ids", "Choose at least one entry.");
+    // Sample rule: even ids are ready, odd ids still have a check held.
+    const notReady = body.only_ready ? ids.filter((x) => x % 2 === 1) : [];
+    return HttpResponse.json({ approved: ids.filter((x) => !notReady.includes(x)), skipped: notReady });
+  }),
+  http.post<never, { emission_category?: string }>("*/user/emissions/check", () =>
+    HttpResponse.json({ ready: false, held: ["EVIDENCE_ATTACHED"] }),
+  ),
+  http.get<{ id: string }>("*/user/emissions/:id/history", ({ params, request }) => {
+    const months = Number(new URL(request.url).searchParams.get("months") ?? 6);
+    return HttpResponse.json({
+      emission_id: Number(params.id),
+      months: Array.from({ length: months }, (_, i) => ({ month: `2026-${String(9 - i).padStart(2, "0")}-01`, tco2e: 4.2 + (i % 3) * 0.3 })),
+    });
+  }),
+  http.post<never, Partial<NothingThisMonthBody>>("*/user/my-month/nothing", async ({ request }) => {
+    const body = await request.json();
+    if (!body.site_id || !body.category_id || !/^\d{4}-\d{2}-01$/.test(body.month ?? "")) return invalid("month", "Give the site, category and month (first day).");
+    const mark = { site_id: body.site_id, category_id: body.category_id, month: body.month as string };
+    nothing.push(mark);
+    return HttpResponse.json(mark, { status: 201 });
+  }),
+  http.delete("*/user/my-month/nothing", async ({ request }) => {
+    const body = (await request.json()) as Partial<NothingThisMonthBody>;
+    nothing = nothing.filter((n) => !(n.site_id === body.site_id && n.category_id === body.category_id && n.month === body.month));
+    return new HttpResponse(null, { status: 204 });
   }),
 ];

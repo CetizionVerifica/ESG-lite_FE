@@ -250,7 +250,7 @@ export interface RecalculationEvent {
   delta_tco2e: number;
   approved_by?: number | null;
   created_at?: string;
-  status?: string | null;
+  status?: RecalculationStatus | null;
   note?: string | null;
   before?: unknown;
   after?: unknown;
@@ -399,4 +399,138 @@ export type CheckId = (typeof CHECK_IDS)[number];
 export interface RowChecks {
   ready: boolean;
   held: CheckId[];
+}
+
+// ---------------------------------------------------------------------------
+// Shapes folded in from §10 and the module specs (01-contracts.md §4–§6)
+// ---------------------------------------------------------------------------
+
+export type YearType = "CY" | "FY";
+
+/** `column_config.method_options` (S3-3): methods a form offers, most specific first, with their units. */
+export type MethodOptions = { method: Exclude<Method, "unknown">; units: string[] }[];
+
+export const RECALCULATION_STATUSES = ["proposed", "approved", "dismissed"] as const;
+export type RecalculationStatus = (typeof RECALCULATION_STATUSES)[number];
+
+/** `investment` (S3-11). */
+export interface Investment {
+  id: number;
+  company_id: number;
+  investee: string;
+  type: "equity" | "debt" | "project";
+  share_pct: number;
+  investee_scope12_tco2e?: number | null;
+  year: number;
+  source?: string | null;
+  revenue?: number | null;
+  currency?: string | null;
+  eeio_sector?: string | null;
+  /** `{sector: share}`, shares summing to 1. */
+  sector_split?: Record<string, number> | null;
+}
+
+/** `product_sale` (S3-10): `period` is the first day of the month. */
+export interface ProductSale {
+  id: number;
+  company_id: number;
+  product_id: number;
+  period: string;
+  quantity: number;
+  unit: string;
+  region?: string | null;
+}
+
+/** `product.eol_mix`: shares summing to 1. */
+export type EolMix = { treatment: string; share: number }[];
+
+/** `PUT /scope3/products/:id/use-profile`. */
+export interface UseProfileBody {
+  lifetime_uses?: number | null;
+  eol_mix?: EolMix | null;
+}
+
+export interface InvestmentsPlanBody {
+  site_id: number;
+  year: number;
+  year_type: YearType;
+}
+
+export interface SoldProductsPlanBody extends InvestmentsPlanBody {
+  ghg_category: 10 | 11 | 12;
+}
+
+/** `POST /scope3/commuting/surveys` (S3-9): `ref` is the client's own code, never a name. */
+export interface CommutingSurveyBody {
+  site_id: number;
+  year: number;
+  year_type: YearType;
+  total_employees: number;
+  responses: { ref: string; mode: string; one_way_km: number; days_per_week: number; weeks_per_year: number }[];
+}
+
+export const SCREENING_BASES = ["spend", "headcount", "revenue", "mass_sold", "other"] as const;
+export type ScreeningBasis = (typeof SCREENING_BASES)[number];
+
+/** `scope3_screening_input` row as `PUT /scope3/screening/inputs` takes it. */
+export interface ScreeningInput {
+  ghg_category: GhgCategoryNumber;
+  basis: ScreeningBasis;
+  amount: number;
+  currency?: string | null;
+  eeio_sector?: string | null;
+  note?: string | null;
+}
+
+export interface PutScreeningInputsBody {
+  year: number;
+  inputs: ScreeningInput[];
+}
+
+/** `POST /scope3/extrapolate` (S3-12). */
+export interface ExtrapolateBody {
+  ghg_category: GhgCategoryNumber;
+  site_id: number;
+  year: number;
+  year_type: YearType;
+  basis: "coverage" | "intensity";
+  /** 1–99. */
+  coverage_pct?: number;
+  source_filter?: Record<string, unknown>;
+  output_site_ids?: number[];
+}
+
+/** `PUT /user/emissions/bulk-approve` (S3-15). */
+export interface BulkApproveBody {
+  ids: number[];
+  only_ready?: boolean;
+}
+
+/** `POST/DELETE /user/my-month/nothing` (S3-15); `month` is the first day of the month. */
+export interface NothingThisMonthBody {
+  site_id: number;
+  category_id: number;
+  month: string;
+}
+
+/** One row of `GET /reports/ghg/scope3` (S3-13): a category 1–15, or "Unmapped" (`n: null`). */
+export interface Scope3ReportRow {
+  n: GhgCategoryNumber | null;
+  name: string;
+  direction: Direction | null;
+  status: BoundaryStatus | null;
+  reason: string | null;
+  method_note: string | null;
+  tco2e: number;
+  share_pct: number;
+  methods: Partial<Record<Method, number>>;
+  primary_pct: number;
+  value_chain_pct: number;
+  proxy_pct: number;
+  dq: { overall: number | null; good_pct: number; fair_pct: number; poor_pct: number };
+  datasets: { dataset: string; version: string | null; factor_type: string }[];
+  gwp_sets: ("AR4" | "AR5" | "AR6")[];
+  /** null = "Not tracked" until `emission.biogenic_kg` is written. */
+  biogenic_tco2e: number | null;
+  mapped_categories: { category_id: number; name: string }[];
 }

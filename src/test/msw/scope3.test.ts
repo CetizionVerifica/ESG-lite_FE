@@ -65,7 +65,7 @@ describe("Scope 3 mock handlers", () => {
   });
 
   it("keeps a report total equal to the sum of its categories, also after a change", async () => {
-    const sum = (r: Scope3Report) => r.categories.reduce((t, c) => t + c.total_tco2e, 0);
+    const sum = (r: Scope3Report) => r.rows.reduce((t, c) => t + c.tco2e, 0);
     const before = (await (await fetch(`${API}/reports/ghg/scope3?year=2026`)).json()) as Scope3Report;
     expect(before.total_tco2e).toBe(sum(before));
     await put("/scope3/categories/1", { status: "excluded", reason: "Test" });
@@ -93,5 +93,41 @@ describe("Scope 3 mock handlers", () => {
   it("returns recalculations with how far the base year moved", async () => {
     const events = (await (await fetch(`${API}/scope3/recalculations`)).json()) as { delta_tco2e: number }[];
     expect(typeof events[0].delta_tco2e).toBe("number");
+  });
+
+  it("gives report rows in the §5 shape: 15 categories, biogenic not tracked yet", async () => {
+    const report = (await (await fetch(`${API}/reports/ghg/scope3?year=2026`)).json()) as Scope3Report;
+    expect(report.rows).toHaveLength(15);
+    expect(report.rows[0]).toMatchObject({ n: 1, name: "Purchased goods and services", status: "included", biogenic_tco2e: null });
+    expect(report.consolidation_approach).toBe("operational_control");
+  });
+
+  it("answers the endpoints folded in from the module specs", async () => {
+    expect((await put("/scope3/screening/inputs", { year: 2026, inputs: [{ ghg_category: 1, basis: "spend", amount: 1e6, currency: "USD" }] })).status).toBe(200);
+    expect(((await (await post("/scope3/extrapolate", { ghg_category: 4, site_id: 1, year: 2026, year_type: "CY", basis: "coverage", coverage_pct: 100 })).json()) as Scope3ErrorBody).code).toBe("EXTRAPOLATION_BASIS_INVALID");
+    expect((await post("/scope3/extrapolate", { ghg_category: 4, site_id: 1, year: 2026, year_type: "CY", basis: "coverage", coverage_pct: 85 })).status).toBe(201);
+    expect((await post("/v1/scope3/eeio-sector", { lines: [{ description: "Copper rod" }], sectors: [] })).status).toBe(200);
+
+    const survey = { site_id: 1, year: 2026, year_type: "CY", total_employees: 3, responses: [{ ref: "A1", mode: "Rail", one_way_km: 10, days_per_week: 5, weeks_per_year: 48 }] };
+    expect((await post("/scope3/commuting/surveys", survey)).status).toBe(201);
+    expect((await post("/scope3/commuting/surveys", { ...survey, responses: [] })).status).toBe(400);
+
+    expect((await fetch(`${API}/scope3/product-sales`)).status).toBe(200);
+    expect((await post("/scope3/product-sales", { product_id: 21, period: "2026-09-15", quantity: 1, unit: "m" })).status).toBe(400);
+    expect((await post("/scope3/product-sales", { product_id: 21, period: "2026-09-01", quantity: 1, unit: "m" })).status).toBe(201);
+    expect((await put("/scope3/products/21/use-profile", { eol_mix: [{ treatment: "landfill", share: 0.6 }] })).status).toBe(400);
+    expect((await post("/scope3/sold-products/plan", { site_id: 1, year: 2026, year_type: "CY", ghg_category: 12 })).status).toBe(201);
+
+    expect((await fetch(`${API}/scope3/investments`)).status).toBe(200);
+    expect((await put("/scope3/investments/999", { share_pct: 5 })).status).toBe(404);
+    expect((await post("/scope3/investments/plan", { site_id: 1, year: 2026, year_type: "CY" })).status).toBe(201);
+
+    const approve = (await (await put("/user/emissions/bulk-approve", { ids: [2, 3], only_ready: true })).json()) as { approved: number[]; skipped: number[] };
+    expect(approve).toEqual({ approved: [2], skipped: [3] });
+    expect((await post("/user/emissions/check", {})).status).toBe(200);
+    expect(((await (await fetch(`${API}/user/emissions/7/history?months=6`)).json()) as { months: unknown[] }).months).toHaveLength(6);
+    expect((await post("/user/my-month/nothing", { site_id: 1, category_id: 2, month: "2026-09-01" })).status).toBe(201);
+    const del = await fetch(`${API}/user/my-month/nothing`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ site_id: 1, category_id: 2, month: "2026-09-01" }) });
+    expect(del.status).toBe(204);
   });
 });
