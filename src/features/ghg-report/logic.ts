@@ -403,6 +403,25 @@ const fmt1 = (n: number) =>
 const pctText = (a: number, b: number) =>
   b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "—";
 
+const SCOPE_WHAT = {
+  "Scope 1": "Scope 1 (direct)",
+  "Scope 2": "Scope 2 (purchased energy)",
+  "Scope 3": "Scope 3 (value chain)",
+} as const;
+
+/**
+ * The scope with the largest total, as the PDF picks it from all three
+ * (S3-4). Ties keep the old order: Scope 2 over Scope 1, and Scope 3 only
+ * when it is strictly the largest.
+ */
+export function dominantScope(f: ReportFigures): { scope: keyof typeof SCOPE_WHAT; value: number } {
+  const s1 = f.selected["Scope 1"];
+  const s2 = f.selected["Scope 2"];
+  const s3 = f.selected["Scope 3"];
+  if (s3 > s1 && s3 > s2) return { scope: "Scope 3", value: s3 };
+  return s2 >= s1 ? { scope: "Scope 2", value: s2 } : { scope: "Scope 1", value: s1 };
+}
+
 export function findings(
   f: ReportFigures,
   locations: LocationRow[],
@@ -410,8 +429,7 @@ export function findings(
   prevLabel: string,
 ): string[] {
   const total = f.selected.total;
-  const s1 = f.selected["Scope 1"];
-  const s2 = f.selected["Scope 2"];
+  const dominant = dominantScope(f);
   const topSite = locations
     .filter((l) => l.selected.total > 0)
     .sort((a, b) => b.selected.total - a.selected.total)[0];
@@ -421,7 +439,7 @@ export function findings(
     topSite
       ? `${topSite.site} is the largest contributing site at ${fmt0(topSite.selected.total)} tCO₂e (${pctText(topSite.selected.total, total)} of total).`
       : "",
-    `${s2 >= s1 ? "Scope 2 (purchased energy)" : "Scope 1 (direct)"} dominates the footprint at ${pctText(Math.max(s1, s2), total)}, indicating the highest-leverage reduction pathway.`,
+    `${SCOPE_WHAT[dominant.scope]} dominates the footprint at ${pctText(dominant.value, total)}, indicating the highest-leverage reduction pathway.`,
     top
       ? `${top.name} is the single largest emission source (${pctText(top.value, total)}).`
       : "",
@@ -436,6 +454,9 @@ export function recommendedActions(f: ReportFigures): string[] {
   return [
     f.coverage.missing.length > 0
       ? "Close data gaps at non-reporting sites to reach full coverage before the next cycle."
+      : "",
+    dominantScope(f).scope === "Scope 3"
+      ? "Engage the largest suppliers for their own emissions data."
       : "",
     "Prioritise Scope 2 reduction through renewable electricity procurement or on-site generation.",
     "Set a validated, science-based reduction target aligned to a 1.5 °C pathway.",
