@@ -176,6 +176,13 @@ describe("one client per person", () => {
     expect(otherClientSites(SITES, { company_id: null, site_ids: [1, 3], role: "Manager", is_internal: false })).toEqual([]);
   });
 
+  it("counts a site with no client as another client's, as the server does", () => {
+    const orphan: Site = { site_id: 4, name: "Loose site", categories: [] };
+    const sites = [...SITES, orphan];
+    expect(otherClientSites(sites, { company_id: 1, site_ids: [1, 4], role: "Manager", is_internal: false }).map((s) => s.site_id)).toEqual([4]);
+    expect(otherClientSites(sites, { company_id: 1, site_ids: [1, 4], role: "Manager", is_internal: true })).toEqual([]);
+  });
+
   it("sends the sites on create and when the sites or the role change, not for a name change", () => {
     const d = draftFrom(mixed);
     expect(sendsSites({ ...d, name: "Mia" }, mixed)).toBe(false);

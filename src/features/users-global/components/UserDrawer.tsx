@@ -138,7 +138,7 @@ export function UserDrawer(props: Props) {
               <Button onClick={close} disabled={props.saving}>
                 Cancel
               </Button>
-              <Button variant="primary" onClick={save} loading={props.saving} disabled={props.saving || (!creating && !dirty)}>
+              <Button variant="primary" onClick={save} loading={props.saving} disabled={props.saving || (!creating && !dirty) || blockedByForeign}>
                 {creating ? "Add user" : "Save"}
               </Button>
             </div>
@@ -243,7 +243,7 @@ export function UserDrawer(props: Props) {
             {foreign.length > 0 && (
               <Callout
                 tone="warn"
-                title={`Also has sites of another client: ${foreign.map((s) => s.name).join(", ")}`}
+                title={`Also has sites of another client: ${foreign.map((s) => (s.company ? s.name : `${s.name} (no client)`)).join(", ")}`}
                 action={
                   <Button size="sm" onClick={() => setSites(draft.site_ids)}>
                     Keep only this client's sites

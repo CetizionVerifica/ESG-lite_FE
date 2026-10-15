@@ -223,7 +223,7 @@ test("someone with sites of two clients can't be saved with both", async ({ page
   await expect(warning).toBeVisible();
 
   await drawer.getByLabel("Role").selectOption("User");
-  await drawer.getByRole("button", { name: "Save" }).click();
+  await expect(drawer.getByRole("button", { name: "Save" })).toBeDisabled();
   await expect(drawer.getByText("Remove the other client's sites to save these changes.")).toBeVisible();
   expect(calls.some((c) => c.path.endsWith("/admin/users/7"))).toBe(false);
 
@@ -260,7 +260,7 @@ test("an internal account picks sites of several clients; turning it off needs o
   const drawer = page.getByRole("dialog", { name: "Tara" });
   await drawer.getByRole("switch", { name: "Internal account" }).click();
   await expect(drawer.getByText("Also has sites of another client: Pune")).toBeVisible();
-  await drawer.getByRole("button", { name: "Save" }).click();
+  await expect(drawer.getByRole("button", { name: "Save" })).toBeDisabled();
   await expect(drawer.getByText("Remove the other client's sites to save these changes.")).toBeVisible();
   expect(calls.some((c) => c.path.endsWith("/admin/users/8"))).toBe(false);
   await drawer.getByRole("button", { name: "Keep only this client's sites" }).click();

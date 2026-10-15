@@ -167,11 +167,12 @@ export function sitesForClient(sites: Site[], companyId: number | null): Site[] 
 /**
  * Picked sites that belong to another client than the draft's (a person given
  * several clients' sites before that was refused). A person works for one
- * client, so the server refuses a mix.
+ * client, so the server refuses a mix. Like the server, a site with no client
+ * counts as another client's.
  */
 export function otherClientSites(sites: Site[], d: Pick<UserDraft, "company_id" | "site_ids" | "role" | "is_internal">): Site[] {
   if (d.company_id === null || internalAccount(d)) return [];
-  return sites.filter((s) => d.site_ids.includes(s.site_id) && !!s.company && s.company.company_id !== d.company_id);
+  return sites.filter((s) => d.site_ids.includes(s.site_id) && s.company?.company_id !== d.company_id);
 }
 
 /** Every category the chosen sites report, by id. */
