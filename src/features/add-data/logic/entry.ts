@@ -3,6 +3,7 @@ import { canConvert, unitsMatchExact } from "../../../ui/unitMatch";
 import { factorYearForDate, yearlyPeriodEndDate, type PeriodMode, type YearType } from "../hooks/reportingPeriod";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import type { ModalRow } from "../types";
+import { isEstimatedRow } from "./transport";
 
 /** What is being reported: a month, or a CY/FY year (yearly batches). */
 export type EntryPeriod =
@@ -93,6 +94,8 @@ export interface EmissionPayload {
   activity_data_unit?: string;
   reporting_period: PeriodMode;
   year_type?: YearType;
+  /** A distance from the route helper that was estimated (S3-8; stored by S3-3's emission.is_estimate). */
+  is_estimate?: true;
 }
 
 /**
@@ -108,7 +111,7 @@ export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: n
     if (key === "id") continue;
     if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
     // Private row state: FERA flag, mapping key, the bill a row came from, the saved entry it edits.
-    if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf" || key === "_editSaved") continue;
+    if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf" || key === "_editSaved" || key === "_estimate") continue;
     activity[key] = value;
   }
   const date = entryDate(ctx.period);
@@ -123,6 +126,7 @@ export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: n
     activity_data_unit: activity_data_unit || undefined,
     reporting_period: ctx.period.mode,
     year_type: ctx.period.mode === "yearly" ? ctx.period.yearType : undefined,
+    ...(isEstimatedRow(row) ? { is_estimate: true as const } : {}),
   };
 }
 

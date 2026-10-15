@@ -1,5 +1,6 @@
 import { NumberField, Select, TextField, Textarea } from "../../../ui";
 import type { ExtraFieldDefinition, ModalRow } from "../types";
+import { PAID_BY_HELP, PAID_BY_KEY } from "../logic/transport";
 
 type Props = {
   fields: ExtraFieldDefinition[];
@@ -25,6 +26,7 @@ export function ExtraFields({ fields, row, onChange }: Props) {
                 onChange={(v) => onChange(f.key, v ?? "")}
                 options={(f.options ?? []).map((o) => ({ value: o, label: o }))}
                 placeholder="Select…"
+                help={f.key === PAID_BY_KEY ? PAID_BY_HELP : undefined}
               />
             );
           case "number":

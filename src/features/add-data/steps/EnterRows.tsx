@@ -184,9 +184,11 @@ export function EnterRows(p: Props) {
         open={!!distanceFor && !!distanceRow}
         onClose={() => setDistanceFor(null)}
         unit={String(distanceRow?.activity_data_unit ?? "km")}
-        onUse={(distance) => {
+        onUse={(distance, estimate) => {
           if (distanceFor) {
-            p.dispatch({ type: "change", model: p.model, id: distanceFor.rowId, column: distanceTarget(distanceFor.field, distanceFor.column), value: String(distance) });
+            const column = distanceTarget(distanceFor.field, distanceFor.column);
+            p.dispatch({ type: "change", model: p.model, id: distanceFor.rowId, column, value: String(distance) });
+            p.dispatch({ type: "estimate", id: distanceFor.rowId, column, value: String(distance), estimate });
           }
           setDistanceFor(null);
         }}

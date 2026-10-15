@@ -3,6 +3,7 @@ import { billOf, markEdited } from "../logic/bill";
 import { withCompositeProduct } from "../logic/distance";
 import { applyChange, newRow, setExtraField, type FormModel } from "../logic/form";
 import type { ModalRow } from "../types";
+import { markEstimate } from "../logic/transport";
 
 // One reducer for the rows being entered (replaces the legacy page's modal
 // row state). The draft is kept in sessionStorage per user × site × category
@@ -27,6 +28,8 @@ type Action =
   | { type: "remove"; id: number }
   | { type: "change"; model: FormModel; id: number; column: string; value: string }
   | { type: "extra"; id: number; key: string; value: string }
+  /** The distance drawer filled `column` with `value`; `estimate` when the route was estimated (S3-8). */
+  | { type: "estimate"; id: number; column: string; value: string; estimate: boolean }
   /** Rows read from a bill; dropped when `draftKey` is no longer the open context. */
   | { type: "append"; rows: ModalRow[]; draftKey: string | null }
   | { type: "confirmBill"; key: string }
@@ -77,6 +80,8 @@ export function rowsReducer(prev: State, action: Action): State {
       };
     case "extra":
       return { ...state, rows: state.rows.map((r) => (r.id === action.id ? setExtraField(r, action.key, action.value) : r)) };
+    case "estimate":
+      return { ...state, rows: state.rows.map((r) => (r.id === action.id ? markEstimate(r, action.column, action.value, action.estimate) : r)) };
     case "append": {
       // Ids are renumbered from nextId so rows read earlier never collide.
       const added = action.rows.map((r, i) => ({ ...r, id: state.nextId + i }));

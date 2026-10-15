@@ -13,7 +13,8 @@ type Props = {
   onClose: () => void;
   /** The row's unit: km, miles, passenger.km… The result is converted to it. */
   unit: string;
-  onUse: (distance: number) => void;
+  /** `estimate`: rail, or sea without a route; the row then sends is_estimate (S3-8). */
+  onUse: (distance: number, estimate: boolean) => void;
 };
 
 const MODES: { value: TravelMode; label: string }[] = [
@@ -71,7 +72,7 @@ export function DistanceDrawer({ open, onClose, unit, onUse }: Props) {
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={!usable} onClick={() => result && (onUse(result.value), onClose())}>
+          <Button variant="primary" disabled={!usable} onClick={() => result && (onUse(result.value, result.estimate), onClose())}>
             Use this distance
           </Button>
         </div>

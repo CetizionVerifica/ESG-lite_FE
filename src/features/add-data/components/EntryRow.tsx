@@ -12,6 +12,7 @@ import { DynamicField } from "./DynamicField";
 import { DistanceInput } from "./DistanceInput";
 import { distanceFieldFor, type DistanceField } from "../logic/distance";
 import { ExtraFields } from "./ExtraFields";
+import { transportUnitHelp } from "../logic/transport";
 
 export type RowComparison = { text: string; overThreshold: boolean; threshold: number; previousLabel: string } | null;
 
@@ -139,7 +140,10 @@ export function EntryRow(p: Props) {
           onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
           options={unitOptions.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
           placeholder="Choose a unit"
-          help={expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined}
+          help={
+            transportUnitHelp(model.spec, row.activity_data_unit) ??
+            (expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined)
+          }
           error={fieldError("activity_data_unit")}
         />
       </div>
