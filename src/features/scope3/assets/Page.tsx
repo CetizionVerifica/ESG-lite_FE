@@ -44,9 +44,9 @@ export default function InvestmentsPage() {
   const setParam = (key: string, value: string | null) =>
     setParams(
       (p) => {
-        const next = new URLSearchParams(p);
-        if (value === null || value === "") next.delete(key);
-        else next.set(key, value);
+        // Copy every other param; an empty value drops this one from the URL.
+        const next = new URLSearchParams([...p].filter(([k]) => k !== key));
+        if (value !== null && value !== "") next.set(key, value);
         return next;
       },
       { replace: true },
