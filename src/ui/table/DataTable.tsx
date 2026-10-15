@@ -69,13 +69,21 @@ export type DataTableProps<T> = {
   maxHeight?: string;
 };
 
-type Prefs = { hidden: string[]; compact: boolean };
+/** `known`: the column ids the saved prefs have seen, so a column added later starts as its default. */
+type Prefs = { hidden: string[]; compact: boolean; known?: string[] };
 
-function loadPrefs(key: string | undefined, fallback: Prefs): Prefs {
+function loadPrefs<T>(key: string | undefined, columns: Column<T>[]): Prefs {
+  const defaultHidden = columns.filter((c) => c.defaultHidden).map((c) => c.id);
+  const fallback: Prefs = { hidden: defaultHidden, compact: false, known: columns.map((c) => c.id) };
   if (!key) return fallback;
   try {
     const raw = localStorage.getItem(`dt:${key}`);
-    return raw ? { ...fallback, ...(JSON.parse(raw) as Partial<Prefs>) } : fallback;
+    if (!raw) return fallback;
+    const saved = { hidden: [], compact: false, ...(JSON.parse(raw) as Partial<Prefs>) };
+    // A default-hidden column the saved prefs have never seen stays hidden.
+    const known = new Set(saved.known ?? []);
+    const unseen = defaultHidden.filter((id) => !known.has(id) && !saved.hidden.includes(id));
+    return { ...saved, hidden: [...saved.hidden, ...unseen], known: [...new Set([...known, ...fallback.known!])] };
   } catch {
     return fallback;
   }
@@ -116,9 +124,7 @@ export function DataTable<T>({
   storageKey,
   maxHeight = "70vh",
 }: DataTableProps<T>) {
-  const [prefs, setPrefs] = useState<Prefs>(() =>
-    loadPrefs(storageKey, { hidden: columns.filter((c) => c.defaultHidden).map((c) => c.id), compact: false }),
-  );
+  const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs(storageKey, columns));
   useEffect(() => savePrefs(storageKey, prefs), [storageKey, prefs]);
 
   const [localSort, setLocalSort] = useState<SortState>(defaultSort);
