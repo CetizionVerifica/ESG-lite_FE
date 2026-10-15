@@ -65,7 +65,8 @@ export const SHELL_ROUTES = [
   { id: "notifications", path: "/notifications", title: "Notifications", crumb: ["Notifications"], roles: ALL, spec: "P13" },
   { id: "settings", path: "/settings", title: "Settings", crumb: ["Settings"], roles: ALL, spec: "P14" },
   // Connect Claude consent (MCP import plan IM10); ESG-lite /oauth/authorize lands here.
-  { id: "oauth-consent", path: "/oauth/consent", title: "Connect Claude", crumb: ["Connect Claude"], roles: ALL, spec: "IM10" },
+  // Superadmin only (Shyam, 2026-10-14): other roles get the 403 page, never the consent screen.
+  { id: "oauth-consent", path: "/oauth/consent", title: "Connect Claude", crumb: ["Connect Claude"], roles: ["Superadmin"], spec: "IM10" },
 
   // Company admin
   { id: "company-users", path: "/users", title: "Users", crumb: ["Users"], roles: ["Admin"], spec: "P15", roleRedirect: { Superadmin: "/setup/users" } },
@@ -90,7 +91,7 @@ export const SHELL_ROUTES = [
   { id: "capture-forms", path: "/capture/forms", title: "Data-entry forms", crumb: ["Capture", "Data-entry forms"], roles: ["Superadmin"], spec: "P24" },
   { id: "capture-form", path: "/capture/forms/:id", title: "Form", crumb: ["Capture", "Data-entry forms", "Edit"], roles: ["Superadmin"], spec: "P24" },
   // Contributors reach it from Add data, for their own sites (P27).
-  { id: "bulk-upload", path: "/capture/upload", title: "Bulk upload", crumb: ["Capture", "Bulk upload"], roles: ["Superadmin", "User"], spec: "P27" },
+  { id: "bulk-upload", path: "/capture/upload", title: "Bulk upload", crumb: ["Capture", "Bulk upload"], roles: ["Superadmin", "Admin", "Manager", "User"], spec: "P27" },
 ] as const satisfies readonly ShellRoute[];
 
 export type ShellRouteId = (typeof SHELL_ROUTES)[number]["id"];

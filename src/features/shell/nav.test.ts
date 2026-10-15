@@ -9,13 +9,13 @@ describe("nav labels (final copy from the F2 spec)", () => {
   it("Manager", () =>
     expect(labels("Manager")).toEqual([
       "Overview",
-      "Data ▾ (Approvals, Emissions ledger, Production data)",
+      "Data ▾ (Approvals, Emissions ledger, Production data, Bulk upload)",
       "Reports ▾ (GHG report, EDE report)",
       "Targets (SBTi)",
       "Products (PCF)",
       "Team",
     ]));
-  it("Admin", () => expect(labels("Admin")).toEqual(["Users", "Brand theme"]));
+  it("Admin", () => expect(labels("Admin")).toEqual(["Users", "Bulk upload", "Brand theme"]));
   it("Superadmin", () =>
     expect(labels("Superadmin")).toEqual([
       "Console",

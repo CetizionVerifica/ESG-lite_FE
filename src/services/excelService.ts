@@ -67,12 +67,14 @@ export class ExcelServiceError extends Error {
 /** Rows changed between the preview and the import (ESG-lite re-checks them on commit). */
 export const PLAN_CHANGED_MESSAGE = "Some rows changed since the preview. Go back to the preview, check them again and import from there.";
 
-async function refuse(response: Response, fallback: string): Promise<never> {
-  const error = await response.json().catch(() => ({}));
-  const detail = error?.detail;
+async function refuse(response: Response, fallback: string, parsed?: unknown): Promise<never> {
+  // A body can be read once: a caller that already parsed it passes it on.
+  const error = parsed !== undefined ? parsed : await response.json().catch(() => ({}));
+  const detail = (error as { detail?: unknown } | null)?.detail;
   if (typeof detail === "string") throw new ExcelServiceError(detail, response.status);
-  const code = typeof detail?.code === "string" ? detail.code : null;
-  const message = typeof detail?.message === "string" ? detail.message : fallback;
+  const body = (detail ?? {}) as { code?: unknown; message?: unknown };
+  const code = typeof body.code === "string" ? body.code : null;
+  const message = typeof body.message === "string" ? body.message : fallback;
   throw new ExcelServiceError(code === "IMPORT_PLAN_VERSION_CONFLICT" ? PLAN_CHANGED_MESSAGE : message, response.status, code);
 }
 
@@ -174,8 +176,80 @@ export async function importAllRows(args: SheetArgs, plan: { plan_id: string; ve
     const error = await response.json().catch(() => ({}));
     const detail = error?.detail;
     if (response.status === 409 && (typeof detail === "string" || !detail)) throw new ExcelServiceError(detail || ALREADY_IMPORTED_MESSAGE, 409);
-    await refuse(response, "Import failed.");
+    await refuse(response, "Import failed.", error);
   }
 
+  return response.json();
+}
+
+// ── Smart import (XI4): the mapping proposal path ───────────────────────────
+
+/** The confirmed proposal as XI0 shapes it; the python twin validates it. See src/features/bulk-upload/smart/types.ts. */
+export type SmartProposal = { document_id: number; site_id: number; sheets: unknown[]; model?: unknown };
+
+/**
+ * Asks the mapper what the workbook holds for one site (`POST /v1/excel/propose`,
+ * XI2). The caller's own token scopes the context the model sees; a site the
+ * caller doesn't hold is refused by ESG-lite (403 IMPORT_FORBIDDEN), a client
+ * with Smart import off gets 403 AI_IMPORT_DISABLED_FOR_CLIENT.
+ */
+export async function proposeMapping(documentId: number, siteId: number): Promise<SmartProposal> {
+  const response = await fetch(`${PYTHON_API_URL}/v1/excel/propose`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...ocrAuthHeaders() },
+    body: JSON.stringify({ document_id: documentId, site_id: siteId }),
+  });
+  if (!response.ok) await refuse(response, "The mapper couldn't read the workbook.");
+  return response.json();
+}
+
+export interface SmartPreviewOptions {
+  page?: number;
+  pageSize?: number;
+  /** Only rows carrying this issue code (ESG-lite `GET /imports/plans/:id?code=`). */
+  code?: string | null;
+  /** Pages an existing plan instead of planning the workbook again. */
+  planId?: string | null;
+  /** The plan of an earlier preview, cancelled when a new one is made. */
+  cancelPlanId?: string | null;
+}
+
+/**
+ * Plans the confirmed proposal on ESG-lite (`POST /imports/plans`, channel
+ * bulk_upload, with `mapping` so XI3 learns from it on commit) and returns the
+ * plan with a page of rows, flattened like the column-mapped preview.
+ */
+export async function fetchSmartPreview(proposal: SmartProposal, opts: SmartPreviewOptions = {}): Promise<PreviewRowsResponse> {
+  const response = await fetch(`${PYTHON_API_URL}/v1/excel/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...ocrAuthHeaders() },
+    body: JSON.stringify({
+      document_id: proposal.document_id,
+      site_id: proposal.site_id,
+      proposal,
+      page: opts.page ?? 1,
+      page_size: opts.pageSize ?? 100,
+      ...(opts.code && { code: opts.code }),
+      ...(opts.planId && { plan_id: opts.planId }),
+      ...(opts.cancelPlanId && { cancel_plan_id: opts.cancelPlanId }),
+    }),
+  });
+  if (!response.ok) await refuse(response, "Failed to fetch preview rows.");
+  return response.json();
+}
+
+/** Commits the previewed plan of a confirmed proposal (`plan_id` at `version`); rows with issues must be skipped first. */
+export async function importProposal(proposal: SmartProposal, plan: { plan_id: string; version: number }): Promise<ImportResponse> {
+  const response = await fetch(`${PYTHON_API_URL}/v1/excel/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...ocrAuthHeaders() },
+    body: JSON.stringify({ document_id: proposal.document_id, site_id: proposal.site_id, proposal, plan_id: plan.plan_id, version: plan.version }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    const detail = error?.detail;
+    if (response.status === 409 && (typeof detail === "string" || !detail)) throw new ExcelServiceError(detail || ALREADY_IMPORTED_MESSAGE, 409);
+    await refuse(response, "Import failed.");
+  }
   return response.json();
 }

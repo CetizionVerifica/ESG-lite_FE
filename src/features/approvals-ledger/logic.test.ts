@@ -12,6 +12,12 @@ import {
   formatFactorValue,
   humanize,
   listParams,
+  approveBatchCopy,
+  attentionOf,
+  batchApproveError,
+  attentionOn,
+  importProvenance,
+  matchedByText,
   reviewRowsPath,
   mergeFera,
   optionLabel,
@@ -65,6 +71,12 @@ describe("listParams", () => {
   it("passes one upload batch through, and nothing when there is none", () => {
     expect(listParams({ ...base, tab: "approvals", batchId: "b-2" })).toMatchObject({ batchId: "b-2", status: "pending" });
     expect(listParams({ ...base, tab: "ledger" })).toMatchObject({ batchId: null });
+  });
+
+  it("asks for the rows that need attention only with a batch (XI5)", () => {
+    expect(listParams({ ...base, tab: "approvals", batchId: "b-2", attention: true })).toMatchObject({ batchId: "b-2", attention: true });
+    expect(listParams({ ...base, tab: "approvals", batchId: "b-2" })).toMatchObject({ attention: null });
+    expect(listParams({ ...base, tab: "approvals", attention: true })).toMatchObject({ batchId: null, attention: null });
   });
 
   it("drops sorts the server can't do", () => {
@@ -256,5 +268,63 @@ describe("reviewRowsPath", () => {
   });
   it("opens the ledger once nothing is pending", () => {
     expect(reviewRowsPath({ ...batch, pending_count: 0 })).toBe("/data/ledger?period=all&site=1&category=20&batch=b-2");
+  });
+});
+
+describe("needs attention (XI5)", () => {
+  it("is on by default while the batch has such rows, and ?attention= overrides", () => {
+    expect(attentionOn(null, 3)).toBe(true);
+    expect(attentionOn(null, 0)).toBe(false);
+    expect(attentionOn(null, undefined)).toBe(false);
+    expect(attentionOn("0", 3)).toBe(false);
+    expect(attentionOn("1", 0)).toBe(true);
+  });
+
+  it("reads the sheet reference and the match off the import row", () => {
+    expect(importProvenance({ extra_data: {} })).toBeNull();
+    expect(importProvenance({ extra_data: { import: { channel: "bulk_upload", row_ref: "Fuel!A5" } } })).toEqual({ row_ref: "Fuel!A5", meta: null });
+    const p = importProvenance({ extra_data: { import: { channel: "bulk_upload", row_ref: "Fuel!A6", meta: { source: "llm", confidence: 0.64 } } } });
+    expect(p).toEqual({ row_ref: "Fuel!A6", meta: { source: "llm", confidence: 0.64 } });
+    expect(matchedByText(p!.meta!)).toBe("suggested (64 %)");
+    expect(matchedByText({ source: "profile", confidence: 1 })).toBe("remembered from an earlier upload");
+    expect(matchedByText({ source: "rules", confidence: 1 })).toBe("matched by name");
+    expect(importProvenance({ extra_data: { import: { meta: { source: "magic", confidence: 0.5 } } } })).toBeNull();
+  });
+
+  it("names the attention count in the batch approval dialog", () => {
+    expect(approveBatchCopy(300, 12)).toEqual({
+      title: "Approve all 300 pending rows?",
+      description: "12 of 300 pending rows were matched by the smart import below 80 % or changed before the import. Review them first, or approve everything now.",
+      reviewFirst: true,
+    });
+    expect(approveBatchCopy(5, 0)).toMatchObject({ title: "Approve 5 pending rows?", reviewFirst: false });
+    expect(approveBatchCopy(5, undefined).reviewFirst).toBe(false);
+    expect(approveBatchCopy(12000, 1)).toEqual({
+      title: "Approve all 12,000 pending rows?",
+      description: "1 of 12,000 pending rows was matched by the smart import below 80 % or changed before the import. Review them first, or approve everything now.",
+      reviewFirst: true,
+    });
+    expect(approveBatchCopy(1, 0).title).toBe("Approve 1 pending row?");
+    expect(approveBatchCopy(1, 1).title).toBe("Approve the 1 pending row?");
+  });
+
+  it("explains a refused batch approve by the uploader", () => {
+    expect(batchApproveError({ response: { status: 403, data: { message: "You can't approve or reject your own entries" } } })).toBe("You can't approve this batch yourself. Ask another manager to approve it.");
+    expect(batchApproveError({ response: { status: 500 } })).toBeNull();
+    expect(batchApproveError(new Error("x"))).toBeNull();
+  });
+
+  it("reads the attention count under either summary name", () => {
+    expect(attentionOf({ attention: 3 })).toBe(3);
+    expect(attentionOf({ attention_count: 2 })).toBe(2);
+    expect(attentionOf({ attention: 0, attention_count: 5 })).toBe(0);
+    expect(attentionOf({})).toBeNull();
+    expect(attentionOf(undefined)).toBeNull();
+  });
+
+  it("links Review rows with the attention filter on", () => {
+    const batch = { upload_batch_id: "b-2", site_id: 1, category_id: 20, pending_count: 2 };
+    expect(reviewRowsPath(batch, true)).toContain("attention=1");
+    expect(reviewRowsPath(batch)).not.toContain("attention");
   });
 });

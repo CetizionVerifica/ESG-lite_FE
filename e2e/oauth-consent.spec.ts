@@ -93,14 +93,12 @@ test("Deny sends the person back with no code", async ({ page }) => {
 });
 
 for (const role of ["Manager", "Admin", "User"]) {
-  test(`a ${role} is told only Superadmins can connect and gets no Allow button`, async ({ page }) => {
+  test(`a ${role} never sees the consent screen: the route is Superadmin only`, async ({ page }) => {
     await mockApi(page, role);
     await page.goto(`/oauth/consent?request=${REQUEST}`);
-    await expect(page.getByText("Only ESGLite staff (Superadmin) can connect Claude.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "You don't have access to this page" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /Connect Claude to ESGLite\?/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Allow" })).toHaveCount(0);
-    await page.getByRole("button", { name: "Back to Claude" }).click();
-    await expect(page.getByRole("heading", { name: "Back in Claude" })).toBeVisible();
-    expect(page.url()).toContain("error=access_denied");
   });
 }
 

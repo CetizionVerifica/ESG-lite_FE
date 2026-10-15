@@ -80,8 +80,8 @@ async function signIn(page: Page) {
       if (brand && method === "GET") return json(brand[1] === "1" ? midal : { companyId: Number(brand[1]), name: "", primary: "#1f2a44", accent: "#3b82f6", logoUrl: null });
       if (path.endsWith("/user/reporting-calendar")) return json({ fiscalYearStartMonth: 4, fiscalYearRule: "Apr 1 → Mar 31" });
       const company = /\/admin\/companies\/(\d+)$/.exec(path);
-      if (company && method === "PUT" && body && "mcp_enabled" in body) {
-        companies = companies.map((c) => (c.company_id === Number(company[1]) ? { ...c, mcp_enabled: body.mcp_enabled } : c));
+      if (company && method === "PUT" && body && ("mcp_enabled" in body || "ai_import_enabled" in body)) {
+        companies = companies.map((c) => (c.company_id === Number(company[1]) ? { ...c, ...body } : c));
         return json({ message: "Company updated" });
       }
       if (path.endsWith("/admin/onboarding/company")) {
@@ -386,6 +386,18 @@ test("a superadmin allows Claude imports for a client from its overview", async 
   await expect(page.getByText("Claude imports allowed for Midal Cables")).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   expect(calls).toContainEqual({ method: "PUT", path: expect.stringMatching(/\/admin\/companies\/1$/), body: { mcp_enabled: true } });
+});
+
+test("a superadmin turns Smart import on for a client from its overview", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/clients/1");
+  const toggle = page.getByRole("switch", { name: "Smart import" });
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByText(/Off: managers map columns themselves/)).toBeVisible();
+  await toggle.click();
+  await expect(page.getByText("Smart import on for Midal Cables")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  expect(calls).toContainEqual({ method: "PUT", path: expect.stringMatching(/\/admin\/companies\/1$/), body: { ai_import_enabled: true } });
 });
 
 test("a superadmin onboards a client that starts from another client's setup", async ({ page }) => {
