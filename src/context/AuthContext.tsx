@@ -86,12 +86,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setRole(role);
     setUser(user);
 
-    // Auto-detect and save timezone (fire-and-forget)
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      api.put("/notifications/preferences", { timezone: tz }).catch(() => {});
-    } catch {
-      // Ignore — timezone detection is best-effort
+    // First sign-in only: save the browser's timezone when none is set yet
+    // (fire-and-forget). A timezone chosen in Settings or set by a Superadmin
+    // is never overwritten by whichever device the person signs in from.
+    if (!user?.timezone) {
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        api.put("/notifications/preferences", { timezone: tz }).catch(() => {});
+      } catch {
+        // Ignore — timezone detection is best-effort
+      }
     }
 
     return role;
