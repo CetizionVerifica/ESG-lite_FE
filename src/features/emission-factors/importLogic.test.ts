@@ -236,6 +236,31 @@ describe("factor metadata on import (S3-2)", () => {
     available_columns: [],
   };
 
+  it("copies gas parts only from the primary's own Direct row", () => {
+    const blend: ParseResult = {
+      ...subColumns,
+      factors: [
+        { year: 2026, factor_value: 2.0844, factor_value_text: "2.0844", denominator_unit: "litre", emission_category_name: "Petrol - Direct", sub_column: "Direct", primary: false },
+        { year: 2026, factor_value: 2.0844, factor_value_text: "2.0844", denominator_unit: "litre", emission_category_name: "Petrol", sub_column: "Total", primary: true },
+        { year: 2026, factor_value: 2.1, factor_value_text: "2.1", denominator_unit: "litre", emission_category_name: "Petrol (average biofuel blend) - Direct", sub_column: "Direct", primary: false, co2_kg: "2.1" },
+        { year: 2026, factor_value: 2.1, factor_value_text: "2.1", denominator_unit: "litre", emission_category_name: "Petrol (average biofuel blend)", sub_column: "Total", primary: true },
+      ],
+    };
+    const rows = rowsFromParse(blend);
+    expect(rows[1].meta).toBeUndefined();
+    expect(rows[3].meta).toEqual({ co2_kg: "2.1" });
+  });
+
+  it("asks for the price base year and currency on a spend (EEIO) row", () => {
+    const { rows } = parseSimpleRows([
+      { year: 2026, factor_value: 0.4, unit: "USD", emission_category_name: "Steel", factor_type: "eeio_spend" },
+      { year: 2026, factor_value: 0.4, unit: "USD", emission_category_name: "Steel", factor_type: "eeio_spend", price_base_year: 2022, price_currency: "usd" },
+    ]);
+    expect(rowProblem(rows[0])).toMatch(/needs its price base year and currency/);
+    expect(rows[1].meta).toEqual({ factor_type: "eeio_spend", price_base_year: 2022, price_currency: "USD" });
+    expect(rowProblem(rows[1])).toBeNull();
+  });
+
   it("keeps WTT as its own group and starts Direct excluded", () => {
     expect(groupsOf(subColumns)).toEqual(["", "WTT"]);
     const rows = rowsFromParse(subColumns);

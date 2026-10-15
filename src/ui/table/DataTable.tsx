@@ -80,8 +80,9 @@ function loadPrefs<T>(key: string | undefined, columns: Column<T>[]): Prefs {
     const raw = localStorage.getItem(`dt:${key}`);
     if (!raw) return fallback;
     const saved = { hidden: [], compact: false, ...(JSON.parse(raw) as Partial<Prefs>) };
-    // A default-hidden column the saved prefs have never seen stays hidden.
-    const known = new Set(saved.known ?? []);
+    // A default-hidden column the saved prefs have never seen stays hidden. Prefs saved before
+    // `known` existed have seen every column except the ones marked addedLater.
+    const known = new Set(saved.known ?? columns.filter((c) => !c.addedLater).map((c) => c.id));
     const unseen = defaultHidden.filter((id) => !known.has(id) && !saved.hidden.includes(id));
     return { ...saved, hidden: [...saved.hidden, ...unseen], known: [...new Set([...known, ...fallback.known!])] };
   } catch {

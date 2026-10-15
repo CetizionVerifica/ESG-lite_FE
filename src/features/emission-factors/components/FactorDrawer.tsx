@@ -213,8 +213,10 @@ export function FactorDrawer(props: Props) {
             placeholder="Not set"
             value={draft.factorType}
             onChange={(v) => set("factorType", v as FactorDraft["factorType"])}
-            options={FACTOR_TYPES.map((t) => ({ value: t, label: FACTOR_TYPE_LABEL[t] }))}
-            help="What the factor covers, e.g. direct combustion, well-to-tank or spend-based."
+            // Spend-based needs a price base year and currency, which arrive with S3-5; until then it's
+            // offered only to keep a factor that already has it.
+            options={FACTOR_TYPES.filter((t) => t !== "eeio_spend" || row?.factor_type === "eeio_spend").map((t) => ({ value: t, label: FACTOR_TYPE_LABEL[t] }))}
+            help="What the factor covers, e.g. direct combustion, well-to-tank or life cycle."
           />
           <Select<string>
             label="GWP set"

@@ -21,6 +21,12 @@ export type Column<T> = {
   /** False keeps the column out of the column picker (always shown). */
   hideable?: boolean;
   defaultHidden?: boolean;
+  /**
+   * A default-hidden column added after the table first saved column prefs.
+   * Prefs saved before the table recorded its known columns hide it; other
+   * default-hidden columns keep the user's earlier choice.
+   */
+  addedLater?: boolean;
   /** Lets the cell wrap onto more lines. Cells stay on one line by default so rows keep one height. */
   wrap?: boolean;
   /** CSS width, e.g. "8rem". */

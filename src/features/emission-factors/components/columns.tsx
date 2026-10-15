@@ -26,9 +26,9 @@ export function factorColumns(opts: { batches: Batch[] | undefined; onEdit: (row
       cell: (r) => <span className="font-num">{formatFactor(r.factor_value)}</span>,
     },
     { id: "unit", header: "Unit", width: "7rem", value: (r) => r.denominator_unit ?? "", cell: (r) => (r.denominator_unit ? r.denominator_unit : dash) },
-    // S3-2 metadata: hidden by default, offered in the column picker and the export.
-    { id: "type", header: "Type", defaultHidden: true, value: (r) => (r.factor_type ? factorTypeLabel(r.factor_type) : ""), cell: (r) => (r.factor_type ? factorTypeLabel(r.factor_type) : dash) },
-    { id: "gwp", header: "GWP", width: "5rem", defaultHidden: true, value: (r) => r.gwp_set ?? "", cell: (r) => (r.gwp_set ? r.gwp_set : dash) },
+    // S3-2 metadata: hidden by default (also for prefs saved before S3-2), offered in the column picker.
+    { id: "type", header: "Type", defaultHidden: true, addedLater: true, value: (r) => (r.factor_type ? factorTypeLabel(r.factor_type) : ""), cell: (r) => (r.factor_type ? factorTypeLabel(r.factor_type) : dash) },
+    { id: "gwp", header: "GWP", width: "5rem", defaultHidden: true, addedLater: true, value: (r) => r.gwp_set ?? "", cell: (r) => (r.gwp_set ? r.gwp_set : dash) },
     {
       id: "source",
       header: "Source",

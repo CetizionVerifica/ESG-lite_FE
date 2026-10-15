@@ -15,6 +15,8 @@ export type ImportMeta = {
   other_kgco2e?: string;
   biogenic_co2_kg?: string;
   includes_wtt?: boolean;
+  price_base_year?: number;
+  price_currency?: string;
 };
 
 /** One factor read from a sheet, editable in the Preview step. */
@@ -53,7 +55,7 @@ const COLS = {
 };
 
 /** S3-2 metadata columns a simple sheet may add. */
-const META_COLS: { field: Exclude<keyof ImportMeta, "includes_wtt">; names: string[] }[] = [
+const META_COLS: { field: Exclude<keyof ImportMeta, "includes_wtt" | "price_base_year">; names: string[] }[] = [
   // Only named headers: a generic "Type" or "GWP" column on an older sheet means something else.
   { field: "factor_type", names: ["factor_type", "Factor Type", "Factor type"] },
   { field: "gwp_set", names: ["gwp_set", "GWP Set", "GWP set"] },
@@ -65,7 +67,9 @@ const META_COLS: { field: Exclude<keyof ImportMeta, "includes_wtt">; names: stri
   { field: "n2o_kg", names: ["n2o_kg", "N2O kg", "kg N2O"] },
   { field: "other_kgco2e", names: ["other_kgco2e", "Other kgCO2e"] },
   { field: "biogenic_co2_kg", names: ["biogenic_co2_kg", "Biogenic CO2 kg"] },
+  { field: "price_currency", names: ["price_currency", "Price currency"] },
 ];
+const PRICE_YEAR_COLS = ["price_base_year", "Price base year"];
 const WTT_COLS = ["includes_wtt", "Includes WTT"];
 
 const GAS_FIELDS = ["co2_kg", "ch4_kg", "n2o_kg", "other_kgco2e", "biogenic_co2_kg"] as const;
@@ -114,8 +118,12 @@ function readMeta(r: Record<string, unknown>): ImportMeta | undefined {
             ? geographyText(v)
             : (GAS_FIELDS as readonly string[]).includes(field)
               ? gasText(v)
-              : String(v).trim();
+              : field === "price_currency"
+                ? String(v).trim().toUpperCase()
+                : String(v).trim();
   }
+  const priceYear = pick(r, PRICE_YEAR_COLS);
+  if (priceYear !== undefined) meta.price_base_year = Number(String(priceYear).trim());
   const wtt = pick(r, WTT_COLS);
   if (wtt !== undefined) meta.includes_wtt = /^(true|yes|y|1)$/i.test(String(wtt).trim());
   return Object.keys(meta).length ? meta : undefined;
@@ -181,6 +189,9 @@ export function rowProblem(r: ImportRow): string | null {
   if (t && !isFactorType(t)) return `Type "${t}" isn't one of the factor types.`;
   const g = r.meta?.gwp_set;
   if (g && !(GWP_SETS as readonly string[]).includes(g)) return "GWP set must be AR4, AR5 or AR6.";
+  // S3-0 rule, enforced by the server: a spend (EEIO) factor needs its price base year and currency.
+  if (t === "eeio_spend" && !(Number.isInteger(r.meta?.price_base_year) && /^[A-Z]{3}$/.test(r.meta?.price_currency ?? "")))
+    return "A spend (EEIO) factor needs its price base year and currency (price_base_year, price_currency columns).";
   const geo = r.meta?.geography;
   if (geo && !GEOGRAPHY_TEXT.test(geo)) return `Geography "${geo}" must be a country code (for example GB) or Global.`;
   for (const k of GAS_FIELDS) {
@@ -379,14 +390,22 @@ const hasGases = (f: ParsedFactor) => PARSED_GASES.some((k) => f[k] != null);
 function gasSource(p: ParseResult, f: ParsedFactor): ParsedFactor {
   if (f.primary === false || hasGases(f)) return f;
   const name = f.emission_category_name ?? "";
+  if (!name) return f;
+  // "<name><separator><sub-column>": only a short separator may sit between them,
+  // so "Petrol" never takes "Petrol (average biofuel blend) - Direct".
+  const isSibling = (d: ParsedFactor) => {
+    const n = d.emission_category_name ?? "";
+    const sub = d.sub_column ?? "";
+    if (!sub || !n.startsWith(name) || !n.endsWith(sub) || n.length < name.length + sub.length) return false;
+    return /^\W{1,5}$/.test(n.slice(name.length, n.length - sub.length));
+  };
   const direct = p.factors.find(
     (d) =>
       d.primary === false &&
       d.year === f.year &&
       /\bdirect\b/i.test(d.sub_column ?? "") &&
       (d.parent_category ?? null) === (f.parent_category ?? null) &&
-      (d.emission_category_name ?? "").startsWith(name) &&
-      (d.emission_category_name ?? "").endsWith(d.sub_column ?? "") &&
+      isSibling(d) &&
       hasGases(d),
   );
   return direct ?? f;

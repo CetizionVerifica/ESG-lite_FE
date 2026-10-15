@@ -51,7 +51,7 @@ describe("DataTable", () => {
   it("keeps a newly added default-hidden column hidden for saved column prefs", () => {
     // Prefs saved before the "note" column existed, with no `known` list.
     localStorage.setItem("dt:entries", JSON.stringify({ hidden: ["t"], compact: false }));
-    const withNote: Column<Row>[] = [...columns, { id: "note", header: "Note", value: (r) => r.site, defaultHidden: true }];
+    const withNote: Column<Row>[] = [...columns, { id: "note", header: "Note", value: (r) => r.site, defaultHidden: true, addedLater: true }];
     render(<DataTable label="Entries" rows={rows} columns={withNote} getRowId={(r) => r.id} storageKey="entries" />);
     expect(screen.queryByRole("columnheader", { name: "Note" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: /Emissions/ })).toBeNull();
@@ -62,6 +62,13 @@ describe("DataTable", () => {
 
     // Once seen, the user's own choice wins: showing it again sticks.
     localStorage.setItem("dt:entries", JSON.stringify({ ...saved, hidden: ["t"] }));
+    render(<DataTable label="Entries" rows={rows} columns={withNote} getRowId={(r) => r.id} storageKey="entries" />);
+    expect(screen.getByRole("columnheader", { name: "Note" })).toBeTruthy();
+  });
+
+  it("keeps an existing default-hidden column the user showed, for prefs saved before `known`", () => {
+    localStorage.setItem("dt:entries", JSON.stringify({ hidden: [], compact: false }));
+    const withNote: Column<Row>[] = [...columns, { id: "note", header: "Note", value: (r) => r.site, defaultHidden: true }];
     render(<DataTable label="Entries" rows={rows} columns={withNote} getRowId={(r) => r.id} storageKey="entries" />);
     expect(screen.getByRole("columnheader", { name: "Note" })).toBeTruthy();
   });
