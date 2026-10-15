@@ -180,6 +180,12 @@ export function Review(p: Props) {
                     {!o && <span className="text-muted">Ready</span>}
                     {o?.kind === "saving" && <span className="text-muted">Sending…</span>}
                     {o?.kind === "saved" && <span className="text-good">Sent</span>}
+                    {o?.kind === "saved" &&
+                      o.warnings?.map((w) => (
+                        <span key={w} className="block text-xs text-warn">
+                          {w}
+                        </span>
+                      ))}
                     {o?.kind === "skipped" && <span className="text-muted">Skipped</span>}
                     {o?.kind === "error" && <span className="text-bad">{o.message}</span>}
                     {o?.kind === "duplicate" && (
