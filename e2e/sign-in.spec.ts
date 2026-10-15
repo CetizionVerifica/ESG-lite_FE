@@ -25,11 +25,15 @@ interface Mocks {
   tokenValid?: boolean;
   resetBodies?: unknown[];
   forgotBodies?: unknown[];
+  /** The signed-in user's saved timezone (null: none yet). */
+  timezone?: string | null;
+  /** Bodies of PUT /notifications/preferences. */
+  preferenceBodies?: unknown[];
 }
 
 async function mockApi(page: Page, mocks: Mocks = {}) {
   const role = mocks.role ?? "Manager";
-  const user = { name: "Mia Manager", email: "mia@midal.com", sites: [{ site_id: 1, company }] };
+  const user = { name: "Mia Manager", email: "mia@midal.com", sites: [{ site_id: 1, company }], timezone: mocks.timezone ?? null };
   await page.route(
     (url) => url.port !== "4173",
     (route) => {
@@ -50,6 +54,10 @@ async function mockApi(page: Page, mocks: Mocks = {}) {
       if (path.endsWith("/auth/reset-password")) {
         mocks.resetBodies?.push(request.postDataJSON());
         return json({ message: "Password reset" });
+      }
+      if (path.endsWith("/notifications/preferences") && request.method() === "PUT") {
+        mocks.preferenceBodies?.push(request.postDataJSON());
+        return json({ message: "Preferences updated" });
       }
       if (path.endsWith("/auth/me")) return json({ role, user });
       if (path.endsWith("/auth/me/appearance")) return json({ appearance: "system" });
@@ -157,4 +165,24 @@ test("at 390px the cover is a 120px band above the form", async ({ page }) => {
   expect((await cover.boundingBox())?.height).toBe(120);
   await expect(page.getByRole("button", { name: "Sign in" })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("sign-in saves the browser's timezone only when none is set yet", async ({ page }) => {
+  const first: unknown[] = [];
+  await mockApi(page, { timezone: null, preferenceBodies: first });
+  await page.goto("/login");
+  await fillAndSubmit(page);
+  await expect(page).toHaveURL(/\/overview$/);
+  await expect.poll(() => first.length).toBe(1);
+  expect(first[0]).toEqual({ timezone: expect.any(String) });
+});
+
+test("sign-in keeps a timezone chosen in Settings", async ({ page }) => {
+  const bodies: unknown[] = [];
+  await mockApi(page, { timezone: "Asia/Bahrain", preferenceBodies: bodies });
+  await page.goto("/login");
+  await fillAndSubmit(page);
+  await expect(page).toHaveURL(/\/overview$/);
+  await page.waitForLoadState("networkidle");
+  expect(bodies).toEqual([]);
 });
