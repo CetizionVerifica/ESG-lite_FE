@@ -1,6 +1,7 @@
 /** Pure helpers for P07 Approvals and Emissions ledger. No React, no requests. */
 import type { BatchChannel, EmissionData, EmissionStatus, EmissionUploadBatch } from "../../services/emissionService";
 import { fyEndYear, fyStartYearOf } from "../../lib/fiscalYear";
+import type { ReviewGroup } from "../../lib/scope3/checks";
 import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatNumber, formatReportingYear, writeContext } from "../../ui";
 
 export type FactorSnapshot = {
@@ -101,6 +102,8 @@ export type ListInput = {
   batchId?: string | null;
   /** With a batch: only its rows that need attention (XI5). */
   attention?: boolean;
+  /** S3-15 `?group=` on Approvals (not with a batch): ready or needs-attention rows only. */
+  group?: ReviewGroup | null;
   sort: SortState;
   page: number;
   pageSize: number;
@@ -116,6 +119,7 @@ export function listParams(input: ListInput) {
     search: input.search.trim() || null,
     batchId: input.batchId || null,
     attention: input.batchId && input.attention ? true : null,
+    ready: input.tab === "approvals" && !input.batchId && input.group ? input.group === "ready" : null,
     sort: sortKey ?? null,
     order: sortKey && input.sort ? input.sort.dir : null,
     // DataTable pages are 0-based, the API's 1-based.
@@ -131,6 +135,14 @@ export function asStatus(value: string | undefined): EmissionStatus | null {
 // ── FERA rows ───────────────────────────────────────────────────────────────
 
 export const isFera = (row: EmissionData) => row.category?.category_name?.toLowerCase() === "fera";
+
+/**
+ * A pending FERA twin whose partner entry is pending too: the server folds it
+ * into that entry (one decision, counted once). `undefined` partner status
+ * (an API without the field) counts as folded, as `mergeFera` hides it.
+ */
+export const isFoldedFeraTwin = (row: EmissionData) =>
+  isFera(row) && row.status === "pending" && (row.fera_partner_status === undefined || row.fera_partner_status === "pending");
 
 /**
  * FERA (fuel- and energy-related) rows ride on their parent: they are hidden
@@ -430,4 +442,87 @@ export function reviewRowsPath(batch: Pick<EmissionUploadBatch, "upload_batch_id
   params.set("batch", batch.upload_batch_id);
   if (attention) params.set("attention", "1");
   return `${batch.pending_count > 0 ? "/data/approvals" : "/data/ledger"}?${params.toString()}`;
+}
+
+// ─── Review queue (S3-15) ───────────────────────────────────────────────────
+
+/** "Ready (n)" / "Needs attention (n)" from the summary; null on an API without checks. */
+export function reviewCounts(summary: { ready?: unknown; held?: unknown } | null | undefined): { ready: number; attention: number } | null {
+  const ready = summary?.ready;
+  const held = summary?.held;
+  if (typeof ready !== "number" || !Number.isFinite(ready)) return null;
+  return { ready, attention: typeof held === "number" && Number.isFinite(held) ? held : 0 };
+}
+
+/** "Approve all 12 ready" and the toast that follows. */
+/**
+ * "Approve all ready" copy. One action sends at most `cap` entries; above it
+ * the button says how many of the ready ones go now.
+ */
+export function approveAllCopy(n: number, cap = Infinity): { button: string; toast: string } {
+  if (n > cap) {
+    return {
+      button: `Approve ${formatNumber(cap)} of ${formatNumber(n)} ready`,
+      toast: `${formatNumber(cap)} ready entries approved`,
+    };
+  }
+  return {
+    button: `Approve all ${formatNumber(n)} ready`,
+    toast: n === 1 ? "1 ready entry approved" : `${formatNumber(n)} ready entries approved`,
+  };
+}
+
+/** What a skipped row count after "Approve all ready" says. */
+export function skippedCopy(skipped: number): string | null {
+  if (skipped <= 0) return null;
+  return skipped === 1
+    ? "1 entry wasn't approved: its checks changed. It's under Needs attention."
+    : `${formatNumber(skipped)} entries weren't approved: their checks changed. They're under Needs attention.`;
+}
+
+export type HistoryMonth = { year: number; month: number; label: string; total: number; entries: number; current: boolean };
+
+/** The six months up to and including `anchor` (oldest first). */
+export function historyMonths(anchor: { year: number; month: number }, count = 6): { year: number; month: number }[] {
+  const out: { year: number; month: number }[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(anchor.year, anchor.month - 1 - i, 1);
+    out.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+  }
+  return out;
+}
+
+/** The year and month a monthly row is dated in; null for yearly rows or a bad date. */
+export function rowMonth(row: Pick<EmissionData, "date_of_reporting" | "reporting_period">): { year: number; month: number } | null {
+  if (row.reporting_period === "yearly") return null;
+  const m = /^(\d{4})-(\d{2})/.exec(row.date_of_reporting ?? "");
+  return m ? { year: Number(m[1]), month: Number(m[2]) } : null;
+}
+
+const activityKey = (row: Pick<EmissionData, "activity_data">) => String(row.activity_data?.emission_category ?? "").trim().toLowerCase();
+
+/**
+ * tCO₂e per month for the same site, category and activity (`activity_data.emission_category`)
+ * as `row`, over the six months up to its month. Rejected rows and yearly rows don't count.
+ */
+export function monthlyHistory(row: EmissionData, candidates: EmissionData[]): HistoryMonth[] {
+  const anchor = rowMonth(row);
+  if (!anchor) return [];
+  const key = activityKey(row);
+  const months = historyMonths(anchor);
+  const totals = new Map(months.map((m) => [`${m.year}-${m.month}`, { total: 0, entries: 0 }]));
+  for (const r of candidates) {
+    if (r.status === "rejected" || r.site?.site_id !== row.site?.site_id || r.category?.category_id !== row.category?.category_id) continue;
+    if (activityKey(r) !== key) continue;
+    const at = rowMonth(r);
+    const slot = at && totals.get(`${at.year}-${at.month}`);
+    if (!slot) continue;
+    const v = Number(r.total_emission);
+    if (Number.isFinite(v)) slot.total += v;
+    slot.entries += 1;
+  }
+  return months.map((m) => {
+    const t = totals.get(`${m.year}-${m.month}`)!;
+    return { ...m, label: formatMonth(`${m.year}-${String(m.month).padStart(2, "0")}`), total: t.total, entries: t.entries, current: m.year === anchor.year && m.month === anchor.month };
+  });
 }

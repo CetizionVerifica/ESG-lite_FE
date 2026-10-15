@@ -18,6 +18,8 @@ export { useContextParams, readContext, writeContext, CONTEXT_KEYS, type Context
 export { useDropStaleCategories } from "./hooks/useDropStaleCategories";
 export * from "./table";
 export { Badge, type BadgeTone } from "./Badge";
+export { CheckChip, ReadyChip, UncheckedChip } from "./CheckChip";
+export { CHECK_ICONS } from "./checkIcons";
 export { Avatar } from "./Avatar";
 export { initials } from "./initials";
 export { Tooltip, type TooltipProps } from "./Tooltip";
