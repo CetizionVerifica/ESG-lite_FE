@@ -2,20 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
   type Site,
   type User,
+  allClientSites,
   availableCategories,
   buildRows,
   draftFrom,
   emptyDraft,
+  internalAccount,
+  internalSupported,
   isDirty,
   lastActive,
   lostPermissions,
   matchesFilters,
+  otherClientSites,
   retargetCategories,
+  sendsSites,
   sitesForClient,
   timezoneOptions,
   toPayload,
   validate,
   withClient,
+  withInternal,
   withRole,
 } from "./logic";
 
@@ -150,5 +156,86 @@ describe("timezoneOptions", () => {
   it("includes the browser's zones and keeps an unknown current one", () => {
     expect(timezoneOptions(null)).toContain("UTC");
     expect(timezoneOptions("Mars/Base")[0]).toBe("Mars/Base");
+  });
+});
+
+describe("one client per person", () => {
+  // A Manager given Steel Co's Plant A and Other Co's plant before mixes were refused.
+  const [mixed] = buildRows([{ user_id: 4, email: "mix@x.io", role: "Manager", sites: [{ site_id: 1, name: "Plant A" }, { site_id: 3, name: "Other plant" }] }], SITES);
+
+  it("takes the client owning most of their sites, whatever the site names", () => {
+    // Steel Co owns Plant A and Plant B; Other Co owns "Other plant", first by name.
+    const [most] = buildRows([{ user_id: 8, email: "most@x.io", role: "Manager", sites: [{ site_id: 1, name: "Plant A" }, { site_id: 2, name: "Plant B" }, { site_id: 3, name: "Other plant" }] }], SITES);
+    expect(draftFrom(most).company_id).toBe(1);
+  });
+
+  it("finds picked sites of another client than the draft's", () => {
+    const d = draftFrom(mixed);
+    expect(d.company_id).toBe(2); // a tie: the first client by site name ("Other plant")
+    expect(otherClientSites(SITES, d).map((s) => s.site_id)).toEqual([1]);
+    expect(otherClientSites(SITES, { company_id: 1, site_ids: [1, 2], role: "Manager", is_internal: false })).toEqual([]);
+    expect(otherClientSites(SITES, { company_id: null, site_ids: [1, 3], role: "Manager", is_internal: false })).toEqual([]);
+  });
+
+  it("counts a site with no client as another client's, as the server does", () => {
+    const orphan: Site = { site_id: 4, name: "Loose site", categories: [] };
+    const sites = [...SITES, orphan];
+    expect(otherClientSites(sites, { company_id: 1, site_ids: [1, 4], role: "Manager", is_internal: false }).map((s) => s.site_id)).toEqual([4]);
+    expect(otherClientSites(sites, { company_id: 1, site_ids: [1, 4], role: "Manager", is_internal: true })).toEqual([]);
+  });
+
+  it("sends the sites on create and when the sites or the role change, not for a name change", () => {
+    const d = draftFrom(mixed);
+    expect(sendsSites({ ...d, name: "Mia" }, mixed)).toBe(false);
+    expect(sendsSites({ ...d, site_ids: [3] }, mixed)).toBe(true);
+    expect(sendsSites({ ...d, role: "User" }, mixed)).toBe(true);
+    expect(sendsSites(d, null)).toBe(true);
+  });
+});
+
+describe("internal accounts", () => {
+  it("shows the switch only when the server sends is_internal on users", () => {
+    expect(internalSupported([{ is_internal: false }, {}])).toBe(true);
+    expect(internalSupported([{}, {}])).toBe(false);
+    expect(internalSupported([])).toBe(false);
+  });
+
+  const [team] = buildRows([{ user_id: 9, email: "team@x.io", role: "Manager", is_internal: true, sites: [{ site_id: 1, name: "Plant A" }, { site_id: 3, name: "Other plant" }] }], SITES);
+
+  it("may hold several clients' sites: no other-client warning, no client needed", () => {
+    const d = draftFrom(team);
+    expect(d.is_internal).toBe(true);
+    expect(internalAccount(d)).toBe(true);
+    expect(otherClientSites(SITES, d)).toEqual([]);
+    expect(validate({ ...d, company_id: null }).company_id).toBeUndefined();
+    expect(validate({ ...d, is_internal: false, company_id: null }).company_id).toBeDefined();
+  });
+
+  it("only applies to Managers and Users; becoming Admin or Superadmin clears it", () => {
+    expect(internalAccount({ role: "Admin", is_internal: true })).toBe(false);
+    expect(withRole(draftFrom(team), "Admin").is_internal).toBe(false);
+    expect(withRole(draftFrom(team), "Superadmin").is_internal).toBe(false);
+    expect(withRole(draftFrom(team), "User").is_internal).toBe(true);
+  });
+
+  it("lists every client's sites, by client then name", () => {
+    expect(allClientSites(SITES).map((s) => s.label)).toEqual(["Other plant · Other Co", "Plant A · Steel Co", "Plant B · Steel Co"]);
+  });
+
+  it("turned off, takes back the client owning most of the person's sites", () => {
+    const d = { ...emptyDraft(), role: "Manager" as const, is_internal: true, company_id: null, site_ids: [1, 2, 3] };
+    expect(withInternal(d, false, SITES)).toMatchObject({ is_internal: false, company_id: 1 });
+    expect(withInternal({ ...d, is_internal: false }, true, SITES).is_internal).toBe(true);
+    // A client kept from before that owns none of the picked sites gives way.
+    expect(withInternal({ ...d, company_id: 1, site_ids: [3] }, false, SITES).company_id).toBe(2);
+    expect(withInternal({ ...d, company_id: 1, site_ids: [1, 3] }, false, SITES).company_id).toBe(1);
+  });
+
+  it("sends is_internal when it changes, and on create only when on", () => {
+    expect(toPayload({ ...draftFrom(team), is_internal: false }, team).is_internal).toBe(false);
+    expect(toPayload({ ...draftFrom(team), name: "Kai" }, team).is_internal).toBeUndefined();
+    const create = { ...emptyDraft(), email: "t@x.io", role: "Manager" as const, site_ids: [1, 3] };
+    expect(toPayload({ ...create, is_internal: true }, null)).toMatchObject({ is_internal: true, site_ids: [1, 3] });
+    expect(toPayload(create, null).is_internal).toBeUndefined();
   });
 });

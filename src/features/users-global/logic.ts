@@ -27,6 +27,8 @@ export type User = {
   categories?: Category[] | null;
   /** Missing (not null) when the backend doesn't report it yet. */
   last_login_at?: string | null;
+  /** The team's own account: may hold sites of several clients. */
+  is_internal?: boolean;
 };
 
 export type UserRow = User & {
@@ -105,12 +107,24 @@ export type UserDraft = {
   site_ids: number[];
   category_ids: number[];
   timezone: string | null;
+  is_internal: boolean;
 };
 
 export type DraftField = "email" | "role" | "company_id" | "site_ids" | "category_ids" | "timezone";
 
 export function emptyDraft(defaultCompanyId: number | null = null): UserDraft {
-  return { name: "", last_name: "", email: "", phone_number: "", role: null, company_id: defaultCompanyId, site_ids: [], category_ids: [], timezone: null };
+  return { name: "", last_name: "", email: "", phone_number: "", role: null, company_id: defaultCompanyId, site_ids: [], category_ids: [], timezone: null, is_internal: false };
+}
+
+/** The client a person works for: the one owning most of their sites (several only for someone given a mix before it was refused). */
+function mainClientId(row: UserRow): number | null {
+  let best: number | null = null;
+  let most = 0;
+  for (const c of row.clients) {
+    const n = row.siteList.filter((s) => s.company?.company_id === c.company_id).length;
+    if (n > most) [best, most] = [c.company_id, n];
+  }
+  return best;
 }
 
 export function draftFrom(row: UserRow): UserDraft {
@@ -121,10 +135,11 @@ export function draftFrom(row: UserRow): UserDraft {
     email: row.email,
     phone_number: row.phone_number ?? "",
     role,
-    company_id: row.clients[0]?.company_id ?? null,
+    company_id: mainClientId(row),
     site_ids: row.siteList.map((s) => s.site_id),
     category_ids: (row.categories ?? []).map((c) => c.category_id).sort((a, b) => a - b),
     timezone: row.timezone ?? null,
+    is_internal: !!row.is_internal,
   };
 }
 
@@ -135,7 +150,7 @@ export function validate(d: UserDraft): Partial<Record<DraftField, string>> {
   if (!d.email.trim()) e.email = "Enter an email address.";
   else if (!EMAIL.test(d.email.trim())) e.email = "Enter a valid email address, like name@company.com.";
   if (!d.role) e.role = "Choose a role.";
-  if (d.role && d.role !== "Superadmin" && d.company_id === null) e.company_id = "Choose the client this person works for.";
+  if (d.role && d.role !== "Superadmin" && !internalAccount(d) && d.company_id === null) e.company_id = "Choose the client this person works for.";
   if (multiSite(d.role) && d.site_ids.length === 0) e.site_ids = "Choose at least one site.";
   // Users have no client link of their own: an Admin's client is their site's.
   if (d.role === "Admin" && d.company_id !== null && d.site_ids.length === 0) e.site_ids = "Choose the site this admin belongs to.";
@@ -147,6 +162,17 @@ export function validate(d: UserDraft): Partial<Record<DraftField, string>> {
 export function sitesForClient(sites: Site[], companyId: number | null): Site[] {
   if (companyId === null) return [];
   return sites.filter((s) => s.company?.company_id === companyId).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Picked sites that belong to another client than the draft's (a person given
+ * several clients' sites before that was refused). A person works for one
+ * client, so the server refuses a mix. Like the server, a site with no client
+ * counts as another client's.
+ */
+export function otherClientSites(sites: Site[], d: Pick<UserDraft, "company_id" | "site_ids" | "role" | "is_internal">): Site[] {
+  if (d.company_id === null || internalAccount(d)) return [];
+  return sites.filter((s) => d.site_ids.includes(s.site_id) && s.company?.company_id !== d.company_id);
 }
 
 /** Every category the chosen sites report, by id. */
@@ -173,8 +199,9 @@ export function retargetCategories(selected: number[], before: Category[], after
 
 /** Applies a role change: Superadmin drops client and sites; Admin keeps at most one site. */
 export function withRole(d: UserDraft, role: Role | null): UserDraft {
-  if (role === "Superadmin") return { ...d, role, company_id: null, site_ids: [], category_ids: [] };
-  if (role === "Admin") return { ...d, role, site_ids: d.site_ids.slice(0, 1), category_ids: [] };
+  // "Internal" applies to Managers and Users only.
+  if (role === "Superadmin") return { ...d, role, company_id: null, site_ids: [], category_ids: [], is_internal: false };
+  if (role === "Admin") return { ...d, role, site_ids: d.site_ids.slice(0, 1), category_ids: [], is_internal: false };
   return { ...d, role };
 }
 
@@ -197,11 +224,13 @@ export function isDirty(d: UserDraft, row: UserRow | null): boolean {
     d.company_id !== base.company_id ||
     !sameIds(d.site_ids, base.site_ids) ||
     !sameIds(d.category_ids, base.category_ids) ||
-    d.timezone !== base.timezone
+    d.timezone !== base.timezone ||
+    d.is_internal !== base.is_internal
   );
 }
 
 export type UserPayload = {
+  is_internal?: boolean;
   name?: string;
   last_name?: string | null;
   email?: string;
@@ -212,6 +241,46 @@ export type UserPayload = {
   site_ids?: number[];
   category_ids?: number[];
 };
+
+/**
+ * Whether the server stores the Internal flag: a server with ESG-lite #130
+ * sends `is_internal` on every user. An older one drops the flag on save, so
+ * the switch stays hidden there.
+ */
+export const internalSupported = (users: Pick<User, "is_internal">[]) => users.some((u) => typeof u.is_internal === "boolean");
+
+/** An internal account (the team's own): a Manager or User that may hold several clients' sites. */
+export const internalAccount = (d: Pick<UserDraft, "role" | "is_internal">) => d.is_internal && multiSite(d.role);
+
+/** Every client's sites, by client then name, labelled "Site · Client" (an internal account's choice). */
+export function allClientSites(sites: Site[]): { site_id: number; label: string }[] {
+  return [...sites]
+    .sort((a, b) => (a.company?.name ?? "").localeCompare(b.company?.name ?? "") || a.name.localeCompare(b.name))
+    .map((s) => ({ site_id: s.site_id, label: s.company ? `${s.name} · ${s.company.name}` : s.name }));
+}
+
+/**
+ * Turns "internal account" on or off. Off, the person needs one client again:
+ * the one owning most of their sites, unless the chosen client still owns one.
+ */
+export function withInternal(d: UserDraft, on: boolean, sites: Site[]): UserDraft {
+  if (on) return { ...d, is_internal: true };
+  // Keep the chosen client only if it still owns one of the picked sites.
+  const owns = (id: number) => sites.some((s) => d.site_ids.includes(s.site_id) && s.company?.company_id === id);
+  let company_id = d.company_id !== null && (d.site_ids.length === 0 || owns(d.company_id)) ? d.company_id : null;
+  if (company_id === null) {
+    const count = new Map<number, number>();
+    for (const s of sites) if (d.site_ids.includes(s.site_id) && s.company) count.set(s.company.company_id, (count.get(s.company.company_id) ?? 0) + 1);
+    for (const [id, n] of count) if (company_id === null || n > (count.get(company_id) ?? 0)) company_id = id;
+  }
+  return { ...d, is_internal: false, company_id };
+}
+
+/** Whether a save sends the sites: on create, or when the sites or the role change. */
+export function sendsSites(d: UserDraft, row: UserRow | null): boolean {
+  const base = row ? draftFrom(row) : null;
+  return !base || !sameIds(d.site_ids, base.site_ids) || d.role !== base.role;
+}
 
 /**
  * Request body. On edit only changed fields go out: re-sending sites makes the
@@ -227,8 +296,9 @@ export function toPayload(d: UserDraft, row: UserRow | null): UserPayload {
   if (!base || d.phone_number !== base.phone_number) p.phone_number = text(d.phone_number);
   if (!base || d.role !== base.role) p.role = d.role ?? undefined;
   if (!base || d.timezone !== base.timezone) p.timezone = d.timezone;
+  if (base ? d.is_internal !== base.is_internal : d.is_internal) p.is_internal = d.is_internal;
 
-  const sitesChanged = !base || !sameIds(d.site_ids, base.site_ids) || d.role !== base.role;
+  const sitesChanged = sendsSites(d, row);
   if (sitesChanged) {
     if (multiSite(d.role)) p.site_ids = d.site_ids;
     else p.site_id = d.role === "Admin" ? (d.site_ids[0] ?? null) : null;

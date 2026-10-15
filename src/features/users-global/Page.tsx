@@ -21,7 +21,7 @@ import {
 import { errorMessage, useCompanies, useRemoveUser, useSaveUser, useSendResetLink, useSites, useUsers } from "./api";
 import { UserDrawer } from "./components/UserDrawer";
 import { userColumns } from "./components/columns";
-import { ROLES, type UserDraft, type UserRow, buildRows, matchesFilters, personName, toIds, toPayload } from "./logic";
+import { ROLES, type UserDraft, type UserRow, buildRows, internalSupported, matchesFilters, personName, toIds, toPayload } from "./logic";
 
 const FILTER_KEYS = ["client", "role", "site"];
 const OPEN = "open";
@@ -206,6 +206,7 @@ export default function UsersGlobalPage() {
         onClose={() => setOpen(null)}
         onSave={onSave}
         isSelf={isSelf(openRow)}
+        internalSupported={internalSupported(users.data ?? [])}
         onRemove={() => openRow && startRemove(openRow)}
         onReset={() => openRow && sendReset(openRow)}
       />

@@ -30,8 +30,8 @@ function makeUsers() {
   ];
 }
 
-async function signIn(page: Page) {
-  let users = makeUsers();
+async function signIn(page: Page, extra: ReturnType<typeof makeUsers> = []) {
+  let users = [...makeUsers(), ...extra];
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
   const me = { user_id: 1, name: "Sam", last_name: "Staff", email: "sam@example.com" };
   await page.addInitScript((u) => {
@@ -210,4 +210,63 @@ test("a superadmin demotes a manager, sends a reset link and sees why someone ca
   const self = page.getByRole("dialog", { name: "Sam Staff" });
   await expect(self.getByLabel("Role")).toBeDisabled();
   await expect(self.getByRole("button", { name: "Remove" })).toHaveCount(0);
+});
+
+test("someone with sites of two clients can't be saved with both", async ({ page }) => {
+  // Given sites of two clients before that was refused: Hidd (first client) and Pune (Gulf client).
+  const zara = { user_id: 7, name: "Zara", last_name: undefined, email: "zara@example.com", role: "Manager", site: null, sites: [SITES[0], SITES[2]], categories: [FUEL, POWER], last_login_at: null };
+  const { calls } = await signIn(page, [zara]);
+  await page.goto("/setup/users");
+  await usersTable(page).getByRole("row", { name: /Zara/ }).click();
+  const drawer = page.getByRole("dialog", { name: "Zara" });
+  const warning = drawer.getByText("Also has sites of another client: Pune");
+  await expect(warning).toBeVisible();
+  // This server sends no is_internal on users (no ESG-lite #130), so no Internal switch.
+  await expect(drawer.getByRole("switch", { name: "Internal account" })).toHaveCount(0);
+
+  await drawer.getByLabel("Role").selectOption("User");
+  await expect(drawer.getByRole("button", { name: "Save" })).toBeDisabled();
+  await expect(drawer.getByText("Remove the other client's sites to save these changes.")).toBeVisible();
+  expect(calls.some((c) => c.path.endsWith("/admin/users/7"))).toBe(false);
+
+  await drawer.getByRole("button", { name: "Keep only this client's sites" }).click();
+  await expect(warning).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Zara saved")).toBeVisible();
+  expect(calls.find((c) => c.path.endsWith("/admin/users/7"))?.body).toMatchObject({ role: "User", site_ids: [1] });
+});
+
+test("an internal account picks sites of several clients; turning it off needs one client", async ({ page }) => {
+  const team = { user_id: 8, name: "Tara", last_name: undefined, email: "tara@example.com", role: "Manager", site: null, sites: [SITES[0], SITES[2]], categories: [FUEL, POWER], last_login_at: null, is_internal: true };
+  const { calls } = await signIn(page, [team]);
+  await page.goto("/setup/users");
+  await expect(usersTable(page).getByRole("row", { name: /Tara/ })).toContainText("Internal");
+
+  // Add an internal Manager with a Midal and a Gulf site: no client to choose.
+  await page.getByRole("button", { name: "Add user" }).first().click();
+  const add = page.getByRole("dialog", { name: "Add user" });
+  await add.getByLabel("Email").fill("team@example.com");
+  await add.getByLabel("Role").selectOption("Manager");
+  await add.getByRole("switch", { name: "Internal account" }).click();
+  await expect(add.getByRole("combobox", { name: "Client" })).toHaveCount(0);
+  await add.getByRole("checkbox", { name: "Hidd · Midal Cables" }).check();
+  await add.getByRole("checkbox", { name: "Pune · Gulf Foods" }).check();
+  await add.getByRole("button", { name: "Add user" }).click();
+  const added = page.getByRole("dialog", { name: /added/ });
+  await expect(added).toBeVisible();
+  expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ email: "team@example.com", role: "Manager", is_internal: true, site_ids: [1, 3] });
+  await added.getByRole("button", { name: "Done" }).click();
+
+  // Tara back to a client account: held until the other client's site goes.
+  await usersTable(page).getByRole("row", { name: /Tara/ }).click();
+  const drawer = page.getByRole("dialog", { name: "Tara" });
+  await drawer.getByRole("switch", { name: "Internal account" }).click();
+  await expect(drawer.getByText("Also has sites of another client: Pune")).toBeVisible();
+  await expect(drawer.getByRole("button", { name: "Save" })).toBeDisabled();
+  await expect(drawer.getByText("Remove the other client's sites to save these changes.")).toBeVisible();
+  expect(calls.some((c) => c.path.endsWith("/admin/users/8"))).toBe(false);
+  await drawer.getByRole("button", { name: "Keep only this client's sites" }).click();
+  await drawer.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Tara saved")).toBeVisible();
+  expect(calls.find((c) => c.path.endsWith("/admin/users/8"))?.body).toMatchObject({ is_internal: false, site_ids: [1] });
 });

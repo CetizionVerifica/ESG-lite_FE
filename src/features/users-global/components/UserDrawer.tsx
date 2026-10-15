@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Button, Callout, Combobox, Drawer, Field, Modal, Select, TextField, cn, focusRing } from "../../../ui";
+import { Button, Callout, Combobox, Drawer, Field, Modal, Select, TextField, Toggle, cn, focusRing } from "../../../ui";
 import {
   type Company,
   type DraftField,
@@ -8,18 +8,23 @@ import {
   type Site,
   type UserDraft,
   type UserRow,
+  allClientSites,
   availableCategories,
   draftFrom,
   emptyDraft,
+  internalAccount,
   isDirty,
   isRole,
   lostPermissions,
   multiSite,
+  otherClientSites,
   retargetCategories,
+  sendsSites,
   sitesForClient,
   timezoneOptions,
   validate,
   withClient,
+  withInternal,
   withRole,
 } from "../logic";
 
@@ -34,6 +39,8 @@ type Props = {
   companies: { data: Company[]; loading: boolean };
   sites: { data: Site[]; loading: boolean };
   saving: boolean;
+  /** The server stores the Internal flag (see `internalSupported`); the switch is hidden otherwise. */
+  internalSupported: boolean;
   /** Editing their own account: role locked, no Remove. */
   isSelf?: boolean;
   /** Server error from the last save. */
@@ -73,14 +80,23 @@ export function UserDrawer(props: Props) {
   const set = <K extends keyof UserDraft>(k: K, v: UserDraft[K]) => setDraft((d) => ({ ...d, [k]: v }));
   const lost = row ? lostPermissions(row.role, draft.role) : [];
 
+  const internal = internalAccount(draft);
+  // An internal account picks from every client's sites; anyone else from one client's.
   const clientSites = sitesForClient(props.sites.data, draft.company_id);
+  const siteItems = internal ? allClientSites(props.sites.data).map((s) => ({ id: s.site_id, label: s.label })) : clientSites.map((s) => ({ id: s.site_id, label: s.name }));
   const categories = availableCategories(props.sites.data, draft.site_ids);
-  const setSites = (ids: number[]) =>
+  // Picking sites keeps only the chosen client's: a person works for one client.
+  const setSites = (picked: number[]) => {
+    const ids = internal ? picked : picked.filter((id) => clientSites.some((s) => s.site_id === id));
     setDraft((d) => ({
       ...d,
       site_ids: ids,
       category_ids: retargetCategories(d.category_ids, availableCategories(props.sites.data, d.site_ids), availableCategories(props.sites.data, ids)),
     }));
+  };
+  const foreign = otherClientSites(props.sites.data, draft);
+  // The server refuses a mix when the save sends the sites, or turns "internal" off.
+  const blockedByForeign = foreign.length > 0 && (sendsSites(draft, row) || (!!row?.is_internal && !draft.is_internal));
   const setRole = (role: Role | null) =>
     setDraft((d) => {
       const next = withRole(d, role);
@@ -92,11 +108,11 @@ export function UserDrawer(props: Props) {
   const close = () => (dirty && !props.saving ? setConfirmClose(true) : props.onClose());
   const save = () => {
     setTouched(true);
-    if (!invalid) props.onSave(draft);
+    if (!invalid && !blockedByForeign) props.onSave(draft);
   };
 
   const title = creating ? "Add user" : row!.displayName;
-  const subtitle = creating ? "They get a temporary password to sign in with, shown once after you add them." : [row!.role, row!.clients.map((c) => c.name).join(", ")].filter(Boolean).join(" · ");
+  const subtitle = creating ? "They get a temporary password to sign in with, shown once after you add them." : [row!.role, row!.is_internal ? "Internal" : null, row!.clients.map((c) => c.name).join(", ")].filter(Boolean).join(" · ");
 
   return (
     <>
@@ -124,7 +140,7 @@ export function UserDrawer(props: Props) {
               <Button onClick={close} disabled={props.saving}>
                 Cancel
               </Button>
-              <Button variant="primary" onClick={save} loading={props.saving} disabled={props.saving || (!creating && !dirty)}>
+              <Button variant="primary" onClick={save} loading={props.saving} disabled={props.saving || (!creating && !dirty) || blockedByForeign}>
                 {creating ? "Add user" : "Save"}
               </Button>
             </div>
@@ -187,7 +203,17 @@ export function UserDrawer(props: Props) {
               </Callout>
             )}
 
-            {draft.role && draft.role !== "Superadmin" && (
+            {props.internalSupported && multiSite(draft.role) && (
+              <Toggle
+                label="Internal account"
+                help="Your team's own login. Only internal accounts may have sites of several clients; a client's people stay within one client."
+                checked={draft.is_internal}
+                onChange={(on) => setDraft((d) => withInternal(d, on, props.sites.data))}
+                inlineLabel={draft.is_internal ? "Internal" : "Client account"}
+              />
+            )}
+
+            {draft.role && draft.role !== "Superadmin" && !internal && (
               <Combobox<number>
                 label="Client"
                 required
@@ -216,14 +242,29 @@ export function UserDrawer(props: Props) {
               />
             )}
 
+            {foreign.length > 0 && (
+              <Callout
+                tone="warn"
+                title={`Also has sites of another client: ${foreign.map((s) => (s.company ? s.name : `${s.name} (no client)`)).join(", ")}`}
+                action={
+                  <Button size="sm" onClick={() => setSites(draft.site_ids)}>
+                    Keep only this client's sites
+                  </Button>
+                }
+              >
+                A person works for one client.{" "}
+                {blockedByForeign ? "Remove the other client's sites to save these changes." : "To change their sites or role, first remove the other client's sites."}
+              </Callout>
+            )}
+
             {multiSite(draft.role) && (
               <CheckList
                 legend="Sites"
                 required
                 error={fieldError("site_ids")}
                 loading={props.sites.loading}
-                empty={draft.company_id === null ? "Choose a client first." : "This client has no sites yet."}
-                items={clientSites.map((s) => ({ id: s.site_id, label: s.name }))}
+                empty={internal ? "There are no sites yet." : draft.company_id === null ? "Choose a client first." : "This client has no sites yet."}
+                items={siteItems}
                 selected={draft.site_ids}
                 onChange={setSites}
               />
