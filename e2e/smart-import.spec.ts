@@ -227,9 +227,9 @@ test("with the mapping model on, the rows show straight after the upload with no
   await expect(page.locator("[aria-current=step]")).toContainText("Review rows");
   await expect(page.getByText("ESGLite mapped this workbook for you")).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue to the rows" })).toHaveCount(0);
-  // The proposal goes to the plan as the model made it: low-confidence matches keep their confidence for the approver.
+  // The proposal goes to the plan as the model made it.
   const preview = calls.find((c) => c.path.endsWith("/preview"))?.body as { proposal: typeof MOCK_PROPOSAL };
-  expect(preview.proposal.sheets[0].activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 0.64, source: "llm" });
+  expect(preview.proposal.sheets[0].activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 0.86, source: "llm" });
   await expect(page.getByRole("table", { name: "Rows of the plan" }).getByRole("row")).toHaveCount(6);
   await expect(page.getByRole("button", { name: "Import 3 rows, leave 2 out" })).toBeEnabled();
 
@@ -237,6 +237,15 @@ test("with the mapping model on, the rows show straight after the upload with no
   await page.getByRole("button", { name: "Change mapping" }).click();
   await expect(page.locator("[aria-current=step]")).toContainText("Confirm mapping");
   await expect(page.getByRole("heading", { name: "Fuel 2026" })).toBeVisible();
+});
+
+test("with the mapping model on, a mapping with something to check still stops on Confirm mapping", async ({ page }) => {
+  await signIn(page, "Manager", MANAGER, [HIDD], [], { ...MOCK_PROPOSAL, model: MODEL_PROPOSAL.model });
+  await page.goto("/capture/upload");
+  await page.locator('input[type="file"]').setInputFiles(WORKBOOK);
+  await page.getByRole("button", { name: "Upload and work out the mapping" }).click();
+  await expect(page.locator("[aria-current=step]")).toContainText("Confirm mapping");
+  await expect(page.getByText('Still to check: Unit, "Gasoline 95".')).toBeVisible();
 });
 
 test("the confirm screen fits 390px without horizontal scroll", async ({ page }) => {

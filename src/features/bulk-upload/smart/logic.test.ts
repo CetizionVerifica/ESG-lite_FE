@@ -3,6 +3,7 @@ import { FINGERPRINT_POWER, MOCK_PROFILE, MOCK_PROPOSAL, MODEL_PROPOSAL } from "
 import {
   activityChip,
   modelMapped,
+  skipConfirm,
   answersCategory,
   categoryNotFound,
   replaceSheet,
@@ -320,13 +321,31 @@ describe("answersCategory", () => {
 });
 
 describe("mapping model on", () => {
-  it("skips Confirm mapping only when the model worked on the proposal", () => {
+  it("knows when the model is on", () => {
     expect(modelMapped(MODEL_PROPOSAL)).toBe(true);
-    // rules and remembered mappings only (no key): the user still confirms
     expect(modelMapped(MOCK_PROPOSAL)).toBe(false);
     expect(modelMapped({ ...MOCK_PROPOSAL, model: undefined })).toBe(false);
     expect(modelMapped({ ...MOCK_PROPOSAL, model: { name: "None", calls: 0, cached_profile_hits: 0 } })).toBe(false);
-    // on, but every sheet came from a remembered mapping: still no check
-    expect(modelMapped({ ...MOCK_PROPOSAL, model: { name: "claude-mapping", calls: 0, cached_profile_hits: 2 } })).toBe(true);
+  });
+
+  it("skips Confirm mapping only when the model is on and nothing is left to check", () => {
+    expect(skipConfirm(MODEL_PROPOSAL)).toBe(true);
+    // rules only (no key): the user confirms, even when everything matched
+    expect(skipConfirm({ ...MODEL_PROPOSAL, model: { name: "none", calls: 0, cached_profile_hits: 0 } })).toBe(false);
+    // the model is on but left Check chips (an empty Unit, a 0.64 match): Confirm stays
+    expect(skipConfirm({ ...MOCK_PROPOSAL, model: MODEL_PROPOSAL.model })).toBe(false);
+    // the model's answer was dropped and the sheet fell back to rules with a guessed category (confidence 0)
+    const fallback = {
+      ...MODEL_PROPOSAL,
+      sheets: MODEL_PROPOSAL.sheets.map((s, i) => (i === 0 ? { ...s, category: { kind: "fixed" as const, id: 1, label: "Fuel", confidence: 0, source: "rules" as const } } : s)),
+    };
+    expect(categoryNotFound(fallback.sheets[0])).toBe(true);
+    expect(skipConfirm(fallback)).toBe(false);
+    // a low-confidence remembered or rules part counts as well
+    const lowRule = {
+      ...MODEL_PROPOSAL,
+      sheets: MODEL_PROPOSAL.sheets.map((s, i) => (i === 1 ? { ...s, fields: s.fields.map((f) => ({ ...f, confidence: 0.5, source: "rules" as const })) } : s)),
+    };
+    expect(skipConfirm(lowRule)).toBe(false);
   });
 });

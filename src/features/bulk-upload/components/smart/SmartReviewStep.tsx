@@ -141,7 +141,7 @@ export function SmartReviewStep(props: {
       )}
       {props.autoMapped && (
         <Callout tone="info" title="ESGLite mapped this workbook for you">
-          Rows it was less sure about import with a note, so the approver checks them. If a column looks wrong, change the mapping.
+          Every column and match was found with confidence, so there was nothing to check. If something looks wrong, change the mapping.
         </Callout>
       )}
       {props.patchError && <Callout tone="warn" title="The change wasn't saved">{props.patchError}</Callout>}

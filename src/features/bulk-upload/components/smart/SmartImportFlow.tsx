@@ -5,7 +5,7 @@ import { type Site, errorMessage, useUploadFile } from "../../api";
 import type { UploadContext } from "../../hooks/useUploadContext";
 import { type ImportResult, fileProblem, selectedSite, skippedMatrix } from "../../logic";
 import { type SmartPreviewArgs, useMappingProfiles, usePatchPlan, usePropose, useReaskSheet, useSkipIssue, useSmartImport, useSmartPreview } from "../../smart/api";
-import { SMART_STEPS, answersCategory, forgetErrorMessage, modelMapped, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, smartErrorMessage, smartUnavailable } from "../../smart/logic";
+import { SMART_STEPS, answersCategory, forgetErrorMessage, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, skipConfirm, smartErrorMessage, smartUnavailable } from "../../smart/logic";
 import type { MappingProposal } from "../../smart/types";
 import { ImportStep, type ImportState } from "../ImportStep";
 import { ConfirmMappingStep } from "./ConfirmMappingStep";
@@ -134,8 +134,8 @@ export function SmartImportFlow(props: {
           {
             onSuccess: (p) => {
               setProposal(p);
-              // With the mapping model on nobody confirms the mapping: straight to the rows.
-              if (modelMapped(p)) {
+              // Mapped by the model with nothing left to check: straight to the rows.
+              if (skipConfirm(p)) {
                 setAutoMapped(true);
                 setPreviewArgs({ proposal: p, planId: null, code: null, page: 0 });
                 setStep(2);

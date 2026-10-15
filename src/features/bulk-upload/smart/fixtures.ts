@@ -107,5 +107,17 @@ export const MOCK_PROFILE: MappingProfile = {
   updated_at: "2026-09-12T08:30:00.000Z",
 };
 
-/** The same workbook mapped with the mapping model on: the flow goes straight to Review rows. */
-export const MODEL_PROPOSAL: MappingProposal = { ...MOCK_PROPOSAL, model: { name: "claude-mapping", calls: 1, cached_profile_hits: 1 } };
+/** The same workbook mapped with the mapping model on and nothing left to check: the flow goes straight to Review rows. */
+export const MODEL_PROPOSAL: MappingProposal = {
+  ...MOCK_PROPOSAL,
+  model: { name: "claude-mapping", calls: 1, cached_profile_hits: 1 },
+  sheets: MOCK_PROPOSAL.sheets.map((s, i) =>
+    i === 0
+      ? {
+          ...s,
+          fields: s.fields.map((f) => (f.key === "activity_unit" ? { ...f, column: "UoM", confidence: 0.9, source: "llm" as const } : f)),
+          activities: s.activities.map((a) => (a.sheet_text === "Gasoline 95" ? { ...a, confidence: 0.86 } : a)),
+        }
+      : s,
+  ),
+};
