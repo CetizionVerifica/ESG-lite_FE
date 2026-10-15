@@ -15,6 +15,8 @@ export type RejectReasonModalProps = {
   /** What is being rejected, singular and plural. Default entry / entries. */
   noun?: [string, string];
   reasons?: string[];
+  /** Reason filled in when the dialog opens (a reason chip picked before opening it). */
+  initialReason?: string;
 };
 
 /**
@@ -30,14 +32,17 @@ export function RejectReasonModal({
   onConfirm,
   noun = ["entry", "entries"],
   reasons = SUGGESTED_REASONS,
+  initialReason = "",
 }: RejectReasonModalProps) {
   const [reason, setReason] = useState("");
   const [touched, setTouched] = useState(false);
   useEffect(() => {
     if (open) {
-      setReason("");
+      setReason(initialReason);
       setTouched(false);
     }
+    // Only when the dialog opens: the reason is the user's from then on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   const invalid = rejectReasonError(reason);
 
