@@ -76,7 +76,11 @@ export function SheetCard(props: {
 
       {!sheet.excluded && (
         <div className="mt-4 space-y-5">
-          {profile && <ProfileLine sheet={sheet} profile={profile} forgetting={props.forgetting} error={props.forgetError} actions={actions} />}
+          {profile && (
+            <fieldset disabled={props.reasking} className="m-0 min-w-0 border-0 p-0">
+              <ProfileLine sheet={sheet} profile={profile} forgetting={props.forgetting} error={props.forgetError} actions={actions} />
+            </fieldset>
+          )}
           {dropped && <Callout tone="warn" title="Some names aren't in your scope">{dropped}</Callout>}
           {otherSites.length > 0 && (
             <Callout tone="info" title="Other sites in this sheet">
@@ -160,26 +164,30 @@ export function SheetCard(props: {
             </div>
           </dl>
 
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-ink">Fields</h3>
-            <div className="divide-y divide-line rounded-card border border-line">
-              {sheet.fields.map((f) => (
-                <FieldRow key={f.key} field={f} sheetName={sheet.sheet_name} columns={columnOptions} actions={actions} />
-              ))}
-            </div>
-          </div>
-
-          {sheet.activities.length > 0 && (
+          {/* While the mapper re-asks for a new category its answer replaces this sheet's
+              fields and activities, so they can't be changed until it arrives. */}
+          <fieldset disabled={props.reasking} aria-busy={props.reasking || undefined} className="m-0 min-w-0 space-y-5 border-0 p-0">
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-ink">Activities</h3>
-              <p className="text-xs text-muted">The sheet's wording on the left, the emission factor it maps to on the right. Tick "Save for this client" to remember a match as a category mapping.</p>
+              <h3 className="text-sm font-semibold text-ink">Fields</h3>
               <div className="divide-y divide-line rounded-card border border-line">
-                {sheet.activities.map((a) => (
-                  <ActivityRow key={a.sheet_text} activity={a} siteId={sheet.site_id} actions={actions} />
+                {sheet.fields.map((f) => (
+                  <FieldRow key={f.key} field={f} sheetName={sheet.sheet_name} columns={columnOptions} actions={actions} />
                 ))}
               </div>
             </div>
-          )}
+
+            {sheet.activities.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-ink">Activities</h3>
+                <p className="text-xs text-muted">The sheet's wording on the left, the emission factor it maps to on the right. Tick "Save for this client" to remember a match as a category mapping.</p>
+                <div className="divide-y divide-line rounded-card border border-line">
+                  {sheet.activities.map((a) => (
+                    <ActivityRow key={a.sheet_text} activity={a} siteId={sheet.site_id} actions={actions} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </fieldset>
 
           {blockers.length > 0 && (
             <p className="text-sm text-muted" role="status">

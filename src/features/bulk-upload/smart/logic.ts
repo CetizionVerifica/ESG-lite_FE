@@ -131,6 +131,9 @@ export const confirmCategory = (p: MappingProposal, index: number) =>
  */
 export const categoryNotFound = (sheet: SheetProposal) => sheet.category.kind === "fixed" && sheet.category.confidence === 0 && sheet.category.source === "rules";
 
+/** The mapper's answer for a sheet is for the category the user picked. */
+export const answersCategory = (sheet: SheetProposal, categoryId: number) => sheet.category.kind === "fixed" && sheet.category.id === categoryId;
+
 /** Swap in the mapper's fresh answer for one sheet, keeping whether the user left it out. */
 export const replaceSheet = (p: MappingProposal, sheetName: string, next: SheetProposal): MappingProposal => ({
   ...p,

@@ -5,7 +5,7 @@ import { type Site, errorMessage, useUploadFile } from "../../api";
 import type { UploadContext } from "../../hooks/useUploadContext";
 import { type ImportResult, fileProblem, selectedSite, skippedMatrix } from "../../logic";
 import { type SmartPreviewArgs, useMappingProfiles, usePatchPlan, usePropose, useReaskSheet, useSkipIssue, useSmartImport, useSmartPreview } from "../../smart/api";
-import { SMART_STEPS, forgetErrorMessage, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, smartErrorMessage, smartUnavailable } from "../../smart/logic";
+import { SMART_STEPS, answersCategory, forgetErrorMessage, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, smartErrorMessage, smartUnavailable } from "../../smart/logic";
 import type { MappingProposal } from "../../smart/types";
 import { ImportStep, type ImportState } from "../ImportStep";
 import { ConfirmMappingStep } from "./ConfirmMappingStep";
@@ -78,8 +78,11 @@ export function SmartImportFlow(props: {
       { documentId: workbook.documentId, siteId: ctx.siteId, sheetName, categoryId: id },
       {
         onSuccess: (res) => {
+          // Only an answer for the category the user picked replaces the sheet: a
+          // mapper that ignored the pick (an older AI service) would otherwise drop it.
           const fresh = res.sheets.find((s) => s.sheet_name === sheetName);
-          if (fresh) setProposal((p) => (p ? replaceSheet(p, sheetName, fresh) : p));
+          if (fresh && answersCategory(fresh, id)) setProposal((p) => (p ? replaceSheet(p, sheetName, fresh) : p));
+          else setReaskFailed((f) => ({ ...f, [sheetName]: `The fields for ${label} couldn't be worked out. Choose the columns below.` }));
         },
         onError: (e) => setReaskFailed((f) => ({ ...f, [sheetName]: smartErrorMessage(e, `The fields for ${label} couldn't be worked out. Choose the columns below.`) })),
         onSettled: () =>
