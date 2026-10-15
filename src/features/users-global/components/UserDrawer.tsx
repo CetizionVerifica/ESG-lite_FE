@@ -39,6 +39,8 @@ type Props = {
   companies: { data: Company[]; loading: boolean };
   sites: { data: Site[]; loading: boolean };
   saving: boolean;
+  /** The server stores the Internal flag (see `internalSupported`); the switch is hidden otherwise. */
+  internalSupported: boolean;
   /** Editing their own account: role locked, no Remove. */
   isSelf?: boolean;
   /** Server error from the last save. */
@@ -201,7 +203,7 @@ export function UserDrawer(props: Props) {
               </Callout>
             )}
 
-            {multiSite(draft.role) && (
+            {props.internalSupported && multiSite(draft.role) && (
               <Toggle
                 label="Internal account"
                 help="Your team's own login. Only internal accounts may have sites of several clients; a client's people stay within one client."

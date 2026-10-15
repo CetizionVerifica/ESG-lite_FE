@@ -221,6 +221,8 @@ test("someone with sites of two clients can't be saved with both", async ({ page
   const drawer = page.getByRole("dialog", { name: "Zara" });
   const warning = drawer.getByText("Also has sites of another client: Pune");
   await expect(warning).toBeVisible();
+  // This server sends no is_internal on users (no ESG-lite #130), so no Internal switch.
+  await expect(drawer.getByRole("switch", { name: "Internal account" })).toHaveCount(0);
 
   await drawer.getByLabel("Role").selectOption("User");
   await expect(drawer.getByRole("button", { name: "Save" })).toBeDisabled();

@@ -8,6 +8,7 @@ import {
   draftFrom,
   emptyDraft,
   internalAccount,
+  internalSupported,
   isDirty,
   lastActive,
   lostPermissions,
@@ -193,6 +194,12 @@ describe("one client per person", () => {
 });
 
 describe("internal accounts", () => {
+  it("shows the switch only when the server sends is_internal on users", () => {
+    expect(internalSupported([{ is_internal: false }, {}])).toBe(true);
+    expect(internalSupported([{}, {}])).toBe(false);
+    expect(internalSupported([])).toBe(false);
+  });
+
   const [team] = buildRows([{ user_id: 9, email: "team@x.io", role: "Manager", is_internal: true, sites: [{ site_id: 1, name: "Plant A" }, { site_id: 3, name: "Other plant" }] }], SITES);
 
   it("may hold several clients' sites: no other-client warning, no client needed", () => {

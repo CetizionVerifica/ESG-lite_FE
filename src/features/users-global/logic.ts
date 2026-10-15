@@ -242,6 +242,13 @@ export type UserPayload = {
   category_ids?: number[];
 };
 
+/**
+ * Whether the server stores the Internal flag: a server with ESG-lite #130
+ * sends `is_internal` on every user. An older one drops the flag on save, so
+ * the switch stays hidden there.
+ */
+export const internalSupported = (users: Pick<User, "is_internal">[]) => users.some((u) => typeof u.is_internal === "boolean");
+
 /** An internal account (the team's own): a Manager or User that may hold several clients' sites. */
 export const internalAccount = (d: Pick<UserDraft, "role" | "is_internal">) => d.is_internal && multiSite(d.role);
 
