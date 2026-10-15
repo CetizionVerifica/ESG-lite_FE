@@ -15,16 +15,18 @@ export function factorColumns(opts: { batches: Batch[] | undefined; onEdit: (row
       header: "Emission category name",
       value: (r) => r.emission_category_name ?? "",
       cell: (r) =>
-        r.emission_category_name ? (
-          <span className="flex max-w-[20rem] items-center gap-1.5">
-            <span className="truncate" title={r.emission_category_name}>
+        !r.emission_category_name ? (
+          dash
+        ) : r.includes_wtt ? (
+          // S3-7: a life-cycle factor that already sums in WTT, which Category 3 may count again. Same width as the plain name.
+          <span className="flex max-w-[18rem] items-center gap-1.5">
+            <span className="min-w-0 truncate" title={r.emission_category_name}>
               {r.emission_category_name}
             </span>
-            {/* S3-7: a life-cycle factor that already sums in WTT, which Category 3 may count again. */}
-            {r.includes_wtt && <Badge tone="warn" className="shrink-0">WTT included</Badge>}
+            <Badge tone="warn" className="shrink-0">WTT included</Badge>
           </span>
         ) : (
-          dash
+          <span className="block max-w-[18rem] truncate" title={r.emission_category_name}>{r.emission_category_name}</span>
         ),
     },
     { id: "year", header: "Year", width: "5rem", value: (r) => r.year, cell: (r) => <span className="font-num">{r.year}</span> },

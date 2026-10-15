@@ -59,13 +59,14 @@ export const sortTwins = <T extends Twin>(twins: T[]): T[] => [...twins].sort((a
 /** The FERA total a parent carries: every twin linked to it. */
 export const twinsTotal = (twins: Twin[]): number => twins.reduce((s, t) => s + Number(t.total_emission ?? 0), 0);
 
+/** The start of every preview line; Add data renders "Cat 3" with its explainer. */
+export const CAT3_PREVIEW_PREFIX = "+ Cat 3 ";
+
 /**
  * The Add data line under a row's result, e.g.
  * "+ Cat 3 0.12 tCO₂e (upstream of electricity) + 0.08 tCO₂e (T&D losses), added on save".
  * Null when no part has a value.
  */
-/** The start of every preview line; Add data renders "Cat 3" with its explainer. */
-export const CAT3_PREVIEW_PREFIX = "+ Cat 3 ";
 
 export function cat3PreviewText(parts: { sub: Scope3Sub; value: number | null | undefined }[], format: (n: number) => string): string | null {
   const shown = parts.filter((p): p is { sub: Scope3Sub; value: number } => typeof p.value === "number");
