@@ -21,7 +21,7 @@ import {
 import type { EmissionStatus } from "../../../services/emissionService";
 import { type LedgerDocument, useColumnConfig, useDocuments, useFactor } from "../api";
 import { EditForm } from "./EditForm";
-import { type FactorSnapshot, type LedgerRow, activityFields, formatFactorValue, quantityOf, rowPeriodLabel } from "../logic";
+import { type FactorSnapshot, type LedgerRow, activityFields, formatFactorValue, importProvenance, matchedByText, quantityOf, rowPeriodLabel } from "../logic";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -124,6 +124,7 @@ function Body({ row, fera }: { row: LedgerRow; fera: LedgerRow | undefined }) {
           Submitted by {row.created_by?.name ?? "—"} on {formatDate(row.created_at)}
           {row.reviewed_by && row.status !== "pending" && ` · reviewed by ${row.reviewed_by.name}`}
         </p>
+        <Provenance row={row} />
         {row.status === "rejected" && row.review_comment && (
           <p className="mt-2 rounded-control bg-bad-soft px-3 py-2 text-sm text-bad">Rejected: {row.review_comment}</p>
         )}
@@ -162,6 +163,23 @@ function Body({ row, fera }: { row: LedgerRow; fera: LedgerRow | undefined }) {
         <EntityAuditTimeline entityType="emission" entityId={row.pk_id} />
       </Section>
     </div>
+  );
+}
+
+/** XI5: where an imported row came from in the sheet and how the smart import matched it. */
+function Provenance({ row }: { row: LedgerRow }) {
+  const p = importProvenance(row);
+  if (!p) return null;
+  return (
+    <p className="mt-1 text-sm text-muted" data-testid="drawer-provenance">
+      {p.row_ref && (
+        <>
+          Imported from <span className="font-num text-ink">{p.row_ref}</span>
+        </>
+      )}
+      {p.row_ref && p.meta && " · "}
+      {p.meta && <>Matched by: {matchedByText(p.meta)}</>}
+    </p>
   );
 }
 

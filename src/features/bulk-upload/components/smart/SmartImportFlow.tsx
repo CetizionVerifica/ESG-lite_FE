@@ -27,6 +27,8 @@ export function SmartImportFlow(props: {
   sites: { data: Site[]; loading: boolean; error: string | null; retry: () => void };
   contributor: boolean;
   clientEnabled: boolean | null;
+  /** Only a Manager can open Approvals; others get the "site's manager approves them" note instead of the link. */
+  canReview: boolean;
   /** The mapper couldn't be reached: offer the manual mapper instead. */
   onUseManual: () => void;
   onLocked: (locked: boolean) => void;
@@ -277,7 +279,7 @@ export function SmartImportFlow(props: {
             total={plan?.counts.ready ?? 0}
             skippedFile={skipped ? { partial: skipped.partial } : null}
             onDownloadSkipped={downloadSkipped}
-            reviewLink={result?.upload_batch_id && ctx.siteId !== null ? reviewRowsLink(ctx.siteId, result.upload_batch_id) : null}
+            reviewLink={props.canReview && result?.upload_batch_id && ctx.siteId !== null ? reviewRowsLink(ctx.siteId, result.upload_batch_id) : null}
             onBackground={() => {
               backgrounded.current = true;
               toast({ title: "Import running in the background", description: "You'll get a message here when it's done." });

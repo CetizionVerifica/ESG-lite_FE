@@ -21,6 +21,7 @@ import {
   rejectEmission,
 } from "../../services/emissionService";
 import type { ColumnConfig, LedgerRow, listParams } from "./logic";
+import { attentionOf } from "./logic";
 
 export const keys = {
   all: ["approvals-ledger"] as const,
@@ -41,9 +42,10 @@ export function errorMessage(e: unknown, fallback: string): string {
   return typeof msg === "string" && msg ? msg : fallback;
 }
 
-export function useEmissionList(params: ReturnType<typeof listParams>) {
+export function useEmissionList(params: ReturnType<typeof listParams>, enabled = true) {
   return useQuery({
     queryKey: keys.list(params),
+    enabled,
     queryFn: async () => {
       const res = await getEmissionsPaginated(params);
       return { ...res, data: res.data as LedgerRow[] };
@@ -220,6 +222,40 @@ export function useBatchMutations() {
     onSettled: refresh,
   });
   return { approve, reject };
+}
+
+/**
+ * How many of a batch's pending rows need attention (XI5): matched by the smart
+ * import below 80 % or changed in the plan. Undefined on an API without the count.
+ */
+export function useBatchAttention(batch: Pick<EmissionUploadBatch, "upload_batch_id" | "site_id"> | null) {
+  return useQuery({
+    queryKey: [...keys.all, "batch-attention", batch?.upload_batch_id ?? null],
+    enabled: batch !== null,
+    queryFn: async () => {
+      const b = batch as EmissionUploadBatch;
+      const { summary } = await getEmissionsPaginated({ siteIds: [b.site_id], batchId: b.upload_batch_id, status: "pending", page: 1, limit: 1 });
+      return attentionOf(summary);
+    },
+  });
+}
+
+/**
+ * XI5: how many rows of the list the smart import was least sure about. Same
+ * filters as the list (pending only on Approvals), without the attention
+ * filter, paging or sort, so the chip counts exactly the rows it would show.
+ * `null` params turn it off; the count is `null` when the API sends none (older API).
+ */
+export function useListAttention(params: ReturnType<typeof listParams> | null) {
+  const narrow = params ? { ...params, attention: null, sort: null, order: null, page: 1, limit: 1 } : null;
+  return useQuery({
+    queryKey: [...keys.all, "list-attention", narrow],
+    enabled: narrow !== null,
+    queryFn: async () => {
+      const { summary } = await getEmissionsPaginated(narrow as NonNullable<typeof narrow>);
+      return attentionOf(summary);
+    },
+  });
 }
 
 /** The most rows "Export" fetches for the current filter in one go. */

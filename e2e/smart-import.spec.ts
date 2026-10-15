@@ -176,7 +176,8 @@ test("a manager uploads a workbook, confirms the mapping, skips the other site's
   // The services page from 1.
   expect(preview.page).toBe(1);
   expect(preview.proposal.sheets[0].fields.find((f) => f.key === "activity_unit")).toMatchObject({ column: "UoM", confidence: 1 });
-  expect(preview.proposal.sheets[0].activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 1 });
+  // Confirmed as proposed: the model's own confidence reaches the plan, so the approver still sees it.
+  expect(preview.proposal.sheets[0].activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 0.64, source: "llm", confirmed: true });
   await expect(page.getByText("2 rows can't be imported as they are")).toBeVisible();
   const table = page.getByRole("table", { name: "Rows of the plan" });
   await expect(table.getByRole("row")).toHaveCount(6);
@@ -284,10 +285,16 @@ test("a remembered mapping is shown on its sheet, can be used and can be forgott
   await expect(page.getByRole("button", { name: "Continue to the rows" })).toBeEnabled();
 
   // Forget: refused once (not the person who confirmed it), then gone.
+  // It asks first; "Keep it" sends nothing.
   const forget = page.getByRole("button", { name: "Forget the remembered mapping for Fuel 2026" });
   await forget.click();
+  await page.getByRole("button", { name: "Keep it" }).click();
+  expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
+  await forget.click();
+  await page.getByRole("button", { name: "Forget it" }).click();
   await expect(fuelCard.getByRole("alert")).toHaveText("Only the person who confirmed this mapping, or an admin, can forget it.");
   await forget.click();
+  await page.getByRole("button", { name: "Forget it" }).click();
   await expect(line).toHaveCount(0);
   const deletes = calls.filter((c) => c.method === "DELETE");
   expect(deletes.map((c) => c.path)).toEqual([`/imports/mapping-profiles/${MOCK_PROFILE.id}`, `/imports/mapping-profiles/${MOCK_PROFILE.id}`]);
@@ -314,6 +321,23 @@ test("an Admin picks from every site of their client", async ({ page }) => {
   await site.click();
   await expect(page.getByRole("option", { name: "Askar" })).toBeVisible();
   await expect(page.getByRole("option", { name: "Hidd" })).toBeVisible();
+});
+
+test("an Admin's import result says the site's manager approves the rows (no Approvals link)", async ({ page }) => {
+  await signIn(page, "Admin", { user_id: 6, name: "Ada Admin", email: "ada@example.com", site: HIDD, sites: [] }, [HIDD]);
+  await page.goto("/capture/upload?site=1");
+  await page.locator('input[type="file"]').setInputFiles(WORKBOOK);
+  await page.getByRole("button", { name: "Upload and work out the mapping" }).click();
+  const unit = page.getByRole("combobox", { name: "Column for Unit in Fuel 2026" });
+  await unit.click();
+  await unit.fill("UoM");
+  await page.getByRole("option", { name: "UoM" }).click();
+  await page.getByRole("button", { name: "Confirm Gasoline 95" }).click();
+  await page.getByRole("button", { name: "Continue to the rows" }).click();
+  await page.getByRole("button", { name: "Import 3 rows, leave 2 out" }).click();
+  await expect(page.getByText("Imported 3 rows.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Review rows" })).toHaveCount(0);
+  await expect(page.getByText("The site's manager approves them in Approvals, under Upload batches.")).toBeVisible();
 });
 
 test("a manager's site of a client with the switch off isn't offered in smart mode", async ({ page }) => {

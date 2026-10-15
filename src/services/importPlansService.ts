@@ -149,6 +149,7 @@ export async function listMappingProfiles(fingerprint: string, siteId: number, c
 /** "Forget this mapping" (XI3 `DELETE /imports/mapping-profiles/:id`). */
 export async function deleteMappingProfile(id: string): Promise<{ id: string; deleted: true }> {
   try {
+    // data-loss-reviewed: deletes one remembered mapping (import_mapping_profile row), never emission data; the user confirms "Forget it" on the sheet card first, and rows already imported don't change.
     const res = await api.delete(`/imports/mapping-profiles/${encodeURIComponent(id)}`);
     return res.data;
   } catch (e) {
