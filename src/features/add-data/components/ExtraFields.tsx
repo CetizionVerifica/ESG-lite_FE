@@ -1,5 +1,6 @@
 import { NumberField, Select, TextField, Textarea } from "../../../ui";
 import type { ExtraFieldDefinition, ModalRow } from "../types";
+import { extraFieldOptions } from "../../../lib/emissions/currencies";
 
 type Props = {
   fields: ExtraFieldDefinition[];
@@ -23,7 +24,7 @@ export function ExtraFields({ fields, row, onChange }: Props) {
                 {...common}
                 value={value || null}
                 onChange={(v) => onChange(f.key, v ?? "")}
-                options={(f.options ?? []).map((o) => ({ value: o, label: o }))}
+                options={extraFieldOptions(f, value).map((o) => ({ value: o, label: o }))}
                 placeholder="Select…"
               />
             );

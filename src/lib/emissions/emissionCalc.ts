@@ -207,6 +207,11 @@ export const calculateEmission = (input: EmissionCalcInput, row: ModalRow): Emis
 
   const expectedUnit = factor.denominator_unit;
   const currentUnit = row.activity_data_unit;
+  // A factor with no unit can't be checked against the quantity: the engine
+  // refuses the row (UNIT_REQUIRED, S3-4), so the preview shows no total.
+  if (!String(expectedUnit ?? "").trim()) {
+    return { value: null, status: "This emission factor has no unit - ask an admin to set it" };
+  }
   if (unitsMatchExact(expectedUnit, currentUnit)) {
     return { value: toTonnes(activityValue, factor.factor_value), status: "ok" };
   }
