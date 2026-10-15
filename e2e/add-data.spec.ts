@@ -199,6 +199,26 @@ test("contributor types a row, sees tCO2e live and submits it", async ({ page })
   });
 });
 
+test("the engine's notes on a saved row show on the result (S3-4)", async ({ page }) => {
+  await signIn(page, []);
+  const note = 'No 2024 FERA factor for "Diesel (avg biofuel blend)", so no fuel- and energy-related (Category 3) row was added.';
+  await page.route(/\/user\/emissions(\?|$)/, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 201, json: { emission: { pk_id: 301 }, warnings: [{ code: "FERA_FACTOR_MISSING", message: note }] } })
+      : route.fallback(),
+  );
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  // The warn callout is role="status", so the note is announced.
+  await expect(page.getByRole("status").filter({ hasText: "Sent, with notes" })).toContainText(note);
+});
+
 test("with no factor in the factor year, the preview uses the newest factor from another year, as the save does", async ({ page }) => {
   await signIn(page, []);
   // Only 2022 and 2023 factors exist; Sep 2025 data looks for 2024 first.
