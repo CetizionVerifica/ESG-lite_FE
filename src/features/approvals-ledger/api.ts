@@ -4,7 +4,9 @@ import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConf
 import { type EmissionDocument, getDocumentsByEmission } from "../../services/documentService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { type UnitData, getUserUnitsBySiteAndCategory } from "../../services/unitService";
+import { getThresholdByCompany } from "../../services/thresholdService";
 import { invalidateEmissionQueries } from "../../lib/emissionQueries";
+import { DEFAULT_THRESHOLD_PCT } from "../../lib/scope3/checks";
 import { type PendingFilter, fetchPendingForApproval } from "../../lib/emissions/pendingCount";
 import {
   type EmissionUploadBatch,
@@ -13,6 +15,7 @@ import {
   getEmissionBatches,
   rejectEmissionsByBatch,
   bulkApproveEmissions,
+  bulkApproveReady,
   bulkDeleteEmissions,
   bulkRejectEmissions,
   getEmissionFactorForEmission,
@@ -21,7 +24,7 @@ import {
   rejectEmission,
 } from "../../services/emissionService";
 import type { ColumnConfig, LedgerRow, listParams } from "./logic";
-import { attentionOf } from "./logic";
+import { attentionOf, historyMonths, monthlyHistory, reviewCounts, rowMonth } from "./logic";
 
 export const keys = {
   all: ["approvals-ledger"] as const,
@@ -266,4 +269,81 @@ export async function fetchAllForExport(params: ReturnType<typeof listParams>, t
   const limit = Math.min(Math.max(total, 1), EXPORT_CAP);
   const res = await getEmissionsPaginated({ ...params, page: 1, limit });
   return { rows: res.data as LedgerRow[], capped: res.total > limit };
+}
+
+// ─── Review queue (S3-15) ───────────────────────────────────────────────────
+
+/**
+ * "Ready (n)" and "Needs attention (n)" for the approvals list: the summary's
+ * `ready` and `held` with the list's own filters, without the group filter.
+ * `null` on an API without review checks.
+ */
+export function useReviewCounts(params: ReturnType<typeof listParams> | null) {
+  const narrow = params ? { ...params, ready: null, attention: null, sort: null, order: null, page: 1, limit: 1 } : null;
+  return useQuery({
+    queryKey: [...keys.all, "review-counts", narrow],
+    enabled: narrow !== null,
+    queryFn: async () => reviewCounts((await getEmissionsPaginated(narrow as NonNullable<typeof narrow>)).summary),
+    placeholderData: keepPreviousData,
+  });
+}
+
+const READY_PAGE = 200;
+/** The most ready rows one "Approve all ready" sends. */
+export const READY_CAP = 5000;
+
+/** Ids of every pending row whose checks pass, with the list's filters (not just this page). */
+export async function fetchReadyIds(params: ReturnType<typeof listParams>): Promise<number[]> {
+  const ids: number[] = [];
+  const base = { ...params, status: "pending", ready: true, attention: null, sort: null, order: null, limit: READY_PAGE };
+  for (let page = 1; ids.length < READY_CAP; page++) {
+    const res = await getEmissionsPaginated({ ...base, page });
+    for (const r of res.data) ids.push(r.pk_id);
+    if (res.data.length < READY_PAGE || ids.length >= res.total) break;
+  }
+  return [...new Set(ids)].slice(0, READY_CAP);
+}
+
+/** Approve the given rows, but only those whose checks pass (the server skips the rest). */
+export function commitApproveReady(ids: number[], opts?: { keepalive?: boolean }) {
+  return bulkApproveReady(ids, opts);
+}
+
+/** Company change limit % for the WITHIN_THRESHOLD copy; the backend default when it can't be read. */
+export function useThreshold(companyId: number | null) {
+  return useQuery({
+    queryKey: ["threshold", companyId ?? 0],
+    enabled: !!companyId,
+    queryFn: async () => {
+      try {
+        const pct = Number(await getThresholdByCompany(companyId as number));
+        return Number.isFinite(pct) ? pct : DEFAULT_THRESHOLD_PCT;
+      } catch {
+        return DEFAULT_THRESHOLD_PCT;
+      }
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+/**
+ * Six months of the same site, category and activity up to the row's month,
+ * for the drawer's mini chart. Read through the list endpoint one month at a
+ * time (in parallel) and narrowed to the activity here; there's no history endpoint yet.
+ */
+export function useEntryHistory(row: LedgerRow | null) {
+  const anchor = row ? rowMonth(row) : null;
+  const siteId = row?.site?.site_id;
+  const categoryId = row?.category?.category_id;
+  const months = anchor ? historyMonths(anchor) : [];
+  return useQuery({
+    queryKey: [...keys.all, "history", row?.pk_id ?? 0, siteId ?? 0, categoryId ?? 0, months, row?.activity_data?.emission_category ?? null],
+    enabled: !!row && !!anchor && !!siteId && !!categoryId,
+    queryFn: async () => {
+      const pages = await Promise.all(
+        months.map(({ year, month }) => getEmissionsPaginated({ siteIds: [siteId as number], categoryId: categoryId as number, year, month, page: 1, limit: 500 })),
+      );
+      return monthlyHistory(row as LedgerRow, pages.flatMap((p) => p.data));
+    },
+  });
 }

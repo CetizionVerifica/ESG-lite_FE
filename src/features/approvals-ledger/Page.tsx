@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle2, Layers, SearchX } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Layers, SearchX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import type { EmissionStatus } from "../../services/emissionService";
 import {
@@ -40,22 +40,41 @@ import {
   commitApprove,
   errorMessage,
   fetchAllForExport,
+  fetchReadyIds,
   loadConfigs,
   useBatches,
   useColumnConfigs,
   useEmissionList,
   useListAttention,
+  useReviewCounts,
   useReviewMutations,
   useStatusCounts,
+  useThreshold,
 } from "./api";
+import { type ReviewGroup, parseGroup } from "../../lib/scope3/checks";
+import { useApproveAllReady } from "./hooks/useApproveAllReady";
 import { feraCategoryIds } from "../../lib/emissions/pendingCount";
 import { BatchesView } from "./components/BatchesView";
 import { ReportMenu } from "./components/ReportMenu";
 import { RecordDrawer } from "./components/RecordDrawer";
 import { ledgerColumns } from "./components/columns";
-import { DEFAULT_SORT, type LedgerRow, PAGE_SIZES, type Tab, asStatus, attentionOn, effectiveStatus, listParams, mergeFera, periodQuery, rowPeriodLabel } from "./logic";
+import {
+  DEFAULT_SORT,
+  type LedgerRow,
+  PAGE_SIZES,
+  type Tab,
+  approveAllCopy,
+  asStatus,
+  attentionOn,
+  effectiveStatus,
+  listParams,
+  mergeFera,
+  periodQuery,
+  rowPeriodLabel,
+  skippedCopy,
+} from "./logic";
 
-type SiteOption = { site_id: number; name: string; categories?: { category_id: number; category_name: string }[] };
+type SiteOption = { site_id: number; name: string; company?: { company_id: number }; categories?: { category_id: number; category_name: string }[] };
 
 const TAB_PATH: Record<Tab, string> = { approvals: "/data/approvals", ledger: "/data/ledger" };
 const CONTEXT_KEYS = ["site", "category", "period"];
@@ -176,6 +195,8 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const [drawer, setDrawer] = useState<LedgerRow | null>(null);
   const [rejecting, setRejecting] = useState<number[] | null>(null);
   const [rejectError, setRejectError] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [collectingReady, setCollectingReady] = useState(false);
   const [deleting, setDeleting] = useState<LedgerRow[] | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -194,7 +215,25 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   // doesn't load once without the filter and then again with it (resetting page and selection).
   const waitForAttention = tab === "approvals" && !!batchId && attentionParam === null && attentionCount === undefined && !attentionCountQ.isError;
 
-  const query = listParams({ ...base, attention });
+  // S3-15: pending rows split into Ready and Needs attention by the review checks (`?group=`).
+  // Not with a batch: there the XI5 chip narrows the list. Hidden on an API without checks.
+  const groupsOn = tab === "approvals" && !batchId;
+  const reviewCountsQ = useReviewCounts(groupsOn ? listParams({ ...base, attention: false }) : null);
+  const groupCounts = groupsOn ? (reviewCountsQ.data ?? null) : null;
+  // An API without checks ignores `ready`, so the filter is sent until the counts say there are none.
+  const group = groupsOn && reviewCountsQ.data !== null ? parseGroup(params.get("group")) : null;
+  const setGroup = (next: ReviewGroup | null) =>
+    setParams((p) => {
+      const out = new URLSearchParams(p);
+      if (next) out.set("group", next);
+      else out.delete("group"); // data-loss-reviewed: URL param, not a record
+      return out;
+    }, { replace: true });
+  const sites = useManagerSites();
+  const threshold = useThreshold(sites[0]?.company?.company_id ?? null);
+  const checkCtx = useMemo(() => ({ pct: threshold.data ?? null }), [threshold.data]);
+
+  const query = listParams({ ...base, attention, group });
   const list = useEmissionList(query, !waitForAttention);
   const review = useReviewMutations();
 
@@ -210,7 +249,19 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
     onCommitted: () => void review.refresh(),
     onFailed: (_id, e) => toast({ title: "Couldn't approve an entry", description: errorMessage(e, "It is back in the queue."), tone: "bad" }),
   });
-  const statusOf = useCallback((r: LedgerRow) => effectiveStatus(r, undoable.optimistic), [undoable.optimistic]);
+  const approveAll = useApproveAllReady({
+    onDone: async (result) => {
+      await review.refresh();
+      const skipped = skippedCopy(result.skipped.length);
+      if (skipped) toast({ title: "Some entries weren't approved", description: skipped });
+    },
+    onFailed: (e) => toast({ title: "Couldn't approve the ready entries", description: errorMessage(e, "They are back in the queue."), tone: "bad" }),
+  });
+  const { isWaiting: bulkWaiting } = approveAll;
+  const statusOf = useCallback(
+    (r: LedgerRow) => (r.status === "pending" && bulkWaiting(r.pk_id) ? "approved" : effectiveStatus(r, undoable.optimistic)),
+    [bulkWaiting, undoable.optimistic],
+  );
 
   const merged = useMemo(() => mergeFera(list.data?.data ?? [], showFera), [list.data, showFera]);
   const rows = useMemo(
@@ -275,14 +326,55 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
     }
   }
 
-  function reject(target: LedgerRow[]) {
+  function reject(target: LedgerRow[], reason = "") {
     const ids = target.filter((r) => statusOf(r) === "pending").map((r) => r.pk_id);
     if (ids.length === 0) {
       toast({ title: "Only pending entries can be rejected" });
       return;
     }
     setRejectError(null);
+    setRejectReason(reason);
     setRejecting(ids);
+  }
+
+  /** The drawer's "Approve and next": approve this entry and open the next one still waiting. */
+  function approveAndNext(row: LedgerRow) {
+    const index = rows.findIndex((r) => r.pk_id === row.pk_id);
+    const rest = rows.filter((r) => r.pk_id !== row.pk_id);
+    const next = rest[Math.max(index, 0)] ?? rest[0] ?? null;
+    approve(row);
+    setDrawer(next);
+  }
+
+  /** "Approve all N ready": every pending row passing its checks under the current filters, with undo. */
+  async function approveAllReady() {
+    setCollectingReady(true);
+    try {
+      const ids = await fetchReadyIds(listParams({ ...base, attention: false, group: null }));
+      if (ids.length === 0) {
+        toast({ title: "Nothing is ready to approve", description: "Every pending entry needs attention." });
+        return;
+      }
+      const token = approveAll.start(ids);
+      setSelected([]);
+      const copy = approveAllCopy(ids.length);
+      toast({
+        title: copy.toast,
+        description: "They pass every check.",
+        tone: "good",
+        duration: UNDO_MS,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            if (!approveAll.undo(token)) toast({ title: "Too late to undo", description: "These entries were already approved. Reject any that are wrong." });
+          },
+        },
+      });
+    } catch (e) {
+      toast({ title: "Couldn't load the ready entries", description: errorMessage(e, "Nothing was approved."), tone: "bad" });
+    } finally {
+      setCollectingReady(false);
+    }
   }
 
   const confirmReject = (reason: string) => {
@@ -333,13 +425,15 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
     setDeleting(target);
   };
   const actions = { open: setDrawer, approve: (r: LedgerRow) => approve(r), reject: (r: LedgerRow) => reject([r]), remove: (r: LedgerRow) => askDelete([r]) };
-  const columns = ledgerColumns({ configOf, feraOf: merged.feraOf, statusOf, actions });
+  // "Why it's held" only on Approvals, and only when the API sends checks.
+  const showChecks = tab === "approvals" && rows.some((r) => r.checks !== undefined);
+  const columns = ledgerColumns({ configOf, feraOf: merged.feraOf, statusOf, actions, checks: showChecks ? checkCtx : undefined });
 
-  const filtered = !!filters.q.trim() || !!status || !!batchId || ctx.categoryIds.length > 0 || ctx.period !== null;
+  const filtered = !!filters.q.trim() || !!status || !!batchId || !!group || ctx.categoryIds.length > 0 || ctx.period !== null;
   // One URL write: two functional setSearchParams calls in one tick both start from the
   // same params, so the second would undo the first.
   const clearFilters = () =>
-    setParams((p) => writeContext(withoutParams(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS[tab]), ["batch", "attention"]), { categoryIds: [], period: null }), { replace: true });
+    setParams((p) => writeContext(withoutParams(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS[tab]), ["batch", "attention", "group"]), { categoryIds: [], period: null }), { replace: true });
   const showAllRows = () => setParams((p) => withoutParams(p, ["batch", "attention"]), { replace: true });
   // Every row shown was just approved, but the server still lists them (undo window): more may follow.
   const savingApprovals = tab === "approvals" && rows.length === 0 && (list.data?.total ?? 0) > 0;
@@ -399,6 +493,30 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
             Show all rows
           </Button>
         </p>
+      )}
+      {groupCounts && (
+        <div role="group" aria-label="Review groups" className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant={group === "attention" ? "primary" : "secondary"}
+            aria-pressed={group === "attention"}
+            title="Pending entries held back by at least one check"
+            onClick={() => setGroup(group === "attention" ? null : "attention")}
+          >
+            <AlertTriangle aria-hidden className="size-4" />
+            Needs attention ({formatNumber(groupCounts.attention)})
+          </Button>
+          <Button
+            size="sm"
+            variant={group === "ready" ? "primary" : "secondary"}
+            aria-pressed={group === "ready"}
+            title="Pending entries that pass every check"
+            onClick={() => setGroup(group === "ready" ? null : "ready")}
+          >
+            <CheckCircle2 aria-hidden className="size-4" />
+            Ready ({formatNumber(groupCounts.ready)})
+          </Button>
+        </div>
       )}
       {tab === "approvals" && (
         <p className="hidden text-xs text-muted sm:block" data-testid="shortcuts">
@@ -465,6 +583,16 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
           }
         />
       </div>
+      {groupCounts && groupCounts.ready > 0 && group !== "attention" && selected.length === 0 && !approveAll.busy && (
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-page py-3" data-testid="approve-ready-bar">
+          <p className="text-sm text-muted">
+            {groupCounts.ready === 1 ? "1 entry passes" : `${formatNumber(groupCounts.ready)} entries pass`} every check.
+          </p>
+          <Button variant="primary" loading={collectingReady} onClick={() => void approveAllReady()}>
+            {approveAllCopy(groupCounts.ready).button}
+          </Button>
+        </div>
+      )}
 
       <RecordDrawer
         row={liveDrawerRow}
@@ -472,7 +600,9 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
         status={liveDrawerRow ? statusOf(liveDrawerRow) : undefined}
         onClose={() => setDrawer(null)}
         onApprove={(r) => approve(r)}
-        onReject={(r) => reject([r])}
+        onApproveNext={tab === "approvals" ? approveAndNext : undefined}
+        onReject={(r, reason) => reject([r], reason)}
+        checkContext={checkCtx}
         onEdited={(saved) => {
           // Keep showing the entry even if the edit moved it out of the current filter.
           if (saved && drawer) setDrawer({ ...drawer, ...saved });
@@ -484,6 +614,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
         count={rejecting?.length ?? 0}
         busy={review.reject.isPending}
         error={rejectError}
+        initialReason={rejectReason}
         onClose={() => setRejecting(null)}
         onConfirm={confirmReject}
       />

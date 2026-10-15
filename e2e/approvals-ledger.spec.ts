@@ -17,6 +17,8 @@ type Row = {
   // Defaults to "litre"; null for an entry stored without a unit.
   activity_data_unit?: string | null;
   upload_batch_id?: string | null;
+  // S3-15 review checks; null = not checked yet.
+  checks?: { ready: boolean; held: string[] } | null;
 };
 
 const company = { company_id: 1, name: "Midal Cables" };
@@ -37,6 +39,8 @@ function makeRows(): Row[] {
     // Rows 1 and 2 came in Claude's batch b-2; row 3 was typed in. Row 2 was matched below 80 % (XI5).
     upload_batch_id: n < 3 ? "b-2" : null,
     extra_data: n < 3 ? { import: { channel: "mcp", row_ref: `Fuel!A${n + 1}`, ...(n === 2 && { meta: { source: "llm", confidence: 0.64 } }) } } : undefined,
+    // Row 1 passes every check; row 2 the smart import was unsure of; row 3 has no evidence and jumped.
+    checks: n === 1 ? { ready: true, held: [] } : n === 2 ? { ready: false, held: ["IMPORT_MATCH_SURE"] } : { ready: false, held: ["EVIDENCE_ATTACHED", "WITHIN_THRESHOLD"] },
   }));
 }
 
@@ -56,7 +60,8 @@ async function signIn(page: Page) {
   // Every list request's query (limit > 1), to check what the page fetched.
   const lists: URLSearchParams[] = [];
   // `attention: false` plays an ESG-lite without XI5: no count in the summary and the filter ignored.
-  const api = { attention: true };
+  // `checks: false` plays an ESG-lite without S3-15: no checks on rows, no ready counts.
+  const api = { attention: true, checks: true };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Manager");
@@ -80,6 +85,23 @@ async function signIn(page: Page) {
       if (path.includes("/user/column-configs/")) return json(config);
       if (path.includes("/user/documents/emission/")) return json([]);
       if (path.endsWith("/user/audit-logs")) return json([]);
+      if (path.includes("/user/thresholds/company/")) return json({ threshold_percentage: 5 });
+      if (path.endsWith("/user/emissions/bulk-approve")) {
+        const body = request.postDataJSON() as { ids: number[]; only_ready?: boolean };
+        const approved: number[] = [];
+        const skipped: { id: number; held: string[] }[] = [];
+        for (const id of body.ids) {
+          const row = rows.find((r) => r.pk_id === id);
+          if (!row || row.status !== "pending") continue;
+          if (body.only_ready && !row.checks?.ready) {
+            skipped.push({ id, held: row.checks?.held ?? [] });
+            continue;
+          }
+          row.status = "approved";
+          approved.push(id);
+        }
+        return json({ message: "ok", approved, skipped });
+      }
       if (path.includes("/user/units/")) return json([{ unit_id: 1, unit_name: "litre" }, { unit_id: 2, unit_name: "m3" }]);
       if (path.endsWith("/user/emissions/batches")) {
         const own = { upload_batch_id: "b-1", count: 40, pending_count: 30, approved_count: 10, rejected_count: 0, uploaded_at: "2025-10-03T09:00:00Z", site_id: 1, site_name: "Hidd", category_id: 10, category_name: "Diesel", uploaded_by: "Omar Contributor" };
@@ -115,12 +137,16 @@ async function signIn(page: Page) {
         const status = url.searchParams.get("status");
         const batchId = url.searchParams.get("batchId");
         const attention = api.attention && batchId && url.searchParams.get("attention") === "1";
+        const ready = api.checks ? url.searchParams.get("ready") : null;
+        const isReady = (r: Row) => r.checks?.ready === true;
         const needsAttention = (r: Row) => (r.extra_data as { import?: { meta?: unknown } } | undefined)?.import?.meta !== undefined;
         const data = rows
           .filter((r) => !status || r.status === status)
           .filter((r) => !batchId || r.upload_batch_id === batchId)
           .filter((r) => !attention || needsAttention(r))
-          .map((r) => ({
+          .filter((r) => ready === null || (r.status === "pending" && isReady(r) === (ready === "1")))
+          .map(({ checks, ...r }) => ({
+            ...(api.checks && { checks }),
             ...r,
             unit: "tCO2e",
             activity_data_unit: r.activity_data_unit === undefined ? "litre" : r.activity_data_unit,
@@ -135,7 +161,9 @@ async function signIn(page: Page) {
         // Like ESG-lite: the attention count follows the request's filters, status included.
         const attentionCount = api.attention && batchId ? rows.filter((r) => (!status || r.status === status) && r.upload_batch_id === batchId && needsAttention(r)).length : undefined;
         if (url.searchParams.get("limit") !== "1") lists.push(url.searchParams);
-        return json({ data, total: data.length, summary: { total_emission: 0, pending_count: count("pending"), approved_count: count("approved"), rejected_count: count("rejected"), ...(attentionCount !== undefined && { attention: attentionCount }) } });
+        const pendingRows = rows.filter((r) => r.status === "pending" && (!batchId || r.upload_batch_id === batchId));
+        const review = api.checks ? { ready: pendingRows.filter(isReady).length, held: pendingRows.filter((r) => !isReady(r)).length } : {};
+        return json({ data, total: data.length, summary: { total_emission: 0, pending_count: count("pending"), approved_count: count("approved"), rejected_count: count("rejected"), ...review, ...(attentionCount !== undefined && { attention: attentionCount }) } });
       }
       return json({});
     },
@@ -499,4 +527,87 @@ test("Approve pending names the rows that need attention and offers to review th
   await expect(page).toHaveURL(/batch=b-2/);
   await expect(page).toHaveURL(/attention=1/);
   await expect(page.getByRole("button", { name: "Needs attention (1)" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a manager approves every ready entry with the keyboard, with undo (S3-15)", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/data/approvals");
+  const table = page.getByRole("table", { name: "Entries waiting for approval" });
+  await expect(table.getByRole("row")).toHaveCount(4);
+  const groups = page.getByRole("group", { name: "Review groups" });
+  await expect(groups.getByRole("button", { name: "Needs attention (2)" })).toBeVisible();
+  await expect(groups.getByRole("button", { name: "Ready (1)" })).toBeVisible();
+  await expect(page.getByTestId("shortcuts")).toContainText("J/K move");
+
+  // Reason chips, word and icon, on each held row.
+  await expect(table.locator("tbody tr").nth(1)).toContainText("Smart import unsure");
+  await expect(table.locator("tbody tr").nth(2)).toContainText("No evidence");
+  await expect(table.locator("tbody tr").nth(2)).toContainText("Over your 5 % change limit");
+  await expect(table.locator("tbody tr").first()).toContainText("Ready");
+
+  // ?group= narrows the list.
+  await groups.getByRole("button", { name: "Needs attention (2)" }).click();
+  await expect(page).toHaveURL(/group=attention/);
+  await expect(table.getByRole("row")).toHaveCount(3);
+  await groups.getByRole("button", { name: "Needs attention (2)" }).click();
+  await expect(page).not.toHaveURL(/group=/);
+
+  // The sticky bar, by keyboard: focus and Enter. The ready row leaves at once; Undo sends nothing.
+  const approveAll = page.getByRole("button", { name: "Approve all 1 ready" });
+  await approveAll.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("1 ready entry approved")).toBeVisible();
+  await expect(table.getByRole("row")).toHaveCount(3);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(table.getByRole("row")).toHaveCount(4);
+  expect(calls.filter((c) => c.path.endsWith("/bulk-approve"))).toHaveLength(0);
+
+  // Again, and let the window close: one request, only the ready id, only_ready set.
+  await page.getByRole("button", { name: "Approve all 1 ready" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(table.getByRole("row")).toHaveCount(3);
+  await expect.poll(() => calls.filter((c) => c.path.endsWith("/bulk-approve")).length, { timeout: 15_000 }).toBe(1);
+  expect(calls.find((c) => c.path.endsWith("/bulk-approve"))?.body).toEqual({ ids: [1], only_ready: true });
+  await expect(page.getByRole("button", { name: /Approve all \d+ ready/ })).toHaveCount(0);
+});
+
+test("a held entry opens as a single-entry review with Why held (S3-15)", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/approvals?group=attention");
+  const table = page.getByRole("table", { name: "Entries waiting for approval" });
+  await expect(table.getByRole("row")).toHaveCount(3);
+  await table.locator("tbody tr").nth(1).focus();
+  await page.keyboard.press("Enter");
+  const drawer = page.getByRole("dialog", { name: "Diesel" });
+  const why = drawer.getByTestId("why-held");
+  await expect(why).toContainText("Held back by 2 checks.");
+  await expect(why.locator('[data-check="EVIDENCE_ATTACHED"]')).toHaveAttribute("data-passed", "false");
+  await expect(why.locator('[data-check="WITHIN_THRESHOLD"]')).toContainText("Over your 5 % change limit");
+  await expect(why.locator('[data-check="FACTOR_FOUND"]')).toContainText("Factor found for 2025");
+  await expect(why.locator('[data-check="METHOD_GIVEN"]')).toHaveAttribute("data-passed", "true");
+  await expect(drawer.getByTestId("calculation")).toBeVisible();
+  await expect(drawer.getByText("Last 6 months")).toBeVisible();
+
+  // A reason chip opens the reject dialog with that reason; Esc closes it.
+  await drawer.getByRole("group", { name: "Reject with a reason" }).getByRole("button", { name: "Missing invoice" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Reject this entry?" });
+  await expect(dialog.getByRole("textbox", { name: "Reason" })).toHaveValue("Missing invoice");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+
+  // Approve and next opens the next entry waiting.
+  await drawer.getByRole("button", { name: "Approve and next" }).click();
+  await expect(page.getByText("Entry approved")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Diesel" }).getByTestId("why-held")).toContainText("Held back by 1 check.");
+});
+
+test("an API without review checks shows no groups and no approve-all bar", async ({ page }) => {
+  const { api } = await signIn(page);
+  api.checks = false;
+  await page.goto("/data/approvals?group=ready");
+  const table = page.getByRole("table", { name: "Entries waiting for approval" });
+  await expect(table.getByRole("row")).toHaveCount(4);
+  await expect(page.getByRole("group", { name: "Review groups" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Approve all \d+ ready/ })).toHaveCount(0);
+  await expect(table.getByRole("columnheader", { name: "Why it's held" })).toHaveCount(0);
 });

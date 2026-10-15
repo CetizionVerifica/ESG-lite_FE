@@ -12,6 +12,13 @@ import {
   formatFactorValue,
   humanize,
   listParams,
+  type ListInput,
+  approveAllCopy,
+  historyMonths,
+  monthlyHistory,
+  reviewCounts,
+  rowMonth,
+  skippedCopy,
   approveBatchCopy,
   attentionOf,
   batchApproveError,
@@ -326,5 +333,80 @@ describe("needs attention (XI5)", () => {
     const batch = { upload_batch_id: "b-2", site_id: 1, category_id: 20, pending_count: 2 };
     expect(reviewRowsPath(batch, true)).toContain("attention=1");
     expect(reviewRowsPath(batch)).not.toContain("attention");
+  });
+});
+
+describe("review queue (S3-15)", () => {
+  const base: ListInput = { tab: "approvals", siteIds: [1], categoryIds: [], period: null, search: "", status: null, sort: null, page: 0, pageSize: 50 };
+
+  it("sends ready=1/0 for ?group= on Approvals only, never with a batch", () => {
+    expect(listParams({ ...base, group: "ready" }).ready).toBe(true);
+    expect(listParams({ ...base, group: "attention" }).ready).toBe(false);
+    expect(listParams({ ...base, group: null }).ready).toBeNull();
+    expect(listParams({ ...base, group: "ready", batchId: "b-1" }).ready).toBeNull();
+    expect(listParams({ ...base, tab: "ledger", group: "ready" }).ready).toBeNull();
+  });
+
+  it("reads Ready and Needs attention from summary.ready and summary.held", () => {
+    expect(reviewCounts({ ready: 10, held: 4 })).toEqual({ ready: 10, attention: 4 });
+    expect(reviewCounts({ ready: 0 })).toEqual({ ready: 0, attention: 0 });
+    // An API without checks.
+    expect(reviewCounts({} as { ready?: unknown })).toBeNull();
+    expect(reviewCounts(null)).toBeNull();
+  });
+
+  it("words the bulk approve and the skipped rows", () => {
+    expect(approveAllCopy(1200)).toEqual({ button: "Approve all 1,200 ready", toast: "1,200 ready entries approved" });
+    expect(approveAllCopy(1).toast).toBe("1 ready entry approved");
+    expect(skippedCopy(0)).toBeNull();
+    expect(skippedCopy(1)).toMatch(/^1 entry wasn't approved/);
+    expect(skippedCopy(3)).toMatch(/^3 entries weren't approved/);
+  });
+
+  it("lists the six months up to the entry's month, across a year end", () => {
+    expect(historyMonths({ year: 2026, month: 2 })).toEqual([
+      { year: 2025, month: 9 },
+      { year: 2025, month: 10 },
+      { year: 2025, month: 11 },
+      { year: 2025, month: 12 },
+      { year: 2026, month: 1 },
+      { year: 2026, month: 2 },
+    ]);
+    expect(rowMonth({ date_of_reporting: "2026-02-28", reporting_period: "monthly" })).toEqual({ year: 2026, month: 2 });
+    expect(rowMonth({ date_of_reporting: "2026-03-31", reporting_period: "yearly" })).toBeNull();
+  });
+
+  it("sums the same site, category and activity per month, without rejected or yearly rows", () => {
+    const mk = (id: number, date: string, total: number, extra: Partial<EmissionData> = {}) =>
+      ({
+        pk_id: id,
+        status: "approved",
+        date_of_reporting: date,
+        total_emission: total,
+        activity_data: { emission_category: "Diesel" },
+        site: { site_id: 1, name: "Hidd" },
+        category: { category_id: 10, category_name: "Fuel" },
+        ...extra,
+      }) as EmissionData;
+    const row = mk(1, "2026-09-30", 5, { status: "pending" });
+    const history = monthlyHistory(row, [
+      row,
+      mk(2, "2026-08-31", 4),
+      mk(3, "2026-08-15", 1),
+      mk(4, "2026-07-31", 9, { status: "rejected" }),
+      mk(5, "2026-06-30", 2, { activity_data: { emission_category: "Petrol" } }),
+      mk(6, "2026-05-31", 2, { site: { site_id: 2, name: "Other" } }),
+      mk(7, "2026-12-31", 30, { reporting_period: "yearly" }),
+      mk(8, "2026-03-31", 7),
+    ]);
+    expect(history.map((m) => [m.label, m.total, m.entries])).toEqual([
+      ["Apr 2026", 0, 0],
+      ["May 2026", 0, 0],
+      ["Jun 2026", 0, 0],
+      ["Jul 2026", 0, 0],
+      ["Aug 2026", 5, 2],
+      ["Sep 2026", 5, 1],
+    ]);
+    expect(history[history.length - 1].current).toBe(true);
   });
 });
