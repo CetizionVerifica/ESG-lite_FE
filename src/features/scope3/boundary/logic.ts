@@ -63,3 +63,9 @@ export function lastChanged(c: Pick<BoundaryCategory, "updated_at" | "updated_by
   const who = c.updated_by.name ?? "a removed user";
   return date ? `${date}, by ${who}` : `By ${who}`;
 }
+
+// S3-11 (D10): Categories 13-15 default to Not relevant, set by ESGLite with
+// no person on the row; an Admin confirms it as is with one click.
+export const D10_CATEGORIES: readonly number[] = [13, 14, 15];
+export const isUnconfirmedDefault = (c: Pick<BoundaryCategory, "n" | "status" | "updated_by">): boolean =>
+  D10_CATEGORIES.includes(c.n) && c.status === "not_relevant" && c.updated_by === null;

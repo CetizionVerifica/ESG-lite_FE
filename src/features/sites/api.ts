@@ -5,6 +5,7 @@ import { getCompanies } from "../../services/companyService";
 import { getCountries } from "../../services/countryService";
 import { createSite, deleteSite, getSites, updateSite } from "../../services/siteService";
 import { getUsers } from "../../services/userService";
+import { type LeaseBody, type LeaseSites, getLeaseSites, updateSiteLease } from "../../services/scope3AssetsService"; // S3-11
 import { type AdminUser, type Category, type ColumnConfig, type Company, type Country, type Site, type SiteDraft, toPayload } from "./logic";
 
 export const keys = {
@@ -55,5 +56,21 @@ export function useDeleteSite() {
     mutationFn: (id: number) => deleteSite(id),
     // Users and configs on the site go with it.
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
+}
+
+// S3-11: a site's lease or franchise role (ESG-lite /scope3/assets/sites), per client.
+export const leaseKeys = {
+  sites: (companyId: number | null) => [...keys.all, "lease", companyId] as const,
+};
+
+export const useLeaseSites = (companyId: number | null, enabled = true) =>
+  useQuery<LeaseSites>({ queryKey: leaseKeys.sites(companyId), queryFn: () => getLeaseSites(companyId), enabled: enabled && companyId !== null });
+
+export function useSaveSiteLease(companyId: number | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ siteId, body }: { siteId: number; body: LeaseBody }) => updateSiteLease(companyId, siteId, body),
+    onSettled: () => qc.invalidateQueries({ queryKey: leaseKeys.sites(companyId) }),
   });
 }

@@ -216,7 +216,7 @@ export function isColumnVisible(m: FormModel, col: ColumnEntity, row: ModalRow):
   if (!m.spec || col.column_type !== "number" || isSelectColumn(m, col)) return true;
   const resolved = resolveSpecMethod(m.spec, row);
   if (!resolved) return m.spec.mode === "per_unit" ? specNumericColumns(m.spec).has(col.column_name) : false;
-  return resolved.method.multiply.includes(col.column_name);
+  return resolved.method.multiply.includes(col.column_name) || !!resolved.method.divide?.includes(col.column_name);
 }
 
 /** Extra fields that apply to the row's emission category. */

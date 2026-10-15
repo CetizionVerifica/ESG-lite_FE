@@ -3,6 +3,7 @@ import type { BoundaryCategory, MapProposal } from "../../../services/scope3Serv
 import {
   bulkConfirmable,
   confidenceText,
+  isUnconfirmedDefault,
   countStatuses,
   draftFrom,
   isRowDirty,
@@ -87,5 +88,15 @@ describe("last changed", () => {
   it("names the person and the day", () => {
     expect(lastChanged({ updated_at: "2026-10-12T10:00:00Z", updated_by: { user_id: 3, name: "Priya" } })).toBe("12 Oct 2026, by Priya");
     expect(lastChanged({ updated_at: null, updated_by: null })).toBe("Not changed yet");
+  });
+});
+
+// S3-11 (D10)
+describe("isUnconfirmedDefault", () => {
+  it("is a 13-15 Not relevant row nobody has saved", () => {
+    expect(isUnconfirmedDefault({ n: 14, status: "not_relevant", updated_by: null })).toBe(true);
+    expect(isUnconfirmedDefault({ n: 14, status: "not_relevant", updated_by: { user_id: 3, name: "Priya" } })).toBe(false);
+    expect(isUnconfirmedDefault({ n: 12, status: "not_relevant", updated_by: null })).toBe(false);
+    expect(isUnconfirmedDefault({ n: 15, status: "screening", updated_by: null })).toBe(false);
   });
 });

@@ -220,3 +220,22 @@ for (const width of [1280, 1024, 768, 390]) {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 }
+
+// S3-11 (D10): Categories 13-15 default to Not relevant; an admin confirms one as is.
+test("an admin confirms the Not relevant default on Category 15", async ({ page }) => {
+  const { calls } = await signIn(page, "Admin");
+  await page.goto("/settings/scope3");
+  await expect(row(page, 15)).toContainText("Default, not confirmed");
+  await expect(row(page, 15).getByRole("link", { name: "Investments register" })).toHaveAttribute("href", "/settings/scope3/investments");
+  await row(page, 15).getByRole("button", { name: "Confirm Category 15 as not relevant" }).click();
+  await expect(page.getByText("Category 15 · Investments confirmed as not relevant")).toBeVisible();
+  expect(calls).toEqual([
+    {
+      method: "PUT",
+      path: expect.stringMatching(/\/scope3\/categories\/15$/),
+      body: { status: "not_relevant", reason: "No leased-out assets, franchises or investments", method_note: null },
+    },
+  ]);
+  await expect(row(page, 15)).toContainText("by Priya Admin");
+  await expect(row(page, 14).getByRole("button", { name: "Confirm Category 14 as not relevant" })).toBeVisible();
+});

@@ -25,7 +25,8 @@ export interface ColumnEntity {
 // Use of Sold Products (Scope 3 Category 11).
 export interface MethodCalculation {
   multiply: string[]; // column names whose values multiply together
-  percent?: string[]; // subset of multiply entered as percentages (divided by 100)
+  percent?: string[]; // subset of multiply/divide entered as percentages (divided by 100)
+  divide?: string[]; // S3-11: fields the product is divided by (each > 0)
   activity_unit?: string; // unit the product is in (preselects activity_data_unit)
 }
 
