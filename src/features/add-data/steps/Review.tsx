@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
-import { Button, EmptyState, cn, formatNumber, panel } from "../../../ui";
+import { Button, Callout, EmptyState, cn, formatNumber, panel } from "../../../ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateEmissionQueries } from "../../../lib/emissionQueries";
 import { linkBillEvidence, saveRow, updateRow, uploadRowEvidence, type SaveOutcome } from "../api";
@@ -103,6 +103,11 @@ export function Review(p: Props) {
   const finished = p.rows.length > 0 && p.rows.every((r) => ["saved", "skipped"].includes(outcomes[r.id]?.kind ?? ""));
   const savedCount = p.rows.filter((r) => outcomes[r.id]?.kind === "saved").length;
   const unattached = p.rows.filter((r) => evidence[r.id] === "failed").length;
+  // The engine's notes on saved rows (S3-4): an older factor year, no FERA row. Never blocking.
+  const notes = p.rows.flatMap((r) => {
+    const o = outcomes[r.id];
+    return o?.kind === "saved" ? (o.warnings ?? []).map((w) => ({ id: `${r.id}:${w}`, text: `${label(r)}: ${w}` })) : [];
+  });
   const evidenceText = (row: ModalRow) => {
     const bill = billOf(row);
     const files = bill ? 0 : p.evidenceFiles(row.id).length;
@@ -144,6 +149,15 @@ export function Review(p: Props) {
             </div>
           }
         />
+        {notes.length > 0 && (
+          <Callout tone="warn" title="Sent, with notes" className="mx-auto mt-4 max-w-xl">
+            <ul className="list-disc space-y-1 pl-4">
+              {notes.map((n) => (
+                <li key={n.id}>{n.text}</li>
+              ))}
+            </ul>
+          </Callout>
+        )}
       </div>
     );
   }
