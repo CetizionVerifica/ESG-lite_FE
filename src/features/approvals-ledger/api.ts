@@ -24,7 +24,7 @@ import {
   rejectEmission,
 } from "../../services/emissionService";
 import type { ColumnConfig, LedgerRow, listParams } from "./logic";
-import { attentionOf, historyMonths, monthlyHistory, reviewCounts, rowMonth } from "./logic";
+import { attentionOf, historyMonths, isFoldedFeraTwin, monthlyHistory, reviewCounts, rowMonth } from "./logic";
 
 export const keys = {
   all: ["approvals-ledger"] as const,
@@ -292,13 +292,18 @@ const READY_PAGE = 200;
 /** The most ready rows one "Approve all ready" sends. */
 export const READY_CAP = 5000;
 
-/** Ids of every pending row whose checks pass, with the list's filters (not just this page). */
+/**
+ * Ids of every pending entry whose checks pass, with the list's filters (not
+ * just this page). A FERA twin folded into its pending parent is left out:
+ * approving the parent approves it, and the server counts the pair once (a
+ * pair is ready only when both rows are), so the ids match the "Ready" count.
+ */
 export async function fetchReadyIds(params: ReturnType<typeof listParams>): Promise<number[]> {
   const ids: number[] = [];
   const base = { ...params, status: "pending", ready: true, attention: null, sort: null, order: null, limit: READY_PAGE };
   for (let page = 1; ids.length < READY_CAP; page++) {
     const res = await getEmissionsPaginated({ ...base, page });
-    for (const r of res.data) ids.push(r.pk_id);
+    for (const r of res.data) if (!isFoldedFeraTwin(r)) ids.push(r.pk_id);
     if (res.data.length < READY_PAGE || ids.length >= res.total) break;
   }
   return [...new Set(ids)].slice(0, READY_CAP);

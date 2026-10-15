@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, ExternalLink, FileText } from "lucide-react";
 import { useTheme } from "../../../theme";
-import { type CheckContext, checkLines, readChecks } from "../../../lib/scope3/checks";
+import { type CheckContext, checkLines, factorYearFor, readChecks } from "../../../lib/scope3/checks";
 import {
   Badge,
   Button,
@@ -310,8 +310,7 @@ function DocumentRow({ doc, url, onOpen }: { doc: LedgerDocument; url: string; o
 function WhyHeld({ row, context }: { row: LedgerRow; context?: CheckContext }) {
   const checks = readChecks(row.checks);
   if (!checks) return <p className="text-sm text-muted">The checks haven't run on this entry yet, so it waits for your review.</p>;
-  const year = rowMonth(row)?.year ?? (Number(String(row.date_of_reporting).slice(0, 4)) || null);
-  const lines = checkLines(checks, { ...context, year });
+  const lines = checkLines(checks, { ...context, year: factorYearFor(row.date_of_reporting) });
   const held = lines.filter((l) => !l.passed);
   const ordered = [...held, ...lines.filter((l) => l.passed)];
   return (

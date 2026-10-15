@@ -37,6 +37,7 @@ import {
 } from "../../ui";
 import {
   EXPORT_CAP,
+  READY_CAP,
   commitApprove,
   errorMessage,
   fetchAllForExport,
@@ -358,9 +359,13 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
       const token = approveAll.start(ids);
       setSelected([]);
       const copy = approveAllCopy(ids.length);
+      const more = (groupCounts?.ready ?? 0) - ids.length;
       toast({
         title: copy.toast,
-        description: "They pass every check.",
+        description:
+          ids.length >= READY_CAP && more > 0
+            ? `They pass every check. One action approves up to ${formatNumber(READY_CAP)}; approve again for the other ${formatNumber(more)}.`
+            : "They pass every check.",
         tone: "good",
         duration: UNDO_MS,
         action: {
@@ -589,7 +594,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
             {groupCounts.ready === 1 ? "1 entry passes" : `${formatNumber(groupCounts.ready)} entries pass`} every check.
           </p>
           <Button variant="primary" loading={collectingReady} onClick={() => void approveAllReady()}>
-            {approveAllCopy(groupCounts.ready).button}
+            {approveAllCopy(groupCounts.ready, READY_CAP).button}
           </Button>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EmissionData } from "../../services/emissionService";
 import {
+  isFoldedFeraTwin,
   BATCH_SOURCE_OPTIONS,
   batchSource,
   parseBatchSource,
@@ -133,6 +134,15 @@ describe("mergeFera", () => {
     expect(mergeFera([elsewhere, other], false).rows.map((r) => r.pk_id)).toEqual([3]);
     // An API that doesn't report the partner: hide it as before.
     expect(mergeFera([fera, other], false).rows.map((r) => r.pk_id)).toEqual([3]);
+  });
+
+  it("counts a pending FERA twin as folded only while its partner is pending", () => {
+    expect(isFoldedFeraTwin({ ...fera, fera_partner_status: "pending" as const })).toBe(true);
+    expect(isFoldedFeraTwin(fera)).toBe(true);
+    expect(isFoldedFeraTwin({ ...fera, fera_partner_status: "approved" as const })).toBe(false);
+    expect(isFoldedFeraTwin({ ...fera, fera_partner_status: null })).toBe(false);
+    expect(isFoldedFeraTwin({ ...fera, status: "approved" as const })).toBe(false);
+    expect(isFoldedFeraTwin(parent)).toBe(false);
   });
 
   it("keeps a decided FERA row whose parent isn't in the list", () => {
@@ -358,6 +368,8 @@ describe("review queue (S3-15)", () => {
   it("words the bulk approve and the skipped rows", () => {
     expect(approveAllCopy(1200)).toEqual({ button: "Approve all 1,200 ready", toast: "1,200 ready entries approved" });
     expect(approveAllCopy(1).toast).toBe("1 ready entry approved");
+    expect(approveAllCopy(1200, 5000).button).toBe("Approve all 1,200 ready");
+    expect(approveAllCopy(6200, 5000)).toEqual({ button: "Approve 5,000 of 6,200 ready", toast: "5,000 ready entries approved" });
     expect(skippedCopy(0)).toBeNull();
     expect(skippedCopy(1)).toMatch(/^1 entry wasn't approved/);
     expect(skippedCopy(3)).toMatch(/^3 entries weren't approved/);

@@ -27,8 +27,21 @@ export type RowChecks = { ready: boolean; held: CheckId[] };
 /** Icon names; `src/ui/CheckChip` maps them to icons. */
 export type CheckIcon = "factor" | "unit" | "evidence" | "trend" | "duplicate" | "import" | "method" | "quality";
 
-/** Values some labels name: the entry's year and the company's change limit. */
+/**
+ * Values some labels name: the factor year FACTOR_FOUND looks for (see
+ * `factorYearFor`) and the company's change limit.
+ */
 export type CheckContext = { year?: number | null; pct?: number | null };
+
+/**
+ * The factor year FACTOR_FOUND looks for: the entry's reporting year − 1, as
+ * the backend's `targetYearFor` reads it from the date (a 2026 entry uses 2025
+ * factors). `null` when the date can't be read.
+ */
+export function factorYearFor(dateOfReporting: string | null | undefined): number | null {
+  const y = Number(String(dateOfReporting ?? "").slice(0, 4));
+  return Number.isInteger(y) && y > 1 ? y - 1 : null;
+}
 
 type CheckCopy = {
   icon: CheckIcon;
@@ -140,12 +153,12 @@ export function groupRows<T extends { status: string; checks?: unknown }>(rows: 
 export type CheckLine = { id: CheckId; passed: boolean; label: string; hint: string; icon: CheckIcon };
 
 /**
- * Every check with pass or fail, in contract order, for "Why held". METHOD_GIVEN
- * and DQ_ACCEPTABLE pass until S3-3 adds method and DQ to entries.
+ * Every check with pass or fail, in contract order, for "Why held". The
+ * server's `held` decides; nothing is passed here on its behalf.
  */
 export function checkLines(checks: RowChecks, c: CheckContext = {}): CheckLine[] {
   return CHECK_IDS.map((id) => {
-    const passed = !checks.held.includes(id) || id === "METHOD_GIVEN" || id === "DQ_ACCEPTABLE";
+    const passed = !checks.held.includes(id);
     const copy = CHECK_COPY[id];
     return { id, passed, label: passed ? copy.pass(c) : copy.held(c), hint: copy.hint(c), icon: copy.icon };
   });

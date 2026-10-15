@@ -1,6 +1,6 @@
 import type { EmissionStatus } from "../../../services/emissionService";
 import { type Column, CheckChip, ReadyChip, StatusPill, UncheckedChip, cn, formatDate, formatEmissions, formatNumber } from "../../../ui";
-import { type CheckContext, heldChip, isReady, readChecks } from "../../../lib/scope3/checks";
+import { type CheckContext, factorYearFor, heldChip, isReady, readChecks } from "../../../lib/scope3/checks";
 import { type RowActions, RowMenu } from "./RowMenu";
 import { type ColumnConfig, type LedgerRow, activityFields, activitySummary, quantityOf, rowPeriodLabel, scopeNumber } from "../logic";
 
@@ -132,11 +132,8 @@ export function ledgerColumns({
   return columns;
 }
 
-/** The entry's year, which the "No factor for {year}" chip names. */
-const yearOf = (r: LedgerRow) => {
-  const y = Number(String(r.date_of_reporting ?? "").slice(0, 4));
-  return Number.isFinite(y) && y > 0 ? y : null;
-};
+/** The factor year the "No factor for {year}" chip names (the entry's year − 1). */
+const yearOf = (r: LedgerRow) => factorYearFor(r.date_of_reporting);
 
 /** Reason chips per held row (word and icon), "Ready" when every check passed. */
 function heldColumn(ctx: CheckContext): Column<LedgerRow> {

@@ -137,6 +137,14 @@ export function asStatus(value: string | undefined): EmissionStatus | null {
 export const isFera = (row: EmissionData) => row.category?.category_name?.toLowerCase() === "fera";
 
 /**
+ * A pending FERA twin whose partner entry is pending too: the server folds it
+ * into that entry (one decision, counted once). `undefined` partner status
+ * (an API without the field) counts as folded, as `mergeFera` hides it.
+ */
+export const isFoldedFeraTwin = (row: EmissionData) =>
+  isFera(row) && row.status === "pending" && (row.fera_partner_status === undefined || row.fera_partner_status === "pending");
+
+/**
  * FERA (fuel- and energy-related) rows ride on their parent: they are hidden
  * from the list and shown as "+X tCO₂e" on the parent, unless the FERA
  * category is among the chosen ones: then every FERA row is a row of its own
@@ -447,7 +455,17 @@ export function reviewCounts(summary: { ready?: unknown; held?: unknown } | null
 }
 
 /** "Approve all 12 ready" and the toast that follows. */
-export function approveAllCopy(n: number): { button: string; toast: string } {
+/**
+ * "Approve all ready" copy. One action sends at most `cap` entries; above it
+ * the button says how many of the ready ones go now.
+ */
+export function approveAllCopy(n: number, cap = Infinity): { button: string; toast: string } {
+  if (n > cap) {
+    return {
+      button: `Approve ${formatNumber(cap)} of ${formatNumber(n)} ready`,
+      toast: `${formatNumber(cap)} ready entries approved`,
+    };
+  }
   return {
     button: `Approve all ${formatNumber(n)} ready`,
     toast: n === 1 ? "1 ready entry approved" : `${formatNumber(n)} ready entries approved`,

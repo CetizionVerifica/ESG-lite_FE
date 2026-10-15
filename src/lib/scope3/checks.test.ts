@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHECK_COPY, CHECK_IDS, checkLines, groupRows, heldChip, isReady, parseGroup, readChecks } from "./checks";
+import { CHECK_COPY, CHECK_IDS, checkLines, factorYearFor, groupRows, heldChip, isReady, parseGroup, readChecks } from "./checks";
 
 describe("review checks (S3-15)", () => {
   it("has fixed copy and an icon for every check id", () => {
@@ -56,12 +56,19 @@ describe("review checks (S3-15)", () => {
     expect(g.attention.map((r) => r.id)).toEqual([2, 3]);
   });
 
-  it("lists every check with pass or fail; method and data quality pass for now", () => {
-    const lines = checkLines({ ready: false, held: ["WITHIN_THRESHOLD", "METHOD_GIVEN"] }, { pct: 5, year: 2026 });
+  it("lists every check with pass or fail, as the server held them", () => {
+    const lines = checkLines({ ready: false, held: ["WITHIN_THRESHOLD", "METHOD_GIVEN"] }, { pct: 5, year: 2025 });
     expect(lines.map((l) => l.id)).toEqual([...CHECK_IDS]);
-    expect(lines.filter((l) => !l.passed).map((l) => l.label)).toEqual(["Over your 5 % change limit"]);
-    expect(lines.find((l) => l.id === "FACTOR_FOUND")?.label).toBe("Factor found for 2026");
-    expect(lines.find((l) => l.id === "METHOD_GIVEN")?.passed).toBe(true);
+    expect(lines.filter((l) => !l.passed).map((l) => l.label)).toEqual(["Over your 5 % change limit", "No method chosen"]);
+    expect(lines.find((l) => l.id === "FACTOR_FOUND")?.label).toBe("Factor found for 2025");
+  });
+
+  it("names the factor year FACTOR_FOUND looks for: the entry's year − 1", () => {
+    expect(factorYearFor("2026-03-15")).toBe(2025);
+    expect(factorYearFor("2026-03-15T00:00:00.000Z")).toBe(2025);
+    expect(factorYearFor("")).toBeNull();
+    expect(factorYearFor(undefined)).toBeNull();
+    expect(heldChip("FACTOR_FOUND", { year: factorYearFor("2026-01-31") }).label).toBe("No factor for 2025");
   });
 
   it("parses ?group=", () => {

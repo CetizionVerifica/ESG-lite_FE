@@ -583,7 +583,7 @@ test("a held entry opens as a single-entry review with Why held (S3-15)", async 
   await expect(why).toContainText("Held back by 2 checks.");
   await expect(why.locator('[data-check="EVIDENCE_ATTACHED"]')).toHaveAttribute("data-passed", "false");
   await expect(why.locator('[data-check="WITHIN_THRESHOLD"]')).toContainText("Over your 5 % change limit");
-  await expect(why.locator('[data-check="FACTOR_FOUND"]')).toContainText("Factor found for 2025");
+  await expect(why.locator('[data-check="FACTOR_FOUND"]')).toContainText("Factor found for 2024"); // a 2025 entry uses 2024 factors
   await expect(why.locator('[data-check="METHOD_GIVEN"]')).toHaveAttribute("data-passed", "true");
   await expect(drawer.getByTestId("calculation")).toBeVisible();
   await expect(drawer.getByText("Last 6 months")).toBeVisible();
