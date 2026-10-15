@@ -1,6 +1,7 @@
 import type { EmissionStatus } from "../../../services/emissionService";
 import { type Column, StatusPill, cn, formatDate, formatEmissions, formatNumber } from "../../../ui";
 import { type RowActions, RowMenu } from "./RowMenu";
+import { feraSubLabel, twinsTotal } from "../../../lib/scope3/fera";
 import { type ColumnConfig, type LedgerRow, activityFields, activitySummary, quantityOf, rowPeriodLabel, scopeNumber } from "../logic";
 
 const SCOPE_DOT: Record<1 | 2 | 3, string> = { 1: "bg-s1", 2: "bg-s2", 3: "bg-s3" };
@@ -14,7 +15,7 @@ export function ledgerColumns({
   actions,
 }: {
   configOf: (siteId: number, categoryId: number) => ColumnConfig | undefined;
-  feraOf: Map<number, LedgerRow>;
+  feraOf: Map<number, LedgerRow[]>;
   statusOf: (row: LedgerRow) => EmissionStatus;
   actions: RowActions;
 }): Column<LedgerRow>[] {
@@ -44,6 +45,8 @@ export function ledgerColumns({
             <span title={r.category?.category_name} className="truncate">
               {r.category?.category_name ?? "—"}
             </span>
+            {/* A FERA row of its own (FERA filter, or a twin waiting alone) says which part of Category 3 it is. */}
+            {r.scope3_sub && <span className="shrink-0 text-xs text-muted">{feraSubLabel(r.scope3_sub).replace("Category 3 · ", "")}</span>}
             {scope && <span className="sr-only">Scope {scope}</span>}
           </span>
         );
@@ -84,7 +87,11 @@ export function ledgerColumns({
         return (
           <span className="flex flex-col items-end leading-tight">
             <span>{formatNumber(Number(r.total_emission), 3)}</span>
-            {fera && <span className="text-xs text-muted">+{formatEmissions(Number(fera.total_emission))} FERA</span>}
+            {fera && (
+              <span className="text-xs text-muted" title={fera.map((f) => `${feraSubLabel(f.scope3_sub)}: ${formatEmissions(Number(f.total_emission))}`).join("\n")}>
+                +{formatEmissions(twinsTotal(fera))} FERA
+              </span>
+            )}
           </span>
         );
       },

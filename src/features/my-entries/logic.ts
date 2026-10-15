@@ -1,5 +1,6 @@
 import { type Period, fyLabel, formatMonth, periodRange } from "../../ui";
 import type { EmissionData, EmissionStatus } from "../../services/emissionService";
+import { sortTwins } from "../../lib/scope3/fera";
 
 /* ------------------------------------------------------------------ sites */
 
@@ -47,7 +48,8 @@ export function serverPeriod(p: Period | null): { year?: number; month?: number 
 
 /* ------------------------------------------------------------------- rows */
 
-export type EntryRow = EmissionData & { fera?: EmissionData };
+/** A parent entry carries its FERA twins: upstream, and T&D losses for Scope 2 (S3-7). */
+export type EntryRow = EmissionData & { fera?: EmissionData[] };
 
 const isFera = (e: EmissionData) => e.category?.category_name?.toLowerCase() === "fera";
 
@@ -64,9 +66,9 @@ export function attachFera(rows: EmissionData[], feraCategorySelected = false): 
   const out: EntryRow[] = [];
   for (const row of rows) {
     if (isFera(row)) continue;
-    const linked = fera.find((f) => f.pk_id === row.fera_linked_id || f.fera_linked_id === row.pk_id);
-    if (linked) used.add(linked.pk_id);
-    out.push(linked ? { ...row, fera: linked } : row);
+    const linked = fera.filter((f) => !used.has(f.pk_id) && (f.pk_id === row.fera_linked_id || f.fera_linked_id === row.pk_id));
+    for (const f of linked) used.add(f.pk_id);
+    out.push(linked.length ? { ...row, fera: sortTwins(linked) } : row);
   }
   // Orphans keep their place at the end of the page.
   for (const f of fera) if (!used.has(f.pk_id)) out.push(f);

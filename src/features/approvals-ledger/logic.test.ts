@@ -100,8 +100,16 @@ describe("mergeFera", () => {
   it("hides FERA rows and hangs them on their parent", () => {
     const m = mergeFera([parent, fera, other], false);
     expect(m.rows.map((r) => r.pk_id)).toEqual([1, 3]);
-    expect(m.feraOf.get(1)?.pk_id).toBe(2);
+    expect(m.feraOf.get(1)?.map((f) => f.pk_id)).toEqual([2]);
     expect(m.feraOf.has(3)).toBe(false);
+  });
+
+  it("hangs both twins of a Scope 2 row on it: upstream and T&D losses (S3-7)", () => {
+    const upstream = { ...fera, scope3_sub: "3b_upstream_electricity" };
+    const td = row({ pk_id: 4, category: { category_id: 99, category_name: "FERA" }, total_emission: 0.1, fera_linked_id: 1, scope3_sub: "3c_td_losses" });
+    const m = mergeFera([parent, td, upstream, other], false);
+    expect(m.rows.map((r) => r.pk_id)).toEqual([1, 3]);
+    expect(m.feraOf.get(1)?.map((f) => f.scope3_sub)).toEqual(["3b_upstream_electricity", "3c_td_losses"]);
   });
 
   it("keeps FERA rows when looking at the FERA category", () => {

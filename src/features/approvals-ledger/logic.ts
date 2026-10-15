@@ -1,6 +1,7 @@
 /** Pure helpers for P07 Approvals and Emissions ledger. No React, no requests. */
 import type { BatchChannel, EmissionData, EmissionStatus, EmissionUploadBatch } from "../../services/emissionService";
 import { fyEndYear, fyStartYearOf } from "../../lib/fiscalYear";
+import { sortTwins } from "../../lib/scope3/fera";
 import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatNumber, formatReportingYear, writeContext } from "../../ui";
 
 export type FactorSnapshot = {
@@ -146,16 +147,19 @@ export const isFera = (row: EmissionData) => row.category?.category_name?.toLowe
  * decision: approving it approves the twin too, and approving the twin alone
  * would approve a parent the reviewer never saw.
  */
-export function mergeFera<T extends EmissionData>(rows: T[], showFera: boolean): { rows: T[]; feraOf: Map<number, T> } {
-  const feraOf = new Map<number, T>();
+export function mergeFera<T extends EmissionData>(rows: T[], showFera: boolean): { rows: T[]; feraOf: Map<number, T[]> } {
+  const feraOf = new Map<number, T[]>();
   if (showFera) return { rows, feraOf };
   const folded = new Set<number>();
   for (const row of rows) {
     if (isFera(row)) continue;
-    const linked = rows.find((f) => isFera(f) && (f.pk_id === row.fera_linked_id || f.fera_linked_id === row.pk_id));
-    if (!linked || (linked.status === "pending" && row.status !== "pending")) continue;
-    feraOf.set(row.pk_id, linked);
-    folded.add(linked.pk_id);
+    // A Scope 2 row may carry two twins: upstream of electricity and T&D losses (S3-7).
+    const linked = rows.filter(
+      (f) => isFera(f) && (f.pk_id === row.fera_linked_id || f.fera_linked_id === row.pk_id) && !(f.status === "pending" && row.status !== "pending"),
+    );
+    if (!linked.length) continue;
+    feraOf.set(row.pk_id, sortTwins(linked));
+    for (const f of linked) folded.add(f.pk_id);
   }
   const partnerElsewhere = (r: T) =>
     r.status === "pending" &&

@@ -18,6 +18,7 @@ type FactorRec = {
   upload_batch_id: string | null;
   site: { site_id: number; name: string };
   category: Cat;
+  includes_wtt?: boolean;
 };
 
 const COMPANIES = [
@@ -52,7 +53,8 @@ function makeFactors(): FactorRec[] {
     site: { site_id: site, name: SITES.find((s) => s.site_id === site)!.name },
     category: CATEGORIES.find((c) => c.category_id === cat)!,
   });
-  return [f(1, 1, 1, 2024, "2.6800", "Diesel"), f(2, 1, 3, 2024, "0.5100", "Grid", "b-1"), f(3, 2, 2, 2023, "1430.0000", "R-134a")];
+  // Diesel stands in for a freight factor that sums in WTT (S3-7's "WTT included" chip).
+  return [{ ...f(1, 1, 1, 2024, "2.6800", "Diesel"), includes_wtt: true }, f(2, 1, 3, 2024, "0.5100", "Grid", "b-1"), f(3, 2, 2, 2023, "1430.0000", "R-134a")];
 }
 
 /** AI read of a DEFRA-style workbook: two groups; re-analyze reads names from the "Fuel" column. */
@@ -204,6 +206,8 @@ test("a superadmin filters factors by client and year, and adds one", async ({ p
   await expect(grid).toContainText("0.51");
   await expect(grid).toContainText("Import · 3 Oct 2026");
   await expect(table.getByRole("row", { name: /Diesel/ })).toContainText("Added by hand");
+  await expect(table.getByRole("row", { name: /Diesel/ })).toContainText("WTT included");
+  await expect(grid).not.toContainText("WTT included");
 
   await chooseFilter(page, "Client", "Midal Cables");
   await expect(page).toHaveURL(/client=1/);
