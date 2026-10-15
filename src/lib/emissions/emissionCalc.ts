@@ -22,8 +22,17 @@ export const normalizeUnitKey = (unit: unknown): string => {
   return u;
 };
 
+/**
+ * `method_column` value meaning "the row's calculation method picks the
+ * fields" (S3-9; backend calculationSpec.ts ROW_METHOD_COLUMN). Until rows
+ * carry a `method` (S3-3) the method is stored in `row["@method"]`, which the
+ * add-data method picker writes, so the lookup below needs no special case.
+ */
+export const ROW_METHOD_COLUMN = "@method";
+
 // Which of the spec's methods applies to this row — by dropdown value
-// (per_method) or by the row's unit (per_unit). null = not decidable yet.
+// (per_method, or the row's method with "@method") or by the row's unit
+// (per_unit). null = not decidable yet.
 export const resolveSpecMethod = (
   spec: CalculationSpec,
   row: ModalRow,
@@ -154,7 +163,9 @@ const specActivityValue = (spec: CalculationSpec, row: ModalRow): number | { sta
           ? row.activity_data_unit
             ? "This unit is not configured for this category"
             : "Select unit"
-          : `Select ${spec.method_column ?? "method"}`,
+          : spec.method_column === ROW_METHOD_COLUMN
+            ? "Choose a calculation method"
+            : `Select ${spec.method_column ?? "method"}`,
     };
   }
   const { method } = resolved;
@@ -178,7 +189,7 @@ const specActivityValue = (spec: CalculationSpec, row: ModalRow): number | { sta
       product *= value;
     }
   }
-  // divide (S3-11): leased-space shares, e.g. your area ÷ (building area × occupancy).
+  // divide (S3-9; first used by S3-11): occupancy, survey scaling and leased-space shares.
   for (const fieldName of method.divide ?? []) {
     const value = parseFloat(String(row[fieldName] ?? "").replace(/,/g, ""));
     if (isNaN(value) || value <= 0) return { status: `Enter ${fieldName} (a number greater than 0)` };

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type SourceConfig,
   addField,
+  addRowMethod,
   choicePaths,
   describeMethod,
   draftFromConfig,
@@ -153,6 +154,22 @@ describe("calculation", () => {
     expect(validateBuilder(d).map((i) => i.message)).toEqual(['Calculation: "Rail" has no fields to multiply.']);
     expect(setMethodField(d, "vehicle").calculation?.methods).toEqual({});
     expect(setCalcMode(d, "none").calculation).toBeNull();
+  });
+
+  it("lets the row's method pick the formula, with divide fields (S3-9)", () => {
+    let d = setMethodField(setCalcMode(draftFromConfig(transport), "per_method"), "@method");
+    expect(d.calculation?.method_column).toBe("@method");
+    expect(d.calculation?.methods).toEqual({});
+    expect(validateBuilder(d).map((i) => i.message)).toEqual(["Calculation: add at least one method."]);
+    d = addRowMethod(d, "distance_based");
+    d = updateMethod(d, "distance_based", { multiply: ["distance"], divide: ["weight", "distance"], percent: ["weight"] });
+    // A field can't be both multiplied and divided by; percent may sit on a divide field.
+    expect(d.calculation?.methods.distance_based).toEqual({ multiply: ["distance"], divide: ["weight"], percent: ["weight"] });
+    expect(describeMethod(d, "distance_based")).toBe('When the row\'s method is "Distance travelled", multiply Distance ÷ Weight (%).');
+    // Switching to Row's method again keeps the methods; renames and removals follow divide.
+    expect(Object.keys(setMethodField(d, "@method").calculation?.methods ?? {})).toEqual(["distance_based"]);
+    expect(renameField(d, 5, "load").calculation?.methods.distance_based.divide).toEqual(["load"]);
+    expect(removeField(d, 5).calculation?.methods.distance_based.divide).toEqual([]);
   });
 
   it("describes per-unit rules", () => {

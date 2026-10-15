@@ -12,6 +12,11 @@ import { DynamicField } from "./DynamicField";
 import { DistanceInput } from "./DistanceInput";
 import { distanceFieldFor, type DistanceField } from "../logic/distance";
 import { ExtraFields } from "./ExtraFields";
+import { TripCalculator } from "./TripCalculator";
+import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
+import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
+import { methodLabel } from "../../../lib/scope3/methods";
+import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 
 export type RowComparison = { text: string; overThreshold: boolean; threshold: number; previousLabel: string } | null;
 
@@ -30,6 +35,8 @@ type Props = {
   showIssue: boolean;
   comparison: RowComparison;
   canRemove: boolean;
+  /** The category's GHG Protocol number (Scope 3 only); picks method labels and travel copy. */
+  ghgCategory?: number | null;
   onChange: (column: string, value: string) => void;
   onExtraChange: (key: string, value: string) => void;
   onDuplicate: () => void;
@@ -61,6 +68,13 @@ export function EntryRow(p: Props) {
   const aiCategory = isAiField(row, "emission_category");
   const confidence = aiCategory ? (bill?.confidence ?? null) : null;
   const unsure = confidence !== null && confidence < LOW_CONFIDENCE;
+  const ghg = isGhgCategoryNumber(p.ghgCategory) ? p.ghgCategory : null;
+  // S3-9: a spec whose method_column is "@method" lets the row pick its method.
+  const rowMethods = model.spec?.mode === "per_method" && model.spec.method_column === ROW_METHOD_COLUMN ? Object.keys(model.spec.methods) : null;
+  const rowMethod = String(row[ROW_METHOD_COLUMN] ?? "");
+  const tripField = ghg === 7 && rowMethod === "distance_based" ? distanceFieldOf(model.spec?.methods[rowMethod]) : null;
+  const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row));
+  const firstSelect = visible.find((c) => c.column_type === "select")?.column_name;
   const unitOptions = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
 
   return (
@@ -112,10 +126,19 @@ export function EntryRow(p: Props) {
       )}
       </div>
 
+      {rowMethods && (
+        <Select<string>
+          label="Calculation method"
+          value={rowMethod || null}
+          onChange={(v) => p.onChange(ROW_METHOD_COLUMN, v ?? "")}
+          options={rowMethods.map((k) => ({ value: k, label: methodLabel(k, ghg) }))}
+          placeholder="Choose how this row is calculated"
+          className="sm:max-w-sm"
+        />
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {formColumns(model)
-          .filter((c) => isColumnVisible(model, c, row))
-          .map((c) => {
+        {visible.map((c) => {
             const labelExtra = isAiField(row, c.column_name) ? <AiChip /> : undefined;
             const distance = distanceFieldFor(model, row, c);
             return distance ? (
@@ -130,7 +153,15 @@ export function EntryRow(p: Props) {
                 labelExtra={labelExtra}
               />
             ) : (
-              <DynamicField key={c.pk_id} model={model} column={c} row={row} onChange={p.onChange} labelExtra={labelExtra} />
+              <DynamicField
+                key={c.pk_id}
+                model={model}
+                column={c}
+                row={row}
+                onChange={p.onChange}
+                labelExtra={labelExtra}
+                help={ghg === 6 && c.column_name === firstSelect ? TRAVEL_MODE_NOTE : undefined}
+              />
             );
           })}
         <Select<string>
@@ -143,6 +174,8 @@ export function EntryRow(p: Props) {
           error={fieldError("activity_data_unit")}
         />
       </div>
+
+      {tripField && <TripCalculator field={tripField} onUse={(km) => p.onChange(tripField, String(km))} />}
 
       {extras.length > 0 && (
         <details className="group" open={extras.some((f) => f.required)}>
