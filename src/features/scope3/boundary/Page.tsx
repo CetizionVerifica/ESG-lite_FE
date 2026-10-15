@@ -7,6 +7,8 @@ import { errorMessage, useBoundary, useCategoryMap, useConfirmMap, useSaveBounda
 import { BoundaryTable } from "./components/BoundaryTable";
 import { UnmappedPanel } from "./components/UnmappedPanel";
 import { type RowDraft, countStatuses, draftFrom, isRowDirty, rowError, summaryLine } from "./logic";
+import { LEASE_ROLE_LABEL } from "../../../lib/scope3/assets"; // S3-11
+import { categoryLabel } from "../../../lib/scope3/contracts"; // S3-11
 
 const APPROACH_OPTIONS = CONSOLIDATION_APPROACHES.map((a) => ({ value: a, label: CONSOLIDATION_LABEL[a] }));
 
@@ -29,6 +31,9 @@ export default function Scope3BoundaryPage() {
   const save = useSaveBoundary(companyId);
   const saveApproach = useSaveConsolidation(companyId);
   const confirm = useConfirmMap(companyId);
+  // S3-11 (D10): confirming a default saves the row as it is, with the person's name.
+  const confirmDefault = useSaveBoundary(companyId);
+  const [confirmingN, setConfirmingN] = useState<number | null>(null);
 
   // Edits per category number; a row missing here shows its saved values.
   const [edits, setEdits] = useState<Record<number, RowDraft>>({});
@@ -102,6 +107,18 @@ export default function Scope3BoundaryPage() {
       onError: (e) => setConfirmErr(errorMessage(e, "Try again.")),
     });
   };
+
+  const onConfirmDefault = (n: number) => {
+    const c = categories.find((x) => x.n === n);
+    if (!c) return;
+    setConfirmingN(n);
+    confirmDefault.mutate([{ n, draft: draftFrom(c) }], {
+      onSuccess: () => toast({ title: `${categoryLabel(c.n)} confirmed as not relevant`, tone: "good" }),
+      onError: (e) => toast({ title: errorMessage(e, "The category wasn't confirmed. Try again."), tone: "bad" }),
+      onSettled: () => setConfirmingN(null),
+    });
+  };
+  const leaseSites = boundary.data?.lease_sites ?? [];
 
   const header = (
     <PageHeader
@@ -180,11 +197,35 @@ export default function Scope3BoundaryPage() {
       ) : null}
 
       {boundary.data ? (
-        <BoundaryTable categories={categories} drafts={drafts} editable={editable} showErrors={triedSave} onChange={onChange} />
+        <BoundaryTable
+          categories={categories}
+          drafts={drafts}
+          editable={editable}
+          showErrors={triedSave}
+          onChange={onChange}
+          onConfirmDefault={onConfirmDefault}
+          confirming={confirmingN}
+        />
       ) : (
         <div className={panel}>
           <SkeletonTableRows rows={8} columns={5} />
         </div>
+      )}
+
+      {/* S3-11: where each leased or franchise site's energy belongs under the approach above. */}
+      {leaseSites.length > 0 && (
+        <section className={cn(panel, "space-y-2 p-4")} aria-label="Leased and franchise sites" data-testid="lease-sites">
+          <h2 className="text-sm font-medium text-ink">Leased and franchise sites</h2>
+          <ul className="space-y-1.5 text-sm">
+            {leaseSites.map((s) => (
+              <li key={s.site_id}>
+                <span className="font-medium text-ink">{s.name}</span>
+                <span className="text-muted"> · {s.lease_role ? LEASE_ROLE_LABEL[s.lease_role] : ""}</span>
+                {s.note && <p className="text-xs text-muted">{s.note}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {editable && dirty.length > 0 && (

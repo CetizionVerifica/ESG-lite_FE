@@ -1,6 +1,7 @@
 import api from "../api/axios";
 import type { BoundaryStatus, ConsolidationApproach } from "../lib/scope3/boundary";
 import type { Direction, GhgCategoryNumber } from "../lib/scope3/contracts";
+import type { LeaseSite } from "./scope3AssetsService"; // S3-11
 
 /** S3-1 Scope 3 boundary and category map (ESG-lite src/scope3/boundary). */
 
@@ -27,6 +28,8 @@ export interface Boundary {
   categories: BoundaryCategory[];
   can_edit: boolean;
   can_confirm_map: boolean;
+  /** S3-11: sites with a lease or franchise role, each with its boundary note. */
+  lease_sites?: LeaseSite[];
 }
 
 export interface MapProposal {

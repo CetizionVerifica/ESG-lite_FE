@@ -46,7 +46,7 @@ export const resolveSpecMethod = (
 // method/unit is chosen).
 export const specNumericColumns = (spec: CalculationSpec): Set<string> => {
   const all = new Set<string>();
-  Object.values(spec.methods).forEach((m) => m.multiply?.forEach((f) => all.add(f)));
+  Object.values(spec.methods).forEach((m) => [...(m.multiply ?? []), ...(m.divide ?? [])].forEach((f) => all.add(f)));
   return all;
 };
 
@@ -143,7 +143,7 @@ export const findActivityValue = (
 };
 
 // Activity value for a spec category: the PRODUCT of the chosen method's
-// fields (percent fields divided by 100). Returns a status message instead
+// fields (percent fields divided by 100), divided by its `divide` fields. Returns a status message instead
 // when the row isn't complete.
 const specActivityValue = (spec: CalculationSpec, row: ModalRow): number | { status: string } => {
   const resolved = resolveSpecMethod(spec, row);
@@ -176,6 +176,17 @@ const specActivityValue = (spec: CalculationSpec, row: ModalRow): number | { sta
       product *= value / 100;
     } else {
       product *= value;
+    }
+  }
+  // divide (S3-11): leased-space shares, e.g. your area ÷ (building area × occupancy).
+  for (const fieldName of method.divide ?? []) {
+    const value = parseFloat(String(row[fieldName] ?? "").replace(/,/g, ""));
+    if (isNaN(value) || value <= 0) return { status: `Enter ${fieldName} (a number greater than 0)` };
+    if (method.percent?.includes(fieldName)) {
+      if (value > 100) return { status: `${fieldName} cannot be more than 100` };
+      product /= value / 100;
+    } else {
+      product /= value;
     }
   }
   return product;

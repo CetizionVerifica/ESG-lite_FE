@@ -1,8 +1,9 @@
-import { Badge, Scope3CategoryChip, Select, TextField, cn, panel } from "../../../../ui";
+import { Link } from "react-router-dom";
+import { Badge, Button, Scope3CategoryChip, Select, TextField, cn, focusRing, panel } from "../../../../ui";
 import { BOUNDARY_STATUSES, BOUNDARY_STATUS_LABEL, type BoundaryStatus, needsReason } from "../../../../lib/scope3/boundary";
 import { DIRECTION_LABEL } from "../../../../lib/scope3/contracts";
 import type { BoundaryCategory } from "../../../../services/scope3Service";
-import { type RowDraft, lastChanged, rowError } from "../logic";
+import { type RowDraft, isRowDirty, isUnconfirmedDefault, lastChanged, rowError } from "../logic";
 
 const STATUS_OPTIONS = BOUNDARY_STATUSES.map((s) => ({ value: s, label: BOUNDARY_STATUS_LABEL[s] }));
 const STATUS_TONE: Record<BoundaryStatus, "good" | "neutral" | "warn" | "info"> = {
@@ -19,10 +20,14 @@ export type BoundaryTableProps = {
   /** Show reason errors (after a Save attempt), not while typing the first time. */
   showErrors: boolean;
   onChange: (n: number, patch: Partial<RowDraft>) => void;
+  /** S3-11 (D10): confirms a default Not relevant row as it is. */
+  onConfirmDefault?: (n: number) => void;
+  /** The category being confirmed. */
+  confirming?: number | null;
 };
 
 /** The 15 GHG Protocol categories with the client's status, reason and mapped categories. */
-export function BoundaryTable({ categories, drafts, editable, showErrors, onChange }: BoundaryTableProps) {
+export function BoundaryTable({ categories, drafts, editable, showErrors, onChange, onConfirmDefault, confirming }: BoundaryTableProps) {
   return (
     <div className={cn(panel, "relative overflow-x-auto")}>
       <table className="w-full min-w-[960px] text-left text-sm">
@@ -50,6 +55,12 @@ export function BoundaryTable({ categories, drafts, editable, showErrors, onChan
                     <div className="min-w-0">
                       <div className="font-medium text-ink">{c.name}</div>
                       <div className="text-xs text-muted">{DIRECTION_LABEL[c.direction]}</div>
+                      {/* S3-11: the investments register behind Category 15. */}
+                      {c.n === 15 && (
+                        <Link to="/settings/scope3/investments" className={cn(focusRing, "rounded-control text-xs font-medium text-brand hover:underline")}>
+                          Investments register
+                        </Link>
+                      )}
                     </div>
                   </div>
                 </th>
@@ -109,7 +120,21 @@ export function BoundaryTable({ categories, drafts, editable, showErrors, onChan
                     <span className="text-muted">None</span>
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-xs text-muted">{lastChanged(c)}</td>
+                <td className="px-3 py-2.5 text-xs text-muted">
+                  {/* S3-11 (D10): a default nobody has confirmed yet. */}
+                  {isUnconfirmedDefault(c) ? (
+                    <div className="space-y-1.5">
+                      <div>Default, not confirmed</div>
+                      {editable && onConfirmDefault && d && !isRowDirty(d, c) && (
+                        <Button size="sm" onClick={() => onConfirmDefault(c.n)} loading={confirming === c.n} aria-label={`Confirm ${label} as not relevant`}>
+                          Confirm
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    lastChanged(c)
+                  )}
+                </td>
               </tr>
             );
           })}
