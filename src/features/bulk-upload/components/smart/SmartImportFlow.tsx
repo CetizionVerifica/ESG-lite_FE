@@ -5,7 +5,7 @@ import { type Site, errorMessage, useUploadFile } from "../../api";
 import type { UploadContext } from "../../hooks/useUploadContext";
 import { type ImportResult, fileProblem, selectedSite, skippedMatrix } from "../../logic";
 import { type SmartPreviewArgs, useMappingProfiles, usePatchPlan, usePropose, useReaskSheet, useSkipIssue, useSmartImport, useSmartPreview } from "../../smart/api";
-import { SMART_STEPS, answersCategory, forgetErrorMessage, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, skipConfirm, smartErrorMessage, smartUnavailable } from "../../smart/logic";
+import { type HeldPart, SMART_STEPS, answersCategory, autoReview, holdUnsure, forgetErrorMessage, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, skipConfirm, smartErrorMessage, smartUnavailable } from "../../smart/logic";
 import type { MappingProposal } from "../../smart/types";
 import { ImportStep, type ImportState } from "../ImportStep";
 import { ConfirmMappingStep } from "./ConfirmMappingStep";
@@ -54,6 +54,8 @@ export function SmartImportFlow(props: {
   const [importState, setImportState] = useState<ImportState | null>(null);
   /** The mapping model mapped the workbook, so Confirm mapping was passed over. */
   const [autoMapped, setAutoMapped] = useState(false);
+  /** What the model wasn't sure of and was left out of the plan (`holdUnsure`); empty once the user confirmed the mapping. */
+  const [held, setHeld] = useState<HeldPart[]>([]);
   /** Sheets being mapped again after a category change, and the ones whose re-ask failed (sheet name → message). */
   const [reasking, setReasking] = useState<Record<string, true>>({});
   const [reaskFailed, setReaskFailed] = useState<Record<string, string>>({});
@@ -137,10 +139,19 @@ export function SmartImportFlow(props: {
               // Mapped by the model with nothing left to check: straight to the rows.
               if (skipConfirm(p)) {
                 setAutoMapped(true);
+                setHeld([]);
                 setPreviewArgs({ proposal: p, planId: null, code: null, page: 0 });
+                setStep(2);
+              } else if (autoReview(p)) {
+                // Some of it is unsure: plan what the model was sure of, hold the rest back for the user (Shyam, 2026-10-15).
+                const split = holdUnsure(p);
+                setAutoMapped(true);
+                setHeld(split.held);
+                setPreviewArgs({ proposal: split.proposal, planId: null, code: null, page: 0 });
                 setStep(2);
               } else {
                 setAutoMapped(false);
+                setHeld([]);
                 setStep(1);
               }
             },
@@ -152,6 +163,7 @@ export function SmartImportFlow(props: {
 
   const toReview = () => {
     if (!proposal) return;
+    setHeld([]);
     setPreviewArgs({ proposal, planId: null, code: null, page: 0 });
     setStep(2);
   };
@@ -174,7 +186,8 @@ export function SmartImportFlow(props: {
     setImportState({ status: "running" });
     props.onLocked(true);
     setStep(3);
-    commit.mutate({ proposal, plan: { plan_id: plan.plan_id, version: plan.version } });
+    // The proposal that was planned: with parts held back, only what the model was sure of is learned.
+    commit.mutate({ proposal: previewArgs?.proposal ?? proposal, plan: { plan_id: plan.plan_id, version: plan.version } });
   };
 
   const backToReview = () => {
@@ -193,6 +206,7 @@ export function SmartImportFlow(props: {
     setPreviewArgs(null);
     setImportState(null);
     setAutoMapped(false);
+    setHeld([]);
     lastPlan.current = null;
     upload.reset();
     propose.reset();
@@ -285,6 +299,7 @@ export function SmartImportFlow(props: {
             busy={patch.isPending || skipIssue.isPending || preview.isFetching}
             patchError={patch.error ? smartErrorMessage(patch.error, "The row couldn't be changed.") : skipIssue.error ? smartErrorMessage(skipIssue.error, "The rows couldn't be skipped.") : null}
             autoMapped={autoMapped}
+            held={held}
             onBack={backToConfirm}
             onImport={runImport}
           />

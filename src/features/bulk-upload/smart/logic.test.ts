@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { FINGERPRINT_POWER, MOCK_PROFILE, MOCK_PROPOSAL, MODEL_PROPOSAL } from "./fixtures";
 import {
   activityChip,
+  autoReview,
+  heldText,
+  holdUnsure,
   modelMapped,
   skipConfirm,
   answersCategory,
@@ -347,5 +350,45 @@ describe("mapping model on", () => {
       sheets: MODEL_PROPOSAL.sheets.map((s, i) => (i === 1 ? { ...s, fields: s.fields.map((f) => ({ ...f, confidence: 0.5, source: "rules" as const })) } : s)),
     };
     expect(skipConfirm(lowRule)).toBe(false);
+  });
+});
+
+describe("holding unsure parts back (Shyam, 2026-10-15)", () => {
+  const modelOn = { ...MOCK_PROPOSAL, model: MODEL_PROPOSAL.model };
+
+  it("plans what the model was sure of and holds an unsure sheet back whole", () => {
+    // Sheet 0 has no Unit column (a required field on Check); sheet 1 is sure.
+    const { proposal, held } = holdUnsure(modelOn);
+    expect(proposal.sheets[0].excluded).toBe(true);
+    expect(proposal.sheets[1].excluded ?? false).toBe(false);
+    expect(held).toEqual([{ sheet: "Fuel 2026", whole: true, reasons: ["Unit"] }]);
+    expect(autoReview(modelOn)).toBe(true);
+    expect(heldText(held)).toBe("1 sheet");
+  });
+
+  it("unmatches only the unsure wordings of an otherwise sure sheet", () => {
+    const sureUnit = {
+      ...modelOn,
+      sheets: modelOn.sheets.map((s, i) => (i === 0 ? { ...s, fields: s.fields.map((f) => (f.key === "activity_unit" ? { ...f, column: "UoM", confidence: 0.9 } : f)) } : s)),
+    };
+    const unsure = sureUnit.sheets[0].activities.filter((a) => activityChip(a) === "check").map((a) => a.sheet_text);
+    expect(unsure.length).toBeGreaterThan(0);
+    const { proposal, held } = holdUnsure(sureUnit);
+    const sheet = proposal.sheets[0];
+    expect(sheet.excluded ?? false).toBe(false);
+    for (const a of sheet.activities) {
+      if (unsure.includes(a.sheet_text)) expect([a.factor_name, a.save_mapping]).toEqual([null, false]);
+      else expect(a.factor_name).toBe(sureUnit.sheets[0].activities.find((x) => x.sheet_text === a.sheet_text)?.factor_name);
+    }
+    expect(held).toEqual([{ sheet: "Fuel 2026", whole: false, reasons: unsure.map((t) => `"${t}"`) }]);
+    expect(heldText(held)).toBe(`${unsure.length} activity wording${unsure.length === 1 ? "" : "s"}`);
+  });
+
+  it("still opens Confirm mapping on rules only, or when nothing at all is sure", () => {
+    expect(autoReview(MOCK_PROPOSAL)).toBe(false);
+    const nothingSure = { ...modelOn, sheets: modelOn.sheets.map((s) => ({ ...s, fields: s.fields.map((f) => ({ ...f, confidence: 0.3 })) })) };
+    expect(autoReview(nothingSure)).toBe(false);
+    // a fully sure proposal holds nothing
+    expect(holdUnsure(MODEL_PROPOSAL).held).toEqual([]);
   });
 });
