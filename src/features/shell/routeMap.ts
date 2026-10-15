@@ -64,6 +64,8 @@ export const SHELL_ROUTES = [
   // Everyone
   { id: "notifications", path: "/notifications", title: "Notifications", crumb: ["Notifications"], roles: ALL, spec: "P13" },
   { id: "settings", path: "/settings", title: "Settings", crumb: ["Settings"], roles: ALL, spec: "P14" },
+  // Scope 3 (docs/scope3 in ESG-lite): a placeholder from S3-0 until S3-1 builds the boundary page here.
+  { id: "scope3", path: "/settings/scope3", title: "Scope 3", crumb: ["Settings", "Scope 3"], roles: ["Admin", "Superadmin"], spec: "S3-1" },
   // Connect Claude consent (MCP import plan IM10); ESG-lite /oauth/authorize lands here.
   // Superadmin only (Shyam, 2026-10-14): other roles get the 403 page, never the consent screen.
   { id: "oauth-consent", path: "/oauth/consent", title: "Connect Claude", crumb: ["Connect Claude"], roles: ["Superadmin"], spec: "IM10" },

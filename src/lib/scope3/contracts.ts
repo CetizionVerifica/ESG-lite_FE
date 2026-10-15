@@ -1,0 +1,299 @@
+/**
+ * Scope 3 contracts (S3-0): the frontend copy of ESG-lite
+ * `src/scope3/contracts/` (docs/scope3/01-contracts.md §1, §3, §4, §5, §7, §8).
+ * Types and the category table only; pages read their words from `labels.ts`.
+ *
+ * Change the backend contracts first, then this file, in the same module.
+ * Factor types and their labels are in `factor.ts` (S3-2).
+ */
+
+// ---------------------------------------------------------------------------
+// §1 Methods and categories
+// ---------------------------------------------------------------------------
+
+export const METHOD_KEYS = [
+  "supplier_specific",
+  "hybrid",
+  "average_data",
+  "spend_based",
+  "fuel_based",
+  "distance_based",
+  "site_specific",
+  "waste_type_specific",
+  "asset_specific",
+  "lessor_specific",
+  "lessee_specific",
+  "direct_use",
+  "indirect_use",
+  "franchise_specific",
+  "investment_specific",
+  "project_specific",
+  "unknown",
+] as const;
+export type Method = (typeof METHOD_KEYS)[number];
+
+/** Default plain label per method; a category can word it its own way (see `GHG_CATEGORIES`). */
+export const METHOD_LABELS: Record<Method, string> = {
+  supplier_specific: "Supplier's own figure",
+  hybrid: "Supplier's energy and materials",
+  average_data: "Average data",
+  spend_based: "From the amount spent",
+  fuel_based: "From fuel used",
+  distance_based: "Distance travelled",
+  site_specific: "Site-specific",
+  waste_type_specific: "By waste type and treatment",
+  asset_specific: "Asset-specific",
+  lessor_specific: "Lessor-specific",
+  lessee_specific: "Lessee-specific",
+  direct_use: "Direct use (energy, fuel, gases)",
+  indirect_use: "Indirect use",
+  franchise_specific: "Franchise-specific",
+  investment_specific: "Investment-specific",
+  project_specific: "Project-specific",
+  unknown: "Not recorded",
+};
+
+export const GHG_CATEGORY_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
+export type GhgCategoryNumber = (typeof GHG_CATEGORY_NUMBERS)[number];
+
+export type GhgCategoryKey =
+  | "purchased_goods"
+  | "capital_goods"
+  | "fuel_energy"
+  | "upstream_transport"
+  | "waste"
+  | "business_travel"
+  | "employee_commuting"
+  | "upstream_leased"
+  | "downstream_transport"
+  | "processing"
+  | "use_of_sold"
+  | "end_of_life"
+  | "downstream_leased"
+  | "franchises"
+  | "investments";
+
+export type Direction = "upstream" | "downstream";
+
+export interface MethodOption {
+  key: Exclude<Method, "unknown">;
+  /** The plain label for this method in this category. */
+  label: string;
+}
+
+export interface GhgCategory {
+  n: GhgCategoryNumber;
+  key: GhgCategoryKey;
+  /** The GHG Protocol name, exactly. */
+  name: string;
+  direction: Direction;
+  /** Methods offered, most specific first. */
+  methods: readonly MethodOption[];
+}
+
+const m = (key: MethodOption["key"], label?: string): MethodOption => ({ key, label: label ?? METHOD_LABELS[key] });
+
+const GOODS_METHODS = [m("supplier_specific"), m("hybrid"), m("average_data", "Average for the material"), m("spend_based")] as const;
+const TRANSPORT_METHODS = [
+  m("fuel_based"),
+  m("distance_based", "Weight × distance"),
+  m("spend_based"),
+  m("site_specific", "Warehouse energy"),
+  m("average_data"),
+] as const;
+
+/** §1, in category order (the same table as the backend's `GHG_CATEGORIES`). */
+export const GHG_CATEGORIES: readonly GhgCategory[] = [
+  { n: 1, key: "purchased_goods", name: "Purchased goods and services", direction: "upstream", methods: GOODS_METHODS },
+  { n: 2, key: "capital_goods", name: "Capital goods", direction: "upstream", methods: GOODS_METHODS },
+  { n: 3, key: "fuel_energy", name: "Fuel- and energy-related activities", direction: "upstream", methods: [m("supplier_specific"), m("average_data")] },
+  { n: 4, key: "upstream_transport", name: "Upstream transportation and distribution", direction: "upstream", methods: TRANSPORT_METHODS },
+  { n: 5, key: "waste", name: "Waste generated in operations", direction: "upstream", methods: [m("supplier_specific"), m("waste_type_specific"), m("average_data")] },
+  { n: 6, key: "business_travel", name: "Business travel", direction: "upstream", methods: [m("fuel_based"), m("distance_based", "Distance travelled"), m("spend_based")] },
+  { n: 7, key: "employee_commuting", name: "Employee commuting", direction: "upstream", methods: [m("fuel_based"), m("distance_based"), m("average_data", "Headcount × national average")] },
+  { n: 8, key: "upstream_leased", name: "Upstream leased assets", direction: "upstream", methods: [m("asset_specific"), m("lessor_specific"), m("average_data")] },
+  { n: 9, key: "downstream_transport", name: "Downstream transportation and distribution", direction: "downstream", methods: TRANSPORT_METHODS },
+  { n: 10, key: "processing", name: "Processing of sold products", direction: "downstream", methods: [m("site_specific"), m("average_data")] },
+  { n: 11, key: "use_of_sold", name: "Use of sold products", direction: "downstream", methods: [m("direct_use"), m("indirect_use")] },
+  { n: 12, key: "end_of_life", name: "End-of-life treatment of sold products", direction: "downstream", methods: [m("waste_type_specific"), m("average_data")] },
+  { n: 13, key: "downstream_leased", name: "Downstream leased assets", direction: "downstream", methods: [m("asset_specific"), m("lessee_specific"), m("average_data")] },
+  { n: 14, key: "franchises", name: "Franchises", direction: "downstream", methods: [m("franchise_specific"), m("average_data")] },
+  { n: 15, key: "investments", name: "Investments", direction: "downstream", methods: [m("investment_specific"), m("average_data"), m("project_specific")] },
+];
+
+export const ghgCategory = (n: number): GhgCategory | undefined => GHG_CATEGORIES.find((c) => c.n === n);
+
+export const SCOPES = ["Scope 1", "Scope 2", "Scope 3"] as const;
+export type Scope = (typeof SCOPES)[number] | null;
+
+export const SCOPE3_SUBS = ["3a_upstream_fuels", "3b_upstream_electricity", "3c_td_losses", "3d_resold_energy"] as const;
+export type Scope3Sub = (typeof SCOPE3_SUBS)[number];
+
+// ---------------------------------------------------------------------------
+// §3 Data quality
+// ---------------------------------------------------------------------------
+
+/** 1 = good, 2 = fair, 3 = poor. */
+export type DqScore = 1 | 2 | 3;
+export const DQ_INDICATORS = ["technology", "geography", "time", "completeness", "reliability"] as const;
+export type DqIndicator = (typeof DQ_INDICATORS)[number];
+export type Dq = Record<DqIndicator, DqScore> & { overall: DqScore; source: "auto" | "manual" };
+export type DataType = "primary" | "secondary";
+
+// ---------------------------------------------------------------------------
+// §4 Boundary, suppliers, base year, review (shapes the API returns)
+// ---------------------------------------------------------------------------
+
+export const CONSOLIDATION_APPROACHES = ["operational_control", "equity_share", "financial_control"] as const;
+export type ConsolidationApproach = (typeof CONSOLIDATION_APPROACHES)[number];
+
+export const BOUNDARY_STATUSES = ["included", "excluded", "not_relevant", "screening"] as const;
+export type BoundaryStatus = (typeof BOUNDARY_STATUSES)[number];
+
+/** `company_scope3_category` (S3-1). A reason is required unless included. */
+export interface CompanyScope3Category {
+  ghg_category: GhgCategoryNumber;
+  status: BoundaryStatus;
+  reason?: string | null;
+  method_note?: string | null;
+  relevance?: Record<string, boolean> | null;
+  updated_by?: number | null;
+  updated_at?: string;
+}
+
+/** `PUT /scope3/categories/:n` body (S3-1). */
+export interface PutScope3CategoryBody {
+  status: BoundaryStatus;
+  reason?: string | null;
+  method_note?: string | null;
+  relevance?: Record<string, boolean>;
+}
+
+export interface Supplier {
+  supplier_id: number;
+  company_id: number;
+  name: string;
+  country?: string | null;
+  email?: string | null;
+}
+
+export interface SupplierFactor {
+  id: number;
+  company_id: number;
+  supplier_id: number;
+  item: string;
+  unit: string;
+  kgco2e_per_unit: number;
+  boundary: "cradle_to_gate";
+  reference_year: number;
+  gwp_set: "AR4" | "AR5" | "AR6";
+  evidence_document_id?: number | null;
+  source: "supplier_request" | "manual";
+}
+
+export interface FxRate {
+  currency: string;
+  date: string;
+  rate_to_usd: number;
+  source: string;
+}
+
+export interface CompanyBaseYear {
+  company_id: number;
+  base_year: number;
+  scope: Scope;
+  significance_pct: number;
+  policy_note?: string | null;
+  rationale?: string | null;
+  year_type?: "CY" | "FY" | null;
+}
+
+export const RECALCULATION_REASONS = ["methodology", "data_quality", "structural", "error"] as const;
+export type RecalculationReason = (typeof RECALCULATION_REASONS)[number];
+
+export interface RecalculationEvent {
+  id: number;
+  company_id: number;
+  reason: RecalculationReason;
+  affected_years: number[];
+  approved_by?: number | null;
+  created_at?: string;
+  status?: string | null;
+  note?: string | null;
+}
+
+export const EMISSION_STATUSES = ["draft", "pending", "approved", "rejected"] as const;
+export type EmissionStatus = (typeof EMISSION_STATUSES)[number];
+
+/** `period_lock` (S3-15): site null = every site, month null = the whole year. */
+export interface PeriodLock {
+  company_id: number;
+  site_id: number | null;
+  year: number;
+  month: number | null;
+  locked_by: number;
+  locked_at: string;
+  reopened_by?: number | null;
+  reopened_at?: string | null;
+  reopened_reason?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// §7 Error and warning codes, §8 review checks
+// ---------------------------------------------------------------------------
+
+export const SCOPE3_ERROR_CODES = [
+  "SCOPE_INVALID",
+  "GHG_CATEGORY_INVALID",
+  "GHG_CATEGORY_REQUIRED",
+  "EXCLUSION_REASON_REQUIRED",
+  "UNIT_REQUIRED",
+  "METHOD_NOT_ALLOWED",
+  "CURRENCY_NOT_SUPPORTED",
+  "SUPPLIER_FACTOR_BOUNDARY",
+  "PERIOD_LOCKED",
+  "UNLOCK_REASON_REQUIRED",
+  "NOT_DRAFT",
+  "EXTRAPOLATION_BASIS_INVALID",
+  "PERIOD_INCOMPLETE",
+  "BASE_YEAR_NO_DATA",
+  "RECALCULATION_REASON_REQUIRED",
+] as const;
+export type Scope3ErrorCode = (typeof SCOPE3_ERROR_CODES)[number];
+
+/** API error body, as `src/imports/errors.ts` sends it. */
+export interface Scope3ErrorBody {
+  code: Scope3ErrorCode;
+  message: string;
+  details?: unknown;
+}
+
+export const SCOPE3_WARNING_CODES = [
+  "FACTOR_FALLBACK_YEAR",
+  "FACTOR_TYPE_MISMATCH",
+  "FERA_FACTOR_MISSING",
+  "WTT_ALREADY_IN_FACTOR",
+  "FX_RATE_FALLBACK",
+  "NO_DEFLATOR",
+  "ESTIMATED_DISTANCE",
+  "TRANSPORT_PAID_BY_MISMATCH",
+] as const;
+export type Scope3WarningCode = (typeof SCOPE3_WARNING_CODES)[number];
+
+export const CHECK_IDS = [
+  "FACTOR_FOUND",
+  "UNIT_OK",
+  "EVIDENCE_ATTACHED",
+  "WITHIN_THRESHOLD",
+  "NO_DUPLICATE",
+  "IMPORT_MATCH_SURE",
+  "METHOD_GIVEN",
+  "DQ_ACCEPTABLE",
+] as const;
+export type CheckId = (typeof CHECK_IDS)[number];
+
+/** `emission.checks` (S3-15): ready when nothing is held. */
+export interface RowChecks {
+  ready: boolean;
+  held: CheckId[];
+}

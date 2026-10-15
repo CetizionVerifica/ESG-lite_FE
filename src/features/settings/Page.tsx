@@ -7,6 +7,7 @@ import { AppearanceSection } from "./components/AppearanceSection";
 import { ConnectedAppsSection } from "./components/ConnectedAppsSection";
 import { NotificationsSection } from "./components/NotificationsSection";
 import { ProfileSection } from "./components/ProfileSection";
+import { Scope3Section } from "./components/Scope3Section";
 import { TimezoneSection } from "./components/TimezoneSection";
 import { type SectionId, profileView, sectionDomId, sectionFromTab, sectionsFor, serverMessage } from "./logic";
 
@@ -78,6 +79,7 @@ export default function SettingsPage() {
               <TimezoneSection saved={prefs.data.timezone ?? null} />
             </>
           )}
+          {(role === "Admin" || role === "Superadmin") && <Scope3Section />}
           {role === "Superadmin" && <ConnectedAppsSection />}
         </div>
       </div>

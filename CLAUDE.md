@@ -66,7 +66,7 @@ Run after `npm ci`:
 | Component visual snapshots (opt-in, not in CI) | `npm run test:ui-snapshots` (add `-- --update-snapshots` after an intended visual change) |
 | Build | `npm run build` |
 
-- `lint:new` covers `src/lib`, `src/ui`, `src/theme`, `src/features`, `src/routes/newUiRoutes.tsx`, `legacyPages.tsx`, `pageRegistry.ts`, `src/routes/devRoutes.tsx`, `src/main.tsx`, `e2e/` and the test configs. Add any new top-level location you create for redesign code to that script.
+- `lint:new` covers `src/lib`, `src/ui`, `src/theme`, `src/features`, `src/test` (MSW mocks), `src/routes/newUiRoutes.tsx`, `legacyPages.tsx`, `pageRegistry.ts`, `src/routes/devRoutes.tsx`, `src/main.tsx`, `e2e/` and the test configs. Add any new top-level location you create for redesign code to that script.
 - Unit tests live next to the code as `*.test.ts(x)` under `src/`. Playwright specs live in `e2e/`; the config starts the Vite dev server on port 4173 itself (or reuses one already running there).
 - Shared components: see `src/ui/README.md`; the dev-only gallery is `/__ui` (`npm run dev`).
 - Run lint:new, typecheck and unit tests before every push.
