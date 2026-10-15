@@ -12,7 +12,8 @@ export const FINGERPRINT_POWER = "b".repeat(64);
 export const MOCK_PROPOSAL: MappingProposal = {
   document_id: 42,
   site_id: 1,
-  model: { name: "mock", calls: 1, cached_profile_hits: 1 },
+  // Rules and a remembered profile only, so the flow stops on Confirm mapping (see `MODEL_PROPOSAL`).
+  model: { name: "none", calls: 0, cached_profile_hits: 1 },
   sheets: [
     {
       sheet_name: "Fuel 2026",
@@ -105,3 +106,6 @@ export const MOCK_PROFILE: MappingProfile = {
   created_at: "2026-08-01T08:00:00.000Z",
   updated_at: "2026-09-12T08:30:00.000Z",
 };
+
+/** The same workbook mapped with the mapping model on: the flow goes straight to Review rows. */
+export const MODEL_PROPOSAL: MappingProposal = { ...MOCK_PROPOSAL, model: { name: "claude-mapping", calls: 1, cached_profile_hits: 1 } };

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { FINGERPRINT_POWER, MOCK_PROFILE, MOCK_PROPOSAL } from "./fixtures";
+import { FINGERPRINT_POWER, MOCK_PROFILE, MOCK_PROPOSAL, MODEL_PROPOSAL } from "./fixtures";
 import {
   activityChip,
+  modelMapped,
   answersCategory,
   categoryNotFound,
   replaceSheet,
@@ -315,5 +316,17 @@ describe("answersCategory", () => {
     expect(answersCategory({ ...sheet, category: { kind: "fixed", id: 3, label: "Electricity", confidence: 1, source: "rules" } }, 3)).toBe(true);
     // a mapper that ignored the pick answers with its own category
     expect(answersCategory({ ...sheet, category: { kind: "fixed", id: 1, label: "Fuel", confidence: 0.9, source: "rules" } }, 3)).toBe(false);
+  });
+});
+
+describe("mapping model on", () => {
+  it("skips Confirm mapping only when the model worked on the proposal", () => {
+    expect(modelMapped(MODEL_PROPOSAL)).toBe(true);
+    // rules and remembered mappings only (no key): the user still confirms
+    expect(modelMapped(MOCK_PROPOSAL)).toBe(false);
+    expect(modelMapped({ ...MOCK_PROPOSAL, model: undefined })).toBe(false);
+    expect(modelMapped({ ...MOCK_PROPOSAL, model: { name: "None", calls: 0, cached_profile_hits: 0 } })).toBe(false);
+    // on, but every sheet came from a remembered mapping: still no check
+    expect(modelMapped({ ...MOCK_PROPOSAL, model: { name: "claude-mapping", calls: 0, cached_profile_hits: 2 } })).toBe(true);
   });
 });

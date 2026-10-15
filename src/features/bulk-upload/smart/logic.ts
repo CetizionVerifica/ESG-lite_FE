@@ -26,6 +26,18 @@ type SiteLike = { company?: { ai_import_enabled?: boolean | null } | null };
 /** The per-client switch (`company.ai_import_enabled`, XI0) as the site list carries it. */
 export const smartImportEnabled = (sites: SiteLike[]): boolean => sites.some((s) => s.company?.ai_import_enabled === true);
 
+/**
+ * The mapping model (python's `MAPPING_MODEL_PROVIDER` with its key) worked on
+ * this proposal. Then nobody is asked to confirm it: the flow goes straight to
+ * Review rows, and matches the model was unsure about reach the approver as
+ * "Needs attention" rows (`LOW_CONFIDENCE_MATCH`). Rules only (no key) reports
+ * the model as "none" and keeps the Confirm mapping step (Shyam, 2026-10-15).
+ */
+export const modelMapped = (p: MappingProposal): boolean => {
+  const name = p.model?.name?.trim().toLowerCase();
+  return !!name && name !== "none";
+};
+
 export const needsConfirmation = (confidence: number) => confidence < CONFIRM_BELOW;
 
 export type MatchChip = "matched" | "remembered" | "suggested" | "check" | "skipped" | null;

@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test";
-import { MOCK_PROFILE, MOCK_PROPOSAL } from "../src/features/bulk-upload/smart/fixtures";
+import { MODEL_PROPOSAL, MOCK_PROFILE, MOCK_PROPOSAL } from "../src/features/bulk-upload/smart/fixtures";
 
 /**
  * XI4 Smart import smoke test. The AI service (`/v1/excel/*`) and ESG-lite
@@ -56,7 +56,7 @@ function planFor(version: number, skippedOtherSite: boolean) {
 
 type Call = { method: string; path: string; body: unknown; query: string };
 
-async function signIn(page: Page, role: string, user: object, companySites = [HIDD], profiles: (typeof MOCK_PROFILE)[] = []) {
+async function signIn(page: Page, role: string, user: object, companySites = [HIDD], profiles: (typeof MOCK_PROFILE)[] = [], proposal = MOCK_PROPOSAL) {
   const calls: Call[] = [];
   const state = { version: 1, skippedOtherSite: false, profiles: [...profiles], forgetRefusals: 1 };
   await page.addInitScript(
@@ -82,7 +82,7 @@ async function signIn(page: Page, role: string, user: object, companySites = [HI
 
       if (path.startsWith("/v1/excel/")) {
         if (path.endsWith("/upload")) return json({ document_id: 42, headers: HEADERS });
-        if (path.endsWith("/propose")) return json(MOCK_PROPOSAL);
+        if (path.endsWith("/propose")) return json(proposal);
         if (path.endsWith("/preview")) {
           const b = body as { code?: string };
           const rows = ROWS.map((r) => (state.skippedOtherSite && r.issues.some((i) => i.code === "SITE_NOT_ALLOWED") ? { ...r, state: "skipped" } : r)).filter((r) => !b.code || r.issues.some((i) => i.code === b.code));
@@ -216,6 +216,27 @@ test("a manager uploads a workbook, confirms the mapping, skips the other site's
   expect(sent).toMatchObject({ document_id: 42, site_id: 1, plan_id: PLAN_ID, version: 3 });
   expect((sent.proposal as { sheets: unknown[] }).sheets).toHaveLength(2);
   await expect(page.getByRole("link", { name: "Review rows" })).toHaveAttribute("href", "/data/approvals?period=all&site=1&category=all&batch=b-9");
+});
+
+test("with the mapping model on, the rows show straight after the upload with no mapping to confirm", async ({ page }) => {
+  const calls = await signIn(page, "Manager", MANAGER, [HIDD], [], MODEL_PROPOSAL);
+  await page.goto("/capture/upload");
+  await page.locator('input[type="file"]').setInputFiles(WORKBOOK);
+  await page.getByRole("button", { name: "Upload and work out the mapping" }).click();
+
+  await expect(page.locator("[aria-current=step]")).toContainText("Review rows");
+  await expect(page.getByText("ESGLite mapped this workbook for you")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue to the rows" })).toHaveCount(0);
+  // The proposal goes to the plan as the model made it: low-confidence matches keep their confidence for the approver.
+  const preview = calls.find((c) => c.path.endsWith("/preview"))?.body as { proposal: typeof MOCK_PROPOSAL };
+  expect(preview.proposal.sheets[0].activities[1]).toMatchObject({ factor_name: "Petrol", confidence: 0.64, source: "llm" });
+  await expect(page.getByRole("table", { name: "Rows of the plan" }).getByRole("row")).toHaveCount(6);
+  await expect(page.getByRole("button", { name: "Import 3 rows, leave 2 out" })).toBeEnabled();
+
+  // The mapping can still be opened and changed.
+  await page.getByRole("button", { name: "Change mapping" }).click();
+  await expect(page.locator("[aria-current=step]")).toContainText("Confirm mapping");
+  await expect(page.getByRole("heading", { name: "Fuel 2026" })).toBeVisible();
 });
 
 test("the confirm screen fits 390px without horizontal scroll", async ({ page }) => {
