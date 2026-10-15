@@ -68,7 +68,10 @@ async function signIn(page: Page, role: "Admin" | "Superadmin" | "Manager", opts
       if (path.endsWith("/brands/mine")) return json({});
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
-      if (path.endsWith("/admin/companies")) return json([{ company_id: 1, name: "Midal Cables", status: true }]);
+      if (path.endsWith("/admin/companies")) return json([
+          { company_id: 1, name: "Midal Cables", status: true },
+          { company_id: 2, name: "Glochem", status: true },
+        ]);
 
       if (path.endsWith("/scope3/categories") && method === "GET") {
         if (opts.failBoundary) return json({ message: "Database unavailable" }, 500);
@@ -176,6 +179,19 @@ test("a superadmin confirms the sure proposals and changes another's number", as
   await page.getByRole("button", { name: "Save number" }).click();
   await expect(row(page, 9)).toContainText("Inbound freight");
   await expect(page.getByRole("heading", { name: /Unmapped categories/ })).toHaveCount(0);
+});
+
+test("unsaved edits don't follow a superadmin to another client", async ({ page }) => {
+  const { calls } = await signIn(page, "Superadmin");
+  await page.goto("/settings/scope3");
+  await row(page, 8).getByRole("combobox", { name: "Status, Category 8" }).selectOption("included");
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeVisible();
+
+  await page.getByRole("button", { name: /Client:/ }).click();
+  await page.getByRole("option", { name: /Glochem/ }).click();
+  await expect(page.getByRole("button", { name: "Save changes" })).toHaveCount(0);
+  await expect(row(page, 8).getByRole("combobox", { name: "Status, Category 8" })).toHaveValue("screening");
+  expect(calls.filter((c) => c.method === "PUT")).toEqual([]);
 });
 
 test("a manager reads the boundary without edit controls", async ({ page }) => {

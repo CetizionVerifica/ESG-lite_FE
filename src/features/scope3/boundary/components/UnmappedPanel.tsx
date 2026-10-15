@@ -11,7 +11,8 @@ export type UnmappedPanelProps = {
   canConfirm: boolean;
   busy: boolean;
   error: string | null;
-  onConfirm: (items: { category_id: number; ghg_category: number }[]) => void;
+  /** `onDone` runs once the confirm is saved. */
+  onConfirm: (items: { category_id: number; ghg_category: number }[], onDone?: () => void) => void;
 };
 
 /**
@@ -101,8 +102,8 @@ export function UnmappedPanel({ unmapped, canConfirm, busy, error, onConfirm }: 
                     variant="primary"
                     disabled={picked === null || busy}
                     onClick={() => {
-                      onConfirm([{ category_id: p.category_id, ghg_category: picked as number }]);
-                      setChanging(null);
+                      // Keep the picker open until it saves, so a failed save keeps the number.
+                      onConfirm([{ category_id: p.category_id, ghg_category: picked as number }], () => setChanging(null));
                     }}
                   >
                     Save number

@@ -36,6 +36,16 @@ export default function Scope3BoundaryPage() {
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [confirmErr, setConfirmErr] = useState<string | null>(null);
 
+  // Unsaved edits belong to one client: drop them when a Superadmin switches.
+  const [editsFor, setEditsFor] = useState(companyId);
+  if (editsFor !== companyId) {
+    setEditsFor(companyId);
+    setEdits({});
+    setTriedSave(false);
+    setSaveErr(null);
+    setConfirmErr(null);
+  }
+
   const categories = useMemo(() => boundary.data?.categories ?? [], [boundary.data]);
   const drafts = useMemo(() => {
     const out: Record<number, RowDraft> = {};
@@ -82,10 +92,13 @@ export default function Scope3BoundaryPage() {
     );
   };
 
-  const onConfirm = (items: { category_id: number; ghg_category: number }[]) => {
+  const onConfirm = (items: { category_id: number; ghg_category: number }[], onDone?: () => void) => {
     setConfirmErr(null);
     confirm.mutate(items, {
-      onSuccess: () => toast({ title: `${items.length} ${items.length === 1 ? "category" : "categories"} confirmed`, tone: "good" }),
+      onSuccess: () => {
+        toast({ title: `${items.length} ${items.length === 1 ? "category" : "categories"} confirmed`, tone: "good" });
+        onDone?.();
+      },
       onError: (e) => setConfirmErr(errorMessage(e, "Try again.")),
     });
   };

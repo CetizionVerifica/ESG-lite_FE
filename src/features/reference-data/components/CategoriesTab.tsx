@@ -333,7 +333,7 @@ function CategoryDrawer(props: {
           {draft.scope === "s3" && (
             <Select<number>
               label="GHG Protocol category"
-              help="The Scope 3 category this rolls up to in reports. Leave it empty and it shows as Unmapped."
+              help="The Scope 3 category this rolls up to in reports. Required for a new Scope 3 category once the category map is confirmed; until then an empty one shows as Unmapped."
               value={draft.ghg_category}
               options={GHG_CATEGORY_OPTIONS}
               placeholder="Unmapped"
