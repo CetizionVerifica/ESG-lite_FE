@@ -7,6 +7,8 @@ export type Category = {
   category_id: number;
   category_name: string;
   scope?: string | null;
+  /** GHG Protocol category 1–15 on Scope 3 categories (S3-1); null = Unmapped. */
+  ghg_category?: number | null;
   sites?: SiteRef[] | null;
   factor_count?: number | null;
   config_count?: number | null;
@@ -141,11 +143,27 @@ export function matchesCategoryRow(row: CategoryRow, f: { q: string; scopes: str
   return !t || norm(row.category_name).includes(t);
 }
 
-export type CategoryDraft = { category_name: string; scope: ScopeKey; site_ids: number[]; assign_all_sites: boolean };
+export type CategoryDraft = {
+  category_name: string;
+  scope: ScopeKey;
+  site_ids: number[];
+  assign_all_sites: boolean;
+  /** GHG Protocol category; only kept for Scope 3. */
+  ghg_category: number | null;
+};
 
 export function categoryDraftFrom(row: CategoryRow | null): CategoryDraft {
-  return { category_name: row?.category_name ?? "", scope: row?.scopeKey ?? "s1", site_ids: row ? [...row.siteIds] : [], assign_all_sites: false };
+  return {
+    category_name: row?.category_name ?? "",
+    scope: row?.scopeKey ?? "s1",
+    site_ids: row ? [...row.siteIds] : [],
+    assign_all_sites: false,
+    ghg_category: row?.ghg_category ?? null,
+  };
 }
+
+/** The GHG category a save sends: the choice for Scope 3, nothing for other scopes. */
+export const draftGhgCategory = (d: CategoryDraft): number | null => (d.scope === "s3" ? d.ghg_category : null);
 
 export function validateCategory(d: CategoryDraft, others: Category[]): { category_name?: string } {
   const name = norm(d.category_name);
@@ -157,13 +175,26 @@ export function validateCategory(d: CategoryDraft, others: Category[]): { catego
 export function isCategoryDirty(d: CategoryDraft, row: CategoryRow | null): boolean {
   const base = categoryDraftFrom(row);
   const ids = (x: number[]) => [...x].sort((a, b) => a - b).join(",");
-  return d.category_name.trim() !== base.category_name || d.scope !== base.scope || ids(d.site_ids) !== ids(base.site_ids) || d.assign_all_sites;
+  return (
+    d.category_name.trim() !== base.category_name ||
+    d.scope !== base.scope ||
+    ids(d.site_ids) !== ids(base.site_ids) ||
+    d.assign_all_sites ||
+    draftGhgCategory(d) !== draftGhgCategory(base)
+  );
 }
 
 /** "Assign to all sites" sends every site id on edit (the API only knows the flag on create). */
 export function categoryPayload(d: CategoryDraft, allSiteIds: number[]) {
   const site_ids = d.assign_all_sites ? [...allSiteIds] : [...d.site_ids];
-  return { category_name: d.category_name.trim(), scope: scopeValue(d.scope), site_ids: site_ids.sort((a, b) => a - b), assign_all_sites: d.assign_all_sites };
+  return {
+    category_name: d.category_name.trim(),
+    scope: scopeValue(d.scope),
+    site_ids: site_ids.sort((a, b) => a - b),
+    assign_all_sites: d.assign_all_sites,
+    // Scope 3 only; moving a category out of Scope 3 clears its number on the server.
+    ...(d.scope === "s3" ? { ghg_category: d.ghg_category } : {}),
+  };
 }
 
 /** Sites a save would take the category off (their data is kept, people lose the category). */
