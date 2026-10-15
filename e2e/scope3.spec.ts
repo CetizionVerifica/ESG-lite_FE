@@ -58,11 +58,15 @@ test("a superadmin sees the Scope 3 section too", async ({ page }) => {
   await expect(page.getByRole("region", { name: "Scope 3" })).toBeVisible();
 });
 
-test("a manager or contributor gets neither the section nor the page", async ({ page }) => {
+test("a manager has no Scope 3 section in Settings", async ({ page }) => {
   await signIn(page, "Manager");
   await page.goto("/settings");
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Scope 3" })).toHaveCount(0);
+});
+
+test("a contributor can't open the Scope 3 page", async ({ page }) => {
+  await signIn(page, "User");
   await page.goto("/settings/scope3");
   await expect(page.getByRole("heading", { name: "You don't have access to this page" })).toBeVisible();
 });

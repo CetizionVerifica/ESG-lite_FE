@@ -1,12 +1,12 @@
 import { Leaf } from "lucide-react";
-import { DIRECTION_LABELS, categoryLabel, methodLabel } from "../../lib/scope3/labels";
+import { DIRECTION_LABEL, categoryLabel, methodLabel } from "../../lib/scope3/labels";
 import { GHG_CATEGORIES } from "../../lib/scope3/contracts";
 import { EmptyState, PageHeader, panel } from "../../ui";
 
 /**
- * Settings → Scope 3 (S3-0 placeholder, Admin and Superadmin). Lists the 15
- * GHG Protocol categories and their methods, read-only, until S3-1 replaces
- * it with the company boundary page.
+ * Settings → Scope 3 (S3-0 placeholder on S3-1's route `scope3-boundary`:
+ * Admin and Superadmin, Managers read). Lists the 15 GHG Protocol categories
+ * and their methods, read-only, until S3-1 replaces it with the boundary page.
  */
 export default function Scope3Placeholder() {
   return (
@@ -35,7 +35,7 @@ export default function Scope3Placeholder() {
                 <p className="text-sm font-medium text-ink">{categoryLabel(c.n)}</p>
                 <p className="text-sm text-muted">{c.methods.map((o) => methodLabel(o.key, c.n)).join(" · ")}</p>
               </div>
-              <span className="shrink-0 text-xs font-medium text-muted">{DIRECTION_LABELS[c.direction]}</span>
+              <span className="shrink-0 text-xs font-medium text-muted">{DIRECTION_LABEL[c.direction]}</span>
             </li>
           ))}
         </ul>

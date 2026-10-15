@@ -86,6 +86,8 @@ export interface GhgCategory {
   key: GhgCategoryKey;
   /** The GHG Protocol name, exactly. */
   name: string;
+  /** A few words for chips and narrow columns. */
+  short: string;
   direction: Direction;
   /** Methods offered, most specific first. */
   methods: readonly MethodOption[];
@@ -104,24 +106,44 @@ const TRANSPORT_METHODS = [
 
 /** §1, in category order (the same table as the backend's `GHG_CATEGORIES`). */
 export const GHG_CATEGORIES: readonly GhgCategory[] = [
-  { n: 1, key: "purchased_goods", name: "Purchased goods and services", direction: "upstream", methods: GOODS_METHODS },
-  { n: 2, key: "capital_goods", name: "Capital goods", direction: "upstream", methods: GOODS_METHODS },
-  { n: 3, key: "fuel_energy", name: "Fuel- and energy-related activities", direction: "upstream", methods: [m("supplier_specific"), m("average_data")] },
-  { n: 4, key: "upstream_transport", name: "Upstream transportation and distribution", direction: "upstream", methods: TRANSPORT_METHODS },
-  { n: 5, key: "waste", name: "Waste generated in operations", direction: "upstream", methods: [m("supplier_specific"), m("waste_type_specific"), m("average_data")] },
-  { n: 6, key: "business_travel", name: "Business travel", direction: "upstream", methods: [m("fuel_based"), m("distance_based", "Distance travelled"), m("spend_based")] },
-  { n: 7, key: "employee_commuting", name: "Employee commuting", direction: "upstream", methods: [m("fuel_based"), m("distance_based"), m("average_data", "Headcount × national average")] },
-  { n: 8, key: "upstream_leased", name: "Upstream leased assets", direction: "upstream", methods: [m("asset_specific"), m("lessor_specific"), m("average_data")] },
-  { n: 9, key: "downstream_transport", name: "Downstream transportation and distribution", direction: "downstream", methods: TRANSPORT_METHODS },
-  { n: 10, key: "processing", name: "Processing of sold products", direction: "downstream", methods: [m("site_specific"), m("average_data")] },
-  { n: 11, key: "use_of_sold", name: "Use of sold products", direction: "downstream", methods: [m("direct_use"), m("indirect_use")] },
-  { n: 12, key: "end_of_life", name: "End-of-life treatment of sold products", direction: "downstream", methods: [m("waste_type_specific"), m("average_data")] },
-  { n: 13, key: "downstream_leased", name: "Downstream leased assets", direction: "downstream", methods: [m("asset_specific"), m("lessee_specific"), m("average_data")] },
-  { n: 14, key: "franchises", name: "Franchises", direction: "downstream", methods: [m("franchise_specific"), m("average_data")] },
-  { n: 15, key: "investments", name: "Investments", direction: "downstream", methods: [m("investment_specific"), m("average_data"), m("project_specific")] },
+  { n: 1, short: "Purchased goods", key: "purchased_goods", name: "Purchased goods and services", direction: "upstream", methods: GOODS_METHODS },
+  { n: 2, short: "Capital goods", key: "capital_goods", name: "Capital goods", direction: "upstream", methods: GOODS_METHODS },
+  { n: 3, short: "Fuel and energy", key: "fuel_energy", name: "Fuel- and energy-related activities", direction: "upstream", methods: [m("supplier_specific"), m("average_data")] },
+  { n: 4, short: "Upstream transport", key: "upstream_transport", name: "Upstream transportation and distribution", direction: "upstream", methods: TRANSPORT_METHODS },
+  { n: 5, short: "Waste", key: "waste", name: "Waste generated in operations", direction: "upstream", methods: [m("supplier_specific"), m("waste_type_specific"), m("average_data")] },
+  { n: 6, short: "Business travel", key: "business_travel", name: "Business travel", direction: "upstream", methods: [m("fuel_based"), m("distance_based", "Distance travelled"), m("spend_based")] },
+  { n: 7, short: "Commuting", key: "employee_commuting", name: "Employee commuting", direction: "upstream", methods: [m("fuel_based"), m("distance_based"), m("average_data", "Headcount × national average")] },
+  { n: 8, short: "Upstream leased", key: "upstream_leased", name: "Upstream leased assets", direction: "upstream", methods: [m("asset_specific"), m("lessor_specific"), m("average_data")] },
+  { n: 9, short: "Downstream transport", key: "downstream_transport", name: "Downstream transportation and distribution", direction: "downstream", methods: TRANSPORT_METHODS },
+  { n: 10, short: "Processing", key: "processing", name: "Processing of sold products", direction: "downstream", methods: [m("site_specific"), m("average_data")] },
+  { n: 11, short: "Use of sold products", key: "use_of_sold", name: "Use of sold products", direction: "downstream", methods: [m("direct_use"), m("indirect_use")] },
+  { n: 12, short: "End of life", key: "end_of_life", name: "End-of-life treatment of sold products", direction: "downstream", methods: [m("waste_type_specific"), m("average_data")] },
+  { n: 13, short: "Downstream leased", key: "downstream_leased", name: "Downstream leased assets", direction: "downstream", methods: [m("asset_specific"), m("lessee_specific"), m("average_data")] },
+  { n: 14, short: "Franchises", key: "franchises", name: "Franchises", direction: "downstream", methods: [m("franchise_specific"), m("average_data")] },
+  { n: 15, short: "Investments", key: "investments", name: "Investments", direction: "downstream", methods: [m("investment_specific"), m("average_data"), m("project_specific")] },
 ];
 
-export const ghgCategory = (n: number): GhgCategory | undefined => GHG_CATEGORIES.find((c) => c.n === n);
+export const isGhgCategoryNumber = (value: unknown): value is GhgCategoryNumber =>
+  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 15;
+
+export function ghgCategory(n: GhgCategoryNumber): GhgCategory;
+export function ghgCategory(n: number): GhgCategory | undefined;
+export function ghgCategory(n: number): GhgCategory | undefined {
+  return GHG_CATEGORIES.find((c) => c.n === n);
+}
+
+/** "Category 1 · Purchased goods and services" (pages import it from labels.ts). */
+export function categoryLabel(n: number): string {
+  const c = ghgCategory(n);
+  return c ? `Category ${c.n} · ${c.name}` : `Category ${n}`;
+}
+
+/** "Purchased goods". */
+export function categoryShortName(n: number): string {
+  return ghgCategory(n)?.short ?? `Category ${n}`;
+}
+
+export const DIRECTION_LABEL: Record<Direction, string> = { upstream: "Upstream", downstream: "Downstream" };
 
 export const SCOPES = ["Scope 1", "Scope 2", "Scope 3"] as const;
 export type Scope = (typeof SCOPES)[number] | null;
