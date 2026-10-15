@@ -188,18 +188,21 @@ export function autoEmissionCategory(m: FormModel, row: ModalRow): { key: string
   }
 
   const parts: string[] = [];
-  const values: string[] = [];
   const walk = (colName: string): boolean => {
     const value = rowValue(row, colName);
     const entity = columnByName(m, colName);
     if (!value) {
       // A dependent select with nothing to choose for its parent (Rail has no
       // radiative-forcing choice) ends the chain instead of blocking it.
-      const parentValue = values[values.length - 1];
-      return !!entity && !!parentValue && isDependentColumn(m, colName) && !columnOptionsFor(m, entity, parentValue, values[values.length - 2]).length;
+      // Read the column's own parent (and grandparent) from the row, not the
+      // last value walked: a sibling branch may have been walked in between.
+      const parent = parentColumnOf(m, colName);
+      const parentValue = parent ? rowValue(row, parent) : undefined;
+      const grandparent = parent ? parentColumnOf(m, parent) : null;
+      const grandValue = grandparent ? rowValue(row, grandparent) : undefined;
+      return !!entity && !!parentValue && !columnOptionsFor(m, entity, String(parentValue), grandValue ? String(grandValue) : undefined).length;
     }
     parts.push(entity ? optionLabel(m, entity, String(value), parts[parts.length - 1]) : String(value));
-    values.push(String(value));
     for (const [child, parent] of Object.entries(m.dependencies)) {
       if (parent === colName && !walk(child)) return false;
     }

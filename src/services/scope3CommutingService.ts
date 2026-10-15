@@ -63,6 +63,7 @@ export const planCommutingSurvey = async (companyId: number | null, body: Survey
 const REASONS: Record<string, string> = {
   CATEGORY_7_NOT_ASSIGNED: `This site has no ${categoryLabel(7)} category. Assign one to the site, or pick another site.`,
   FEWER_EMPLOYEES_THAN_RESPONDENTS: "Total employees is lower than the number of people in the survey.",
+  COMMUTING_HAS_ENTRIES: "This site already has commuting entries on its own form, so the survey can't add rows there. Enter them on Add data, or ask a Superadmin to set up the standard form.",
   COMMUTING_FORM_CUSTOMISED: "This site's commuting form was customised, so the survey can't fill it. Ask a Superadmin to restore the standard form.",
 };
 

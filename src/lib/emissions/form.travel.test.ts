@@ -52,6 +52,27 @@ describe("dependent selects with no choice for the parent (S3-9)", () => {
     expect(row.emission_category).toBe("Flights - Long haul - Economy - With RF [passenger.km]");
   });
 
+  it("reads an empty child's own parent, not the last column walked", () => {
+    // Mode has two children; Trip class's branch is walked before Seat note's.
+    const branched: ColumnConfig = {
+      ...travel,
+      columns: [...travel.columns, col(7, "Seat note")],
+      column_options: { ...travel.column_options, "7": [] },
+      column_dependencies: { ...travel.column_dependencies, "Seat note": "Trip mode" },
+      dependent_options: { ...travel.dependent_options, "Seat note": { Air: opts("Window") } },
+    };
+    const b = toFormModel(branched);
+    let rail = applyChange(b, newRow(b, 1), "Trip mode", "Rail");
+    rail = applyChange(b, rail, "Trip class", "National rail");
+    // Rail offers no seat note, so the chain ends and maps.
+    expect(autoEmissionCategory(b, rail)?.category).toBe("Rail - National rail [passenger.km]");
+    let air = applyChange(b, newRow(b, 1), "Trip mode", "Air");
+    air = applyChange(b, air, "Trip class", "Long haul, economy");
+    air = applyChange(b, air, "Radiative forcing", "With RF");
+    // Air offers a seat note: the last value walked ("With RF") must not decide that.
+    expect(autoEmissionCategory(b, air)).toBeNull();
+  });
+
   it("shows a dependent select while its parent is still empty", () => {
     expect(isColumnVisible(m, rf, newRow(m, 1))).toBe(true);
   });

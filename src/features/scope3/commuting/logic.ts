@@ -83,35 +83,113 @@ export function parseSurvey(table: unknown[][]): ParsedSurvey {
   return { responses, missing, errors };
 }
 
+// Mode matching, copied from the server (survey.ts MODE_ALIASES / matchMode) so
+// the preview groups modes the way the plan will: "Train" and "Rail" are one
+// line, walking and cycling get no row. Keep the two lists in step.
+const SURVEY_LABELS = [
+  "Rail [passenger.km]",
+  "Underground or metro [passenger.km]",
+  "Light rail and tram [passenger.km]",
+  "Bus [passenger.km]",
+  "Coach [passenger.km]",
+  "Car, unknown fuel [vehicle.km]",
+  "Car, petrol [vehicle.km]",
+  "Car, diesel [vehicle.km]",
+  "Car, hybrid [vehicle.km]",
+  "Car, battery electric [vehicle.km]",
+  "Motorbike [vehicle.km]",
+  "Taxi [passenger.km]",
+];
+
+const MODE_ALIASES: Array<[RegExp, string]> = [
+  [/^(walk(ing)?|on foot|foot|bicycle|bike|cycle|cycling|push ?bike)$/, ""], // zero emission
+  [/^(underground|metro|subway|tube)$/, "Underground or metro [passenger.km]"],
+  [/^(tram|light rail)$/, "Light rail and tram [passenger.km]"],
+  [/^(rail|train|national rail|local train)$/, "Rail [passenger.km]"],
+  [/^(bus|local bus)$/, "Bus [passenger.km]"],
+  [/^coach$/, "Coach [passenger.km]"],
+  [/^(car|drive|driving|car \(unknown fuel\)|car, unknown fuel)$/, "Car, unknown fuel [vehicle.km]"],
+  [/^(petrol car|car, petrol|car \(petrol\))$/, "Car, petrol [vehicle.km]"],
+  [/^(diesel car|car, diesel|car \(diesel\))$/, "Car, diesel [vehicle.km]"],
+  [/^(hybrid car|car, hybrid|car \(hybrid\)|hybrid)$/, "Car, hybrid [vehicle.km]"],
+  [/^(electric car|ev|battery electric car|car, electric|car, battery electric|car \(electric\))$/, "Car, battery electric [vehicle.km]"],
+  [/^(motorbike|motorcycle|scooter|moped)$/, "Motorbike [vehicle.km]"],
+  [/^(taxi|cab)$/, "Taxi [passenger.km]"],
+];
+
+const withoutUnit = (label: string) => label.replace(/\s*\[[^\]]+\]\s*$/, "");
+
+export type ModeMatch = { kind: "mode"; label: string } | { kind: "zero" } | { kind: "unknown"; label: string };
+
+/** A survey answer's mode → a form label, a zero-emission mode (walking, cycling), or unknown (kept as written). */
+export function matchMode(raw: string): ModeMatch {
+  const text = raw.trim().replace(/\s+/g, " ");
+  const lower = text.toLowerCase();
+  const exact = SURVEY_LABELS.find((l) => l.toLowerCase() === lower || withoutUnit(l).toLowerCase() === lower);
+  if (exact) return { kind: "mode", label: exact };
+  for (const [re, label] of MODE_ALIASES) if (re.test(lower)) return label ? { kind: "mode", label } : { kind: "zero" };
+  return { kind: "unknown", label: text };
+}
+
 export interface ModePreview {
+  /** Stable id for the line (the form label, or the survey wording when it matched none). */
+  key: string;
+  /** What the line shows: the form's mode without its unit, or the survey wording. */
   mode: string;
+  /** False when the mode matched no form option; the plan will flag those rows. */
+  matched: boolean;
   respondents: number;
   total_km: number;
+}
+
+export interface SkippedMode {
+  mode: string;
+  reason: "zero_emission" | "no_distance";
+  respondents: number;
 }
 
 export interface SurveyPreview {
   respondents: number;
   modes: ModePreview[];
+  /** Modes that get no row: walking and cycling, or no distance at all. */
+  skipped: SkippedMode[];
 }
 
-/** Respondents (distinct refs; a blank ref counts once) and km per mode, as the server sums them. */
+/** Respondents (distinct refs; a blank ref counts as its own respondent) and km per mode, as the server sums them. */
 export function previewSurvey(responses: SurveyResponse[]): SurveyPreview {
   const refs = new Set<string>();
-  const byMode = new Map<string, { mode: string; refs: Set<string>; km: number }>();
+  const byMode = new Map<string, { matched: boolean; refs: Set<string>; km: number }>();
+  const zero = new Map<string, Set<string>>();
   responses.forEach((r, i) => {
     const ref = r.ref.trim() || `#${i + 1}`;
     refs.add(ref);
-    const key = r.mode.trim().replace(/\s+/g, " ").toLowerCase();
-    const entry = byMode.get(key) ?? { mode: r.mode.trim(), refs: new Set<string>(), km: 0 };
+    const match = matchMode(r.mode);
+    if (match.kind === "zero") {
+      const key = r.mode.trim();
+      zero.set(key, (zero.get(key) ?? new Set()).add(ref));
+      return;
+    }
+    const entry = byMode.get(match.label) ?? { matched: match.kind === "mode", refs: new Set<string>(), km: 0 };
     entry.refs.add(ref);
     entry.km += r.one_way_km * 2 * r.days_per_week * r.weeks_per_year;
-    byMode.set(key, entry);
+    byMode.set(match.label, entry);
   });
-  return {
-    respondents: refs.size,
-    modes: [...byMode.values()].map((e) => ({ mode: e.mode, respondents: e.refs.size, total_km: Number(e.km.toFixed(6)) })),
-  };
+  const modes: ModePreview[] = [];
+  const skipped: SkippedMode[] = [...zero].map(([mode, s]) => ({ mode, reason: "zero_emission" as const, respondents: s.size }));
+  for (const [key, e] of byMode) {
+    const mode = e.matched ? withoutUnit(key) : key;
+    if (e.km <= 0) skipped.push({ mode, reason: "no_distance", respondents: e.refs.size });
+    else modes.push({ key, mode, matched: e.matched, respondents: e.refs.size, total_km: Number(e.km.toFixed(6)) });
+  }
+  return { respondents: refs.size, modes, skipped };
 }
+
+/** A test id / DOM-safe slug of a mode line ("Car, unknown fuel" → "car-unknown-fuel"). */
+export const modeSlug = (mode: string) =>
+  mode
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
 /** "scaled × 4.0 to 4,000 employees", or null until both counts are known. */
 export function scaleText(respondents: number, totalEmployees: number | null): string | null {

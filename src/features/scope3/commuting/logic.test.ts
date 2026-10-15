@@ -11,9 +11,10 @@ describe("commuting survey sheet (S3-9)", () => {
     const preview = previewSurvey(parsed.responses);
     expect(preview.respondents).toBe(3);
     expect(preview.modes).toEqual([
-      { mode: "Rail", respondents: 2, total_km: 8640 },
-      { mode: "Car", respondents: 2, total_km: 11040 },
+      { key: "Rail [passenger.km]", mode: "Rail", matched: true, respondents: 2, total_km: 8640 },
+      { key: "Car, unknown fuel [vehicle.km]", mode: "Car, unknown fuel", matched: true, respondents: 2, total_km: 11040 },
     ]);
+    expect(preview.skipped).toEqual([]);
   });
 
   it("accepts close header names in any order and skips blank rows", () => {
@@ -50,7 +51,22 @@ describe("commuting survey sheet (S3-9)", () => {
       { ref: "", mode: "Walk", one_way_km: 0, days_per_week: 5, weeks_per_year: 48 },
     ]);
     expect(p.respondents).toBe(2);
-    expect(p.modes[0]).toEqual({ mode: "rail", respondents: 1, total_km: 4 });
+    expect(p.modes).toEqual([{ key: "Rail [passenger.km]", mode: "Rail", matched: true, respondents: 1, total_km: 4 }]);
+    expect(p.skipped).toEqual([{ mode: "Walk", reason: "zero_emission", respondents: 1 }]);
+  });
+
+  it("groups modes the way the server does: aliases merge, unknown modes stay as written", () => {
+    const row = (mode: string, km = 1) => ({ ref: mode, mode, one_way_km: km, days_per_week: 1, weeks_per_year: 1 });
+    const p = previewSurvey([row("Train"), row("Rail"), row("Tube"), row("Cycling"), row("Hovercraft"), row("Bus", 0)]);
+    expect(p.modes.map((m) => [m.mode, m.matched, m.respondents])).toEqual([
+      ["Rail", true, 2],
+      ["Underground or metro", true, 1],
+      ["Hovercraft", false, 1],
+    ]);
+    expect(p.skipped).toEqual([
+      { mode: "Cycling", reason: "zero_emission", respondents: 1 },
+      { mode: "Bus", reason: "no_distance", respondents: 1 },
+    ]);
   });
 
   it("writes the scaling line", () => {

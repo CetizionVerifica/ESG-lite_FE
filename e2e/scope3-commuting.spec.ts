@@ -78,7 +78,7 @@ test("a manager uploads the 7.1 sample, previews km by mode and imports the plan
 
   const preview = page.getByTestId("mode-preview");
   await expect(preview.getByTestId("km-rail")).toHaveText("8,640 km");
-  await expect(preview.getByTestId("km-car")).toHaveText("11,040 km");
+  await expect(preview.getByTestId("km-car-unknown-fuel")).toHaveText("11,040 km");
   await expect(preview).toContainText("3 people in the survey, scaled × 1.0 to 3 employees");
 
   await page.getByRole("button", { name: "Create import plan" }).click();

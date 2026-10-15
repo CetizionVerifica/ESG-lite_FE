@@ -1,6 +1,6 @@
 import { formatNumber } from "../../../../ui";
 import type { SurveyPreview } from "../logic";
-import { scaleText } from "../logic";
+import { modeSlug, scaleText } from "../logic";
 
 const km = (n: number) => `${formatNumber(n, n % 1 ? 2 : 0)} km`;
 
@@ -23,15 +23,28 @@ export function ModePreview({ preview, totalEmployees }: { preview: SurveyPrevie
           <span className="text-right">Total km (sample)</span>
         </li>
         {preview.modes.map((m) => (
-          <li key={m.mode} className="grid grid-cols-2 gap-x-3 gap-y-1 px-3 py-2 text-sm sm:grid-cols-[1fr_8rem_10rem]">
-            <span className="col-span-2 font-medium text-ink sm:col-span-1">{m.mode}</span>
+          <li key={m.key} className="grid grid-cols-2 gap-x-3 gap-y-1 px-3 py-2 text-sm sm:grid-cols-[1fr_8rem_10rem]">
+            <span className="col-span-2 font-medium text-ink sm:col-span-1">
+              {m.mode}
+              {!m.matched && <span className="ml-2 text-xs font-normal text-muted">(not on the form; fix it in the plan)</span>}
+            </span>
             <span className="text-muted sm:text-right sm:text-ink">
               <span className="sm:hidden">Respondents </span>
               {m.respondents}
             </span>
-            <span className="text-right font-num tabular-nums text-ink" data-testid={`km-${m.mode.toLowerCase()}`}>
+            <span className="text-right font-num tabular-nums text-ink" data-testid={`km-${modeSlug(m.mode)}`}>
               {km(m.total_km)}
             </span>
+          </li>
+        ))}
+        {preview.skipped.map((m) => (
+          <li key={`skip-${m.mode}`} className="grid grid-cols-2 gap-x-3 gap-y-1 px-3 py-2 text-sm text-muted sm:grid-cols-[1fr_8rem_10rem]" data-testid={`skip-${modeSlug(m.mode)}`}>
+            <span className="col-span-2 sm:col-span-1">{m.mode}</span>
+            <span className="sm:text-right">
+              <span className="sm:hidden">Respondents </span>
+              {m.respondents}
+            </span>
+            <span className="text-right">{m.reason === "zero_emission" ? "No row (no emissions)" : "No row (no distance)"}</span>
           </li>
         ))}
       </ul>
