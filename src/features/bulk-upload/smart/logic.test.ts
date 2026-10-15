@@ -380,8 +380,45 @@ describe("holding unsure parts back (Shyam, 2026-10-15)", () => {
       if (unsure.includes(a.sheet_text)) expect([a.factor_name, a.save_mapping]).toEqual([null, false]);
       else expect(a.factor_name).toBe(sureUnit.sheets[0].activities.find((x) => x.sheet_text === a.sheet_text)?.factor_name);
     }
-    expect(held).toEqual([{ sheet: "Fuel 2026", whole: false, reasons: unsure.map((t) => `"${t}"`) }]);
-    expect(heldText(held)).toBe(`${unsure.length} activity wording${unsure.length === 1 ? "" : "s"}`);
+    // Invoice number ("Inv #" at 0.7) is optional and a guess: left unmapped (not skipped) and listed.
+    expect(sheet.fields.find((f) => f.key === "extra_invoice")).toMatchObject({ column: null, skipped: false });
+    expect(held).toEqual([{ sheet: "Fuel 2026", whole: false, reasons: unsure.map((t) => `"${t}"`), fields: ["Invoice number"] }]);
+    expect(heldText(held)).toBe(`1 column and ${unsure.length} activity wording${unsure.length === 1 ? "" : "s"}`);
+  });
+
+  it("holds the sheet back whole when its Activity column is a guess, though the field is optional", () => {
+    const guessedActivity = {
+      ...MODEL_PROPOSAL,
+      sheets: MODEL_PROPOSAL.sheets.map((s, i) =>
+        i === 0 ? { ...s, fields: [...s.fields, { key: "activity_name", label: "Activity", required: false, column: "Notes", confidence: 0.55, source: "llm" as const, skipped: false }] } : s,
+      ),
+    };
+    const { proposal, held } = holdUnsure(guessedActivity);
+    expect(proposal.sheets[0].excluded).toBe(true);
+    expect(held).toEqual([{ sheet: "Fuel 2026", whole: true, reasons: ["Activity"] }]);
+  });
+
+  it("holds back an unsure optional field even when nothing else needs a check", () => {
+    // canContinue ignores optional fields, so skipConfirm alone would import this guess and learn it.
+    const guessedOptional = {
+      ...MODEL_PROPOSAL,
+      sheets: MODEL_PROPOSAL.sheets.map((s, i) => (i === 0 ? { ...s, fields: s.fields.map((f) => (f.key === "extra_invoice" ? { ...f, confidence: 0.7 } : f)) } : s)),
+    };
+    expect(skipConfirm(guessedOptional)).toBe(true);
+    expect(autoReview(guessedOptional)).toBe(true);
+    const { proposal, held } = holdUnsure(guessedOptional);
+    expect(proposal.sheets[0].excluded ?? false).toBe(false);
+    expect(proposal.sheets[0].fields.find((f) => f.key === "extra_invoice")?.column).toBeNull();
+    expect(held).toEqual([{ sheet: "Fuel 2026", whole: false, reasons: [], fields: ["Invoice number"] }]);
+    expect(heldText(held)).toBe("1 column");
+  });
+
+  it("names three kinds of held parts in one line", () => {
+    const held = [
+      { sheet: "A", whole: true, reasons: ["Unit"] },
+      { sheet: "B", whole: false, reasons: ['"x"', '"y"'], fields: ["Invoice number"] },
+    ];
+    expect(heldText(held)).toBe("1 sheet, 1 column and 2 activity wordings");
   });
 
   it("still opens Confirm mapping on rules only, or when nothing at all is sure", () => {

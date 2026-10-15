@@ -100,23 +100,30 @@ export function canContinue(p: MappingProposal): boolean {
  */
 export const skipConfirm = (p: MappingProposal): boolean => modelMapped(p) && canContinue(p);
 
-/** A sheet, or some of its activity wordings, the model wasn't sure of and that was left out of the plan. */
+/** A sheet, or some of its optional columns and activity wordings, the model wasn't sure of and that was left out of the plan. */
 export type HeldPart = {
   sheet: string;
-  /** True: the whole sheet is out (its category or a required field is unsure). False: only the wordings below. */
+  /** True: the whole sheet is out (its category, a required field or the Activity column is unsure). False: only the parts below. */
   whole: boolean;
-  /** What wasn't sure: "Category", a field label, or a quoted sheet wording. */
+  /** Whole sheet: what wasn't sure ("Category", field labels). Otherwise: the quoted sheet wordings left without a factor. */
   reasons: string[];
+  /** Not whole: the optional fields left unmapped (their column was a guess). */
+  fields?: string[];
 };
+
+/** The Activity column: optional in python's field specs, but every row's factor comes from it. */
+const ACTIVITY_KEY = "activity_name";
 
 /**
  * Splits a proposal into what the model was sure of and what it wasn't
  * (Shyam, 2026-10-15: "at least the data points where the AI is confident can
  * be marked for review rows and make it pending status"). A sheet whose
- * category or a required field is unsure is left out whole, since none of its
- * rows can be built reliably. An unsure activity wording is unmatched (no
- * factor, nothing saved), so its rows reach Review rows as issues the user can
- * fix there and are left out at import if they don't. Nothing unsure is
+ * category, a required field or its Activity column is unsure is left out
+ * whole, since none of its rows can be built reliably. Any other optional field
+ * on Check is left unmapped (column cleared, not skipped, so it is neither
+ * imported nor remembered as "skip"). An unsure activity wording is unmatched
+ * (no factor, nothing saved), so its rows reach Review rows as issues the user
+ * can fix there and are left out at import if they don't. Nothing unsure is
  * imported or learned as a mapping.
  */
 export function holdUnsure(p: MappingProposal): { proposal: MappingProposal; held: HeldPart[] } {
@@ -125,17 +132,23 @@ export function holdUnsure(p: MappingProposal): { proposal: MappingProposal; hel
     if (s.excluded) return s;
     const sheetLevel = [
       ...(categoryChip(s.category) === "check" ? ["Category"] : []),
-      ...s.fields.filter((f) => f.required && fieldChip(f) === "check").map((f) => f.label),
+      ...s.fields.filter((f) => (f.required || f.key === ACTIVITY_KEY) && fieldChip(f) === "check").map((f) => f.label),
     ];
     if (sheetLevel.length) {
       held.push({ sheet: s.sheet_name, whole: true, reasons: sheetLevel });
       return { ...s, excluded: true };
     }
+    const unsureFields = new Set(s.fields.filter((f) => fieldChip(f) === "check").map((f) => f.key));
     const unsure = s.activities.filter((a) => activityChip(a) === "check");
-    if (!unsure.length) return s;
-    held.push({ sheet: s.sheet_name, whole: false, reasons: unsure.map((a) => `"${a.sheet_text}"`) });
+    if (!unsure.length && !unsureFields.size) return s;
+    const fields = s.fields.filter((f) => unsureFields.has(f.key)).map((f) => f.label);
+    held.push({ sheet: s.sheet_name, whole: false, reasons: unsure.map((a) => `"${a.sheet_text}"`), ...(fields.length ? { fields } : {}) });
     const names = new Set(unsure.map((a) => a.sheet_text));
-    return { ...s, activities: s.activities.map((a) => (names.has(a.sheet_text) ? { ...a, factor_name: null, save_mapping: false } : a)) };
+    return {
+      ...s,
+      fields: s.fields.map((f) => (unsureFields.has(f.key) ? { ...f, column: null } : f)),
+      activities: s.activities.map((a) => (names.has(a.sheet_text) ? { ...a, factor_name: null, save_mapping: false } : a)),
+    };
   });
   return { proposal: { ...p, sheets }, held };
 }
@@ -143,7 +156,8 @@ export function holdUnsure(p: MappingProposal): { proposal: MappingProposal; hel
 /**
  * With the model on, the upload goes straight to Review rows whenever at least
  * one sheet is sure enough to plan; what isn't sure is held back (`holdUnsure`)
- * and listed there for the user to check. Rules only, or nothing sure at all,
+ * and listed there for the user to check. The flow uses this, not `skipConfirm`,
+ * whose `canContinue` ignores optional fields. Rules only, or nothing sure at all,
  * still opens Confirm mapping.
  */
 export const autoReview = (p: MappingProposal): boolean => modelMapped(p) && holdUnsure(p).proposal.sheets.some((s) => !s.excluded);
@@ -151,9 +165,14 @@ export const autoReview = (p: MappingProposal): boolean => modelMapped(p) && hol
 /** "2 sheets and 3 wordings held back" style summary for the review callout. */
 export function heldText(held: HeldPart[]): string {
   const sheets = held.filter((h) => h.whole).length;
+  const columns = held.filter((h) => !h.whole).reduce((n, h) => n + (h.fields?.length ?? 0), 0);
   const wordings = held.filter((h) => !h.whole).reduce((n, h) => n + h.reasons.length, 0);
-  const parts = [sheets ? `${sheets} ${sheets === 1 ? "sheet" : "sheets"}` : "", wordings ? `${wordings} ${wordings === 1 ? "activity wording" : "activity wordings"}` : ""].filter(Boolean);
-  return parts.join(" and ");
+  const parts = [
+    sheets ? `${sheets} ${sheets === 1 ? "sheet" : "sheets"}` : "",
+    columns ? `${columns} ${columns === 1 ? "column" : "columns"}` : "",
+    wordings ? `${wordings} ${wordings === 1 ? "activity wording" : "activity wordings"}` : "",
+  ].filter(Boolean);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts.join("");
 }
 
 // ── Edits on the confirm screen ──────────────────────────────────────────────

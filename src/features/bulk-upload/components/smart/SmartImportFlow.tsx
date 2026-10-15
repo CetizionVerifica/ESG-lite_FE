@@ -5,7 +5,7 @@ import { type Site, errorMessage, useUploadFile } from "../../api";
 import type { UploadContext } from "../../hooks/useUploadContext";
 import { type ImportResult, fileProblem, selectedSite, skippedMatrix } from "../../logic";
 import { type SmartPreviewArgs, useMappingProfiles, usePatchPlan, usePropose, useReaskSheet, useSkipIssue, useSmartImport, useSmartPreview } from "../../smart/api";
-import { type HeldPart, SMART_STEPS, answersCategory, autoReview, holdUnsure, forgetErrorMessage, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, skipConfirm, smartErrorMessage, smartUnavailable } from "../../smart/logic";
+import { type HeldPart, SMART_STEPS, answersCategory, autoReview, holdUnsure, forgetErrorMessage, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, smartErrorMessage, smartUnavailable } from "../../smart/logic";
 import type { MappingProposal } from "../../smart/types";
 import { ImportStep, type ImportState } from "../ImportStep";
 import { ConfirmMappingStep } from "./ConfirmMappingStep";
@@ -136,14 +136,10 @@ export function SmartImportFlow(props: {
           {
             onSuccess: (p) => {
               setProposal(p);
-              // Mapped by the model with nothing left to check: straight to the rows.
-              if (skipConfirm(p)) {
-                setAutoMapped(true);
-                setHeld([]);
-                setPreviewArgs({ proposal: p, planId: null, code: null, page: 0 });
-                setStep(2);
-              } else if (autoReview(p)) {
-                // Some of it is unsure: plan what the model was sure of, hold the rest back for the user (Shyam, 2026-10-15).
+              // Mapped by the model: plan what it was sure of and go straight to the rows, holding anything
+              // unsure back for the user (Shyam, 2026-10-15); with nothing unsure, nothing is held. Always via
+              // holdUnsure: `skipConfirm` ignores optional fields, so an unsure one would be imported and learned.
+              if (autoReview(p)) {
                 const split = holdUnsure(p);
                 setAutoMapped(true);
                 setHeld(split.held);

@@ -115,7 +115,9 @@ export const MODEL_PROPOSAL: MappingProposal = {
     i === 0
       ? {
           ...s,
-          fields: s.fields.map((f) => (f.key === "activity_unit" ? { ...f, column: "UoM", confidence: 0.9, source: "llm" as const } : f)),
+          fields: s.fields.map((f) =>
+            f.key === "activity_unit" ? { ...f, column: "UoM", confidence: 0.9, source: "llm" as const } : f.key === "extra_invoice" ? { ...f, confidence: 0.88 } : f,
+          ),
           activities: s.activities.map((a) => (a.sheet_text === "Gasoline 95" ? { ...a, confidence: 0.86 } : a)),
         }
       : s,

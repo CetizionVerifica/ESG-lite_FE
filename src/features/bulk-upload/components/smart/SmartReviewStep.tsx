@@ -168,7 +168,8 @@ export function SmartReviewStep(props: {
                   </>
                 ) : (
                   <>
-                    <strong>{h.sheet}</strong>: no factor yet for {h.reasons.join(", ")}. Those rows show as issues below; edit them or check the mapping.
+                    <strong>{h.sheet}</strong>:{!!h.fields?.length && <> {h.fields.join(", ")} not imported (the column was a guess).</>}
+                    {!!h.reasons.length && <> No factor yet for {h.reasons.join(", ")}. Those rows show as issues below; edit them or check the mapping.</>}
                   </>
                 )}
               </li>
