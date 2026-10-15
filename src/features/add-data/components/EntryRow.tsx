@@ -1,5 +1,5 @@
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
-import { Badge, Button, FileDrop, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
+import { Badge, Button, FileDrop, InfoTerm, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
 import { formColumns, isColumnVisible, visibleExtraFields, type FormModel } from "../logic/form";
@@ -12,7 +12,7 @@ import { DynamicField } from "./DynamicField";
 import { DistanceInput } from "./DistanceInput";
 import { distanceFieldFor, type DistanceField } from "../logic/distance";
 import { ExtraFields } from "./ExtraFields";
-import { cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
+import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
 
 /**
  * The Category 3 (FERA) rows an entry adds on save (S3-7): the upstream twin
@@ -228,8 +228,8 @@ export function EntryRow(p: Props) {
             <p className={cn("text-sm", p.showIssue ? "text-bad" : "text-muted")}>{p.issue?.message ?? result.status}</p>
           )}
           {cat3 && (
-            <p className="font-num text-xs text-muted" title="Fuel- and energy-related activities (FERA), added as their own entries">
-              {cat3}
+            <p className="font-num text-xs text-muted">
+              + <InfoTerm id="fera">Cat 3</InfoTerm> {cat3.slice(CAT3_PREVIEW_PREFIX.length)}
             </p>
           )}
         </div>

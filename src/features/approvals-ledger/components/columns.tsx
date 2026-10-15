@@ -1,7 +1,7 @@
 import type { EmissionStatus } from "../../../services/emissionService";
 import { type Column, StatusPill, cn, formatDate, formatEmissions, formatNumber } from "../../../ui";
 import { type RowActions, RowMenu } from "./RowMenu";
-import { feraSubLabel, twinsTotal } from "../../../lib/scope3/fera";
+import { feraSubLabel, feraSubShort, twinsTotal } from "../../../lib/scope3/fera";
 import { type ColumnConfig, type LedgerRow, activityFields, activitySummary, quantityOf, rowPeriodLabel, scopeNumber } from "../logic";
 
 const SCOPE_DOT: Record<1 | 2 | 3, string> = { 1: "bg-s1", 2: "bg-s2", 3: "bg-s3" };
@@ -46,7 +46,7 @@ export function ledgerColumns({
               {r.category?.category_name ?? "—"}
             </span>
             {/* A FERA row of its own (FERA filter, or a twin waiting alone) says which part of Category 3 it is. */}
-            {r.scope3_sub && <span className="shrink-0 text-xs text-muted">{feraSubLabel(r.scope3_sub).replace("Category 3 · ", "")}</span>}
+            {r.scope3_sub && <span className="shrink-0 text-xs text-muted">{feraSubShort(r.scope3_sub)}</span>}
             {scope && <span className="sr-only">Scope {scope}</span>}
           </span>
         );

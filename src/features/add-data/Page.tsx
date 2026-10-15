@@ -87,7 +87,8 @@ export default function AddDataPage() {
   const calc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec });
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.
   // S3-7: td_loss factors make a second, T&D-loss row for Scope 2 categories only.
-  const feraSplit = useMemo(() => splitFeraFactors(setup.data?.feraFactors ?? []), [setup.data]);
+  // Only the factor year's FERA factors count: the backend never falls back to another year for a twin.
+  const feraSplit = useMemo(() => splitFeraFactors(setup.data?.feraFactors ?? [], factorYear), [setup.data, factorYear]);
   const upstreamCalc = useEmissionCalc({ ...calcInput, emissionFactors: feraSplit.upstream, fallbackToRaw: true });
   const tdLossCalc = useEmissionCalc({ ...calcInput, emissionFactors: isScope2(category?.scope) ? feraSplit.tdLoss : [], fallbackToRaw: true });
   const feraCalc: Cat3Calc | null =

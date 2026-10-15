@@ -559,5 +559,8 @@ test("a Scope 2 row previews its Category 3 rows: upstream of electricity and T&
   await row.getByLabel("Consumption").fill("500000");
   await row.getByLabel("Unit").selectOption("kwh");
   await expect(row.getByText("= 400.00 tCO₂e")).toBeVisible();
-  await expect(row.getByText("+ Cat 3 60.00 tCO₂e (upstream of electricity) + 40.00 tCO₂e (T&D losses), added on save")).toBeVisible();
+  const cat3 = row.locator("p", { hasText: "added on save" });
+  await expect(cat3).toHaveText(/^\+ Cat 3\s*60\.00 tCO₂e \(upstream of electricity\) \+ 40\.00 tCO₂e \(T&D losses\), added on save$/);
+  // The Cat 3 explainer is a button, so keyboard users reach it too.
+  await expect(cat3.getByRole("button", { name: "What is Cat 3?" })).toBeVisible();
 });

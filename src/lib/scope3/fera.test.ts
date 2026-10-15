@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cat3PreviewText, feraSubLabel, isScope2, sortTwins, splitFeraFactors, twinsTotal, upstreamSubFor } from "./fera";
+import { cat3PreviewText, feraSubLabel, feraSubShort, isScope2, sortTwins, splitFeraFactors, twinsTotal, upstreamSubFor } from "./fera";
 
 describe("Category 3 sub-activities", () => {
   it("labels each twin by its sub-activity", () => {
@@ -21,6 +21,20 @@ describe("Category 3 sub-activities", () => {
     const { upstream, tdLoss } = splitFeraFactors(f);
     expect(upstream.map((x) => x.id)).toEqual([1, 3, 4]);
     expect(tdLoss.map((x) => x.id)).toEqual([2]);
+  });
+
+  it("keeps only the target year's FERA factors, as the backend twin lookup does", () => {
+    const f = [{ id: 1, factor_type: "wtt", year: 2024 }, { id: 2, factor_type: "td_loss", year: 2023 }, { id: 3, factor_type: "td_loss", year: 2024 }];
+    const { upstream, tdLoss } = splitFeraFactors(f, 2024);
+    expect(upstream.map((x) => x.id)).toEqual([1]);
+    expect(tdLoss.map((x) => x.id)).toEqual([3]);
+    expect(splitFeraFactors(f, 2022).tdLoss).toEqual([]);
+    expect(splitFeraFactors(f).tdLoss.map((x) => x.id)).toEqual([2, 3]);
+  });
+
+  it("gives the short sub-activity name", () => {
+    expect(feraSubShort("3c_td_losses")).toBe("T&D losses");
+    expect(feraSubShort(null)).toBe("Fuel- and energy-related activities");
   });
 
   it("orders and sums a parent's twins", () => {
