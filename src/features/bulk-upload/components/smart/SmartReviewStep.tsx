@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Callout, type Column, DataTable, EmptyState, KpiStrip, Select, formatNumber } from "../../../../ui";
 import type { PlanSummary } from "../../api";
 import type { PreviewRow } from "../../logic";
-import { SEVERITY_TONE, errorRowsRemain, issueLabel, issueOptions, rowSeverity, rowsText } from "../../smart/logic";
+import { type HeldPart, SEVERITY_TONE, errorRowsRemain, heldText, issueLabel, issueOptions, rowSeverity, rowsText } from "../../smart/logic";
 import { type RowEdit, RowEditModal } from "./RowEditModal";
 
 type Row = PreviewRow & { _i: number };
@@ -37,6 +37,8 @@ export function SmartReviewStep(props: {
   patchError: string | null;
   /** The mapping model mapped the workbook and Confirm mapping was passed over; Back opens it. */
   autoMapped?: boolean;
+  /** Sheets and wordings the model wasn't sure of, left out of this plan; "Check them" opens Confirm mapping. */
+  held?: HeldPart[];
   onBack: () => void;
   onImport: () => void;
 }) {
@@ -139,9 +141,41 @@ export function SmartReviewStep(props: {
           They're left out when you import. Fix each one (Edit) to bring it in, or skip it (or every row with the same issue) to say so. Rows for other sites are always left out: upload the file again for that site.
         </Callout>
       )}
-      {props.autoMapped && (
+      {props.autoMapped && !props.held?.length && (
         <Callout tone="info" title="ESGLite mapped this workbook for you">
           Every column and match was found with confidence, so there was nothing to check. If something looks wrong, change the mapping.
+        </Callout>
+      )}
+      {props.autoMapped && !!props.held?.length && (
+        <Callout
+          tone="warn"
+          title={`${heldText(props.held)} held back for you to check`}
+          action={
+            <Button size="sm" variant="secondary" onClick={props.onBack} disabled={props.busy}>
+              Check them
+            </Button>
+          }
+        >
+          <p>
+            ESGLite mapped the rest with confidence; those rows are below and import as Pending. It wasn&apos;t sure of these, so they aren&apos;t in the rows yet:
+          </p>
+          <ul className="mt-1 list-disc pl-5">
+            {props.held.map((h) => (
+              <li key={h.sheet}>
+                {h.whole ? (
+                  <>
+                    Sheet <strong>{h.sheet}</strong>: {h.reasons.join(", ")}
+                  </>
+                ) : (
+                  <>
+                    <strong>{h.sheet}</strong>:{!!h.fields?.length && <> {h.fields.join(", ")} not imported (the column was a guess).</>}
+                    {!!h.reasons.length && <> No factor yet for {h.reasons.join(", ")}. Those rows show as issues below; edit them or check the mapping.</>}
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1">Check them to bring them in. If you import now, they&apos;re left out.</p>
         </Callout>
       )}
       {props.patchError && <Callout tone="warn" title="The change wasn't saved">{props.patchError}</Callout>}

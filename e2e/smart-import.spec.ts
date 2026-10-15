@@ -239,11 +239,22 @@ test("with the mapping model on, the rows show straight after the upload with no
   await expect(page.getByRole("heading", { name: "Fuel 2026" })).toBeVisible();
 });
 
-test("with the mapping model on, a mapping with something to check still stops on Confirm mapping", async ({ page }) => {
-  await signIn(page, "Manager", MANAGER, [HIDD], [], { ...MOCK_PROPOSAL, model: MODEL_PROPOSAL.model });
+test("with the mapping model on, an unsure sheet is held back and the sure ones go straight to the rows", async ({ page }) => {
+  const calls = await signIn(page, "Manager", MANAGER, [HIDD], [], { ...MOCK_PROPOSAL, model: MODEL_PROPOSAL.model });
   await page.goto("/capture/upload");
   await page.locator('input[type="file"]').setInputFiles(WORKBOOK);
   await page.getByRole("button", { name: "Upload and work out the mapping" }).click();
+
+  await expect(page.locator("[aria-current=step]")).toContainText("Review rows");
+  await expect(page.getByText("1 sheet held back for you to check")).toBeVisible();
+  await expect(page.getByText("Fuel 2026").first()).toBeVisible();
+  // Only the sure sheet is planned: the unsure one goes to the plan left out.
+  const preview = calls.find((c) => c.path.endsWith("/preview"))?.body as { proposal: typeof MOCK_PROPOSAL };
+  expect(preview.proposal.sheets[0].excluded).toBe(true);
+  expect(preview.proposal.sheets[1].excluded ?? false).toBe(false);
+
+  // Check them opens Confirm mapping with what still needs a look.
+  await page.getByRole("button", { name: "Check them" }).click();
   await expect(page.locator("[aria-current=step]")).toContainText("Confirm mapping");
   await expect(page.getByText('Still to check: Unit, "Gasoline 95".')).toBeVisible();
 });
