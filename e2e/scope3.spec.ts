@@ -1,8 +1,10 @@
 import { type Page, expect, test } from "@playwright/test";
 
 /**
- * S3-0 Scope 3 placeholder smoke test: Settings → Scope 3 for company Admins
- * and Superadmins, hidden from everyone else. Every API call is answered locally.
+ * S3-0 smoke test: Settings → Scope 3 for company Admins and Superadmins,
+ * hidden from everyone else. Holds for the placeholder and for S3-1's page;
+ * the placeholder's own content is in scope3-placeholder.spec.ts. Every API
+ * call is answered locally.
  */
 
 const company = { company_id: 3, name: "Glochem" };
@@ -35,21 +37,14 @@ async function signIn(page: Page, role: string) {
   );
 }
 
-test("a company admin opens Scope 3 from Settings and sees the 15 categories", async ({ page }) => {
+test("a company admin opens Scope 3 from Settings", async ({ page }) => {
   await signIn(page, "Admin");
   await page.goto("/settings?tab=scope3");
   const section = page.getByRole("region", { name: "Scope 3" });
   await expect(section).toBeVisible();
   await section.getByRole("link", { name: "Open Scope 3 settings" }).click();
-
   await expect(page).toHaveURL(/\/settings\/scope3$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Scope 3" })).toBeVisible();
-  await expect(page.getByText("Choosing your categories is coming soon")).toBeVisible();
-  const list = page.getByRole("region", { name: "Categories" }).getByRole("listitem");
-  await expect(list).toHaveCount(15);
-  await expect(list.first()).toContainText("Category 1 · Purchased goods and services");
-  await expect(list.first()).toContainText("Supplier's own figure · Supplier's energy and materials · Average for the material · From the amount spent");
-  await expect(list.nth(8)).toContainText("Downstream");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 });
 
 test("a superadmin sees the Scope 3 section too", async ({ page }) => {
