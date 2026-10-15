@@ -18,6 +18,13 @@ export const smartKeys = {
 export const usePropose = () =>
   useMutation({ mutationFn: ({ documentId, siteId }: { documentId: number; siteId: number }) => proposeMapping(documentId, siteId) as Promise<MappingProposal> });
 
+/** Re-asks the mapper for one sheet after the user picked its category (fields and activities follow that category). */
+export const useReaskSheet = () =>
+  useMutation({
+    mutationFn: ({ documentId, siteId, sheetName, categoryId }: { documentId: number; siteId: number; sheetName: string; categoryId: number }) =>
+      proposeMapping(documentId, siteId, { sheets: [sheetName], sheetCategories: { [sheetName]: categoryId } }) as Promise<MappingProposal>,
+  });
+
 export interface SmartPreviewArgs {
   proposal: MappingProposal;
   /** Set once the first preview made the plan: later reads page it instead of planning again. */

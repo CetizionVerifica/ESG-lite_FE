@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Badge, type BadgeTone, Button, Callout, Combobox, Select, Toggle, useDebounced } from "../../../../ui";
 import { useActivityOptions } from "../../smart/api";
-import { CHIP_LABEL, type MatchChip, SOURCE_LABEL, activityChip, categoryChip, categoryText, fieldChip, notInContextText, otherSiteLines, periodText, profileDiffers, profileSummary, profileWhenText, sheetBlockers } from "../../smart/logic";
+import { CHIP_LABEL, type MatchChip, SOURCE_LABEL, activityChip, categoryChip, categoryNotFound, categoryText, fieldChip, notInContextText, otherSiteLines, periodText, profileDiffers, profileSummary, profileWhenText, sheetBlockers } from "../../smart/logic";
 import type { FieldMapping, MappingProfile, ProposedActivityMatch, SheetProposal } from "../../smart/types";
 
 const CHIP_TONE: Record<Exclude<MatchChip, null>, BadgeTone> = { matched: "good", remembered: "brand", suggested: "info", check: "warn", skipped: "neutral" };
@@ -45,12 +45,17 @@ export function SheetCard(props: {
   profile: MappingProfile | null;
   forgetting: boolean;
   forgetError: string | null;
+  /** The mapper is working out the fields for a category the user just picked. */
+  reasking?: boolean;
+  /** Why that re-ask failed, if it did. */
+  reaskError?: string | null;
   actions: SheetCardActions;
 }) {
   const { sheet, actions, index, profile } = props;
   const blockers = sheetBlockers(sheet);
   const columnOptions = props.columns.map((c) => ({ value: c, label: c }));
   const catChip = categoryChip(sheet.category);
+  const notFound = categoryNotFound(sheet);
   const otherSites = otherSiteLines(sheet, props.siteName);
   const dropped = notInContextText(sheet.not_in_context);
   const titleId = `sheet-${index}-title`;
@@ -71,7 +76,11 @@ export function SheetCard(props: {
 
       {!sheet.excluded && (
         <div className="mt-4 space-y-5">
-          {profile && <ProfileLine sheet={sheet} profile={profile} forgetting={props.forgetting} error={props.forgetError} actions={actions} />}
+          {profile && (
+            <fieldset disabled={props.reasking} className="m-0 min-w-0 border-0 p-0">
+              <ProfileLine sheet={sheet} profile={profile} forgetting={props.forgetting} error={props.forgetError} actions={actions} />
+            </fieldset>
+          )}
           {dropped && <Callout tone="warn" title="Some names aren't in your scope">{dropped}</Callout>}
           {otherSites.length > 0 && (
             <Callout tone="info" title="Other sites in this sheet">
@@ -90,23 +99,38 @@ export function SheetCard(props: {
               </dt>
               <dd className="space-y-2 text-sm text-muted">
                 {sheet.category.kind === "fixed" ? (
-                  <div className="flex flex-wrap items-end gap-2">
-                    <Select<number>
-                      label={`Category of ${sheet.sheet_name}`}
-                      hideLabel
-                      value={sheet.category.id}
-                      options={props.categories.some((c) => c.value === (sheet.category as { id: number }).id) ? props.categories : [...props.categories, { value: sheet.category.id, label: sheet.category.label }]}
-                      onChange={(v) => {
-                        const match = props.categories.find((c) => c.value === v);
-                        if (match) actions.onFixedCategory(match.value, match.label);
-                      }}
-                    />
-                    {catChip === "check" && (
-                      <Button size="sm" aria-label="Confirm category" onClick={actions.onConfirmCategory}>
-                        Confirm
-                      </Button>
+                  <>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <Select<number>
+                        label={`Category of ${sheet.sheet_name}`}
+                        hideLabel
+                        placeholder={notFound ? "Choose a category" : undefined}
+                        value={notFound ? null : sheet.category.id}
+                        disabled={props.reasking}
+                        options={notFound || props.categories.some((c) => c.value === (sheet.category as { id: number }).id) ? props.categories : [...props.categories, { value: sheet.category.id, label: sheet.category.label }]}
+                        onChange={(v) => {
+                          const match = props.categories.find((c) => c.value === v);
+                          if (match) actions.onFixedCategory(match.value, match.label);
+                        }}
+                      />
+                      {catChip === "check" && !notFound && !props.reasking && (
+                        <Button size="sm" aria-label="Confirm category" onClick={actions.onConfirmCategory}>
+                          Confirm
+                        </Button>
+                      )}
+                    </div>
+                    {notFound && <p className="text-xs text-muted">The app couldn't tell which category this sheet is. Choose one and its fields are worked out again.</p>}
+                    {props.reasking && (
+                      <p role="status" className="text-xs text-muted">
+                        Working out the fields and activities for {sheet.category.label}…
+                      </p>
                     )}
-                  </div>
+                    {props.reaskError && (
+                      <Callout tone="warn" title="Fields not worked out">
+                        {props.reaskError}
+                      </Callout>
+                    )}
+                  </>
                 ) : (
                   <>
                     <p>{categoryText(sheet.category)}</p>
@@ -140,26 +164,30 @@ export function SheetCard(props: {
             </div>
           </dl>
 
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-ink">Fields</h3>
-            <div className="divide-y divide-line rounded-card border border-line">
-              {sheet.fields.map((f) => (
-                <FieldRow key={f.key} field={f} sheetName={sheet.sheet_name} columns={columnOptions} actions={actions} />
-              ))}
-            </div>
-          </div>
-
-          {sheet.activities.length > 0 && (
+          {/* While the mapper re-asks for a new category its answer replaces this sheet's
+              fields and activities, so they can't be changed until it arrives. */}
+          <fieldset disabled={props.reasking} aria-busy={props.reasking || undefined} className="m-0 min-w-0 space-y-5 border-0 p-0">
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-ink">Activities</h3>
-              <p className="text-xs text-muted">The sheet's wording on the left, the emission factor it maps to on the right. Tick "Save for this client" to remember a match as a category mapping.</p>
+              <h3 className="text-sm font-semibold text-ink">Fields</h3>
               <div className="divide-y divide-line rounded-card border border-line">
-                {sheet.activities.map((a) => (
-                  <ActivityRow key={a.sheet_text} activity={a} siteId={sheet.site_id} actions={actions} />
+                {sheet.fields.map((f) => (
+                  <FieldRow key={f.key} field={f} sheetName={sheet.sheet_name} columns={columnOptions} actions={actions} />
                 ))}
               </div>
             </div>
-          )}
+
+            {sheet.activities.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-ink">Activities</h3>
+                <p className="text-xs text-muted">The sheet's wording on the left, the emission factor it maps to on the right. Tick "Save for this client" to remember a match as a category mapping.</p>
+                <div className="divide-y divide-line rounded-card border border-line">
+                  {sheet.activities.map((a) => (
+                    <ActivityRow key={a.sheet_text} activity={a} siteId={sheet.site_id} actions={actions} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </fieldset>
 
           {blockers.length > 0 && (
             <p className="text-sm text-muted" role="status">

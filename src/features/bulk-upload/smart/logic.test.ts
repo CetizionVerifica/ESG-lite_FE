@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { FINGERPRINT_POWER, MOCK_PROFILE, MOCK_PROPOSAL } from "./fixtures";
 import {
   activityChip,
+  answersCategory,
+  categoryNotFound,
+  replaceSheet,
   applyProfile,
   forgetErrorMessage,
   profileDiffers,
@@ -282,5 +285,35 @@ describe("mapping memory (XI4 2/2)", () => {
     expect(forgetErrorMessage({ status: 403, code: "IMPORT_FORBIDDEN", message: "Forbidden" })).toBe("Only the person who confirmed this mapping, or an admin, can forget it.");
     expect(forgetErrorMessage({ status: 404 })).toBe("This mapping was already forgotten.");
     expect(forgetErrorMessage({ status: 500, message: "boom" })).toBe("boom");
+  });
+});
+
+describe("category not worked out", () => {
+  it("is the rules' zero-confidence placeholder, not a real suggestion", () => {
+    const sheet = MOCK_PROPOSAL.sheets[0];
+    expect(categoryNotFound(sheet)).toBe(false);
+    expect(categoryNotFound({ ...sheet, category: { kind: "fixed", id: 1, label: "Fuel", confidence: 0, source: "rules" } })).toBe(true);
+    // a low-confidence model guess is a suggestion to check, not "not found"
+    expect(categoryNotFound({ ...sheet, category: { kind: "fixed", id: 1, label: "Fuel", confidence: 0.3, source: "llm" } })).toBe(false);
+  });
+});
+
+describe("replaceSheet", () => {
+  it("swaps in the fresh answer for that sheet only and keeps whether it was left out", () => {
+    const base = { ...MOCK_PROPOSAL, sheets: MOCK_PROPOSAL.sheets.map((s, i) => (i === 0 ? { ...s, excluded: true } : s)) };
+    const fresh = { ...MOCK_PROPOSAL.sheets[0], excluded: false, category: { kind: "fixed" as const, id: 3, label: "Electricity", confidence: 1, source: "rules" as const } };
+    const next = replaceSheet(base, "Fuel 2026", fresh);
+    expect(next.sheets[0].category).toEqual(fresh.category);
+    expect(next.sheets[0].excluded).toBe(true);
+    expect(next.sheets[1]).toBe(base.sheets[1]);
+  });
+});
+
+describe("answersCategory", () => {
+  const sheet = MOCK_PROPOSAL.sheets[0];
+  it("accepts a re-ask answer only for the category the user picked", () => {
+    expect(answersCategory({ ...sheet, category: { kind: "fixed", id: 3, label: "Electricity", confidence: 1, source: "rules" } }, 3)).toBe(true);
+    // a mapper that ignored the pick answers with its own category
+    expect(answersCategory({ ...sheet, category: { kind: "fixed", id: 1, label: "Fuel", confidence: 0.9, source: "rules" } }, 3)).toBe(false);
   });
 });

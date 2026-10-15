@@ -99,7 +99,7 @@ export function SmartReviewStep(props: {
       value: () => "",
       exportValue: () => undefined,
       cell: (r) =>
-        r.row_ref ? (
+        r.row_ref && !(r as { local?: boolean }).local ? (
           <span className="flex gap-1">
             <Button size="sm" variant="ghost" disabled={props.busy} onClick={() => props.onSkip(r.row_ref as string, r.state !== "skipped")}>
               {r.state === "skipped" ? "Unskip" : "Skip"}
@@ -159,11 +159,13 @@ export function SmartReviewStep(props: {
             onChange={props.onCode}
             className="min-w-56"
           />
-          {selectedIssue && (
+          {/* Rows kept back by the AI service never reached the plan: there is nothing to skip, they are left out. */}
+          {selectedIssue && !selectedIssue.local && (
             <Button size="sm" variant="secondary" disabled={props.busy} loading={props.busy} onClick={() => props.onSkipIssue(selectedIssue.code)}>
               Skip all {selectedIssue.count} rows with this issue
             </Button>
           )}
+          {selectedIssue?.local && <p className="text-xs text-muted">These rows were never sent to the plan; they're left out when you import.</p>}
         </div>
       </div>
 
