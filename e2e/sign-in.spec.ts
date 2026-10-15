@@ -32,7 +32,6 @@ interface Mocks {
 }
 
 async function mockApi(page: Page, mocks: Mocks = {}) {
-  const role = mocks.role ?? "Manager";
   const user = { name: "Mia Manager", email: "mia@midal.com", sites: [{ site_id: 1, company }], timezone: mocks.timezone ?? null };
   await page.route(
     (url) => url.port !== "4173",
@@ -40,6 +39,7 @@ async function mockApi(page: Page, mocks: Mocks = {}) {
       const request = route.request();
       const path = new URL(request.url()).pathname;
       const json = (body: unknown, status = 200) => route.fulfill({ status, json: body });
+      const role = mocks.role ?? "Manager";
       if (path.endsWith("/brands/public/midal")) return json(midal);
       if (path.includes("/brands/public/")) return json({ message: "Not found" }, 404);
       if (path.endsWith("/auth/login")) {
@@ -185,4 +185,19 @@ test("sign-in keeps a timezone chosen in Settings", async ({ page }) => {
   await expect(page).toHaveURL(/\/overview$/);
   await page.waitForLoadState("networkidle");
   expect(bodies).toEqual([]);
+});
+
+test("signing out and back in as another role lands on that role's home, not a 403", async ({ page }) => {
+  const mocks: Mocks = { role: "Manager" };
+  await mockApi(page, mocks);
+  await page.goto("/login");
+  await fillAndSubmit(page);
+  await expect(page).toHaveURL(/\/overview$/);
+  await page.getByRole("button", { name: /account menu/i }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  mocks.role = "User";
+  await fillAndSubmit(page, "uma@midal.com");
+  await expect(page).toHaveURL(/\/my-month$/);
+  await expect(page.getByText("You don't have access to this page")).toHaveCount(0);
 });
