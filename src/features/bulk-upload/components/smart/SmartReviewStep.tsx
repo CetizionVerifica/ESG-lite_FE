@@ -35,6 +35,8 @@ export function SmartReviewStep(props: {
   onSkipIssue: (code: string) => void;
   busy: boolean;
   patchError: string | null;
+  /** The mapping model mapped the workbook and Confirm mapping was passed over; Back opens it. */
+  autoMapped?: boolean;
   onBack: () => void;
   onImport: () => void;
 }) {
@@ -137,6 +139,11 @@ export function SmartReviewStep(props: {
           They're left out when you import. Fix each one (Edit) to bring it in, or skip it (or every row with the same issue) to say so. Rows for other sites are always left out: upload the file again for that site.
         </Callout>
       )}
+      {props.autoMapped && (
+        <Callout tone="info" title="ESGLite mapped this workbook for you">
+          Every column and match was found with confidence, so there was nothing to check. If something looks wrong, change the mapping.
+        </Callout>
+      )}
       {props.patchError && <Callout tone="warn" title="The change wasn't saved">{props.patchError}</Callout>}
 
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -196,7 +203,7 @@ export function SmartReviewStep(props: {
 
       <div className="flex flex-wrap justify-between gap-3">
         <Button variant="secondary" onClick={props.onBack}>
-          Back
+          {props.autoMapped ? "Change mapping" : "Back"}
         </Button>
         {/* Rows with issues are left out at import (they can't all be skipped: some never reach the plan), so the
             button says so instead of blocking. Off while a change is saving or the plan is being reread,

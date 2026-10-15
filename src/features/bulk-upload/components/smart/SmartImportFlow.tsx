@@ -5,7 +5,7 @@ import { type Site, errorMessage, useUploadFile } from "../../api";
 import type { UploadContext } from "../../hooks/useUploadContext";
 import { type ImportResult, fileProblem, selectedSite, skippedMatrix } from "../../logic";
 import { type SmartPreviewArgs, useMappingProfiles, usePatchPlan, usePropose, useReaskSheet, useSkipIssue, useSmartImport, useSmartPreview } from "../../smart/api";
-import { SMART_STEPS, answersCategory, forgetErrorMessage, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, smartErrorMessage, smartUnavailable } from "../../smart/logic";
+import { SMART_STEPS, answersCategory, forgetErrorMessage, replaceSheet, reviewRowsLink, rowsText, setFixedCategory, skipConfirm, smartErrorMessage, smartUnavailable } from "../../smart/logic";
 import type { MappingProposal } from "../../smart/types";
 import { ImportStep, type ImportState } from "../ImportStep";
 import { ConfirmMappingStep } from "./ConfirmMappingStep";
@@ -52,6 +52,8 @@ export function SmartImportFlow(props: {
   const [proposal, setProposal] = useState<MappingProposal | null>(null);
   const [previewArgs, setPreviewArgs] = useState<SmartPreviewArgs | null>(null);
   const [importState, setImportState] = useState<ImportState | null>(null);
+  /** The mapping model mapped the workbook, so Confirm mapping was passed over. */
+  const [autoMapped, setAutoMapped] = useState(false);
   /** Sheets being mapped again after a category change, and the ones whose re-ask failed (sheet name → message). */
   const [reasking, setReasking] = useState<Record<string, true>>({});
   const [reaskFailed, setReaskFailed] = useState<Record<string, string>>({});
@@ -132,7 +134,15 @@ export function SmartImportFlow(props: {
           {
             onSuccess: (p) => {
               setProposal(p);
-              setStep(1);
+              // Mapped by the model with nothing left to check: straight to the rows.
+              if (skipConfirm(p)) {
+                setAutoMapped(true);
+                setPreviewArgs({ proposal: p, planId: null, code: null, page: 0 });
+                setStep(2);
+              } else {
+                setAutoMapped(false);
+                setStep(1);
+              }
             },
           },
         );
@@ -149,6 +159,7 @@ export function SmartImportFlow(props: {
   const backToConfirm = () => {
     // The proposal may change: the next Continue plans afresh and cancels this plan.
     setPreviewArgs(null);
+    setAutoMapped(false);
     setStep(1);
   };
 
@@ -181,6 +192,7 @@ export function SmartImportFlow(props: {
     setProposal(null);
     setPreviewArgs(null);
     setImportState(null);
+    setAutoMapped(false);
     lastPlan.current = null;
     upload.reset();
     propose.reset();
@@ -272,6 +284,7 @@ export function SmartImportFlow(props: {
             // Also while the plan is reread after a change: patches carry its version.
             busy={patch.isPending || skipIssue.isPending || preview.isFetching}
             patchError={patch.error ? smartErrorMessage(patch.error, "The row couldn't be changed.") : skipIssue.error ? smartErrorMessage(skipIssue.error, "The rows couldn't be skipped.") : null}
+            autoMapped={autoMapped}
             onBack={backToConfirm}
             onImport={runImport}
           />

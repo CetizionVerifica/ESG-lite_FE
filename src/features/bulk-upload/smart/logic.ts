@@ -26,6 +26,17 @@ type SiteLike = { company?: { ai_import_enabled?: boolean | null } | null };
 /** The per-client switch (`company.ai_import_enabled`, XI0) as the site list carries it. */
 export const smartImportEnabled = (sites: SiteLike[]): boolean => sites.some((s) => s.company?.ai_import_enabled === true);
 
+/**
+ * The mapping model is on (python's `MAPPING_MODEL_PROVIDER` with its key).
+ * Rules only (no key) reports the model as "none". The name stays set when a
+ * sheet's model answer was dropped and it fell back to rules, so this alone
+ * never decides that a proposal needs no check: see `skipConfirm`.
+ */
+export const modelMapped = (p: MappingProposal): boolean => {
+  const name = p.model?.name?.trim().toLowerCase();
+  return !!name && name !== "none";
+};
+
 export const needsConfirmation = (confidence: number) => confidence < CONFIRM_BELOW;
 
 export type MatchChip = "matched" | "remembered" | "suggested" | "check" | "skipped" | null;
@@ -79,6 +90,15 @@ export function canContinue(p: MappingProposal): boolean {
   const included = p.sheets.filter((s) => !s.excluded);
   return included.length > 0 && included.every((s) => sheetBlockers(s).length === 0);
 }
+
+/**
+ * With the model on, a proposal with nothing left to check goes straight to
+ * Review rows (Shyam, 2026-10-15). Anything with a Check chip (a guessed
+ * category, an empty required field, a match below 0.8, a sheet the model
+ * didn't map) still stops on Confirm mapping, so no unreviewed guess is
+ * imported or remembered as a mapping.
+ */
+export const skipConfirm = (p: MappingProposal): boolean => modelMapped(p) && canContinue(p);
 
 // ── Edits on the confirm screen ──────────────────────────────────────────────
 
