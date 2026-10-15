@@ -175,6 +175,7 @@ export interface Supplier {
   name: string;
   country?: string | null;
   email?: string | null;
+  created_by?: number;
 }
 
 export interface SupplierFactor {
@@ -189,6 +190,8 @@ export interface SupplierFactor {
   gwp_set: "AR4" | "AR5" | "AR6";
   evidence_document_id?: number | null;
   source: "supplier_request" | "manual";
+  /** The PCF material factor it came from, if any. */
+  material_factor_id?: number | null;
 }
 
 export interface FxRate {
@@ -206,7 +209,11 @@ export interface CompanyBaseYear {
   policy_note?: string | null;
   rationale?: string | null;
   year_type?: "CY" | "FY" | null;
+  /** The base year figures frozen when it was set (S3-14). */
+  snapshot?: unknown;
 }
+
+export type PutBaseYearBody = Omit<CompanyBaseYear, "company_id" | "snapshot">;
 
 export const RECALCULATION_REASONS = ["methodology", "data_quality", "structural", "error"] as const;
 export type RecalculationReason = (typeof RECALCULATION_REASONS)[number];
@@ -215,10 +222,22 @@ export interface RecalculationEvent {
   id: number;
   company_id: number;
   reason: RecalculationReason;
+  /** At least one year. */
   affected_years: number[];
+  /** How much the base year moves, in tCO₂e. */
+  delta_tco2e: number;
   approved_by?: number | null;
   created_at?: string;
   status?: string | null;
+  note?: string | null;
+  before?: unknown;
+  after?: unknown;
+}
+
+/** `POST /scope3/recalculations`: a reason and at least one year. */
+export interface PostRecalculationBody {
+  reason: RecalculationReason;
+  affected_years: number[];
   note?: string | null;
 }
 
@@ -236,6 +255,68 @@ export interface PeriodLock {
   reopened_by?: number | null;
   reopened_at?: string | null;
   reopened_reason?: string | null;
+}
+
+/** `POST /user/emissions/submit` (S3-15): at least one id. */
+export interface SubmitEmissionsBody {
+  ids: number[];
+}
+
+/** `POST /periods/lock`; unlock adds a reason. */
+export interface LockPeriodBody {
+  site_id?: number | null;
+  year: number;
+  month?: number | null;
+}
+export interface UnlockPeriodBody extends LockPeriodBody {
+  reason: string;
+}
+
+/** `POST /scope3/category-map`: an ESGLite category proposed for a GHG category (S3-1). */
+export interface CategoryGhgMapProposal {
+  category_id: number;
+  company_id: number;
+  ghg_category: GhgCategoryNumber;
+  confidence: number;
+  confirmed_by?: number | null;
+  confirmed_at?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Scope 3 fields on an emission row (§4, `GET /user/emissions` gains them)
+// ---------------------------------------------------------------------------
+
+export interface Fx {
+  currency: string;
+  rate: number;
+  as_of: string;
+  source: string;
+}
+
+export interface Proxy {
+  basis: string;
+  coverage_pct: number;
+  from: string;
+}
+
+export const GASES = ["CO2", "CH4", "N2O", "HFCs", "PFCs", "SF6", "NF3"] as const;
+export type Gas = (typeof GASES)[number];
+
+/** All optional: each module fills its own (S3-3 method, dq, data_type; S3-4 total_kgco2e; …). */
+export interface EmissionScope3Fields {
+  method?: Method | null;
+  dq?: Dq | null;
+  data_type?: DataType | null;
+  is_estimate?: boolean;
+  /** kgCO₂e at 4 dp, a decimal string, beside total_emission (tCO₂e). */
+  total_kgco2e?: string | null;
+  fx?: Fx | null;
+  supplier_id?: number | null;
+  scope3_sub?: Scope3Sub | null;
+  proxy?: Proxy | null;
+  checks?: RowChecks | null;
+  gas_kg?: Partial<Record<Gas, number>> | null;
+  biogenic_kg?: number | null;
 }
 
 // ---------------------------------------------------------------------------

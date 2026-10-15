@@ -79,7 +79,7 @@ export default function SettingsPage() {
               <TimezoneSection saved={prefs.data.timezone ?? null} />
             </>
           )}
-          {(role === "Admin" || role === "Superadmin") && <Scope3Section />}
+          {sections.some((s) => s.id === "scope3") && <Scope3Section />}
           {role === "Superadmin" && <ConnectedAppsSection />}
         </div>
       </div>

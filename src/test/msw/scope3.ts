@@ -13,7 +13,9 @@
  */
 import { http, HttpResponse } from "msw";
 import {
+  BOUNDARY_STATUSES,
   type BoundaryStatus,
+  type CategoryGhgMapProposal,
   type CompanyBaseYear,
   type CompanyScope3Category,
   type ConsolidationApproach,
@@ -21,14 +23,18 @@ import {
   type FxRate,
   GHG_CATEGORIES,
   type GhgCategoryNumber,
+  type LockPeriodBody,
   type PeriodLock,
+  type PostRecalculationBody,
   type PutScope3CategoryBody,
   RECALCULATION_REASONS,
   type RecalculationEvent,
   type Scope3ErrorBody,
   type Scope3ErrorCode,
+  type SubmitEmissionsBody,
   type Supplier,
   type SupplierFactor,
+  type UnlockPeriodBody,
 } from "../../lib/scope3/contracts";
 
 const COMPANY_ID = 1;
@@ -59,6 +65,12 @@ export interface Scope3Report {
 
 const error = (code: Scope3ErrorCode, status: number, message: string) =>
   HttpResponse.json<Scope3ErrorBody>({ code, message }, { status });
+
+/** A body the backend's zod schema refuses: 400 with the problem and no Scope 3 code, as the import endpoints answer. */
+const invalid = (path: string, message: string) =>
+  HttpResponse.json({ message: "The request body is not valid.", details: [{ path: [path], message }] }, { status: 400 });
+
+const notFound = (message: string) => HttpResponse.json({ message }, { status: 404 });
 
 // ---------------------------------------------------------------------------
 // Sample data (realistic, small). resetScope3Mocks() restores it.
@@ -102,7 +114,7 @@ const initialCategories = (): Scope3CategoryRow[] =>
     method_note: null,
     relevance: null,
     updated_at: "2026-10-01T09:00:00.000Z",
-    mapped_categories: MAPPED[c.n] ?? [],
+    mapped_categories: (MAPPED[c.n] ?? []).map((x) => ({ ...x })),
   }));
 
 const initialSuppliers = (): Supplier[] => [
@@ -140,7 +152,7 @@ const initialBaseYear = (): CompanyBaseYear => ({
 });
 
 const initialRecalculations = (): RecalculationEvent[] => [
-  { id: 1, company_id: COMPANY_ID, reason: "error", affected_years: [2023], approved_by: 4, created_at: "2026-03-14T10:12:00.000Z", status: "applied", note: "Copper rod factor was per tonne, not per kg." },
+  { id: 1, company_id: COMPANY_ID, reason: "error", affected_years: [2023], delta_tco2e: -412.6, approved_by: 4, created_at: "2026-03-14T10:12:00.000Z", status: "applied", note: "Copper rod factor was per tonne, not per kg." },
 ];
 
 const initialLocks = (): PeriodLock[] => [
@@ -180,8 +192,15 @@ export const scope3Handlers = [
     const row = categories.find((c) => c.ghg_category === n);
     if (!row) return error("GHG_CATEGORY_INVALID", 400, "The GHG Protocol category must be a number from 1 to 15.");
     const body = await request.json();
+    if (!BOUNDARY_STATUSES.includes(body.status)) return invalid("status", "Status must be included, excluded, not_relevant or screening.");
     if (needsReason(body.status, body.reason)) return error("EXCLUSION_REASON_REQUIRED", 400, "Give a reason for excluding this category.");
-    Object.assign(row, { ...body, reason: body.status === "included" ? null : body.reason, updated_at: new Date().toISOString() });
+    Object.assign(row, {
+      status: body.status,
+      reason: body.status === "included" ? null : body.reason,
+      method_note: body.method_note ?? row.method_note,
+      relevance: body.relevance ?? row.relevance,
+      updated_at: new Date().toISOString(),
+    });
     return HttpResponse.json(row);
   }),
   http.get("*/scope3/category-map", () =>
@@ -190,7 +209,11 @@ export const scope3Handlers = [
       { category_id: 13, company_id: COMPANY_ID, ghg_category: 6, confidence: 0.64, confirmed_by: null, confirmed_at: null, name: "Hotel nights" },
     ]),
   ),
-  http.post("*/scope3/category-map", async ({ request }) => HttpResponse.json({ ...(await request.json() as object), confirmed_by: 4, confirmed_at: new Date().toISOString() })),
+  http.post<never, Pick<CategoryGhgMapProposal, "category_id" | "ghg_category">>("*/scope3/category-map", async ({ request }) => {
+    const { category_id, ghg_category } = await request.json();
+    const proposal: CategoryGhgMapProposal = { category_id, ghg_category, company_id: COMPANY_ID, confidence: 1, confirmed_by: 4, confirmed_at: new Date().toISOString() };
+    return HttpResponse.json(proposal);
+  }),
   http.put<{ id: string }, { consolidation_approach: ConsolidationApproach }>("*/company/:id/consolidation-approach", async ({ request }) => {
     consolidation = (await request.json()).consolidation_approach;
     return HttpResponse.json({ company_id: COMPANY_ID, consolidation_approach: consolidation });
@@ -199,21 +222,33 @@ export const scope3Handlers = [
   // S3-6 suppliers
   http.get("*/suppliers", () => HttpResponse.json(suppliers)),
   http.post<never, Omit<Supplier, "supplier_id" | "company_id">>("*/suppliers", async ({ request }) => {
-    const supplier: Supplier = { supplier_id: Math.max(0, ...suppliers.map((s) => s.supplier_id)) + 1, company_id: COMPANY_ID, ...(await request.json()) };
+    const { name, country, email } = await request.json();
+    if (!name?.trim()) return invalid("name", "A supplier needs a name.");
+    const supplier: Supplier = { supplier_id: Math.max(0, ...suppliers.map((x) => x.supplier_id)) + 1, company_id: COMPANY_ID, name, country: country ?? null, email: email ?? null, created_by: 4 };
     suppliers.push(supplier);
     return HttpResponse.json(supplier, { status: 201 });
   }),
   http.put<{ id: string }, Partial<Supplier>>("*/suppliers/:id", async ({ params, request }) => {
     const supplier = suppliers.find((s) => s.supplier_id === Number(params.id));
-    if (!supplier) return HttpResponse.json({ message: "Supplier not found" }, { status: 404 });
-    Object.assign(supplier, await request.json());
+    if (!supplier) return notFound("Supplier not found");
+    const { name, country, email } = await request.json();
+    if (name !== undefined) supplier.name = name;
+    if (country !== undefined) supplier.country = country;
+    if (email !== undefined) supplier.email = email;
     return HttpResponse.json(supplier);
   }),
-  http.get<{ id: string }>("*/suppliers/:id/factors", ({ params }) => HttpResponse.json(supplierFactors.filter((f) => f.supplier_id === Number(params.id)))),
+  http.get<{ id: string }>("*/suppliers/:id/factors", ({ params }) =>
+    suppliers.some((x) => x.supplier_id === Number(params.id))
+      ? HttpResponse.json(supplierFactors.filter((f) => f.supplier_id === Number(params.id)))
+      : notFound("Supplier not found"),
+  ),
   http.post<{ id: string }, Omit<SupplierFactor, "id" | "company_id" | "supplier_id" | "source">>("*/suppliers/:id/factors", async ({ params, request }) => {
+    const supplierId = Number(params.id);
+    if (!suppliers.some((x) => x.supplier_id === supplierId)) return notFound("Supplier not found");
     const body = await request.json();
     if (body.boundary !== "cradle_to_gate") return error("SUPPLIER_FACTOR_BOUNDARY", 422, "A supplier's figure must be cradle-to-gate.");
-    const factor: SupplierFactor = { id: supplierFactors.length + 1, company_id: COMPANY_ID, supplier_id: Number(params.id), source: "manual", ...body };
+    // Server-owned fields last, so a body can't set them.
+    const factor: SupplierFactor = { ...body, id: Math.max(0, ...supplierFactors.map((f) => f.id)) + 1, company_id: COMPANY_ID, supplier_id: supplierId, source: "manual" };
     supplierFactors.push(factor);
     return HttpResponse.json(factor, { status: 201 });
   }),
@@ -236,16 +271,14 @@ export const scope3Handlers = [
   // S3-13 report
   http.get("*/reports/ghg/scope3", ({ request }) => {
     const year = Number(new URL(request.url).searchParams.get("year") ?? 2026);
-    const report: Scope3Report = {
-      year,
-      total_tco2e: 21880,
-      categories: categories.map((c) => ({
-        ghg_category: c.ghg_category,
-        status: c.status,
-        reason: c.reason,
-        total_tco2e: SCREENING.find((s) => s.ghg_category === c.ghg_category && c.status === "included")?.estimate_tco2e ?? 0,
-      })),
-    };
+    // Only included categories carry a total; the report total is their sum.
+    const rows = categories.map((c) => ({
+      ghg_category: c.ghg_category,
+      status: c.status,
+      reason: c.reason,
+      total_tco2e: c.status === "included" ? (SCREENING.find((x) => x.ghg_category === c.ghg_category)?.estimate_tco2e ?? 0) : 0,
+    }));
+    const report: Scope3Report = { year, total_tco2e: rows.reduce((sum, r) => sum + r.total_tco2e, 0), categories: rows };
     return HttpResponse.json(report);
   }),
 
@@ -256,33 +289,47 @@ export const scope3Handlers = [
     return HttpResponse.json(baseYear);
   }),
   http.get("*/scope3/recalculations", () => HttpResponse.json(recalculations)),
-  http.post<never, { reason?: string; affected_years?: number[]; note?: string | null }>("*/scope3/recalculations", async ({ request }) => {
+  http.post<never, Partial<PostRecalculationBody>>("*/scope3/recalculations", async ({ request }) => {
     const body = await request.json();
     const reason = RECALCULATION_REASONS.find((r) => r === body.reason);
     if (!reason) return error("RECALCULATION_REASON_REQUIRED", 400, "Give a reason for the recalculation.");
-    const event: RecalculationEvent = { id: recalculations.length + 1, company_id: COMPANY_ID, reason, affected_years: body.affected_years ?? [], note: body.note ?? null, status: "proposed", created_at: new Date().toISOString() };
+    if (!body.affected_years?.length) return invalid("affected_years", "Name at least one affected year.");
+    const event: RecalculationEvent = {
+      id: Math.max(0, ...recalculations.map((r) => r.id)) + 1,
+      company_id: COMPANY_ID,
+      reason,
+      affected_years: body.affected_years,
+      delta_tco2e: 0,
+      note: body.note ?? null,
+      status: "proposed",
+      created_at: new Date().toISOString(),
+    };
     recalculations.push(event);
     return HttpResponse.json(event, { status: 201 });
   }),
 
   // S3-15 review: submit drafts, month locks
-  http.post<never, { ids?: number[] }>("*/user/emissions/submit", async ({ request }) => {
+  http.post<never, Partial<SubmitEmissionsBody>>("*/user/emissions/submit", async ({ request }) => {
     const ids = (await request.json()).ids ?? [];
-    if (ids.length === 0) return error("NOT_DRAFT", 409, "Only Draft entries can be submitted.");
+    if (ids.length === 0) return invalid("ids", "Choose at least one entry.");
     return HttpResponse.json({ submitted: ids, status: "pending" });
   }),
   http.get("*/periods/lock", () => HttpResponse.json(locks)),
-  http.post<never, { site_id?: number | null; year: number; month?: number | null }>("*/periods/lock", async ({ request }) => {
+  http.post<never, Partial<LockPeriodBody>>("*/periods/lock", async ({ request }) => {
     const body = await request.json();
-    const lock: PeriodLock = { company_id: COMPANY_ID, site_id: body.site_id ?? null, year: body.year, month: body.month ?? null, locked_by: 4, locked_at: new Date().toISOString() };
+    if (!body.year) return invalid("year", "Give the year to lock.");
+    const year = body.year;
+    const same = (l: PeriodLock) => l.site_id === (body.site_id ?? null) && l.year === year && l.month === (body.month ?? null) && !l.reopened_at;
+    if (locks.some(same)) return error("PERIOD_LOCKED", 409, "This month is closed. Reopen it with a reason to change its data.");
+    const lock: PeriodLock = { company_id: COMPANY_ID, site_id: body.site_id ?? null, year, month: body.month ?? null, locked_by: 4, locked_at: new Date().toISOString() };
     locks.push(lock);
     return HttpResponse.json(lock, { status: 201 });
   }),
-  http.post<never, { site_id?: number | null; year: number; month?: number | null; reason?: string }>("*/periods/unlock", async ({ request }) => {
+  http.post<never, Partial<UnlockPeriodBody>>("*/periods/unlock", async ({ request }) => {
     const body = await request.json();
     if (!body.reason?.trim()) return error("UNLOCK_REASON_REQUIRED", 400, "Give a reason for reopening this month.");
     const lock = locks.find((l) => l.site_id === (body.site_id ?? null) && l.year === body.year && l.month === (body.month ?? null) && !l.reopened_at);
-    if (!lock) return HttpResponse.json({ message: "That month isn't locked." }, { status: 404 });
+    if (!lock) return notFound("That month isn't locked.");
     Object.assign(lock, { reopened_by: 4, reopened_at: new Date().toISOString(), reopened_reason: body.reason });
     return HttpResponse.json(lock);
   }),
