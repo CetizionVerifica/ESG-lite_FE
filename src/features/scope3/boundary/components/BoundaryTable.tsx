@@ -55,6 +55,12 @@ export function BoundaryTable({ categories, drafts, editable, showErrors, onChan
                     <div className="min-w-0">
                       <div className="font-medium text-ink">{c.name}</div>
                       <div className="text-xs text-muted">{DIRECTION_LABEL[c.direction]}</div>
+                      {/* S3-9: the commuting survey behind Category 7. */}
+                      {c.n === 7 && (
+                        <Link to="/settings/scope3/commuting" className={cn(focusRing, "rounded-control text-xs font-medium text-brand hover:underline")}>
+                          Commuting survey
+                        </Link>
+                      )}
                       {/* S3-11: the investments register behind Category 15. */}
                       {c.n === 15 && (
                         <Link to="/settings/scope3/investments" className={cn(focusRing, "rounded-control text-xs font-medium text-brand hover:underline")}>

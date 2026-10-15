@@ -190,8 +190,18 @@ export function autoEmissionCategory(m: FormModel, row: ModalRow): { key: string
   const parts: string[] = [];
   const walk = (colName: string): boolean => {
     const value = rowValue(row, colName);
-    if (!value) return false;
     const entity = columnByName(m, colName);
+    if (!value) {
+      // A dependent select with nothing to choose for its parent (Rail has no
+      // radiative-forcing choice) ends the chain instead of blocking it.
+      // Read the column's own parent (and grandparent) from the row, not the
+      // last value walked: a sibling branch may have been walked in between.
+      const parent = parentColumnOf(m, colName);
+      const parentValue = parent ? rowValue(row, parent) : undefined;
+      const grandparent = parent ? parentColumnOf(m, parent) : null;
+      const grandValue = grandparent ? rowValue(row, grandparent) : undefined;
+      return !!entity && !!parentValue && !columnOptionsFor(m, entity, String(parentValue), grandValue ? String(grandValue) : undefined).length;
+    }
     parts.push(entity ? optionLabel(m, entity, String(value), parts[parts.length - 1]) : String(value));
     for (const [child, parent] of Object.entries(m.dependencies)) {
       if (parent === colName && !walk(child)) return false;
@@ -209,10 +219,18 @@ export function autoEmissionCategory(m: FormModel, row: ModalRow): { key: string
 
 /**
  * Whether a column shows in this row. Spec categories hide numeric fields the
- * chosen method doesn't multiply (all of them until a method is chosen;
+ * chosen method doesn't multiply or divide by (all of them until a method is chosen;
  * per_unit shows every one a unit could use until the unit is chosen).
  */
 export function isColumnVisible(m: FormModel, col: ColumnEntity, row: ModalRow): boolean {
+  // A dependent select with nothing to offer for the chosen parent is hidden
+  // (a rail class has no radiative-forcing choice); the mapping walk skips it too.
+  const parent = parentColumnOf(m, col.column_name);
+  const parentValue = parent ? rowValue(row, parent) : undefined;
+  if (parent && parentValue) {
+    const grandparent = parentColumnOf(m, parent);
+    if (!columnOptionsFor(m, col, parentValue, grandparent ? rowValue(row, grandparent) : undefined).length) return false;
+  }
   if (!m.spec || col.column_type !== "number" || isSelectColumn(m, col)) return true;
   const resolved = resolveSpecMethod(m.spec, row);
   if (!resolved) return m.spec.mode === "per_unit" ? specNumericColumns(m.spec).has(col.column_name) : false;
@@ -253,7 +271,7 @@ export function applyChange(m: FormModel, row: ModalRow, column: string, value: 
 
   if (m.spec && column === m.spec.method_column) {
     const method = m.spec.methods[String(value)];
-    const applicable = new Set(method?.multiply ?? []);
+    const applicable = new Set([...(method?.multiply ?? []), ...(method?.divide ?? [])]);
     m.columns.forEach((c) => {
       if (c.column_type === "number" && !applicable.has(c.column_name) && next[c.column_name] !== undefined) {
         next[c.column_name] = "";

@@ -11,6 +11,8 @@ type Props = {
   error?: string;
   /** Shown after the label, e.g. Add data's "AI" chip on a value read from a bill. */
   labelExtra?: ReactNode;
+  /** Help line under a select or number field. */
+  help?: string;
 };
 
 const toNumber = (text: unknown): number | null => {
@@ -19,7 +21,7 @@ const toNumber = (text: unknown): number | null => {
 };
 
 /** One ColumnConfig column: a (dependent) select, a number or text. */
-export function DynamicField({ model, column, row, onChange, error, labelExtra }: Props) {
+export function DynamicField({ model, column, row, onChange, error, labelExtra, help }: Props) {
   const name = column.column_name;
   const title = columnTitle(name);
   const label = labelExtra ? (
@@ -47,6 +49,7 @@ export function DynamicField({ model, column, row, onChange, error, labelExtra }
         placeholder={`Select ${title.toLowerCase()}`}
         emptyText={waiting && parent ? `Select ${columnTitle(parent).toLowerCase()} first` : "No options"}
         disabled={waiting}
+        help={help}
       />
     );
   }
@@ -59,6 +62,7 @@ export function DynamicField({ model, column, row, onChange, error, labelExtra }
         onChange={(n) => onChange(name, n === null ? "" : String(n))}
         min={0}
         error={error}
+        help={help}
       />
     );
   }
