@@ -604,8 +604,8 @@ exports[`Context 3 · Dubai × Upstream transport · yearly FY 2025-26 (per_unit
     "expectedUnit": "tonne.km",
     "factorId": 10,
     "result": {
-      "status": "Unit mismatch - this option is per tonne.km; choose the [Tonne KM] option or switch the unit to tonne.km",
-      "value": null,
+      "status": "ok",
+      "value": 749,
     },
     "row": {
       "activity_data_unit": "Tonne KM",
@@ -620,8 +620,8 @@ exports[`Context 3 · Dubai × Upstream transport · yearly FY 2025-26 (per_unit
     "expectedUnit": "tonne.km",
     "factorId": 10,
     "result": {
-      "status": "Unit mismatch - this option is per tonne.km; choose the [tkm] option or switch the unit to tonne.km",
-      "value": null,
+      "status": "ok",
+      "value": 749,
     },
     "row": {
       "activity_data_unit": "tkm",
@@ -652,8 +652,8 @@ exports[`Context 3 · Dubai × Upstream transport · yearly FY 2025-26 (per_unit
     "expectedUnit": "km",
     "factorId": 11,
     "result": {
-      "status": "Unit mismatch - this option is per km; choose the [kms] option or switch the unit to km",
-      "value": null,
+      "status": "ok",
+      "value": 315,
     },
     "row": {
       "activity_data_unit": "kms",
