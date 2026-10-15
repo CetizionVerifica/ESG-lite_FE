@@ -486,6 +486,7 @@ export const scope3Handlers = [
     nothing.push(mark);
     return HttpResponse.json(mark, { status: 201 });
   }),
+  // data-loss-reviewed: a test mock; it removes a "Nothing this month" mark from in-memory sample data, never a real record.
   http.delete("*/user/my-month/nothing", async ({ request }) => {
     const body = (await request.json()) as Partial<NothingThisMonthBody>;
     nothing = nothing.filter((n) => !(n.site_id === body.site_id && n.category_id === body.category_id && n.month === body.month));
