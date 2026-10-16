@@ -1,3 +1,16 @@
+import { BOUNDARY_STATUS_LABEL, CONSOLIDATION_LABEL, isConsolidationApproach } from "../../lib/scope3/boundary";
+import {
+  NOT_RECORDED,
+  NOT_TRACKED,
+  RF_LABEL,
+  SCOPE3_TOTAL_NOTE,
+  type Scope3Report,
+  datasetText,
+  gwpText,
+  hasScope3,
+  methodMixText,
+  rowLabel,
+} from "../../lib/scope3/report";
 import type {
   GhgDetailsRow,
   GhgReportTablesRequest,
@@ -486,6 +499,13 @@ export function pdfParams(q: ReportQuery): Record<string, string> {
   };
 }
 
+/** Query for GET /reports/ghg/scope3 (S3-13): the PDF's filters, as JSON. */
+export function scope3Params(q: ReportQuery): Record<string, string> {
+  const params = pdfParams(q);
+  delete params.download;
+  return params;
+}
+
 /** "ghg-report-q2-fy-2024-25" from a period label. */
 export function fileStem(label: string): string {
   return `ghg-report-${label
@@ -509,6 +529,8 @@ export function exportSheets(args: {
   actions: string[];
   prevLabel: string;
   selLabel: string;
+  /** S3-13: adds "Scope 3 by category" and "Scope 3 methodology". */
+  scope3?: Scope3Report | null;
 }): { name: string; rows: Cell[][] }[] {
   const {
     figures: f,
@@ -599,6 +621,7 @@ export function exportSheets(args: {
           ]),
         ],
       });
+  if (args.scope3 && hasScope3(args.scope3)) sheets.push(...scope3Sheets(args.scope3));
   sheets.push({
     name: "Findings",
     rows: [
@@ -610,4 +633,73 @@ export function exportSheets(args: {
     ],
   });
   return sheets;
+}
+
+/** The Scope 3 sheets (S3-13): one row per GHG category plus Unmapped, then the methodology. */
+export function scope3Sheets(r: Scope3Report): { name: string; rows: Cell[][] }[] {
+  const shown = r.rows.filter((x) => x.n !== null || x.tco2e > 0 || x.mapped_categories.length > 0);
+  const t = r.tracked;
+  const approach = isConsolidationApproach(r.consolidation_approach)
+    ? CONSOLIDATION_LABEL[r.consolidation_approach]
+    : CONSOLIDATION_LABEL.operational_control;
+  return [
+    {
+      name: "Scope 3 by category",
+      rows: [
+        [
+          "Category",
+          "Status",
+          "Reason",
+          "tCO2e",
+          "Share %",
+          "Method mix",
+          "Value-chain data %",
+          "Primary data %",
+          "Data quality (1 good - 3 poor)",
+          "Biogenic CO2 tCO2e",
+          "Included activities",
+        ],
+        ...shown.map((x) => [
+          rowLabel(x),
+          x.status ? BOUNDARY_STATUS_LABEL[x.status] : "Needs a category",
+          x.reason ?? "",
+          r3(x.tco2e),
+          r3(x.share_pct),
+          t.method ? methodMixText(x) : NOT_RECORDED,
+          t.method ? r3(x.value_chain_pct) : NOT_RECORDED,
+          t.data_type ? r3(x.primary_pct) : NOT_RECORDED,
+          x.dq.overall ?? (t.dq ? "Not scored" : NOT_RECORDED),
+          x.biogenic_tco2e ?? NOT_TRACKED,
+          x.mapped_categories.map((m) => m.name).join(", "),
+        ]),
+        ["Total Scope 3", "", "", r3(r.total_tco2e), r.total_tco2e > 0 ? 100 : 0, "", "", "", "", "", ""],
+        [],
+        [SCOPE3_TOTAL_NOTE],
+      ],
+    },
+    {
+      name: "Scope 3 methodology",
+      rows: [
+        ["Organisational boundary", `${approach} approach`],
+        ["GWP values", gwpText(r.gwp_sets) ? `IPCC ${gwpText(r.gwp_sets)}, 100-year` : "Not recorded on the factors used"],
+        ["Biogenic CO2 and gases", t.biogenic ? "Reported separately per category" : NOT_TRACKED],
+        ["Base year", "No Scope 3 base year set"],
+        [],
+        ["Category", "Methods", "Data and factors", "Proxy data %", "Proxy basis", "Radiative forcing", "EEIO boundary", "GWP", "Allocation and assumptions"],
+        ...r.rows
+          .filter((x) => x.tco2e > 0 || !!x.method_note)
+          .map((x) => [
+            rowLabel(x),
+            t.method ? methodMixText(x) : NOT_RECORDED,
+            datasetText(x),
+            r3(x.proxy_pct),
+            (x.proxy_basis ?? []).join("; "),
+            x.rf ? RF_LABEL[x.rf] : "",
+            x.n === 15 && x.tco2e > 0 ? NOT_RECORDED : "",
+            x.gwp_sets.join(", ") || NOT_RECORDED,
+            x.method_note ?? "",
+          ]),
+      ],
+    },
+  ];
 }
