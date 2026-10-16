@@ -156,6 +156,24 @@ export function acceptProblem(r: SupplierRequest, form: AcceptForm, confirmBound
   return null;
 }
 
+/**
+ * S3-6: the boundary the accepted figure will carry (the one in the form, else
+ * the footprint's), and whether it only counts as the supplier's Scope 3 figure
+ * once the boundary is confirmed. Scope 3 takes cradle-to-gate figures only
+ * (SUPPLIER_FACTOR_BOUNDARY); PCF takes it either way.
+ */
+export function scope3Boundary(r: SupplierRequest, form: AcceptForm): { boundary: string | null; needsConfirm: boolean } {
+  const boundary = form.boundary ?? r.study?.boundary ?? null;
+  return { boundary, needsConfirm: !!boundary && boundary !== "cradle_to_gate" };
+}
+
+/** S3-6: the note shown after an accept that added no Scope 3 supplier figure, or null. */
+export function scope3AcceptNote(res: { scope3_warning?: { code: string; boundary: string } | null } | null | undefined): string | null {
+  const w = res?.scope3_warning;
+  if (!w) return null;
+  return `It is ${boundaryLabel(w.boundary).toLowerCase()}, so no Scope 3 supplier figure was created. To count it for Category 1, add it on the Suppliers page and confirm the boundary there.`;
+}
+
 export type AskForm = {
   study_id: number | null;
   input_id: number | null;
