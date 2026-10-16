@@ -154,6 +154,17 @@ export function useEntryRows(model: FormModel | null, draftKey: string | null) {
     dispatch({ type: "sent" });
   }, [clearDraft]);
 
+  /**
+   * "Add another category" after a send: drop the sent rows and the draft now.
+   * Waiting for the context to change isn't enough: the URL update is a
+   * transition, and picking the same category again quickly can skip the
+   * render without a category, so the sent rows would come back as new ones.
+   */
+  const startAnother = useCallback(() => {
+    clearDraft();
+    dispatch({ type: "forget" });
+  }, [clearDraft]);
+
   // A bill read finishing after the site, category or period changed must not
   // land in the new context's rows.
   const keyRef = useRef(draftKey);
@@ -166,7 +177,7 @@ export function useEntryRows(model: FormModel | null, draftKey: string | null) {
   // Rows of another context are never handed out (they'd show in the unsaved
   // guard or the period comparison while the new form loads).
   const own = state.key === draftKey;
-  return { rows: own ? state.rows : NO_ROWS, sent: own && state.sent, dispatch: guarded, clearDraft, markSent };
+  return { rows: own ? state.rows : NO_ROWS, sent: own && state.sent, dispatch: guarded, clearDraft, markSent, startAnother };
 }
 
 const NO_ROWS: ModalRow[] = [];

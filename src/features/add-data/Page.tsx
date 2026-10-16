@@ -75,7 +75,7 @@ export default function AddDataPage() {
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
   // Per user: a draft survives a reload, so the next person signing in on this tab mustn't get it.
   const draftKey = contextReady ? entryDraftKey(userIdOf(user), site.site_id, category.category_id, formatEntryPeriodParam(period)) : null;
-  const { rows, sent, dispatch, clearDraft, markSent } = useEntryRows(model, draftKey);
+  const { rows, sent, dispatch, markSent, startAnother } = useEntryRows(model, draftKey);
   const evidence = useRowEvidence(draftKey);
   // Rows sent: nothing is left to lose (the draft is cleared). New rows for the
   // same context after "Add another category" are unsent again.
@@ -155,7 +155,7 @@ export default function AddDataPage() {
       onBack={() => setStep(1)}
       onFinished={markSent}
       onAnother={() => {
-        clearDraft();
+        startAnother();
         setContext({ category: null });
         setStep(0);
       }}

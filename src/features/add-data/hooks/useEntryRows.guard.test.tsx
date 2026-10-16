@@ -116,4 +116,19 @@ describe("useEntryRows", () => {
     rerender({ m: toFormModel({ ...config }) });
     expect(result.current.rows.map((r) => r.quantity)).toEqual(["5"]);
   });
+
+  it("Add another category after a send never brings the sent rows back, even for the same context", () => {
+    const { result, rerender } = renderHook(({ key }) => useEntryRows(model, key), { initialProps: { key: SEP } });
+    act(() => result.current.dispatch({ type: "change", model, id: 1, column: "quantity", value: "1600" }));
+    act(() => result.current.markSent());
+    expect(result.current.sent).toBe(true);
+    expect(stored(SEP)).toBeNull();
+
+    // The user picks the same category again before a render without one is committed.
+    act(() => result.current.startAnother());
+    rerender({ key: SEP });
+    expect(result.current.sent).toBe(false);
+    expect(result.current.rows.map((r) => r.quantity)).toEqual([""]);
+    expect(stored(SEP)).toBeNull();
+  });
 });
