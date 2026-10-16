@@ -8,7 +8,7 @@ import type { RowIssue } from "../logic/entry";
 import type { FormModel } from "../logic/form";
 import type { EntrySetup } from "../api";
 import type { ModalRow } from "../types";
-import { EntryRow, type RowComparison } from "../components/EntryRow";
+import { type Cat3Calc, EntryRow, type RowComparison } from "../components/EntryRow";
 import { billOf } from "../logic/bill";
 import type { EntryPeriod } from "../logic/entry";
 import { rowHasInput } from "../hooks/useEntryRows";
@@ -23,7 +23,7 @@ type Props = {
   model: FormModel;
   setup: EntrySetup;
   calc: EmissionCalculator;
-  feraCalc: EmissionCalculator | null;
+  feraCalc: Cat3Calc | null;
   /** Per row of `rows`; null when the row is fine or won't be sent (an empty typed row next to bill rows). */
   issues: (RowIssue | null)[];
   /** Bills whose rows the user hasn't checked yet. */
