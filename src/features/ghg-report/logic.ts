@@ -1,3 +1,14 @@
+import { BOUNDARY_STATUS_LABEL, CONSOLIDATION_LABEL, isConsolidationApproach } from "../../lib/scope3/boundary";
+import {
+  NOT_RECORDED,
+  NOT_TRACKED,
+  SCOPE3_TOTAL_NOTE,
+  type Scope3Report,
+  datasetText,
+  gwpText,
+  methodMixText,
+  rowLabel,
+} from "../../lib/scope3/report";
 import type {
   GhgDetailsRow,
   GhgReportTablesRequest,
@@ -403,6 +414,25 @@ const fmt1 = (n: number) =>
 const pctText = (a: number, b: number) =>
   b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "—";
 
+const SCOPE_WHAT = {
+  "Scope 1": "Scope 1 (direct)",
+  "Scope 2": "Scope 2 (purchased energy)",
+  "Scope 3": "Scope 3 (value chain)",
+} as const;
+
+/**
+ * The scope with the largest total, as the PDF picks it from all three
+ * (S3-4). Ties keep the old order: Scope 2 over Scope 1, and Scope 3 only
+ * when it is strictly the largest.
+ */
+export function dominantScope(f: ReportFigures): { scope: keyof typeof SCOPE_WHAT; value: number } {
+  const s1 = f.selected["Scope 1"];
+  const s2 = f.selected["Scope 2"];
+  const s3 = f.selected["Scope 3"];
+  if (s3 > s1 && s3 > s2) return { scope: "Scope 3", value: s3 };
+  return s2 >= s1 ? { scope: "Scope 2", value: s2 } : { scope: "Scope 1", value: s1 };
+}
+
 export function findings(
   f: ReportFigures,
   locations: LocationRow[],
@@ -410,8 +440,7 @@ export function findings(
   prevLabel: string,
 ): string[] {
   const total = f.selected.total;
-  const s1 = f.selected["Scope 1"];
-  const s2 = f.selected["Scope 2"];
+  const dominant = dominantScope(f);
   const topSite = locations
     .filter((l) => l.selected.total > 0)
     .sort((a, b) => b.selected.total - a.selected.total)[0];
@@ -421,7 +450,7 @@ export function findings(
     topSite
       ? `${topSite.site} is the largest contributing site at ${fmt0(topSite.selected.total)} tCO₂e (${pctText(topSite.selected.total, total)} of total).`
       : "",
-    `${s2 >= s1 ? "Scope 2 (purchased energy)" : "Scope 1 (direct)"} dominates the footprint at ${pctText(Math.max(s1, s2), total)}, indicating the highest-leverage reduction pathway.`,
+    `${SCOPE_WHAT[dominant.scope]} dominates the footprint at ${pctText(dominant.value, total)}, indicating the highest-leverage reduction pathway.`,
     top
       ? `${top.name} is the single largest emission source (${pctText(top.value, total)}).`
       : "",
@@ -465,6 +494,13 @@ export function pdfParams(q: ReportQuery): Record<string, string> {
   };
 }
 
+/** Query for GET /reports/ghg/scope3 (S3-13): the PDF's filters, as JSON. */
+export function scope3Params(q: ReportQuery): Record<string, string> {
+  const params = pdfParams(q);
+  delete params.download;
+  return params;
+}
+
 /** "ghg-report-q2-fy-2024-25" from a period label. */
 export function fileStem(label: string): string {
   return `ghg-report-${label
@@ -488,6 +524,8 @@ export function exportSheets(args: {
   actions: string[];
   prevLabel: string;
   selLabel: string;
+  /** S3-13: adds "Scope 3 by category" and "Scope 3 methodology". */
+  scope3?: Scope3Report | null;
 }): { name: string; rows: Cell[][] }[] {
   const {
     figures: f,
@@ -578,6 +616,7 @@ export function exportSheets(args: {
           ]),
         ],
       });
+  if (args.scope3) sheets.push(...scope3Sheets(args.scope3));
   sheets.push({
     name: "Findings",
     rows: [
@@ -589,4 +628,70 @@ export function exportSheets(args: {
     ],
   });
   return sheets;
+}
+
+/** The Scope 3 sheets (S3-13): one row per GHG category plus Unmapped, then the methodology. */
+export function scope3Sheets(r: Scope3Report): { name: string; rows: Cell[][] }[] {
+  const shown = r.rows.filter((x) => x.n !== null || x.tco2e > 0 || x.mapped_categories.length > 0);
+  const t = r.tracked;
+  const approach = isConsolidationApproach(r.consolidation_approach)
+    ? CONSOLIDATION_LABEL[r.consolidation_approach]
+    : CONSOLIDATION_LABEL.operational_control;
+  return [
+    {
+      name: "Scope 3 by category",
+      rows: [
+        [
+          "Category",
+          "Status",
+          "Reason",
+          "tCO2e",
+          "Share %",
+          "Method mix",
+          "Value-chain data %",
+          "Primary data %",
+          "Data quality (1 good - 3 poor)",
+          "Biogenic CO2 tCO2e",
+          "Included activities",
+        ],
+        ...shown.map((x) => [
+          rowLabel(x),
+          x.status ? BOUNDARY_STATUS_LABEL[x.status] : "Needs a category",
+          x.reason ?? "",
+          r3(x.tco2e),
+          r3(x.share_pct),
+          t.method ? methodMixText(x) : NOT_RECORDED,
+          t.method ? r3(x.value_chain_pct) : NOT_RECORDED,
+          t.data_type ? r3(x.primary_pct) : NOT_RECORDED,
+          x.dq.overall ?? (t.dq ? "Not scored" : NOT_RECORDED),
+          x.biogenic_tco2e ?? NOT_TRACKED,
+          x.mapped_categories.map((m) => m.name).join(", "),
+        ]),
+        ["Total Scope 3", "", "", r3(r.total_tco2e), r.total_tco2e > 0 ? 100 : 0, "", "", "", "", "", ""],
+        [],
+        [SCOPE3_TOTAL_NOTE],
+      ],
+    },
+    {
+      name: "Scope 3 methodology",
+      rows: [
+        ["Organisational boundary", `${approach} approach`],
+        ["GWP values", gwpText(r.gwp_sets) ? `IPCC ${gwpText(r.gwp_sets)}, 100-year` : "Not recorded on the factors used"],
+        ["Biogenic CO2 and gases", t.biogenic ? "Reported separately per category" : NOT_TRACKED],
+        ["Base year", "No Scope 3 base year set"],
+        [],
+        ["Category", "Methods", "Data and factors", "Proxy data %", "GWP", "Assumptions"],
+        ...r.rows
+          .filter((x) => x.tco2e > 0 || !!x.method_note)
+          .map((x) => [
+            rowLabel(x),
+            t.method ? methodMixText(x) : NOT_RECORDED,
+            datasetText(x),
+            r3(x.proxy_pct),
+            x.gwp_sets.join(", ") || NOT_RECORDED,
+            x.method_note ?? "",
+          ]),
+      ],
+    },
+  ];
 }

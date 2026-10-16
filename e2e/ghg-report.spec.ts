@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { type Page, expect, test } from "@playwright/test";
 
 /**
@@ -48,8 +49,59 @@ function tables(body: Body, empty = false) {
   };
 }
 
+const S3_NAMES = [
+  "Purchased goods and services",
+  "Capital goods",
+  "Fuel- and energy-related activities",
+  "Upstream transportation and distribution",
+  "Waste generated in operations",
+  "Business travel",
+  "Employee commuting",
+  "Upstream leased assets",
+  "Downstream transportation and distribution",
+  "Processing of sold products",
+  "Use of sold products",
+  "End-of-life treatment of sold products",
+  "Downstream leased assets",
+  "Franchises",
+  "Investments",
+];
+
+/** GET /reports/ghg/scope3 (S3-13): Cat 1 and 6 with emissions, Cat 9 excluded, 13–15 not relevant. */
+function scope3Report() {
+  const row = (n: number | null) => ({
+    n,
+    name: n === null ? "Unmapped" : S3_NAMES[n - 1],
+    direction: n === null ? null : n <= 8 ? "upstream" : "downstream",
+    status: n === null ? null : n === 9 ? "excluded" : n >= 13 ? "not_relevant" : n === 1 || n === 6 ? "included" : "screening",
+    reason: n === 9 ? "Customers collect at the gate" : n !== null && n >= 13 ? "No leased-out assets, franchises or investments" : null,
+    method_note: n === 1 ? "Spend for services, supplier figures for steel" : null,
+    tco2e: n === 1 ? 45 : n === 6 ? 15 : 0,
+    share_pct: n === 1 ? 75 : n === 6 ? 25 : 0,
+    methods: n === 1 ? { supplier_specific: 60, spend_based: 40 } : n === 6 ? { distance_based: 100 } : {},
+    primary_pct: n === 1 ? 60 : 0,
+    value_chain_pct: n === 1 ? 60 : 0,
+    proxy_pct: 0,
+    dq: n === 1 ? { overall: 1.8, good_pct: 30, fair_pct: 70, poor_pct: 0 } : { overall: null, good_pct: 0, fair_pct: 0, poor_pct: 0 },
+    datasets: n === 6 ? [{ dataset: "DEFRA", version: "2025", factor_type: "life_cycle" }] : [],
+    gwp_sets: n === 6 ? ["AR6"] : [],
+    biogenic_tco2e: null,
+    mapped_categories: n === 1 ? [{ category_id: 30, name: "Steel" }] : n === 6 ? [{ category_id: 31, name: "Flights" }] : [],
+  });
+  return {
+    company_id: 1,
+    consolidation_approach: "financial_control",
+    period: { label: "CY2025", year: 2025, year_type: "CY" },
+    total_tco2e: 60,
+    gwp_sets: ["AR6"],
+    tracked: { method: true, dq: true, data_type: true, proxy: false, biogenic: false, gases: false, total_kgco2e: false },
+    rows: [...Array.from({ length: 15 }, (_, i) => row(i + 1)), row(null)],
+  };
+}
+
 async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
   const bodies: Body[] = [];
+  const scope3: URLSearchParams[] = [];
   const details: Body[] = [];
   const pdf: { query: URLSearchParams; auth: string }[] = [];
   await page.addInitScript((u) => {
@@ -69,6 +121,10 @@ async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       if (path.endsWith("/user/reporting-calendar")) return json({ fiscalYearStartMonth: 4, fiscalYearRule: "" });
+      if (path.endsWith("/reports/ghg/scope3")) {
+        scope3.push(url.searchParams);
+        return json(scope3Report());
+      }
       if (path.endsWith("/reports/ghg")) {
         pdf.push({ query: url.searchParams, auth: route.request().headers()["authorization"] ?? "" });
         return route.fulfill({ status: 200, contentType: "application/pdf", body: "%PDF-1.4 test" });
@@ -95,7 +151,7 @@ async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
       return json({});
     },
   );
-  return { bodies, details, pdf, last: () => bodies[bodies.length - 1] };
+  return { bodies, details, pdf, scope3, last: () => bodies[bodies.length - 1] };
 }
 
 test("a manager compares a year with the last one and narrows it live", async ({ page }) => {
@@ -199,6 +255,47 @@ test("the branded PDF downloads with the auth header, not a token in the URL", a
   expect((await xlsx).suggestedFilename()).toBe("ghg-report-june-2024.xlsx");
   // The export loads the detail rows for the period on screen, even from the Summary tab.
   expect(details.at(-1)).toEqual({ siteIds: [1, 2], yearType: "FY", year: 2025, frequency: "monthly", month: 6 });
+});
+
+test("Scope 3 by GHG category, its exclusions, the Methodology tab and the XLSX sheets (S3-13)", async ({ page }) => {
+  const { scope3 } = await signIn(page);
+  await page.goto("/reports/ghg?year=2025&tab=scope3");
+
+  const table = page.getByRole("table", { name: "Scope 3 emissions by GHG Protocol category" });
+  // 15 categories (Unmapped is hidden while it has nothing) plus the header row.
+  await expect(table.getByRole("row")).toHaveCount(16);
+  await expect(table.getByRole("row", { name: /1 · Purchased goods/ })).toContainText("Supplier's own figure 60%, From the amount spent 40%");
+  await expect(table.getByRole("row", { name: /1 · Purchased goods/ })).toContainText("Fair · 1.8");
+  await expect(page.getByText("Customers collect at the gate")).toBeVisible();
+  expect(Object.fromEntries(scope3[0])).toEqual({ siteIds: "1,2", yearType: "CY", year: "2025", frequency: "yearly" });
+
+  // Methodology tab, reached with the keyboard from the Scope 3 tab.
+  await page.getByRole("tab", { name: "Scope 3", exact: true }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "Methodology", selected: true })).toBeFocused();
+  await expect(page).toHaveURL(/tab=methodology/);
+  await expect(page.getByText("Financial control approach.")).toBeVisible();
+  await expect(page.getByText("100-year GWP values from IPCC AR6.")).toBeVisible();
+  await expect(page.getByText("Spend for services, supplier figures for steel")).toBeVisible();
+  await expect(page.getByText("No Scope 3 base year set.")).toBeVisible();
+
+  // The XLSX carries both Scope 3 sheets.
+  const xlsx = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export tables" }).click();
+  const file = await (await xlsx).path();
+  const XLSX = await import("xlsx");
+  const book = XLSX.read(await readFile(file!));
+  expect(book.SheetNames).toEqual(expect.arrayContaining(["Scope 3 by category", "Scope 3 methodology"]));
+  const rows = XLSX.utils.sheet_to_json<string[]>(book.Sheets["Scope 3 by category"], { header: 1 });
+  expect(rows[9][2]).toBe("Customers collect at the gate");
+});
+
+test("the SBTi 67 % hint shows when Scope 3 is at least 40 % of the total", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/reports/ghg?year=2025&tab=scope3");
+  // The fixture report has 60 t of Scope 3 against a 100 t page total (60 %).
+  await expect(page.getByText("SBTi near-term targets must cover at least 67 % of Scope 3.")).toBeVisible();
+  await expect(page.getByText(/Category 1 covers 75 %/)).toBeVisible();
 });
 
 test("a superadmin reports on the picked client's sites only", async ({ page }) => {

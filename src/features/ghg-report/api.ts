@@ -13,10 +13,12 @@ import {
 } from "../../services/ghgreportService";
 import { getSites } from "../../services/siteService";
 import { reportingCalendarKey } from "../../lib/fiscalYear";
+import type { Scope3Report } from "../../lib/scope3/report";
 import {
   type ReportQuery,
   type SiteOption,
   pdfParams,
+  scope3Params,
   readBlobError,
   requestPayload,
 } from "./logic";
@@ -27,6 +29,8 @@ export const keys = {
     [...keys.all, "tables", requestPayload(q)] as const,
   details: (q: ReportQuery) =>
     [...keys.all, "details", requestPayload(q)] as const,
+  scope3: (q: ReportQuery) =>
+    [...keys.all, "scope3", requestPayload(q)] as const,
   calendar: reportingCalendarKey,
   adminSites: ["admin", "sites"] as const,
 };
@@ -76,6 +80,24 @@ export function useReportDetails(q: ReportQuery | null, enabled: boolean) {
     enabled: enabled && !!q && q.siteIds.length > 0,
     placeholderData: keepPreviousData,
   });
+}
+
+const getScope3 = async (q: ReportQuery) =>
+  (await api.get<Scope3Report>("/reports/ghg/scope3", { params: scope3Params(q) })).data;
+
+/** Scope 3 by GHG Protocol category (S3-13), for the Scope 3 and Methodology tabs. */
+export function useScope3Report(q: ReportQuery | null, enabled: boolean) {
+  return useQuery<Scope3Report>({
+    queryKey: q ? keys.scope3(q) : [...keys.all, "scope3", null],
+    queryFn: () => getScope3(q!),
+    enabled: enabled && !!q && q.siteIds.length > 0,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** The Scope 3 report for exactly `q` (the XLSX export), from the cache when fresh. */
+export function fetchScope3Report(client: QueryClient, q: ReportQuery) {
+  return client.fetchQuery<Scope3Report>({ queryKey: keys.scope3(q), queryFn: () => getScope3(q) });
 }
 
 function save(blob: Blob, fileName: string) {
