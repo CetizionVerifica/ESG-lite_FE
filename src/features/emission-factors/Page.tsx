@@ -6,6 +6,8 @@ import {
   DataTable,
   EMPTY_FILTERS,
   EmptyState,
+  type ExportFormat,
+  exportMatrix,
   FilterBar,
   type FilterDef,
   type FilterValues,
@@ -13,6 +15,7 @@ import {
   PageHeader,
   TabPanel,
   Tabs,
+  toMatrix,
   useFilterParams,
   useToast,
   withoutParams,
@@ -20,9 +23,11 @@ import {
 } from "../../ui";
 import {
   errorMessage,
+  fetchFactorsForExport,
   useBatches,
   useCategories,
   useCompanies,
+  useCountries,
   useFactors,
   useRemoveBatch,
   useRemoveFactor,
@@ -35,12 +40,14 @@ import {
 import { FactorDrawer } from "./components/FactorDrawer";
 import { ImportDrawer } from "./components/ImportDrawer";
 import { ImportsTab } from "./components/ImportsTab";
-import { factorColumns } from "./components/columns";
+import { factorColumns, factorExportColumns } from "./components/columns";
+import { factorTypeLabel } from "../../lib/scope3/factor";
 import {
   type Batch,
   type Factor,
   type FactorDraft,
   PAGE_SIZE,
+  TYPE_FILTER_VALUES,
   batchScope,
   categoriesFor,
   factorSummary,
@@ -53,7 +60,7 @@ import {
   yearOptions,
 } from "./logic";
 
-const FILTER_KEYS = ["client", "site", "category", "year"];
+const FILTER_KEYS = ["client", "site", "category", "year", "type"];
 type Tab = "factors" | "imports";
 
 /** Drops filters that no longer fit the ones above them (a site of another client, a category the site doesn't report). */
@@ -82,13 +89,14 @@ export default function EmissionFactorsPage() {
   const siteId = firstId(filters.filters.site);
   const categoryId = firstId(filters.filters.category);
   const year = firstId(filters.filters.year);
+  const factorType = filters.filters.type?.find((v) => TYPE_FILTER_VALUES.includes(v)) ?? null;
   const q = filters.q;
 
   // Page index resets whenever the filters change.
-  const filterKey = JSON.stringify([clientId, siteId, categoryId, year, q.trim()]);
+  const filterKey = JSON.stringify([clientId, siteId, categoryId, year, factorType, q.trim()]);
   const [paging, setPaging] = useState({ key: filterKey, page: 0 });
   const page = paging.key === filterKey ? paging.page : 0;
-  const query = listParams({ clientId, siteId, categoryId, year, q }, page);
+  const query = listParams({ clientId, siteId, categoryId, year, q, factorType }, page);
 
   const factors = useFactors(query);
   const sites = useSites();
@@ -104,6 +112,7 @@ export default function EmissionFactorsPage() {
 
   // Drawer: null = closed, "new" = add, a factor = edit.
   const [editing, setEditing] = useState<Factor | "new" | null>(null);
+  const countries = useCountries(editing !== null);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   // Selection, like the page index, belongs to one set of filters: changing them clears it.
   const [selection, setSelection] = useState<{ key: string; ids: (string | number)[] }>({ key: filterKey, ids: [] });
@@ -148,9 +157,10 @@ export default function EmissionFactorsPage() {
       options: categoriesFor(siteId, allSites, categories.data ?? []).map((c) => ({ value: String(c.category_id), label: c.category_name })),
     },
     { key: "year", label: "Year", multiple: false, options: yearOptions().map((y) => ({ value: String(y), label: String(y) })) },
+    { key: "type", label: "Type", multiple: false, options: TYPE_FILTER_VALUES.map((t) => ({ value: t, label: factorTypeLabel(t === "none" ? null : t) })) },
   ];
   const onFilters = (next: FilterValues) => setFilters(cascade(next, filters));
-  const filtered = !!q.trim() || !!clientId || !!siteId || !!categoryId || !!year;
+  const filtered = !!q.trim() || !!clientId || !!siteId || !!categoryId || !!year || !!factorType;
   const clearFilters = () => setParams((p) => writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS), { replace: true });
 
   const onSave = (draft: FactorDraft) => {
@@ -160,9 +170,15 @@ export default function EmissionFactorsPage() {
     save.mutate(
       { id, body: row ? toUpdatePayload(draft, row) : toPayload(draft) },
       {
-        onSuccess: () => {
+        onSuccess: (res: unknown) => {
           openDrawer(null);
-          toast({ title: id === null ? "Factor added" : "Factor saved", tone: "good" });
+          // FACTOR_TYPE_MISMATCH never blocks a save; it's said once here.
+          const warning = (res as { warnings?: { message?: string }[] } | null)?.warnings?.[0]?.message;
+          toast(
+            warning
+              ? { title: id === null ? "Factor added" : "Factor saved", description: warning, tone: "neutral" }
+              : { title: id === null ? "Factor added" : "Factor saved", tone: "good" },
+          );
         },
         onError: (e) => setSaveErr(errorMessage(e, "Nothing was saved. Try again.")),
       },
@@ -223,6 +239,16 @@ export default function EmissionFactorsPage() {
   const rows = factors.data?.data ?? [];
   const total = factors.data?.total ?? 0;
   const columns = factorColumns({ batches: batches.data, onEdit: (r) => openDrawer(r) });
+
+  // Export: every factor for the current filters (all pages), with all metadata columns.
+  const exportFactors = async (format: ExportFormat) => {
+    try {
+      const all = await fetchFactorsForExport(query);
+      await exportMatrix(toMatrix(all, factorExportColumns(columns)), "emission-factors", format);
+    } catch {
+      toast({ title: "Couldn't export", description: "Try again in a moment.", tone: "bad" });
+    }
+  };
   const empty =
     filtered ? (
       <EmptyState icon={SearchX} title="No factors match these filters." action={<Button onClick={clearFilters}>Clear filters</Button>} />
@@ -306,6 +332,7 @@ export default function EmissionFactorsPage() {
           )}
           pagination={{ mode: "server", page, pageSize: PAGE_SIZE, total, onPageChange: (p) => setPaging({ key: filterKey, page: p }) }}
           onRowClick={(r) => openDrawer(r)}
+          onExport={(f) => void exportFactors(f)}
           storageKey="p22-factors"
         />
       </TabPanel>
@@ -333,6 +360,7 @@ export default function EmissionFactorsPage() {
         defaults={{ siteId, categoryId, year }}
         sites={{ data: allSites, loading: sites.isPending }}
         categories={{ data: categories.data ?? [], loading: categories.isPending }}
+        countries={{ data: countries.data ?? [], loading: countries.isPending && editing !== null }}
         saving={save.isPending}
         error={saveErr}
         onClose={() => openDrawer(null)}
