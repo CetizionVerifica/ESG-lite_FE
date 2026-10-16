@@ -10,6 +10,8 @@ import {
   EmptyState,
   FilterBar,
   type FilterDef,
+  Scope3CategoryChip,
+  Select,
   SetupListPage,
   TextField,
   cn,
@@ -38,6 +40,7 @@ import {
   setMany,
   validateCategory,
 } from "../logic";
+import { GHG_CATEGORIES, categoryLabel } from "../../../lib/scope3/contracts";
 import { DeleteModal, DiscardModal, DrawerFooter, SaveError, type TabShell } from "./common";
 import { dash, openColumn } from "./columns";
 
@@ -130,6 +133,15 @@ export function CategoriesTab({ nav, panel }: TabShell) {
       sortValue: (r) => SCOPE_KEYS.indexOf(r.scopeKey),
       cell: (r) => <ScopePill scope={r.scopeKey} />,
     },
+    {
+      id: "ghg",
+      header: "GHG category",
+      sortable: true,
+      width: "11rem",
+      value: (r) => (r.scopeKey === "s3" ? (r.ghg_category ?? null) : null),
+      exportValue: (r) => (r.scopeKey === "s3" ? (r.ghg_category ?? "Unmapped") : null),
+      cell: (r) => (r.scopeKey === "s3" ? <Scope3CategoryChip n={r.ghg_category} /> : dash),
+    },
     { id: "sites", header: "Sites assigned", numeric: true, sortable: true, width: "8rem", value: (r) => r.siteIds.length },
     countCol("factors", "Factors", (r) => r.factors),
     countCol("configs", "Configs", (r) => r.configs),
@@ -214,6 +226,8 @@ export function CategoriesTab({ nav, panel }: TabShell) {
     </SetupListPage>
   );
 }
+
+const GHG_CATEGORY_OPTIONS = GHG_CATEGORIES.map((c) => ({ value: c.n as number, label: categoryLabel(c.n) }));
 
 const SCOPE_HELP: Record<ScopeKey, string> = {
   s1: "Direct emissions from sources the client owns or runs, like fuel and refrigerants.",
@@ -316,6 +330,16 @@ function CategoryDrawer(props: {
               </label>
             ))}
           </fieldset>
+          {draft.scope === "s3" && (
+            <Select<number>
+              label="GHG Protocol category"
+              help="The Scope 3 category this rolls up to in reports. Required for a new Scope 3 category once the category map is confirmed; until then an empty one shows as Unmapped."
+              value={draft.ghg_category}
+              options={GHG_CATEGORY_OPTIONS}
+              placeholder="Unmapped"
+              onChange={(v) => setDraft((d) => ({ ...d, ghg_category: v }))}
+            />
+          )}
           <SitePicker
             sites={props.sites}
             selected={draft.site_ids}

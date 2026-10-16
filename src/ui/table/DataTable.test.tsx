@@ -48,6 +48,31 @@ describe("DataTable", () => {
     expect(firstCell.className).toContain("font-num");
   });
 
+  it("keeps a newly added default-hidden column hidden for saved column prefs", () => {
+    // Prefs saved before the "note" column existed, with no `known` list.
+    localStorage.setItem("dt:entries", JSON.stringify({ hidden: ["t"], compact: false }));
+    const withNote: Column<Row>[] = [...columns, { id: "note", header: "Note", value: (r) => r.site, defaultHidden: true, addedLater: true }];
+    render(<DataTable label="Entries" rows={rows} columns={withNote} getRowId={(r) => r.id} storageKey="entries" />);
+    expect(screen.queryByRole("columnheader", { name: "Note" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /Emissions/ })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: /Site/ })).toBeTruthy();
+    const saved = JSON.parse(localStorage.getItem("dt:entries")!);
+    expect(saved.known).toEqual(["site", "t", "note"]);
+    cleanup();
+
+    // Once seen, the user's own choice wins: showing it again sticks.
+    localStorage.setItem("dt:entries", JSON.stringify({ ...saved, hidden: ["t"] }));
+    render(<DataTable label="Entries" rows={rows} columns={withNote} getRowId={(r) => r.id} storageKey="entries" />);
+    expect(screen.getByRole("columnheader", { name: "Note" })).toBeTruthy();
+  });
+
+  it("keeps an existing default-hidden column the user showed, for prefs saved before `known`", () => {
+    localStorage.setItem("dt:entries", JSON.stringify({ hidden: [], compact: false }));
+    const withNote: Column<Row>[] = [...columns, { id: "note", header: "Note", value: (r) => r.site, defaultHidden: true }];
+    render(<DataTable label="Entries" rows={rows} columns={withNote} getRowId={(r) => r.id} storageKey="entries" />);
+    expect(screen.getByRole("columnheader", { name: "Note" })).toBeTruthy();
+  });
+
   it("keeps cells on one line unless a column wraps, inside a positioned scroll box", () => {
     const wrapping: Column<Row>[] = [columns[0], { id: "note", header: "Note", value: (r) => r.site, wrap: true }];
     render(<DataTable label="Entries" rows={rows} columns={wrapping} getRowId={(r) => r.id} />);

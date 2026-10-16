@@ -25,6 +25,7 @@ import {
   type UploadPlan,
   detectedColumns,
   groupsOf,
+  rowTypeLabel,
   needsValueColumn,
   parseFactor,
   rowProblem,
@@ -321,6 +322,9 @@ export function PreviewStep(props: {
   const invalid = props.rows.filter((r) => !r.excluded && rowProblem(r));
   const shownKeys = props.shown.map((r) => r.key);
   const shownExcluded = props.shown.filter((r) => r.excluded).length;
+  const hasTypes = props.rows.some((r) => r.meta?.factor_type);
+  const wttRows = props.rows.filter((r) => r.wtt);
+  const wttGroups = [...new Set(wttRows.map((r) => r.group ?? ""))];
   const numberCell = (r: ImportRow, field: "year" | "factor_value", label: string) => (
     <input
       type="text"
@@ -368,6 +372,22 @@ export function PreviewStep(props: {
     { id: "factor", header: "Factor", hideable: false, value: (r) => r.factor_value, cell: (r) => numberCell(r, "factor_value", "Factor") },
     { id: "unit", header: "Unit", value: (r) => r.denominator_unit, cell: (r) => textCell(r, "denominator_unit", "Unit", "w-24") },
     { id: "source", header: "Source", value: (r) => r.source, cell: (r) => textCell(r, "source", "Source", "w-36") },
+    ...(hasTypes
+      ? [
+          {
+            id: "type",
+            header: "Type",
+            value: (r: ImportRow) => rowTypeLabel(r),
+            cell: (r: ImportRow) => (
+              <span className="flex flex-col items-start gap-1">
+                <span>{rowTypeLabel(r) || "—"}</span>
+                {r.wtt && <Badge tone="neutral">WTT kept as its own factor</Badge>}
+                {r.meta?.includes_wtt && <Badge tone="neutral">Includes WTT</Badge>}
+              </span>
+            ),
+          } satisfies Column<ImportRow>,
+        ]
+      : []),
     {
       id: "problem",
       header: "",
@@ -410,6 +430,13 @@ export function PreviewStep(props: {
       {props.plan && props.plan.notAssigned.length > 0 && (
         <Callout tone="info" title="Some sites don't report these categories">
           Skipped: {props.plan.notAssigned.map((n) => `${n.site} (${n.category})`).join(", ")}.
+        </Callout>
+      )}
+      {wttRows.length > 0 && (
+        <Callout tone="info" title="WTT kept as its own factor">
+          The sheet&apos;s well-to-tank column gives {wttRows.length} separate {wttRows.length === 1 ? "factor" : "factors"} in {wttGroups.join(", ")}.
+          {" "}They&apos;re saved only when that group is mapped to a category (usually the FERA category); otherwise they&apos;re skipped.
+          {" "}Totals that already include WTT are marked, so it isn&apos;t counted twice.
         </Callout>
       )}
       {props.saveError && (

@@ -28,6 +28,7 @@ export interface EmissionCategoryMapping {
 export interface MethodCalculation {
   multiply: string[];
   percent?: string[];
+  divide?: string[]; // S3-11
   activity_unit?: string;
 }
 
