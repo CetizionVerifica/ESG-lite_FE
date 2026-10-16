@@ -11,6 +11,7 @@ import {
   isSameCurrencyFx,
   isSpendRow,
   looksLikeCurrency,
+  needsCurrencyConversion,
   spendInputOf,
   spendOutcome,
   spendPreviewLine,
@@ -54,6 +55,26 @@ describe("spend inputs", () => {
     expect(isSpendRow({}, { factor_type: "cradle_to_gate" })).toBe(false);
   });
 
+  it("is a spend row when its amount is in a currency other than its factor's (backend needsCurrencyConversion)", () => {
+    const perUsd = { factor_type: null, denominator_unit: "USD", price_currency: null };
+    expect(isSpendRow({ activity_data_unit: "INR" }, perUsd)).toBe(true);
+    expect(isSpendRow({ activity_data_unit: "JPY" }, perUsd)).toBe(true);
+    expect(isSpendRow({ activity_data_unit: "USD" }, perUsd)).toBe(false);
+    expect(isSpendRow({ activity_data_unit: "kg" }, perUsd)).toBe(false);
+    expect(isSpendRow({ activity_data_unit: "INR" }, { factor_type: null, denominator_unit: "kg", price_currency: null })).toBe(false);
+    expect(needsCurrencyConversion("inr", perUsd)).toBe(true);
+    expect(needsCurrencyConversion("INR", null)).toBe(false);
+  });
+
+  it("previews a quantity in another currency on a per-USD factor as the engine saves it", () => {
+    const perUsd: EmissionFactor = { emission_factor_id: 2, emission_category_name: "Per USD", factor_value: 0.5, denominator_unit: "USD", year: 2025, factor_type: null, price_currency: null, price_base_year: null };
+    const input = { emissionFactors: [perUsd], reportingDate: "2026-09-30" };
+    // No fixed INR→USD factor: the stored rate of the day, as the saved total uses.
+    expect(calculateEmission(input, { id: 1, emission_category: "Per USD", quantity: "1000", activity_data_unit: "INR" }).status).toBe(SPEND_RATE_PENDING);
+    // A currency without rates is refused as the engine refuses it (CURRENCY_NOT_SUPPORTED), not "unit mismatch".
+    expect(calculateEmission(input, { id: 1, emission_category: "Per USD", quantity: "1000", activity_data_unit: "JPY" }).status).toMatch(/JPY can't be converted/);
+  });
+
   it("reads the amount, currency and invoice date; the reporting date without one", () => {
     expect(spendInputOf(row(), "2026-09-30")).toEqual({ amount: 1240000, currency: "INR", spend_date: "2026-09-03", amount_from: "spent_value" });
     expect(spendInputOf(row({ invoice_date: "" }), "2026-09-30")?.spend_date).toBe("2026-09-30");
@@ -92,6 +113,9 @@ describe("spend inputs", () => {
     expect(factorCurrency(eeio)).toBe("USD");
     expect(factorCurrency({ price_currency: null, denominator_unit: "EUR" })).toBe("EUR");
     expect(factorCurrency({ price_currency: null, denominator_unit: "kg" })).toBeNull();
+    // The unit the factor is per wins over its price currency, as on the backend.
+    expect(factorCurrency({ price_currency: "EUR", denominator_unit: "USD" })).toBe("USD");
+    expect(factorCurrency({ price_currency: "EUR", denominator_unit: "kg" })).toBe("EUR");
   });
 
   it("asks for no rate when the amount is already in the factor's currency and year", () => {
