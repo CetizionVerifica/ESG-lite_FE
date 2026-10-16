@@ -10,16 +10,16 @@ describe("nav labels (final copy from the F2 spec)", () => {
     expect(labels("Manager")).toEqual([
       "Overview",
       "Data ▾ (Approvals, Emissions ledger, Production data, Bulk upload)",
-      "Reports ▾ (GHG report, EDE report)",
+      "Reports ▾ (GHG report, EDE report, Scope 3 boundary)",
       "Targets (SBTi)",
       "Products (PCF)",
       "Team",
     ]));
-  it("Admin", () => expect(labels("Admin")).toEqual(["Users", "Bulk upload", "Brand theme"]));
+  it("Admin", () => expect(labels("Admin")).toEqual(["Users", "Bulk upload", "Brand theme", "Scope 3 boundary"]));
   it("Superadmin", () =>
     expect(labels("Superadmin")).toEqual([
       "Console",
-      "Clients ▾ (Companies, Onboard client, Brand themes)",
+      "Clients ▾ (Companies, Onboard client, Brand themes, Scope 3 boundary)",
       "Setup ▾ (Sites, Users, Countries, Categories, Units, Products)",
       "Factors ▾ (Emission factors, Category mappings, Thresholds, Material factors)",
       "Capture ▾ (Columns, Data-entry forms, Bulk upload)",

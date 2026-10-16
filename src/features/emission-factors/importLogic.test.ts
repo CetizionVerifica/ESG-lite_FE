@@ -187,7 +187,7 @@ describe("AI read", () => {
 describe("factor metadata on import (S3-2)", () => {
   it("reads the metadata columns of a simple sheet", () => {
     const { rows, errors } = parseSimpleRows([
-      { year: 2026, factor_value: "0.00012345", unit: "kg", emission_category_name: "Trace", "Factor Type": "Well-to-tank (WTT)", GWP: "ar6", dataset: "DEFRA", co2_kg: 0.0001, includes_wtt: "yes" },
+      { year: 2026, factor_value: "0.00012345", unit: "kg", emission_category_name: "Trace", "Factor Type": "Well-to-tank (WTT)", "GWP set": "ar6", dataset: "DEFRA", co2_kg: 0.0001, includes_wtt: "yes" },
       { year: 2026, factor_value: 2.68, unit: "litre", emission_category_name: "Diesel" },
     ]);
     expect(errors).toEqual([]);
@@ -200,6 +200,25 @@ describe("factor metadata on import (S3-2)", () => {
     expect(rowProblem(row("r2", { meta: { factor_type: "scope 3" } }))).toMatch(/isn't one of the factor types/);
     expect(rowProblem(row("r2", { meta: { gwp_set: "AR3" } }))).toMatch(/AR4, AR5 or AR6/);
     expect(rowProblem(row("r2", { meta: { factor_type: "combustion", gwp_set: "AR5" } }))).toBeNull();
+  });
+
+  it("leaves generic Type and GWP headers alone, as older sheets use them for other things", () => {
+    const { rows } = parseSimpleRows([{ year: 2026, factor_value: 1, unit: "kg", emission_category_name: "Coal", Type: "Fuel", GWP: 25 }]);
+    expect(rows[0].meta).toBeUndefined();
+    expect(rowProblem(rows[0])).toBeNull();
+  });
+
+  it("reads Global as GLO and gas parts as 8-dp decimals, and reports what the server would refuse", () => {
+    const { rows } = parseSimpleRows([
+      { year: 2026, factor_value: 1, unit: "kg", emission_category_name: "A", geography: "Global", ch4_kg: 1.2345678e-5, n2o_kg: "1e-7" },
+      { year: 2026, factor_value: 1, unit: "kg", emission_category_name: "B", geography: "gb", co2_kg: "-0.5" },
+      { year: 2026, factor_value: 1, unit: "kg", emission_category_name: "C", geography: "United Kingdom" },
+    ]);
+    expect(rows[0].meta).toEqual({ geography: "GLO", ch4_kg: "0.00001235", n2o_kg: "0.0000001" });
+    expect(rowProblem(rows[0])).toBeNull();
+    expect(rows[1].meta?.geography).toBe("GB");
+    expect(rowProblem(rows[1])).toMatch(/Gas part "-0.5" must be a number 0 or more/);
+    expect(rowProblem(rows[2])).toMatch(/Geography "UNITED KINGDOM" must be a country code/);
   });
 
   const subColumns: ParseResult = {
@@ -217,6 +236,31 @@ describe("factor metadata on import (S3-2)", () => {
     available_columns: [],
   };
 
+  it("copies gas parts only from the primary's own Direct row", () => {
+    const blend: ParseResult = {
+      ...subColumns,
+      factors: [
+        { year: 2026, factor_value: 2.0844, factor_value_text: "2.0844", denominator_unit: "litre", emission_category_name: "Petrol - Direct", sub_column: "Direct", primary: false },
+        { year: 2026, factor_value: 2.0844, factor_value_text: "2.0844", denominator_unit: "litre", emission_category_name: "Petrol", sub_column: "Total", primary: true },
+        { year: 2026, factor_value: 2.1, factor_value_text: "2.1", denominator_unit: "litre", emission_category_name: "Petrol (average biofuel blend) - Direct", sub_column: "Direct", primary: false, co2_kg: "2.1" },
+        { year: 2026, factor_value: 2.1, factor_value_text: "2.1", denominator_unit: "litre", emission_category_name: "Petrol (average biofuel blend)", sub_column: "Total", primary: true },
+      ],
+    };
+    const rows = rowsFromParse(blend);
+    expect(rows[1].meta).toBeUndefined();
+    expect(rows[3].meta).toEqual({ co2_kg: "2.1" });
+  });
+
+  it("asks for the price base year and currency on a spend (EEIO) row", () => {
+    const { rows } = parseSimpleRows([
+      { year: 2026, factor_value: 0.4, unit: "USD", emission_category_name: "Steel", factor_type: "eeio_spend" },
+      { year: 2026, factor_value: 0.4, unit: "USD", emission_category_name: "Steel", factor_type: "eeio_spend", price_base_year: 2022, price_currency: "usd" },
+    ]);
+    expect(rowProblem(rows[0])).toMatch(/needs its price base year and currency/);
+    expect(rows[1].meta).toEqual({ factor_type: "eeio_spend", price_base_year: 2022, price_currency: "USD" });
+    expect(rowProblem(rows[1])).toBeNull();
+  });
+
   it("keeps WTT as its own group and starts Direct excluded", () => {
     expect(groupsOf(subColumns)).toEqual(["", "WTT"]);
     const rows = rowsFromParse(subColumns);
@@ -226,7 +270,8 @@ describe("factor metadata on import (S3-2)", () => {
       ["Diesel", null, false, false],
     ]);
     expect(rows[0].meta).toEqual({ factor_type: "combustion", co2_kg: "2.47703" });
-    expect(rows[2].meta).toEqual({ factor_type: "life_cycle", includes_wtt: true });
+    // The kept Total takes the excluded Direct row's gas parts, so a default import keeps them.
+    expect(rows[2].meta).toEqual({ factor_type: "life_cycle", includes_wtt: true, co2_kg: "2.47703" });
     // The suggestion still lands on the sheet's single group; WTT starts skipped.
     expect(initialMap(subColumns, [1])).toEqual({ "": 1, WTT: null });
   });

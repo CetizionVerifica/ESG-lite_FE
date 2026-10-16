@@ -17,6 +17,7 @@ import {
   focusRing,
   inputBase,
 } from "../../../ui";
+import { LeaseTab } from "./LeaseTab"; // S3-11
 import {
   type AdminUser,
   type Category,
@@ -37,7 +38,7 @@ import {
   validate,
 } from "../logic";
 
-export type SiteTab = "details" | "categories" | "people" | "capture";
+export type SiteTab = "details" | "categories" | "people" | "capture" | "lease"; // S3-11: lease
 
 type Props = {
   /** The site being edited; null with `creating` for a new one. */
@@ -97,6 +98,7 @@ export function SiteDrawer(props: Props) {
     { value: "categories" as const, label: "Categories", count: draft.category_ids.length },
     { value: "people" as const, label: "People", disabled: creating, count: row && props.peopleReady ? row.users.length + row.managers.length : undefined },
     { value: "capture" as const, label: "Capture", disabled: creating },
+    { value: "lease" as const, label: "Lease", disabled: creating }, // S3-11
   ];
 
   return (
@@ -157,6 +159,10 @@ export function SiteDrawer(props: Props) {
               </TabPanel>
               <TabPanel idBase={idBase} value="capture" current={tab}>
                 <CaptureTab row={row} ready={props.configsReady} />
+              </TabPanel>
+              {/* S3-11 */}
+              <TabPanel idBase={idBase} value="lease" current={tab}>
+                <LeaseTab siteId={row.site_id} companyId={row.company?.company_id ?? null} />
               </TabPanel>
             </>
           )}

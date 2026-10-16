@@ -5,6 +5,8 @@ export interface Category {
   category_id: number;
   category_name: string;
   scope: string;
+  /** GHG Protocol category 1–15 for a Scope 3 category (S3-1), when the server sends it. */
+  ghg_category?: number | null;
 }
 
 export interface EntrySite {

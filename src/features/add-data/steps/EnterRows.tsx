@@ -30,6 +30,8 @@ type Props = {
   unconfirmedBills: number;
   siteId: number;
   categoryId: number;
+  /** GHG Protocol category (Scope 3 only): method labels and travel copy on each row. */
+  ghgCategory?: number | null;
   userId: number | null;
   period: EntryPeriod;
   draftKey: string | null;
@@ -78,6 +80,7 @@ export function EnterRows(p: Props) {
         showIssue={showIssues}
         comparison={p.comparisons[i]}
         canRemove={canRemove}
+        ghgCategory={p.ghgCategory}
         onChange={(column, value) => p.dispatch({ type: "change", model: p.model, id: row.id, column, value })}
         onExtraChange={(key, value) => p.dispatch({ type: "extra", id: row.id, key, value })}
         onDuplicate={() => p.dispatch({ type: "duplicate", id: row.id })}

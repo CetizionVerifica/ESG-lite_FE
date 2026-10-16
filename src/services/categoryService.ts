@@ -15,6 +15,8 @@ export const createCategory = async (data: {
   scope?: string | null;
   site_ids?: (string | number)[];
   assign_all_sites?: boolean;
+  /** GHG Protocol category 1–15, Scope 3 only (S3-1). */
+  ghg_category?: number | null;
 }) => {
   const response = await api.post("/admin/categories", data);
   return response.data;
@@ -27,6 +29,8 @@ export const updateCategory = async (
     scope?: string | null;
     /** Replaces the category's site assignment when sent. */
     site_ids?: (string | number)[];
+    /** GHG Protocol category 1–15, Scope 3 only (S3-1); null clears it. */
+    ghg_category?: number | null;
   }
 ) => {
   const response = await api.put(`/admin/categories/${id}`, data);

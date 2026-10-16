@@ -1,5 +1,5 @@
 // P22 Import factors: pure logic shared by the simple-sheet and AI paths. No React here.
-import { FACTOR_TYPES, FACTOR_TYPE_LABEL, GWP_SETS, type FactorType, isFactorType } from "../../lib/scope3/factor";
+import { FACTOR_TYPES, FACTOR_TYPE_LABEL, GLOBAL_GEOGRAPHY, GWP_SETS, type FactorType, isFactorType } from "../../lib/scope3/factor";
 import type { Category, Site } from "./logic";
 
 /** S3-2 metadata a sheet may carry for a factor (sent as is; the server validates it). */
@@ -15,6 +15,8 @@ export type ImportMeta = {
   other_kgco2e?: string;
   biogenic_co2_kg?: string;
   includes_wtt?: boolean;
+  price_base_year?: number;
+  price_currency?: string;
 };
 
 /** One factor read from a sheet, editable in the Preview step. */
@@ -53,9 +55,10 @@ const COLS = {
 };
 
 /** S3-2 metadata columns a simple sheet may add. */
-const META_COLS: { field: Exclude<keyof ImportMeta, "includes_wtt">; names: string[] }[] = [
-  { field: "factor_type", names: ["factor_type", "Factor Type", "Type"] },
-  { field: "gwp_set", names: ["gwp_set", "GWP Set", "GWP set", "GWP"] },
+const META_COLS: { field: Exclude<keyof ImportMeta, "includes_wtt" | "price_base_year">; names: string[] }[] = [
+  // Only named headers: a generic "Type" or "GWP" column on an older sheet means something else.
+  { field: "factor_type", names: ["factor_type", "Factor Type", "Factor type"] },
+  { field: "gwp_set", names: ["gwp_set", "GWP Set", "GWP set"] },
   { field: "geography", names: ["geography", "Geography"] },
   { field: "dataset", names: ["dataset", "Dataset"] },
   { field: "dataset_version", names: ["dataset_version", "Dataset Version", "Dataset version"] },
@@ -64,8 +67,34 @@ const META_COLS: { field: Exclude<keyof ImportMeta, "includes_wtt">; names: stri
   { field: "n2o_kg", names: ["n2o_kg", "N2O kg", "kg N2O"] },
   { field: "other_kgco2e", names: ["other_kgco2e", "Other kgCO2e"] },
   { field: "biogenic_co2_kg", names: ["biogenic_co2_kg", "Biogenic CO2 kg"] },
+  { field: "price_currency", names: ["price_currency", "Price currency"] },
 ];
+const PRICE_YEAR_COLS = ["price_base_year", "Price base year"];
 const WTT_COLS = ["includes_wtt", "Includes WTT"];
+
+const GAS_FIELDS = ["co2_kg", "ch4_kg", "n2o_kg", "other_kgco2e", "biogenic_co2_kg"] as const;
+/** What ESG-lite accepts for a gas part (numeric(18,8), no sign, no exponent). */
+const GAS_TEXT = /^\d{1,10}(\.\d{1,8})?$/;
+/** What ESG-lite accepts for a geography: a country code or GLO. */
+const GEOGRAPHY_TEXT = /^[A-Z0-9][A-Z0-9-]{1,15}$/;
+
+/**
+ * A gas part as ESG-lite stores it: a plain decimal rounded to 8 places.
+ * Text that isn't a number 0 or more is returned as written, for rowProblem to report.
+ */
+export function gasText(cell: unknown): string {
+  const raw = String(cell ?? "").trim();
+  const n = typeof cell === "number" ? cell : parseFactor(raw);
+  if (!Number.isFinite(n) || n < 0) return raw;
+  const fixed = n.toFixed(8).replace(/\.?0+$/, "");
+  return fixed === "" ? "0" : fixed;
+}
+
+/** "Global" and "World" are the drawer's Global option (GLO); anything else is upper-cased. */
+export function geographyText(cell: unknown): string {
+  const s = String(cell ?? "").trim().toUpperCase();
+  return s === "GLOBAL" || s === "WORLD" ? GLOBAL_GEOGRAPHY : s;
+}
 
 /** A type cell: the key ("wtt") or its label ("Well-to-tank (WTT)"), any case; anything else is kept to be reported. */
 export function readFactorType(cell: unknown): string {
@@ -80,8 +109,21 @@ function readMeta(r: Record<string, unknown>): ImportMeta | undefined {
   for (const { field, names } of META_COLS) {
     const v = pick(r, names);
     if (v === undefined) continue;
-    meta[field] = field === "factor_type" ? readFactorType(v) : field === "gwp_set" ? String(v).trim().toUpperCase() : String(v).trim();
+    meta[field] =
+      field === "factor_type"
+        ? readFactorType(v)
+        : field === "gwp_set"
+          ? String(v).trim().toUpperCase()
+          : field === "geography"
+            ? geographyText(v)
+            : (GAS_FIELDS as readonly string[]).includes(field)
+              ? gasText(v)
+              : field === "price_currency"
+                ? String(v).trim().toUpperCase()
+                : String(v).trim();
   }
+  const priceYear = pick(r, PRICE_YEAR_COLS);
+  if (priceYear !== undefined) meta.price_base_year = Number(String(priceYear).trim());
   const wtt = pick(r, WTT_COLS);
   if (wtt !== undefined) meta.includes_wtt = /^(true|yes|y|1)$/i.test(String(wtt).trim());
   return Object.keys(meta).length ? meta : undefined;
@@ -147,6 +189,15 @@ export function rowProblem(r: ImportRow): string | null {
   if (t && !isFactorType(t)) return `Type "${t}" isn't one of the factor types.`;
   const g = r.meta?.gwp_set;
   if (g && !(GWP_SETS as readonly string[]).includes(g)) return "GWP set must be AR4, AR5 or AR6.";
+  // S3-0 rule, enforced by the server: a spend (EEIO) factor needs its price base year and currency.
+  if (t === "eeio_spend" && !(Number.isInteger(r.meta?.price_base_year) && /^[A-Z]{3}$/.test(r.meta?.price_currency ?? "")))
+    return "A spend (EEIO) factor needs its price base year and currency (price_base_year, price_currency columns).";
+  const geo = r.meta?.geography;
+  if (geo && !GEOGRAPHY_TEXT.test(geo)) return `Geography "${geo}" must be a country code (for example GB) or Global.`;
+  for (const k of GAS_FIELDS) {
+    const v = r.meta?.[k];
+    if (v != null && !GAS_TEXT.test(v)) return `Gas part "${v}" must be a number 0 or more, below 10,000,000,000.`;
+  }
   return null;
 }
 
@@ -328,13 +379,46 @@ export function groupsOf(p: ParseResult): string[] {
 }
 
 /** A factor of the AI read as a Preview row: exact value, its type and gas parts carried along. */
+const PARSED_GASES = ["co2_kg", "ch4_kg", "n2o_kg", "biogenic_co2_kg"] as const;
+const hasGases = (f: ParsedFactor) => PARSED_GASES.some((k) => f[k] != null);
+
+/**
+ * The AI service puts a sheet's gas columns on its "Direct" candidate, which
+ * starts excluded. The kept primary takes them when it has none of its own, so
+ * a default import doesn't drop them.
+ */
+function gasSource(p: ParseResult, f: ParsedFactor): ParsedFactor {
+  if (f.primary === false || hasGases(f)) return f;
+  const name = f.emission_category_name ?? "";
+  if (!name) return f;
+  // "<name><separator><sub-column>": only a short separator may sit between them,
+  // so "Petrol" never takes "Petrol (average biofuel blend) - Direct".
+  const isSibling = (d: ParsedFactor) => {
+    const n = d.emission_category_name ?? "";
+    const sub = d.sub_column ?? "";
+    if (!sub || !n.startsWith(name) || !n.endsWith(sub) || n.length < name.length + sub.length) return false;
+    return /^\W{1,5}$/.test(n.slice(name.length, n.length - sub.length));
+  };
+  const direct = p.factors.find(
+    (d) =>
+      d.primary === false &&
+      d.year === f.year &&
+      /\bdirect\b/i.test(d.sub_column ?? "") &&
+      (d.parent_category ?? null) === (f.parent_category ?? null) &&
+      isSibling(d) &&
+      hasGases(d),
+  );
+  return direct ?? f;
+}
+
 export function rowsFromParse(p: ParseResult): ImportRow[] {
   return p.factors.map((f, i) => {
     const exact = f.factor_value_text != null ? Number(f.factor_value_text) : NaN;
     const meta: ImportMeta = {};
     if (f.factor_type) meta.factor_type = f.factor_type;
     if (f.includes_wtt) meta.includes_wtt = true;
-    for (const k of ["co2_kg", "ch4_kg", "n2o_kg", "biogenic_co2_kg"] as const) if (f[k] != null) meta[k] = f[k]!;
+    const gases = gasSource(p, f);
+    for (const k of PARSED_GASES) if (gases[k] != null) meta[k] = gasText(gases[k]);
     const wtt = isWttCandidate(f);
     return {
       key: `a${i + 1}`,

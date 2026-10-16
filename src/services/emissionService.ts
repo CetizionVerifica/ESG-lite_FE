@@ -1,4 +1,5 @@
 import api from "../api/axios";
+import type { CheckId, RowChecks } from "../lib/scope3/checks";
 
 export type EmissionStatus = "pending" | "approved" | "rejected";
 
@@ -42,6 +43,8 @@ export interface EmissionData {
   parent_category_name?: string | null;
   /** FERA rows: status of the linked non-FERA entry; null when there is none. */
   fera_partner_status?: EmissionStatus | null;
+  /** S3-15 review checks; null while a pending row hasn't been checked; absent on older APIs. */
+  checks?: RowChecks | null;
 }
 
 export type ReportFrequency = "yearly" | "monthly";
@@ -69,6 +72,10 @@ export interface EmissionsSummary {
   attention?: number;
   /** The same count under the name ESG-lite #127 first shipped; read through `attentionOf`. */
   attention_count?: number;
+  /** S3-15: pending rows that pass every check (FERA twins folded); absent on older APIs. */
+  ready?: number;
+  /** S3-15: pending rows that don't (no checks yet counts here). */
+  held?: number;
 }
 
 export interface PaginatedEmissions {
@@ -125,6 +132,8 @@ export const getEmissionsPaginated = async (params: {
   batchId?: string | null;
   /** With `batchId`: only the rows that need attention (XI5 "Needs attention"). */
   attention?: boolean | null;
+  /** S3-15, with `status=pending`: only rows whose checks are ready (true) or not (false). */
+  ready?: boolean | null;
 }): Promise<PaginatedEmissions> => {
   const query: Record<string, string | number> = {
     page: params.page,
@@ -146,6 +155,7 @@ export const getEmissionsPaginated = async (params: {
   if (params.search?.trim()) query.search = params.search.trim();
   if (params.batchId) query.batchId = params.batchId;
   if (params.batchId && params.attention) query.attention = 1;
+  if (params.ready != null) query.ready = params.ready ? 1 : 0;
 
   const response = await api.get("/user/emissions", { params: query });
   return response.data;
@@ -232,6 +242,21 @@ export const rejectEmission = async (id: string | number, comment: string) => {
 export const bulkApproveEmissions = async (ids: number[], comment?: string) => {
   const response = await api.put("/user/emissions/bulk-approve", { ids, comment });
   return response.data;
+};
+
+export interface BulkApproveReadyResult {
+  message?: string;
+  approved: number[];
+  /** Rows not approved because their checks no longer pass. */
+  skipped: { id: number; held: CheckId[] }[];
+}
+
+/** S3-15 "Approve all ready": the server approves only rows whose checks pass and returns the rest. */
+export const bulkApproveReady = async (ids: number[], opts?: { keepalive?: boolean }): Promise<BulkApproveReadyResult> => {
+  const config = opts?.keepalive ? { adapter: "fetch" as const, fetchOptions: { keepalive: true } } : undefined;
+  const response = await api.put("/user/emissions/bulk-approve", { ids, only_ready: true }, config);
+  const data = (response.data ?? {}) as Partial<BulkApproveReadyResult>;
+  return { message: data.message, approved: Array.isArray(data.approved) ? data.approved : [], skipped: Array.isArray(data.skipped) ? data.skipped : [] };
 };
 
 export const bulkRejectEmissions = async (ids: number[], comment: string) => {

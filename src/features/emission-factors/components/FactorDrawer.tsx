@@ -55,6 +55,8 @@ export function FactorDrawer(props: Props) {
   const [draft, setDraft] = useState<FactorDraft>(() => (row ? draftFrom(row) : emptyDraft(props.defaults)));
   const [shown, setShown] = useState<DraftErrors>({});
   const [confirmClose, setConfirmClose] = useState(false);
+  // Opens when the factor already has gas parts; after that the user decides, so clearing the last part doesn't collapse it.
+  const [gasesOpen, setGasesOpen] = useState(() => Object.values(draft.gases).some((v) => v !== null));
   const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (props.error) errorRef.current?.focus();
@@ -114,7 +116,6 @@ export function FactorDrawer(props: Props) {
     props.onEdit();
   };
   const gasHint = gasSumHint(draft);
-  const hasGases = Object.values(draft.gases).some((v) => v !== null);
   const close = () => (dirty && !props.saving ? setConfirmClose(true) : props.onClose());
   const submit = () => {
     const errors = validate(draft);
@@ -212,8 +213,10 @@ export function FactorDrawer(props: Props) {
             placeholder="Not set"
             value={draft.factorType}
             onChange={(v) => set("factorType", v as FactorDraft["factorType"])}
-            options={FACTOR_TYPES.map((t) => ({ value: t, label: FACTOR_TYPE_LABEL[t] }))}
-            help="What the factor covers, e.g. direct combustion, well-to-tank or spend-based."
+            // Spend-based needs a price base year and currency, which arrive with S3-5; until then it's
+            // offered only to keep a factor that already has it.
+            options={FACTOR_TYPES.filter((t) => t !== "eeio_spend" || row?.factor_type === "eeio_spend").map((t) => ({ value: t, label: FACTOR_TYPE_LABEL[t] }))}
+            help="What the factor covers, e.g. direct combustion, well-to-tank or life cycle."
           />
           <Select<string>
             label="GWP set"
@@ -237,7 +240,7 @@ export function FactorDrawer(props: Props) {
             <TextField label="Dataset" value={draft.dataset} onChange={(v) => set("dataset", v)} help="e.g. DEFRA, IEA, USEEIO, ecoinvent." autoComplete="off" />
             <TextField label="Dataset version" value={draft.datasetVersion} onChange={(v) => set("datasetVersion", v)} help="e.g. 2025 or v3.10." autoComplete="off" />
           </div>
-          <details className="group" open={hasGases}>
+          <details className="group" open={gasesOpen} onToggle={(e) => setGasesOpen(e.currentTarget.open)}>
             <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-brand-text">
               <ChevronDown aria-hidden className="size-4 transition-transform group-open:rotate-180" />
               Gas breakdown (optional)

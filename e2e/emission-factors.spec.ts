@@ -1,4 +1,5 @@
 import { type Page, expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import * as XLSX from "xlsx";
 
 /**
@@ -317,6 +318,20 @@ test("a superadmin sets a factor's type and GWP set, and they stay after a reloa
   await chooseFilter(page, "Type", "Combustion (direct)");
   await expect(page).toHaveURL(/type=combustion/);
   await expect.poll(() => lists.at(-1)?.get("factor_type")).toBe("combustion");
+
+  // The Excel export carries Type and GWP even though the table hides them.
+  await page.getByRole("button", { name: "Export" }).click();
+  const xlsx = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Excel (.xlsx)" }).click();
+  const file = await xlsx;
+  expect(file.suggestedFilename()).toBe("emission-factors.xlsx");
+  expect(lists.at(-1)?.get("limit")).toBe("200");
+  expect(lists.at(-1)?.get("factor_type")).toBe("combustion");
+  const wb = XLSX.read(await readFile((await file.path())!));
+  const [head, first] = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+  expect(head).toEqual(expect.arrayContaining(["Type", "GWP", "Geography", "CO₂ (kg)", "Includes WTT"]));
+  expect(first[head.indexOf("Type")]).toBe("Combustion (direct)");
+  expect(first[head.indexOf("GWP")]).toBe("AR5");
 });
 
 function sheet(rows: Record<string, unknown>[]): Buffer {

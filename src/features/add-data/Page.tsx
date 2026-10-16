@@ -196,6 +196,7 @@ export default function AddDataPage() {
         unconfirmedBills={unconfirmedBills}
         siteId={site.site_id}
         categoryId={category.category_id}
+        ghgCategory={category.ghg_category}
         userId={userIdOf(user)}
         period={period}
         draftKey={draftKey}

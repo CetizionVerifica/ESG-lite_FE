@@ -1,5 +1,6 @@
 import type { EmissionStatus } from "../../../services/emissionService";
-import { type Column, StatusPill, cn, formatDate, formatEmissions, formatNumber } from "../../../ui";
+import { type Column, CheckChip, ReadyChip, StatusPill, UncheckedChip, cn, formatDate, formatEmissions, formatNumber } from "../../../ui";
+import { type CheckContext, factorYearFor, heldChip, isReady, readChecks } from "../../../lib/scope3/checks";
 import { type RowActions, RowMenu } from "./RowMenu";
 import { feraSubLabel, feraSubShort, twinsTotal } from "../../../lib/scope3/fera";
 import { type ColumnConfig, type LedgerRow, activityFields, activitySummary, quantityOf, rowPeriodLabel, scopeNumber } from "../logic";
@@ -13,14 +14,17 @@ export function ledgerColumns({
   feraOf,
   statusOf,
   actions,
+  checks,
 }: {
   configOf: (siteId: number, categoryId: number) => ColumnConfig | undefined;
   feraOf: Map<number, LedgerRow[]>;
   statusOf: (row: LedgerRow) => EmissionStatus;
   actions: RowActions;
+  /** S3-15: add the "Why it's held" column, with these values for the copy. */
+  checks?: CheckContext;
 }): Column<LedgerRow>[] {
   const fieldsOf = (r: LedgerRow) => activityFields(r, configOf(r.site?.site_id ?? 0, r.category?.category_id ?? 0));
-  return [
+  const columns: Column<LedgerRow>[] = [
     {
       id: "site",
       header: "Site",
@@ -128,4 +132,41 @@ export function ledgerColumns({
       cell: (r) => <RowMenu row={r} pending={statusOf(r) === "pending"} actions={actions} />,
     },
   ];
+  if (checks) {
+    const at = columns.findIndex((c) => c.id === "activity") + 1;
+    columns.splice(at, 0, heldColumn(checks));
+  }
+  return columns;
+}
+
+/** The factor year the "No factor for {year}" chip names (the entry's year − 1). */
+const yearOf = (r: LedgerRow) => factorYearFor(r.date_of_reporting);
+
+/** Reason chips per held row (word and icon), "Ready" when every check passed. */
+function heldColumn(ctx: CheckContext): Column<LedgerRow> {
+  const reasons = (r: LedgerRow) => readChecks(r.checks);
+  return {
+    id: "held",
+    header: "Why it's held",
+    wrap: true,
+    value: (r) => {
+      const c = reasons(r);
+      if (!c) return "Not checked yet";
+      return isReady(c) ? "Ready" : c.held.map((id) => heldChip(id, { ...ctx, year: yearOf(r) }).label).join(", ");
+    },
+    cell: (r) => {
+      const c = reasons(r);
+      if (c === undefined) return null;
+      if (c === null) return <UncheckedChip />;
+      if (isReady(c)) return <ReadyChip />;
+      return (
+        <span className="flex max-w-[18rem] flex-wrap gap-1" data-testid="held-reasons">
+          {c.held.map((id) => {
+            const chip = heldChip(id, { ...ctx, year: yearOf(r) });
+            return <CheckChip key={id} label={chip.label} hint={chip.hint} icon={chip.icon} />;
+          })}
+        </span>
+      );
+    },
+  };
 }

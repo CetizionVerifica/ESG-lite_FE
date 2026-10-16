@@ -6,6 +6,8 @@ import {
   DataTable,
   EMPTY_FILTERS,
   EmptyState,
+  type ExportFormat,
+  exportMatrix,
   FilterBar,
   type FilterDef,
   type FilterValues,
@@ -13,6 +15,7 @@ import {
   PageHeader,
   TabPanel,
   Tabs,
+  toMatrix,
   useFilterParams,
   useToast,
   withoutParams,
@@ -20,6 +23,7 @@ import {
 } from "../../ui";
 import {
   errorMessage,
+  fetchFactorsForExport,
   useBatches,
   useCategories,
   useCompanies,
@@ -36,7 +40,7 @@ import {
 import { FactorDrawer } from "./components/FactorDrawer";
 import { ImportDrawer } from "./components/ImportDrawer";
 import { ImportsTab } from "./components/ImportsTab";
-import { factorColumns } from "./components/columns";
+import { factorColumns, factorExportColumns } from "./components/columns";
 import { factorTypeLabel } from "../../lib/scope3/factor";
 import {
   type Batch,
@@ -235,6 +239,16 @@ export default function EmissionFactorsPage() {
   const rows = factors.data?.data ?? [];
   const total = factors.data?.total ?? 0;
   const columns = factorColumns({ batches: batches.data, onEdit: (r) => openDrawer(r) });
+
+  // Export: every factor for the current filters (all pages), with all metadata columns.
+  const exportFactors = async (format: ExportFormat) => {
+    try {
+      const all = await fetchFactorsForExport(query);
+      await exportMatrix(toMatrix(all, factorExportColumns(columns)), "emission-factors", format);
+    } catch {
+      toast({ title: "Couldn't export", description: "Try again in a moment.", tone: "bad" });
+    }
+  };
   const empty =
     filtered ? (
       <EmptyState icon={SearchX} title="No factors match these filters." action={<Button onClick={clearFilters}>Clear filters</Button>} />
@@ -318,6 +332,7 @@ export default function EmissionFactorsPage() {
           )}
           pagination={{ mode: "server", page, pageSize: PAGE_SIZE, total, onPageChange: (p) => setPaging({ key: filterKey, page: p }) }}
           onRowClick={(r) => openDrawer(r)}
+          onExport={(f) => void exportFactors(f)}
           storageKey="p22-factors"
         />
       </TabPanel>

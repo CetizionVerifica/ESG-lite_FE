@@ -16,6 +16,7 @@ import {
 import { getSites } from "../../services/siteService";
 import { getUsers } from "../../services/userService";
 import type { JobResult, ParseResult, Schema, UploadPlan } from "./importLogic";
+import { fetchAllFactors } from "./logic";
 import type { Batch, Category, Company, FactorPage, FactorPayload, ListParams, Site, UploadRecord } from "./logic";
 
 export const keys = {
@@ -52,6 +53,10 @@ export type Country = { country_id: number; name: string; code?: string | null }
 /** Countries for the factor's Geography select (reference data, Superadmin). */
 export const useCountries = (enabled: boolean) =>
   useQuery<Country[]>({ queryKey: keys.countries(), queryFn: async () => asList<Country>(await getCountries(), "countries"), staleTime: LONG, enabled });
+
+/** All factors for the list filters (export). */
+export const fetchFactorsForExport = (p: ListParams) =>
+  fetchAllFactors(p, async (q) => (await getEmissionFactors(q)) as FactorPage);
 
 export const useFactors = (p: ListParams) =>
   useQuery<FactorPage>({
