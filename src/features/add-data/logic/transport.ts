@@ -16,15 +16,35 @@ export const TRANSPORT_UNIT_HELP: Record<string, string> = {
   "teu.day": "Containers (TEU) stored × days stored.",
 };
 
+/** kWh and kg on a vehicle (electric van or train, refrigerated HGV) rather than a warehouse. */
+const VEHICLE_HELP: Record<string, string> = {
+  kwh: "Electricity the vehicle used for your goods × your share (100 = only your goods).",
+  kg: "Refrigerant leaked from the refrigerated vehicle × your share (100 = only your goods).",
+};
+const WAREHOUSE_HELP: Record<string, string> = {
+  kg: "Refrigerant leaked from the warehouse × your share of its volume (100 = used only by you).",
+};
+/** The form's mode column and the mode that means a warehouse (ESG-lite src/scope3/transport/configs.ts). */
+export const TRANSPORT_MODE_COLUMN = "Travel Mode";
+export const WAREHOUSE_MODE = "Warehouse";
+
 /** A transport or warehousing form: a per-unit spec that keeps the tonne.km method. */
 export const isTransportSpec = (spec: CalculationSpec | null | undefined): spec is CalculationSpec =>
   !!spec && spec.mode === "per_unit" && "tonne.km" in spec.methods;
 
-/** Help under the Unit select for a transport form, or undefined. */
-export function transportUnitHelp(spec: CalculationSpec | null | undefined, unit: unknown): string | undefined {
+/**
+ * Help under the Unit select for a transport form, or undefined. `mode` is the
+ * row's Travel Mode: kWh and kg mean a warehouse under "Warehouse" and a
+ * vehicle elsewhere; with no mode chosen yet the general copy shows.
+ */
+export function transportUnitHelp(spec: CalculationSpec | null | undefined, unit: unknown, mode?: unknown): string | undefined {
   if (!isTransportSpec(spec)) return undefined;
   const key = normalizeUnitKey(unit);
-  return key in spec.methods ? TRANSPORT_UNIT_HELP[key] : undefined;
+  if (!(key in spec.methods)) return undefined;
+  const m = String(mode ?? "").trim();
+  if (m === WAREHOUSE_MODE && WAREHOUSE_HELP[key]) return WAREHOUSE_HELP[key];
+  if (m && m !== WAREHOUSE_MODE && VEHICLE_HELP[key]) return VEHICLE_HELP[key];
+  return TRANSPORT_UNIT_HELP[key];
 }
 
 /** The extra field "Who paid for this transport?" (stored in extra_data.paid_by). */

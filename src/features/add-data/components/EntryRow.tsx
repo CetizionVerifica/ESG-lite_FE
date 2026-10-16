@@ -12,7 +12,7 @@ import { DynamicField } from "./DynamicField";
 import { DistanceInput } from "./DistanceInput";
 import { distanceFieldFor, type DistanceField } from "../logic/distance";
 import { ExtraFields } from "./ExtraFields";
-import { transportUnitHelp } from "../logic/transport";
+import { TRANSPORT_MODE_COLUMN, transportUnitHelp } from "../logic/transport";
 import { TripCalculator } from "./TripCalculator";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
@@ -202,7 +202,7 @@ export function EntryRow(p: Props) {
             options={unitOptions.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
             placeholder="Choose a unit"
             help={
-              transportUnitHelp(model.spec, row.activity_data_unit) ??
+              transportUnitHelp(model.spec, row.activity_data_unit, row[TRANSPORT_MODE_COLUMN]) ??
               (expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined)
             }
             error={fieldError("activity_data_unit")}

@@ -67,6 +67,12 @@ describe("S3-8 helper copy", () => {
     expect(transportUnitHelp(spec, "m³.day")).toBe("Volume stored × days stored.");
     expect(transportUnitHelp(spec, "gallon")).toBeUndefined();
     expect(transportUnitHelp(null, "litre")).toBeUndefined();
+    // kWh and kg read as the warehouse's under "Warehouse", as the vehicle's on any other mode.
+    expect(transportUnitHelp(spec, "kWh", "Warehouse")).toMatch(/^Energy of the warehouse/);
+    expect(transportUnitHelp(spec, "kWh", "Rail")).toMatch(/^Electricity the vehicle used for your goods/);
+    expect(transportUnitHelp(spec, "kg", "Road")).toMatch(/^Refrigerant leaked from the refrigerated vehicle × your share/);
+    expect(transportUnitHelp(spec, "kg", "Warehouse")).toMatch(/^Refrigerant leaked from the warehouse/);
+    expect(transportUnitHelp(spec, "litre", "Road")).toMatch(/^Litres your carrier used for your goods/);
     const useOfSoldProducts: CalculationSpec = { mode: "per_method", method_column: "Method", methods: { Fuel: { multiply: ["Units Sold"] } } };
     expect(transportUnitHelp(useOfSoldProducts, "litre")).toBeUndefined();
     expect(PAID_BY_HELP).toMatch(/^If you paid for it, it belongs in Category 4/);
