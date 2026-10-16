@@ -35,7 +35,7 @@ describe("the row's method", () => {
     expect(rowMethodChoices(toFormModel(goods))).toEqual(["supplier_specific", "average_data", "spend_based"]);
     expect(rowMethodChoices(toFormModel(travel))).toEqual(["distance_based"]);
     expect(rowMethodChoices(toFormModel({ ...travel, calculation: null }))).toEqual([]);
-    // Bare keys (as ESG-lite #135 stores them) work too.
+    // Legacy bare keys (the first cut of the column) work too, as the engine reads them.
     expect(rowMethodChoices(toFormModel({ ...goods, method_options: ["spend_based"] }))).toEqual(["spend_based"]);
   });
 

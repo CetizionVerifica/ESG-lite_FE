@@ -132,8 +132,10 @@ export function readDq(value: unknown): Dq | null {
 
 /**
  * `column_config.method_options`, most specific first. The contract shape is
- * `[{method, units}]` (§6); a list of bare method keys (as ESG-lite #135 stores
- * it) is read too, with no units. Unknown keys, "unknown" and repeats are dropped.
+ * `[{method, units}]` (§6), validated on every column-config write; a legacy
+ * list of bare method keys (the column's first cut) is read too, with no units,
+ * as ESG-lite `src/scope3/dq/methodOptions.ts` reads it. Unknown keys,
+ * "unknown" and repeats are dropped.
  */
 export function readMethodOptions(value: unknown): MethodOptions {
   if (!Array.isArray(value)) return [];
