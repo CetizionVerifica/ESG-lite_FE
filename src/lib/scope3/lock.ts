@@ -43,15 +43,19 @@ const num = (v: unknown): number | null => {
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
-function readLock(raw: unknown): PeriodLock | null {
+/**
+ * A site's active lock. ESG-lite sends `{locked_at, locked_by, locked_by_name}`
+ * on the site (one period_lock row per site, so the lock is the site's own);
+ * the year and month are the answer's.
+ */
+function readLock(raw: unknown, siteId: number, period: { year: number; month: number }): PeriodLock | null {
   const l = obj(raw);
-  if (num(l.year) === null || !l.locked_at) return null;
-  if (l.reopened_at) return null; // a reopened lock no longer holds
+  if (!l.locked_at || l.reopened_at) return null; // a reopened lock no longer holds
   return {
     company_id: num(l.company_id) ?? 0,
-    site_id: num(l.site_id),
-    year: num(l.year) as number,
-    month: num(l.month),
+    site_id: "site_id" in l ? num(l.site_id) : siteId,
+    year: num(l.year) ?? period.year,
+    month: "month" in l ? num(l.month) : period.month,
     locked_by: num(l.locked_by) ?? 0,
     locked_at: String(l.locked_at),
   };
@@ -66,15 +70,17 @@ function readCategory(raw: unknown): PeriodLockCategory {
     scope: str(c.scope),
     ghg_category: num(c.ghg_category),
     counts: { draft: num(counts.draft) ?? 0, pending: num(counts.pending) ?? 0, approved: num(counts.approved) ?? 0, rejected: num(counts.rejected) ?? 0 },
-    nothing_this_month: c.nothing_this_month === true,
+    // ESG-lite sends `nothing` (and `state: "nothing"`); 01-contracts §4 names the table `nothing_this_month`.
+    nothing_this_month: c.nothing === true || c.nothing_this_month === true || c.state === "nothing",
   };
 }
 
-function readSite(raw: unknown): PeriodLockSite {
+function readSite(raw: unknown, period: { year: number; month: number }): PeriodLockSite {
   const s = obj(raw);
-  const lock = readLock(s.lock);
+  const siteId = num(s.site_id) ?? 0;
+  const lock = readLock(s.lock, siteId, period);
   return {
-    site_id: num(s.site_id) ?? 0,
+    site_id: siteId,
     name: str(s.name) ?? str(s.site_name) ?? "—",
     locked: s.locked === true || !!lock,
     lock,
@@ -104,18 +110,30 @@ function readGrid(raw: unknown): Scope3GridCell[] {
   const list = Array.isArray(raw) ? raw.map(obj) : [];
   return GHG_CATEGORY_NUMBERS.map((n) => {
     const cell = list.find((c) => num(c.n ?? c.ghg_category) === n) ?? {};
-    return { n, status: isBoundary(cell.status) ? cell.status : null, has_data: cell.has_data === true };
+    return { n, status: isBoundary(cell.status) ? cell.status : null, has_data: cell.has_data === true || cell.data === true };
   });
+}
+
+/**
+ * The grid for the sites in the answer. ESG-lite sends one grid per site
+ * (`sites[].scope3`, data per site); the view shows one grid: the company's
+ * boundary status, with data when any site has some.
+ */
+function gridOf(r: Record<string, unknown>): Scope3GridCell[] {
+  if (Array.isArray(r.scope3)) return readGrid(r.scope3);
+  const grids = (Array.isArray(r.sites) ? r.sites : []).map((s) => readGrid(obj(s).scope3));
+  if (grids.length === 0) return readGrid([]);
+  return grids[0].map((cell, i) => ({ ...cell, has_data: grids.some((g) => g[i].has_data) }));
 }
 
 /** `GET /periods/lock` as the API sent it, cleaned to the contract shape. */
 export function readPeriodLockStatus(raw: unknown, fallback: { year: number; month: number }): PeriodLockStatus {
   const r = obj(raw);
+  const period = { year: num(r.year) ?? fallback.year, month: num(r.month) ?? fallback.month };
   return {
-    year: num(r.year) ?? fallback.year,
-    month: num(r.month) ?? fallback.month,
-    sites: Array.isArray(r.sites) ? r.sites.map(readSite) : [],
-    scope3: readGrid(r.scope3),
+    ...period,
+    sites: Array.isArray(r.sites) ? r.sites.map((s) => readSite(s, period)) : [],
+    scope3: gridOf(r),
     left: Array.isArray(r.left) ? r.left.map(readLeft) : [],
   };
 }

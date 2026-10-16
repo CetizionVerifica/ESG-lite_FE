@@ -150,8 +150,9 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
         return json({ emission: { pk_id: Number(path.split("/").pop()), ...(extra.workflow && { status: "draft" }) } });
       }
       if (path.endsWith("/user/emissions/check")) {
-        extra.checked?.push(request.postDataJSON());
-        return json({ ready: false, held: ["FACTOR_FOUND", "EVIDENCE_ATTACHED"] });
+        const ids = (request.postDataJSON() as { ids: number[] }).ids;
+        extra.checked?.push(ids);
+        return json({ results: ids.map((id) => ({ id, status: "rejected", checks: { ready: false, held: ["FACTOR_FOUND", "EVIDENCE_ATTACHED"] } })) });
       }
       if (path.endsWith("/user/emissions/submit")) {
         const ids = (request.postDataJSON() as { ids: number[] }).ids;
@@ -401,7 +402,7 @@ test("Fix and resubmit (S3-15): a Fix link opens the rejected row with live chec
   const created: unknown[] = [];
   const updated: { id: number; body: Record<string, unknown> }[] = [];
   const submitted: number[][] = [];
-  const checked: Record<string, unknown>[] = [];
+  const checked: number[][] = [];
   await signIn(page, created, false, [], undefined, { existing: [rejected], updated, workflow: true, submitted, checked });
   await page.goto("/data/new?site=4&category=9&period=2025-09&fix=55");
 
@@ -416,9 +417,9 @@ test("Fix and resubmit (S3-15): a Fix link opens the rejected row with live chec
   const checks = page.getByRole("region", { name: "Checks before you send" });
   await expect(checks.getByText("No evidence")).toBeVisible();
   await expect(checks.getByText(/factor/i)).toHaveCount(0);
+  // ESG-lite checks the saved entry (as if submitted now).
+  expect(checked[0]).toEqual([55]);
   await row.getByLabel("Quantity").fill("1600");
-  await expect.poll(() => checked.some((c) => (c.activity_data as Record<string, unknown>)?.quantity === "1600")).toBe(true);
-  expect(checked.at(-1)).toMatchObject({ pk_id: 55, site_id: 4, category_id: 9, evidence_count: 0 });
 
   await page.getByRole("button", { name: "Review" }).click();
   await expect(page.getByRole("button", { name: "Save as draft" })).toBeVisible();

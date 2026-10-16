@@ -102,6 +102,28 @@ describe("readPeriodLockStatus", () => {
     expect(s.left).toEqual([{ site_id: 2, site_name: "Sitra", category_id: 5, category_name: "Waste", ghg_category: null, reason: "missing" }]);
   });
 
+  it("reads ESG-lite's shape: the site's own lock, `nothing`, one grid per site", () => {
+    const s = readPeriodLockStatus(
+      {
+        company_id: 1,
+        year: 2026,
+        month: 9,
+        period: "2026-09",
+        can_lock: false,
+        left: [{ site_id: 1, site_name: "Hidd", category_id: 2, category_name: "LPG", reason: "pending" }],
+        sites: [
+          { site_id: 1, name: "Hidd", locked: false, lock: null, categories: [{ category_id: 3, category_name: "Refrigerants", state: "nothing", counts: { draft: 0, pending: 0, approved: 0, rejected: 0 }, nothing: true }], scope3: [{ n: 1, status: "included", data: false }] },
+          { site_id: 2, name: "Sitra", locked: true, lock: { locked_at: "2026-10-10T00:00:00Z", locked_by: 4, locked_by_name: "Mia" }, categories: [], scope3: [{ n: 1, status: "included", data: true }] },
+        ],
+      },
+      { year: 2026, month: 9 },
+    );
+    expect(s.sites[0].categories[0].nothing_this_month).toBe(true);
+    expect(s.sites[1].lock).toMatchObject({ site_id: 2, year: 2026, month: 9, locked_by: 4 });
+    expect(s.scope3[0]).toEqual({ n: 1, status: "included", has_data: true });
+    expect(s.left[0]).toMatchObject({ site_id: 1, category_id: 2, reason: "pending" });
+  });
+
   it("falls back to the asked month and empty lists on an empty answer", () => {
     expect(readPeriodLockStatus(null, { year: 2026, month: 8 })).toMatchObject({ year: 2026, month: 8, sites: [], left: [] });
   });

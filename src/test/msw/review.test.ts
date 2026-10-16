@@ -41,10 +41,14 @@ describe("S3-15 part 2 mocks: drafts and submit", () => {
     expect(res).toEqual({ submitted: [703], refused: [{ id: 801, code: "PERIOD_LOCKED" }] });
   });
 
-  it("dry-runs the checks: evidence picked on the row passes EVIDENCE_ATTACHED", async () => {
-    expect(await (await post("/user/emissions/check", { pk_id: 705 })).json()).toEqual({ ready: true, held: [] });
-    expect(await (await post("/user/emissions/check", { pk_id: 701 })).json()).toEqual({ ready: false, held: ["EVIDENCE_ATTACHED"] });
-    expect(await (await post("/user/emissions/check", { pk_id: 701, evidence_count: 1 })).json()).toEqual({ ready: true, held: [] });
+  it("checks saved rows as if submitted now, per id", async () => {
+    expect(await (await post("/user/emissions/check", { ids: [705, 701] })).json()).toEqual({
+      results: [
+        { id: 705, status: "rejected", checks: { ready: true, held: [] } },
+        { id: 701, status: "draft", checks: { ready: false, held: ["EVIDENCE_ATTACHED"] } },
+      ],
+    });
+    expect((await post("/user/emissions/check", { ids: [] })).status).toBe(400);
   });
 });
 
@@ -55,12 +59,15 @@ describe("S3-15 part 2 mocks: close month", () => {
     expect(s.scope3).toHaveLength(15);
     expect(s.sites[0].categories.find((c) => c.category_id === 3)?.counts).toEqual({ draft: 1, pending: 1, approved: 0, rejected: 0 });
     const reasons = s.left.map((l) => `${l.site_id}:${l.category_id ?? `S3-${l.ghg_category}`}:${l.reason}`);
-    expect(reasons).toEqual(["1:1:draft", "1:2:rejected", "1:3:draft", "1:3:pending", "1:11:draft", "1:S3-1:scope3_no_data"]);
+    // One reason per category: its state (rejected, then draft, then pending, else missing).
+    expect(reasons).toEqual(["1:1:draft", "1:2:rejected", "1:3:draft", "1:11:draft"]);
+    // One grid per site in the answer; the reader shows data when any site has some.
+    expect(s.scope3.find((c) => c.n === 7)).toEqual({ n: 7, status: "included", has_data: true });
   });
 
   it("marks and unmarks Nothing this month, which the lock view reads", async () => {
     // Sitra yard has nothing owed left; mark Hidd LPG and see it counted.
-    expect((await post("/user/my-month/nothing", { site_id: 1, category_id: 2, month: "2026-09-01" })).status).toBe(201);
+    expect(await (await post("/user/my-month/nothing", { site_id: 1, category_id: 2, month: "2026-09-01" })).json()).toEqual({ site_id: 1, category_id: 2, month: "2026-09-01", nothing: true });
     expect((await lockStatus()).sites[0].categories.find((c) => c.category_id === 2)?.nothing_this_month).toBe(true);
     await fetch(`${API}/user/my-month/nothing`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ site_id: 1, category_id: 2, month: "2026-09-01" }) });
     expect((await lockStatus()).sites[0].categories.find((c) => c.category_id === 2)?.nothing_this_month).toBe(false);
@@ -68,21 +75,22 @@ describe("S3-15 part 2 mocks: close month", () => {
 
   it("refuses a lock with items left (PERIOD_INCOMPLETE), then locks once complete", async () => {
     const early = await post("/periods/lock", { site_id: 1, year: 2026, month: 9 });
-    expect(early.status).toBe(409);
+    expect(early.status).toBe(422);
     expect(((await early.json()) as Scope3ErrorBody).code).toBe("PERIOD_INCOMPLETE");
     completeMonth(2026, 9);
     expect((await lockStatus()).left).toEqual([]);
-    expect((await post("/periods/lock", { site_id: null, year: 2026, month: 9 })).status).toBe(201);
+    expect((await post("/periods/lock", { site_id: null, year: 2026, month: 9 })).status).toBe(200);
     const s = await lockStatus();
     expect(s.sites.every((x) => x.locked)).toBe(true);
-    expect(s.sites[1].lock?.site_id).toBeNull();
+    // One lock row per site: each site reopens on its own.
+    expect(s.sites[1].lock).toMatchObject({ site_id: 2, year: 2026, month: 9 });
   });
 
   it("reopens only with a reason of 5 characters or more", async () => {
     const short = await post("/periods/unlock", { site_id: 1, year: 2026, month: 8, reason: "late" });
     expect(((await short.json()) as Scope3ErrorBody).code).toBe("UNLOCK_REASON_REQUIRED");
     expect((await post("/periods/unlock", { site_id: 1, year: 2026, month: 8, reason: "Late diesel invoice" })).status).toBe(200);
-    const s = (await get<PeriodLockStatus>("/periods/lock?year=2026&month=8&siteIds=1")).sites[0];
+    const s = (await get<PeriodLockStatus>("/periods/lock?year=2026&month=8&site_id=1")).sites[0];
     expect(s.locked).toBe(false);
   });
 

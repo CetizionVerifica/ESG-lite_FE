@@ -83,7 +83,7 @@ export function CloseMonthView({ siteIds }: { siteIds: number[] }) {
           </Button>
           {!allLocked && (
             <Button variant="primary" icon={<Lock aria-hidden className="size-4" />} disabled={!gate.canLock} aria-describedby={gateId} loading={lock.isPending} onClick={doLock}>
-              {sites.length === 1 ? `Lock ${title}` : `Lock ${title} for ${sites.filter((s) => !s.locked).length} sites`}
+              {lockLabel(title, sites)}
             </Button>
           )}
         </div>
@@ -149,6 +149,13 @@ export function CloseMonthView({ siteIds }: { siteIds: number[] }) {
       />
     </div>
   );
+}
+
+/** "Lock Sep 2026", "Lock Sep 2026 for Hidd" (one site still open of several), "Lock Sep 2026 for 3 sites". */
+function lockLabel(title: string, sites: PeriodLockSite[]): string {
+  const open = sites.filter((s) => !s.locked);
+  if (sites.length === 1) return `Lock ${title}`;
+  return open.length === 1 ? `Lock ${title} for ${open[0].name}` : `Lock ${title} for ${open.length} sites`;
 }
 
 function Count({ n, label }: { n: number; label: string }) {
@@ -238,7 +245,7 @@ function Scope3Grid({ status }: { status: PeriodLockStatus }) {
       <h2 id="scope3-grid-heading" className="text-sm font-semibold text-ink">
         Scope 3 categories
       </h2>
-      <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" aria-label="Scope 3 categories">
+      <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5" aria-label="Scope 3 categories">
         {status.scope3.map((cell) => {
           const text = gridCellText(cell);
           const open = gridCellOpen(cell);

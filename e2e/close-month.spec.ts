@@ -9,23 +9,39 @@ const company = { company_id: 1, name: "Midal Cables" };
 const site = { site_id: 1, name: "Hidd", categories: [{ category_id: 10, category_name: "Diesel" }] };
 const manager = (on: boolean) => ({ name: "Mia Manager", email: "mia@example.com", sites: [{ ...site, company: { ...company, review_workflow_v2: on } }] });
 
-const category = (counts: object, nothing = false) => ({ category_id: 10, category_name: "Diesel", scope: "Scope 1", counts: { draft: 0, pending: 0, approved: 0, rejected: 0, ...counts }, nothing_this_month: nothing });
-const lockRow = { company_id: 1, site_id: 1, year: 2026, month: 9, locked_by: 4, locked_at: "2026-10-12T08:00:00.000Z" };
-const grid = Array.from({ length: 15 }, (_, i) => ({ n: i + 1, status: i === 0 ? "included" : "not_relevant", has_data: i === 0 }));
+// Shapes as ESG-lite answers (docs/scope3/01-contracts.md §5, "as built by S3-15 part 2").
+const category = (counts: object, state: string) => ({ category_id: 10, category_name: "Diesel", scope: "Scope 1", ghg_category: null, state, counts: { draft: 0, pending: 0, approved: 0, rejected: 0, ...counts }, nothing: false });
+const lockRow = { locked_at: "2026-10-12T08:00:00.000Z", locked_by: 4, locked_by_name: "Mia Manager" };
+const grid = Array.from({ length: 15 }, (_, i) => ({ n: i + 1, status: i === 0 ? "included" : "not_relevant", data: i === 0 }));
 
 async function signIn(page: Page, on = true) {
   const state = { complete: false, locked: false, calls: [] as { method: string; path: string; body: unknown }[] };
   const user = manager(on);
   const lockStatus = () => ({
+    company_id: 1,
     year: 2026,
     month: 9,
-    sites: [{ site_id: 1, name: "Hidd", locked: state.locked, lock: state.locked ? lockRow : null, categories: [state.complete ? category({ approved: 2 }) : category({ pending: 1, draft: 1 })] }],
-    scope3: grid,
+    period: "2026-09",
+    review_workflow_v2: true,
+    can_lock: state.complete && !state.locked,
+    locked: state.locked,
+    sites: [
+      {
+        site_id: 1,
+        name: "Hidd",
+        locked: state.locked,
+        lock: state.locked ? lockRow : null,
+        reopened: null,
+        left: state.complete ? 0 : 2,
+        categories: [state.complete ? category({ approved: 2 }, "approved") : category({ pending: 1, draft: 1 }, "draft")],
+        scope3: grid,
+      },
+    ],
     left: state.complete
       ? []
       : [
           { site_id: 1, site_name: "Hidd", category_id: 10, category_name: "Diesel", reason: "pending" },
-          { site_id: 1, site_name: "Hidd", category_id: 10, category_name: "Diesel", reason: "draft" },
+          { site_id: 1, site_name: "Hidd", category_id: 20, category_name: "Electricity", reason: "draft" },
         ],
   });
   await page.addInitScript((u) => {
@@ -45,11 +61,11 @@ async function signIn(page: Page, on = true) {
       if (path.endsWith("/periods/lock") && method === "GET") return json(lockStatus());
       if (path.endsWith("/periods/lock")) {
         state.locked = true;
-        return json(lockRow, 201);
+        return json(lockStatus());
       }
       if (path.endsWith("/periods/unlock")) {
         state.locked = false;
-        return json({ ...lockRow, reopened_at: "2026-10-16T10:00:00.000Z" });
+        return json(lockStatus());
       }
       if (path.endsWith("/auth/me")) return json({ role: "Manager", user });
       if (path.endsWith("/auth/me/appearance")) return json({ appearance: "light" });

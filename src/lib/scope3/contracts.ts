@@ -422,6 +422,8 @@ export const SCOPE3_ERROR_CODES = [
   "PERIOD_INCOMPLETE",
   "BASE_YEAR_NO_DATA",
   "RECALCULATION_REASON_REQUIRED",
+  // S3-15 part 2 (ESG-lite [S3-15 3/4]): lock or "Nothing this month" for a client without review workflow v2.
+  "REVIEW_WORKFLOW_OFF",
 ] as const;
 export type Scope3ErrorCode = (typeof SCOPE3_ERROR_CODES)[number];
 

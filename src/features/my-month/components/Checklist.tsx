@@ -67,7 +67,7 @@ function Row({ siteId, category, month, locked, workflow }: RowProps) {
           <p className="text-xs text-muted">{[yearly, summary].filter(Boolean).join(" · ")}</p>
         )}
       </div>
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
         <WordPill word={word} />
         <span className="w-24 whitespace-nowrap text-right font-num text-sm tabular-nums text-ink">
           {category.status === "pending" || category.status === "approved" ? formatEmissions(Number(category.total_emission)) : ""}

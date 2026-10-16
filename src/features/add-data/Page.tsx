@@ -6,7 +6,6 @@ import { Button, Callout, EmptyState, Loading, Modal, PageHeader, Skeleton, Step
 import { useEntrySetup, useExistingEntries, usePeriodTotals, useSiteCountry, useThreshold } from "./api";
 import { useReviewWorkflow } from "../../lib/reviewWorkflow";
 import { LiveChecks, type LiveCheckRow } from "./components/LiveChecks";
-import { dryRunBody } from "./logic/submit";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
 import { useSpendRates } from "../../lib/scope3/useSpendRates";
 import type { EmissionFactor } from "./types";
@@ -174,16 +173,13 @@ export default function AddDataPage() {
     return { text: `${arrow} ${Math.abs(c.pct).toFixed(1)}%`.trim(), overThreshold: c.overThreshold, threshold: threshold.data ?? 5, previousLabel: entryPeriodLabel(previousPeriod(period)) };
   });
 
-  // S3-15: the live checks run for rows that change a saved entry (Fix, or Edit of a draft).
-  const liveRows: LiveCheckRow[] = useMemo(() => {
-    if (!workflow || !contextReady || !period) return [];
-    return rows.flatMap((r, i) => {
-      const id = editOf(r);
-      if (id === null) return [];
-      const payload = buildPayload(r, { siteId: site.site_id, categoryId: category.category_id, period });
-      return [{ id: r.id, label: `Row ${i + 1} · ${r.emission_category || category.category_name}`, body: dryRunBody(payload, id, evidence.filesOf(r.id).length) }];
-    });
-  }, [workflow, contextReady, period, rows, site, category, evidence]);
+  // S3-15: the checks on the saved entries being fixed (Fix, or Edit of a draft).
+  const liveRows: LiveCheckRow[] = workflow
+    ? rows.flatMap((r, i) => {
+        const id = editOf(r);
+        return id === null ? [] : [{ pkId: id, label: `Row ${i + 1} · ${r.emission_category || category?.category_name || ""}` }];
+      })
+    : [];
 
   const periodLabel = period ? entryPeriodLabel(period) : "";
   // Rows without their own date are filed in the month the period ends, as here.

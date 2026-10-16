@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MyMonthCategory, MyMonthResponse } from "../../services/myMonthService";
 import type { EmissionData } from "../../services/emissionService";
+import { readMyMonth } from "../../services/myMonthService";
 import {
   addDataLink,
   allLocked,
@@ -268,5 +269,19 @@ describe("S3-15 part 2: drafts and submit selection", () => {
       tone: "neutral",
     });
     expect(submitMessage({ submitted: [], refused: [{ id: 2, code: "NOT_DRAFT" }, { id: 3, code: "NOT_DRAFT" }] })).toMatchObject({ title: "2 rows not sent", tone: "bad" });
+  });
+});
+
+describe("readMyMonth (ESG-lite's S3-15 fields)", () => {
+  it("turns `nothing` / status nothing into a marked to-do, and leaves today's answer alone", () => {
+    const raw = month([cat({ category_id: 1, status: "nothing" as MyMonthCategory["status"] }), cat({ category_id: 2, ...({ nothing: true } as object) }), cat({ category_id: 3, status: "pending" })]);
+    const read = readMyMonth(raw).sites[0].categories;
+    expect(read.map((c) => [c.status, c.nothing_this_month ?? false])).toEqual([
+      ["todo", true],
+      ["todo", true],
+      ["pending", false],
+    ]);
+    const plain = month([cat()]);
+    expect(readMyMonth(plain).sites[0].categories[0]).toBe(plain.sites[0].categories[0]);
   });
 });

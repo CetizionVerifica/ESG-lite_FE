@@ -2,8 +2,6 @@
 // rows "Save and submit" sends, and what the finish screen says.
 import type { SubmitEmissionsResult } from "../../../lib/scope3/contracts";
 import type { SaveOutcome } from "../api";
-import type { CheckDryRunBody } from "../../../services/reviewService";
-import type { EmissionPayload } from "./entry";
 
 /** Submits across one Review (a duplicate "Replace" sends a second time). `failed`: a submit call itself failed. */
 export type SubmitTally = { submitted: number[]; refused: SubmitEmissionsResult["refused"]; failed: boolean };
@@ -41,22 +39,3 @@ export function finishCopy(statuses: (string | null)[], tally: SubmitTally, peri
   return { title: `${rows(sent)} sent for approval`, description: `Your manager reviews ${periodLabel} next.${left}` };
 }
 
-/**
- * The live checks' dry-run body for a row that changes saved entry `pkId`:
- * the row as it would be saved, without the preview total (the server works
- * it out), plus the files picked but not uploaded yet.
- */
-export function dryRunBody(p: EmissionPayload, pkId: number, evidenceCount: number): CheckDryRunBody {
-  return {
-    pk_id: pkId,
-    site_id: p.site_id,
-    category_id: p.category_id,
-    activity_data: p.activity_data,
-    activity_data_unit: p.activity_data_unit,
-    date_of_reporting: p.date_of_reporting,
-    reporting_period: p.reporting_period,
-    year_type: p.year_type ?? null,
-    ...(p.method ? { method: p.method } : {}),
-    evidence_count: evidenceCount,
-  };
-}

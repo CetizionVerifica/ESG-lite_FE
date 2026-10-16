@@ -4,7 +4,6 @@ import api from "../api/axios";
 import type {
   LockPeriodBody,
   NothingThisMonthBody,
-  PeriodLock,
   RowChecks,
   SubmitEmissionsResult,
   UnlockPeriodBody,
@@ -30,45 +29,38 @@ export const unmarkNothingThisMonth = async (body: NothingThisMonthBody): Promis
   await api.delete("/user/my-month/nothing", { data: body });
 };
 
-/** The row as Add data would save it; `pk_id` when it changes a saved entry. */
-export type CheckDryRunBody = {
-  pk_id?: number | null;
-  site_id: number;
-  category_id: number;
-  activity_data: Record<string, unknown>;
-  activity_data_unit?: string;
-  date_of_reporting: string;
-  reporting_period?: string;
-  year_type?: string | null;
-  method?: string;
-  /** Files picked on the row but not uploaded yet: EVIDENCE_ATTACHED passes on them. */
-  evidence_count?: number;
+/**
+ * `POST /user/emissions/check {ids}`: the review checks on saved rows, as if
+ * they were submitted now. Saves nothing. ESG-lite checks the saved row, not
+ * unsaved edits, so the Fix screen refreshes it after each save.
+ */
+export const checkEmissions = async (ids: number[]): Promise<Map<number, RowChecks | null>> => {
+  const { data } = await api.post("/user/emissions/check", { ids });
+  const out = new Map<number, RowChecks | null>();
+  for (const r of Array.isArray(data?.results) ? data.results : []) out.set(Number(r?.id), readChecks(r?.checks) ?? null);
+  return out;
 };
 
-/** `POST /user/emissions/check`: the review checks for an unsaved row. Saves nothing. */
-export const checkEmission = async (body: CheckDryRunBody): Promise<RowChecks | null> => {
-  const { data } = await api.post("/user/emissions/check", body);
-  return readChecks(data?.checks ?? data) ?? null;
-};
-
-/** `GET /periods/lock?year&month`: completeness of the month over the caller's sites. */
+/**
+ * `GET /periods/lock?year&month[&site_id]`: completeness of the month over the
+ * caller's sites. ESG-lite filters by one site only; with several site chips
+ * the view narrows the answer itself.
+ */
 export const getPeriodLock = async (year: number, month: number, siteIds?: number[]) => {
   const params: Record<string, string | number> = { year, month };
-  if (siteIds?.length) params.siteIds = siteIds.join(",");
+  if (siteIds?.length === 1) params.site_id = siteIds[0];
   const { data } = await api.get("/periods/lock", { params });
   return readPeriodLockStatus(data, { year, month });
 };
 
-/** `POST /periods/lock {site_id | null, year, month}`; null = every site (Admin and Superadmin). */
-export const lockPeriod = async (body: LockPeriodBody): Promise<PeriodLock> => {
-  const { data } = await api.post("/periods/lock", body);
-  return data;
+/** `POST /periods/lock {site_id | null, year, month}`; null = every site (Admin and Superadmin). Answers the month's new status; the view refetches it. */
+export const lockPeriod = async (body: LockPeriodBody): Promise<void> => {
+  await api.post("/periods/lock", body);
 };
 
 /** `POST /periods/unlock {site_id, year, month, reason}`. */
-export const unlockPeriod = async (body: UnlockPeriodBody): Promise<PeriodLock> => {
-  const { data } = await api.post("/periods/unlock", body);
-  return data;
+export const unlockPeriod = async (body: UnlockPeriodBody): Promise<void> => {
+  await api.post("/periods/unlock", body);
 };
 
 /** The `code` an S3-15 refusal carries (`PERIOD_LOCKED`, `PERIOD_INCOMPLETE`, `UNLOCK_REASON_REQUIRED`, …). */

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftIdsToSubmit, dryRunBody, finishCopy, mergeSubmit } from "./submit";
-import type { EmissionPayload } from "./entry";
+import { draftIdsToSubmit, finishCopy, mergeSubmit } from "./submit";
 
 const none = { submitted: [], refused: [], failed: false };
 
@@ -33,28 +32,4 @@ describe("Save and submit (S3-15, review workflow on)", () => {
     expect(finishCopy(["pending"], none, "Sep 2026").title).toBe("1 row sent for approval");
   });
 
-  it("sends the row without the preview total for the dry run, with the files picked", () => {
-    const payload: EmissionPayload = {
-      site_id: 1,
-      category_id: 2,
-      activity_data: { amount: "5" },
-      extra_data: { note: "x" },
-      total_emission: 9.9,
-      unit: "tCO2e",
-      date_of_reporting: "2026-09-30",
-      activity_data_unit: "kg",
-      reporting_period: "monthly",
-    };
-    expect(dryRunBody(payload, 91, 2)).toEqual({
-      pk_id: 91,
-      site_id: 1,
-      category_id: 2,
-      activity_data: { amount: "5" },
-      activity_data_unit: "kg",
-      date_of_reporting: "2026-09-30",
-      reporting_period: "monthly",
-      year_type: null,
-      evidence_count: 2,
-    });
-  });
 });

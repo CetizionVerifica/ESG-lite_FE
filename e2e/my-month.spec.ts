@@ -144,7 +144,8 @@ async function signInWithWorkflow(page: Page) {
       {
         ...september.sites[0],
         categories: september.sites[0].categories.map((c) =>
-          c.category_id === 2 ? { ...c, nothing_this_month: state.nothing } : c.category_id === 1 ? { ...c, entries: { ...c.entries, draft: 1 } } : c,
+          // ESG-lite marks it `nothing: true` with status "nothing".
+          c.category_id === 2 ? { ...c, nothing: state.nothing, status: state.nothing ? "nothing" : c.status } : c.category_id === 1 ? { ...c, entries: { ...c.entries, draft: 1 } } : c,
         ),
       },
     ],
@@ -165,7 +166,7 @@ async function signInWithWorkflow(page: Page) {
       if (method !== "GET") state.calls.push({ method, path, body: request.postDataJSON() });
       if (path.endsWith("/user/my-month/nothing")) {
         state.nothing = method === "POST";
-        return method === "POST" ? json({ site_id: 7, category_id: 2, month: "2025-09-01" }, 201) : route.fulfill({ status: 204 });
+        return json({ site_id: 7, category_id: 2, month: "2025-09-01", nothing: state.nothing });
       }
       if (path.endsWith("/user/my-month")) return json(month());
       if (path.endsWith("/user/emissions/submit")) {

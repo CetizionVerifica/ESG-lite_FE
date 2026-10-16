@@ -9,13 +9,9 @@ import {
   type BoundaryStatus,
   type GhgCategoryNumber,
   GHG_CATEGORY_NUMBERS,
-  type LockLeftItem,
   type LockPeriodBody,
   type NothingThisMonthBody,
   type PeriodLock,
-  type PeriodLockCategory,
-  type PeriodLockSite,
-  type PeriodLockStatus,
   type RowChecks,
   type Scope3ErrorCode,
   type SubmitEmissionsBody,
@@ -135,45 +131,45 @@ const activeLock = (siteId: number, year: number, month: number): PeriodLock | n
   locks.find((l) => !l.reopened_at && l.year === year && (l.month === null || l.month === month) && (l.site_id === null || l.site_id === siteId)) ?? null;
 const lockedRow = (r: ReviewRow) => !!activeLock(r.site.site_id, Number(r.date_of_reporting.slice(0, 4)), Number(r.date_of_reporting.slice(5, 7)));
 
-function status(year: number, month: number, siteIds: number[]): PeriodLockStatus {
+type State = "missing" | "draft" | "pending" | "rejected" | "approved" | "nothing";
+
+/** `GET /periods/lock` as ESG-lite answers it (01-contracts §5 "as built"): one grid per site, `nothing`, `state`, the site's own lock. */
+function status(year: number, month: number, siteIds: number[]) {
   const key = monthKey(year, month);
-  const sites: PeriodLockSite[] = REVIEW_SITES.filter((s) => !siteIds.length || siteIds.includes(s.site_id)).map((s) => {
-    const categories: PeriodLockCategory[] = OWED[s.site_id].map((c) => {
+  const left: { site_id: number; site_name: string; category_id: number; category_name: string; reason: State }[] = [];
+  const sites = REVIEW_SITES.filter((s) => !siteIds.length || siteIds.includes(s.site_id)).map((s) => {
+    const lock = activeLock(s.site_id, year, month);
+    const categories = OWED[s.site_id].map((c) => {
       const mine = rows.filter((r) => r.site.site_id === s.site_id && r.category.category_id === c.category_id && r.date_of_reporting.startsWith(key));
       const count = (st: EmissionStatus) => mine.filter((r) => r.status === st).length;
-      return {
-        category_id: c.category_id,
-        category_name: c.category_name,
-        scope: c.scope,
-        ghg_category: c.ghg_category,
-        counts: { draft: count("draft"), pending: count("pending"), approved: count("approved"), rejected: count("rejected") },
-        nothing_this_month: nothing.some((n) => n.site_id === s.site_id && n.category_id === c.category_id && n.month === `${key}-01`),
-      };
+      const counts = { draft: count("draft"), pending: count("pending"), approved: count("approved"), rejected: count("rejected") };
+      const nothingMark = nothing.some((n) => n.site_id === s.site_id && n.category_id === c.category_id && n.month === `${key}-01`);
+      const state: State = counts.rejected ? "rejected" : counts.draft ? "draft" : counts.pending ? "pending" : counts.approved ? "approved" : nothingMark ? "nothing" : "missing";
+      if (!lock && ["missing", "draft", "pending", "rejected"].includes(state)) left.push({ site_id: s.site_id, site_name: s.name, category_id: c.category_id, category_name: c.category_name, reason: state });
+      return { category_id: c.category_id, category_name: c.category_name, scope: c.scope, ghg_category: c.ghg_category, state, counts, nothing: nothingMark };
     });
-    const lock = activeLock(s.site_id, year, month);
-    return { site_id: s.site_id, name: s.name, locked: !!lock, lock, categories };
+    return {
+      site_id: s.site_id,
+      name: s.name,
+      locked: !!lock,
+      lock: lock ? { locked_at: lock.locked_at, locked_by: lock.locked_by, locked_by_name: "Mia Manager" } : null,
+      reopened: null,
+      left: left.filter((l) => l.site_id === s.site_id).length,
+      categories,
+      scope3: GHG_CATEGORY_NUMBERS.map((n) => ({ n, status: BOUNDARY[n] ?? "screening", data: s.site_id === 1 && scope3Data.has(n) })),
+    };
   });
-  const scope3 = GHG_CATEGORY_NUMBERS.map((n) => ({ n, status: BOUNDARY[n] ?? "not_relevant", has_data: scope3Data.has(n) }));
-  const left: LockLeftItem[] = [];
-  for (const s of sites) {
-    if (s.locked) continue;
-    for (const c of s.categories) {
-      const base = { site_id: s.site_id, site_name: s.name, category_id: c.category_id, category_name: c.category_name, ghg_category: c.ghg_category };
-      const { draft, pending, approved, rejected } = c.counts;
-      if (c.nothing_this_month) continue;
-      if (draft + pending + approved + rejected === 0) left.push({ ...base, reason: "missing" });
-      if (draft) left.push({ ...base, reason: "draft" });
-      if (pending) left.push({ ...base, reason: "pending" });
-      if (rejected) left.push({ ...base, reason: "rejected" });
-    }
-  }
-  // Company-level: an included Scope 3 category with no data this month, on the first site in view that is open.
-  const open = sites.find((s) => !s.locked);
-  if (open)
-    for (const cell of scope3)
-      if (cell.status === "included" && !cell.has_data)
-        left.push({ site_id: open.site_id, site_name: open.name, category_id: null, category_name: null, ghg_category: cell.n, reason: "scope3_no_data" });
-  return { year, month, sites, scope3, left };
+  return {
+    company_id: COMPANY_ID,
+    year,
+    month,
+    period: key,
+    review_workflow_v2: true,
+    can_lock: left.length === 0 && sites.some((s) => !s.locked),
+    locked: sites.length > 0 && sites.every((s) => s.locked),
+    left,
+    sites,
+  };
 }
 
 const sameMark = (a: NothingThisMonthBody, b: Partial<NothingThisMonthBody>) => a.site_id === b.site_id && a.category_id === b.category_id && a.month === b.month;
@@ -212,11 +208,16 @@ export const reviewHandlers = [
     return HttpResponse.json(result);
   }),
 
-  http.post<never, { pk_id?: number | null; evidence_count?: number }>("*/user/emissions/check", async ({ request }) => {
-    const body = await request.json();
-    const saved = rows.find((r) => r.pk_id === body.pk_id);
-    const held: RowChecks["held"] = (saved?.documents ?? 0) + (body.evidence_count ?? 0) > 0 ? [] : ["EVIDENCE_ATTACHED"];
-    return HttpResponse.json({ ready: held.length === 0, held } satisfies RowChecks);
+  // Checks saved rows as if submitted now; saves nothing.
+  http.post<never, { ids?: number[] }>("*/user/emissions/check", async ({ request }) => {
+    const ids = (await request.json()).ids ?? [];
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 200) return invalid("ids", "Give 1 to 200 entry ids.");
+    const results = ids.map((id) => {
+      const saved = rows.find((r) => r.pk_id === id);
+      const held: RowChecks["held"] = (saved?.documents ?? 0) > 0 ? [] : ["EVIDENCE_ATTACHED"];
+      return { id, status: saved?.status ?? "pending", checks: { ready: held.length === 0, held } satisfies RowChecks };
+    });
+    return HttpResponse.json({ results });
   }),
 
   http.post<never, Partial<NothingThisMonthBody>>("*/user/my-month/nothing", async ({ request }) => {
@@ -226,13 +227,13 @@ export const reviewHandlers = [
     if (activeLock(body.site_id, y, m)) return error("PERIOD_LOCKED", 409, "This month is closed. Ask your manager to reopen it.");
     const mark = { site_id: body.site_id, category_id: body.category_id, month: body.month as string };
     if (!nothing.some((n) => sameMark(n, mark))) nothing.push(mark);
-    return HttpResponse.json(mark, { status: 201 });
+    return HttpResponse.json({ ...mark, nothing: true });
   }),
   // data-loss-reviewed: a test mock; it removes a "Nothing this month" mark from in-memory sample data, never a real record.
   http.delete("*/user/my-month/nothing", async ({ request }) => {
     const body = (await request.json()) as Partial<NothingThisMonthBody>;
     nothing = nothing.filter((n) => !sameMark(n, body));
-    return new HttpResponse(null, { status: 204 });
+    return HttpResponse.json({ site_id: body.site_id, category_id: body.category_id, month: body.month, nothing: false });
   }),
 
   http.get("*/periods/lock", ({ request }) => {
@@ -240,9 +241,10 @@ export const reviewHandlers = [
     const year = Number(q.get("year"));
     const month = Number(q.get("month"));
     if (!year || !month || month < 1 || month > 12) return invalid("month", "Give the year and month.");
-    const siteIds = (q.get("siteIds") ?? "").split(",").filter(Boolean).map(Number);
-    return HttpResponse.json(status(year, month, siteIds));
+    const site = Number(q.get("site_id"));
+    return HttpResponse.json(status(year, month, site ? [site] : []));
   }),
+  // One period_lock row per site; site_id null locks every site.
   http.post<never, Partial<LockPeriodBody>>("*/periods/lock", async ({ request }) => {
     const body = await request.json();
     if (!body.year) return invalid("year", "Give the year to lock.");
@@ -250,18 +252,20 @@ export const reviewHandlers = [
     const { year, month } = body as { year: number; month: number };
     const siteIds = body.site_id == null ? [] : [body.site_id];
     const now = status(year, month, siteIds);
-    if (now.sites.every((s) => s.locked)) return error("PERIOD_LOCKED", 409, "This month is already locked.");
-    if (now.left.length > 0) return error("PERIOD_INCOMPLETE", 409, `${now.left.length} items are left before this month can be locked.`);
-    const lock: PeriodLock = { company_id: COMPANY_ID, site_id: body.site_id ?? null, year, month, locked_by: 4, locked_at: new Date().toISOString() };
-    locks.push(lock);
-    return HttpResponse.json(lock, { status: 201 });
+    if (now.left.length > 0) return HttpResponse.json({ code: "PERIOD_INCOMPLETE", message: `${now.left.length} items are left before this month can be locked.`, details: { left: now.left } }, { status: 422 });
+    for (const s of now.sites) if (!s.locked) locks.push({ company_id: COMPANY_ID, site_id: s.site_id, year, month, locked_by: 4, locked_at: new Date().toISOString() });
+    return HttpResponse.json(status(year, month, siteIds));
   }),
   http.post<never, Partial<UnlockPeriodBody>>("*/periods/unlock", async ({ request }) => {
     const body = await request.json();
-    if ((body.reason ?? "").trim().length < UNLOCK_REASON_MIN) return error("UNLOCK_REASON_REQUIRED", 400, "Give a reason of at least 5 characters for reopening this month.");
-    const lock = locks.find((l) => !l.reopened_at && l.site_id === (body.site_id ?? null) && l.year === body.year && l.month === (body.month ?? null));
-    if (!lock) return HttpResponse.json({ message: "That month isn't locked." }, { status: 404 });
-    Object.assign(lock, { reopened_by: 4, reopened_at: new Date().toISOString(), reopened_reason: body.reason });
-    return HttpResponse.json(lock);
+    if ((body.reason ?? "").trim().length < UNLOCK_REASON_MIN)
+      return HttpResponse.json({ code: "UNLOCK_REASON_REQUIRED", message: "Give a reason of at least 5 characters for reopening this month.", details: { min_length: UNLOCK_REASON_MIN } }, { status: 400 });
+    const year = body.year as number;
+    const month = body.month as number;
+    const siteIds = body.site_id == null ? [] : [body.site_id];
+    const open = locks.filter((l) => !l.reopened_at && l.year === year && l.month === month && (!siteIds.length || siteIds.includes(l.site_id as number)));
+    if (!open.length) return HttpResponse.json({ code: "SCOPE3_NOT_FOUND", message: "That month isn't locked." }, { status: 404 });
+    for (const l of open) Object.assign(l, { reopened_by: 4, reopened_at: new Date().toISOString(), reopened_reason: body.reason });
+    return HttpResponse.json(status(year, month, siteIds));
   }),
 ];

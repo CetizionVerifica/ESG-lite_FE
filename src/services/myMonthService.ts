@@ -55,5 +55,27 @@ export interface MyMonthResponse {
  */
 export const getMyMonth = async (month?: string): Promise<MyMonthResponse> => {
   const response = await api.get("/user/my-month", { params: month ? { month } : undefined });
-  return response.data;
+  return readMyMonth(response.data);
 };
+
+/**
+ * S3-15 part 2: ESG-lite marks "Nothing this month" as `nothing: true` and
+ * `status: "nothing"`; the page reads `nothing_this_month` and keeps the
+ * status words it orders by (a marked category is a to-do with the mark).
+ */
+export function readMyMonth(data: MyMonthResponse): MyMonthResponse {
+  if (!data?.sites) return data;
+  return {
+    ...data,
+    sites: data.sites.map((s) => ({
+      ...s,
+      categories: s.categories.map((c) => {
+        const raw = c as MyMonthCategory & { nothing?: boolean };
+        const status = String(raw.status);
+        const nothing = raw.nothing === true || raw.nothing_this_month === true || status === "nothing";
+        if (!nothing) return c;
+        return { ...c, status: status === "nothing" ? "todo" : c.status, nothing_this_month: true };
+      }),
+    })),
+  };
+}
