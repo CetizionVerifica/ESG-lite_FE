@@ -24,6 +24,7 @@ import { useEntryDocuments, useLabelConfig, useUpdateEntry } from "../api";
 import { type EntryUpdate, canEdit, saveErrorMessage } from "../edit";
 import { EDIT_FORM_ID, EditEntryForm } from "./EditEntryForm";
 import { type EntryRow, activityFields, keyActivity, periodText, quantityOf } from "../logic";
+import { feraSubLabel } from "../../../lib/scope3/fera";
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -146,11 +147,12 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
                     <Row label="Emissions">
                       <span className="font-num font-semibold tabular-nums">{formatEmissions(Number(entry.total_emission))}</span>
                     </Row>
-                    {entry.fera && (
-                      <Row label="FERA (upstream fuel and energy)">
-                        <span className="font-num tabular-nums">{formatEmissions(Number(entry.fera.total_emission))}</span>
+                    {entry.scope3_sub && <Row label="Part of">{feraSubLabel(entry.scope3_sub)}</Row>}
+                    {entry.fera?.map((f) => (
+                      <Row key={f.pk_id} label={feraSubLabel(f.scope3_sub)}>
+                        <span className="font-num tabular-nums">{formatEmissions(Number(f.total_emission))}</span>
                       </Row>
-                    )}
+                    ))}
                     <Row label="Filed">{entry.reporting_period === "yearly" ? `Yearly · ${periodText(entry)}` : `Monthly · ${periodText(entry)}`}</Row>
                     <Row label="Submitted">
                       {formatDateTime(entry.created_at)}

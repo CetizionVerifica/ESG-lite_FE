@@ -1,5 +1,5 @@
 import { Pencil } from "lucide-react";
-import { type Column, cn, focusRing } from "../../../ui";
+import { Badge, type Column, cn, focusRing } from "../../../ui";
 import { factorTypeLabel } from "../../../lib/scope3/factor";
 import { type Batch, type Factor, batchLabel, factorNumber, formatFactor } from "../logic";
 
@@ -14,7 +14,20 @@ export function factorColumns(opts: { batches: Batch[] | undefined; onEdit: (row
       id: "name",
       header: "Emission category name",
       value: (r) => r.emission_category_name ?? "",
-      cell: (r) => (r.emission_category_name ? <span className="block max-w-[18rem] truncate" title={r.emission_category_name}>{r.emission_category_name}</span> : dash),
+      cell: (r) =>
+        !r.emission_category_name ? (
+          dash
+        ) : r.includes_wtt ? (
+          // S3-7: a life-cycle factor that already sums in WTT, which Category 3 may count again. Same width as the plain name.
+          <span className="flex max-w-[18rem] items-center gap-1.5">
+            <span className="min-w-0 truncate" title={r.emission_category_name}>
+              {r.emission_category_name}
+            </span>
+            <Badge tone="warn" className="shrink-0">WTT included</Badge>
+          </span>
+        ) : (
+          <span className="block max-w-[18rem] truncate" title={r.emission_category_name}>{r.emission_category_name}</span>
+        ),
     },
     { id: "year", header: "Year", width: "5rem", value: (r) => r.year, cell: (r) => <span className="font-num">{r.year}</span> },
     {

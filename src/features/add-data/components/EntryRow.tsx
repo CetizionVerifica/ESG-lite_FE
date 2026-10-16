@@ -18,9 +18,17 @@ import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
 import { methodLabel } from "../../../lib/scope3/labels";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 import { SPEND_FIELDS, isSpendRow, spendPreviewLine } from "../../../lib/scope3/spend";
+import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
 import { SpendFields } from "./SpendFields";
 
 const SPEND_EXTRA_KEYS = new Set<string>(Object.values(SPEND_FIELDS));
+
+/**
+ * The Category 3 (FERA) rows an entry adds on save (S3-7): the upstream twin
+ * against the site's FERA factors (td_loss ones left out), and for a Scope 2
+ * category the T&D-loss twin against its td_loss factors.
+ */
+export type Cat3Calc = { upstream: EmissionCalculator | null; tdLoss: EmissionCalculator | null; upstreamSub: Scope3Sub };
 
 export type RowComparison = { text: string; overThreshold: boolean; threshold: number; previousLabel: string } | null;
 
@@ -29,7 +37,7 @@ type Props = {
   row: ModalRow;
   model: FormModel;
   calc: EmissionCalculator;
-  feraCalc: EmissionCalculator | null;
+  feraCalc: Cat3Calc | null;
   factors: EmissionFactor[];
   mappings: CategoryMapping[];
   units: string[];
@@ -57,7 +65,16 @@ export function EntryRow(p: Props) {
   const mapped = Object.keys(model.mapping).length > 0;
   const factor = row.emission_category ? calc.getEmissionFactor(row.emission_category) : undefined;
   const result = calc.calculateEmission(row);
-  const fera = p.feraCalc && row.emission_category && p.feraCalc.getEmissionFactor(row.emission_category) ? p.feraCalc.calculateEmission(row) : null;
+  const twin = (c: EmissionCalculator | null | undefined) => (c && row.emission_category && c.getEmissionFactor(row.emission_category) ? c.calculateEmission(row).value : null);
+  const cat3 = p.feraCalc
+    ? cat3PreviewText(
+        [
+          { sub: p.feraCalc.upstreamSub, value: twin(p.feraCalc.upstream) },
+          { sub: "3c_td_losses", value: twin(p.feraCalc.tdLoss) },
+        ],
+        (n) => formatNumber(n, 2),
+      )
+    : null;
   const expectedUnit =
     (row.emission_category && calc.getExpectedUnit(row.emission_category)) ||
     (model.spec?.mode === "per_method" ? resolveSpecMethod(model.spec, row)?.method.activity_unit : null) ||
@@ -262,7 +279,11 @@ export function EntryRow(p: Props) {
           ) : (
             <p className={cn("text-sm", p.showIssue ? "text-bad" : "text-muted")}>{p.issue?.message ?? result.status}</p>
           )}
-          {fera?.value != null && <p className="font-num text-xs text-muted">+ <InfoTerm>FERA</InfoTerm> {formatNumber(fera.value, 2)} tCO₂e (added on save)</p>}
+          {cat3 && (
+            <p className="font-num text-xs text-muted">
+              + <InfoTerm id="fera">Cat 3</InfoTerm> {cat3.slice(CAT3_PREVIEW_PREFIX.length)}
+            </p>
+          )}
         </div>
       </footer>
     </section>
