@@ -497,7 +497,8 @@ test("a passenger.km row works the distance out in the drawer", async ({ page })
 
   // Rail is an estimate on the road corridor.
   await drawer.getByRole("radio", { name: "Rail" }).click();
-  await expect(drawer.getByText("Estimate")).toBeVisible();
+  await expect(drawer.getByText("Estimate", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("The entry is saved as an estimate.")).toBeVisible();
   await drawer.getByRole("radio", { name: "Road" }).click();
   await drawer.getByRole("button", { name: "Use this distance" }).click();
 
@@ -510,6 +511,34 @@ test("a passenger.km row works the distance out in the drawer", async ({ page })
   await expect(page.getByText("1 row sent for approval")).toBeVisible();
   expect(created[0].body).toMatchObject({ activity_data: { "Activity Data": "43", emission_category: "Car (petrol)" }, activity_data_unit: "passenger.km" });
   expect(Object.keys(created[0].body.activity_data as object)).not.toContain("Activity Data__distance");
+  // A road route is not an estimate (S3-3 is_estimate).
+  expect(created[0].body).not.toHaveProperty("is_estimate");
+});
+
+test("a rail estimate from the distance drawer is saved as an estimate (S3-3)", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  await page.goto("/data/new?site=4&category=11&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Emission category").selectOption({ label: "Car (petrol)" });
+  await row.getByLabel("Unit").selectOption("passenger.km");
+  await row.getByLabel("Passenger").fill("1");
+  await row.getByRole("button", { name: "Calculate distance" }).click();
+  const drawer = page.getByRole("dialog", { name: "Calculate distance" });
+  await drawer.getByRole("textbox", { name: "From" }).fill("Manama");
+  await drawer.getByRole("textbox", { name: "From" }).press("Enter");
+  await drawer.getByRole("textbox", { name: "To" }).fill("Riffa");
+  await drawer.getByRole("textbox", { name: "To" }).press("Enter");
+  await drawer.getByRole("radio", { name: "Rail" }).click();
+  await expect(drawer.getByText("The entry is saved as an estimate.")).toBeVisible();
+  await drawer.getByRole("button", { name: "Use this distance" }).click();
+  await expect(row.getByLabel("Distance (km)")).toHaveValue("21.5");
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0].body).toMatchObject({ is_estimate: true, activity_data_unit: "passenger.km" });
+  expect(created[0].body.activity_data).not.toHaveProperty("_estimates");
 });
 
 test("typed rows ask before leaving the page", async ({ page }) => {

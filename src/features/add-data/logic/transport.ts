@@ -2,7 +2,7 @@
 // methods, the "Who paid?" hint, and the estimated-distance flag.
 // The forms themselves come from the backend config (src/scope3/transport/configs.ts).
 import { normalizeUnitKey } from "../hooks/emissionCalc";
-import type { CalculationSpec, ModalRow } from "../types";
+import type { CalculationSpec } from "../types";
 
 /** What each S3-8 unit key asks for (guidance formulas 4.1, 4.6, 4.8, 4.9). */
 export const TRANSPORT_UNIT_HELP: Record<string, string> = {
@@ -51,22 +51,3 @@ export function transportUnitHelp(spec: CalculationSpec | null | undefined, unit
 export const PAID_BY_KEY = "paid_by";
 export const PAID_BY_HELP = "If you paid for it, it belongs in Category 4. Category 9 is only transport after the sale that you didn't pay for.";
 
-/**
- * The distance drawer marks the value it put in a field as estimated (rail,
- * or sea when the route service didn't answer). The row sends
- * `is_estimate: true` only while that field still holds that value: typing
- * over it makes the row a measured distance again.
- */
-export type DistanceEstimate = { column: string; value: string };
-
-export const markEstimate = (row: ModalRow, column: string, value: string, estimate: boolean): ModalRow => {
-  if (estimate) return { ...row, _estimate: { column, value } satisfies DistanceEstimate };
-  const next = { ...row };
-  delete next._estimate;
-  return next;
-};
-
-export const isEstimatedRow = (row: ModalRow): boolean => {
-  const e = row._estimate as DistanceEstimate | undefined;
-  return !!e && typeof e.column === "string" && String(row[e.column] ?? "") === e.value;
-};

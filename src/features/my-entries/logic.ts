@@ -210,7 +210,8 @@ export type ActivityField = { key: string; value: string };
 export function activityFields(activityData: Record<string, unknown> | null | undefined, config?: LabelConfig): ActivityField[] {
   const data = activityData ?? {};
   return Object.entries(data)
-    .filter(([key, value]) => !META_KEYS.has(key) && value !== null && value !== undefined && value !== "")
+    // The row's method ("@method") has its own "How it was calculated" line (S3-3).
+    .filter(([key, value]) => !META_KEYS.has(key) && key !== "@method" && value !== null && value !== undefined && value !== "")
     .map(([key, value]) => ({
       key,
       value: typeof value === "object" ? JSON.stringify(value) : optionLabel(key, String(value), config, data),

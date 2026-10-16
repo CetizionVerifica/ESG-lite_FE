@@ -50,6 +50,8 @@ export interface EmissionFactor {
   year: number;
   /** S3-2 factor type; a FERA factor typed td_loss makes the T&D-loss twin (S3-7). */
   factor_type?: string | null;
+  /** S3-2 geography (ISO-3166 alpha-2, a region code or GLO); the data quality preview reads it (S3-3). */
+  geography?: string | null;
   // S3-2 metadata the factor list returns; S3-5 reads these for spend rows.
   price_currency?: string | null;
   price_base_year?: number | null;
@@ -114,4 +116,10 @@ export interface ColumnConfig {
   emission_category_mapping?: EmissionCategoryMapping;
   extra_fields?: ExtraFieldDefinition[];
   calculation?: CalculationSpec | null;
+  /**
+   * S3-3 `method_options`: the methods this form offers, most specific first,
+   * each with its units (contracts §6 `[{method, units}]`). Read it with
+   * `readMethodOptions` (src/lib/scope3/dq.ts), which also takes bare keys.
+   */
+  method_options?: unknown;
 }

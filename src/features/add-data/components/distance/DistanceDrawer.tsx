@@ -13,7 +13,7 @@ type Props = {
   onClose: () => void;
   /** The row's unit: km, miles, passenger.km… The result is converted to it. */
   unit: string;
-  /** `estimate`: rail, or sea without a route; the row then sends is_estimate (S3-8). */
+  /** `estimate`: a rail or sea estimate (or straight-line fallback), saved as the row's `is_estimate` (S3-3). */
   onUse: (distance: number, estimate: boolean) => void;
 };
 
@@ -113,6 +113,7 @@ export function DistanceDrawer({ open, onClose, unit, onUse }: Props) {
               <p className="flex flex-wrap items-center gap-2 text-xs text-muted">
                 {result.note}
                 {result.estimate && <Badge tone="warn">Estimate</Badge>}
+                {result.estimate && <span className="w-full">The entry is saved as an estimate.</span>}
               </p>
               <p className="mt-1 font-num text-xl font-semibold text-ink">
                 {formatNumber(result.value, 2)} {shownUnit}
