@@ -25,7 +25,8 @@ export interface ColumnEntity {
 // Use of Sold Products (Scope 3 Category 11).
 export interface MethodCalculation {
   multiply: string[]; // column names whose values multiply together
-  percent?: string[]; // subset of multiply entered as percentages (divided by 100)
+  percent?: string[]; // subset of multiply/divide entered as percentages (divided by 100)
+  divide?: string[]; // S3-11: fields the product is divided by (each > 0)
   activity_unit?: string; // unit the product is in (preselects activity_data_unit)
 }
 
@@ -34,7 +35,7 @@ export interface CalculationSpec {
   // per_unit:   the row's unit picks them (transport: tonne.km = Weight × Distance,
   //             km = Distance alone); keys are normalized unit names.
   mode: "per_method" | "per_unit";
-  method_column?: string; // per_method only
+  method_column?: string; // per_method only: a select column, or "@method" (the row's method, S3-9)
   identity_columns?: string[]; // columns added to the duplicate identity (backend)
   methods: { [methodKeyOrUnit: string]: MethodCalculation };
   legacy_field?: string; // per_unit: pre-spec rows hold the product here
@@ -47,6 +48,8 @@ export interface EmissionFactor {
   factor_value: number;
   denominator_unit: string;
   year: number;
+  /** S3-2 factor type; a FERA factor typed td_loss makes the T&D-loss twin (S3-7). */
+  factor_type?: string | null;
 }
 
 export interface ModalRow {

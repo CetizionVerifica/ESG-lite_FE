@@ -25,8 +25,17 @@ export const normalizeUnitKey = (unit: unknown): string => {
   return u;
 };
 
+/**
+ * `method_column` value meaning "the row's calculation method picks the
+ * fields" (S3-9; backend calculationSpec.ts ROW_METHOD_COLUMN). Until rows
+ * carry a `method` (S3-3) the method is stored in `row["@method"]`, which the
+ * add-data method picker writes, so the lookup below needs no special case.
+ */
+export const ROW_METHOD_COLUMN = "@method";
+
 // Which of the spec's methods applies to this row — by dropdown value
-// (per_method) or by the row's unit (per_unit). null = not decidable yet.
+// (per_method, or the row's method with "@method") or by the row's unit
+// (per_unit). null = not decidable yet.
 export const resolveSpecMethod = (
   spec: CalculationSpec,
   row: ModalRow,
@@ -49,7 +58,7 @@ export const resolveSpecMethod = (
 // method/unit is chosen).
 export const specNumericColumns = (spec: CalculationSpec): Set<string> => {
   const all = new Set<string>();
-  Object.values(spec.methods).forEach((m) => m.multiply?.forEach((f) => all.add(f)));
+  Object.values(spec.methods).forEach((m) => [...(m.multiply ?? []), ...(m.divide ?? [])].forEach((f) => all.add(f)));
   return all;
 };
 
@@ -146,7 +155,7 @@ export const findActivityValue = (
 };
 
 // Activity value for a spec category: the PRODUCT of the chosen method's
-// fields (percent fields divided by 100). Returns a status message instead
+// fields (percent fields divided by 100), divided by its `divide` fields. Returns a status message instead
 // when the row isn't complete.
 const specActivityValue = (spec: CalculationSpec, row: ModalRow): number | { status: string } => {
   const resolved = resolveSpecMethod(spec, row);
@@ -157,7 +166,9 @@ const specActivityValue = (spec: CalculationSpec, row: ModalRow): number | { sta
           ? row.activity_data_unit
             ? "This unit is not configured for this category"
             : "Select unit"
-          : `Select ${spec.method_column ?? "method"}`,
+          : spec.method_column === ROW_METHOD_COLUMN
+            ? "Choose a calculation method"
+            : `Select ${spec.method_column ?? "method"}`,
     };
   }
   const { method } = resolved;
@@ -179,6 +190,17 @@ const specActivityValue = (spec: CalculationSpec, row: ModalRow): number | { sta
       product *= value / 100;
     } else {
       product *= value;
+    }
+  }
+  // divide (S3-9; first used by S3-11): occupancy, survey scaling and leased-space shares.
+  for (const fieldName of method.divide ?? []) {
+    const value = parseFloat(String(row[fieldName] ?? "").replace(/,/g, ""));
+    if (isNaN(value) || value <= 0) return { status: `Enter ${fieldName} (a number greater than 0)` };
+    if (method.percent?.includes(fieldName)) {
+      if (value > 100) return { status: `${fieldName} cannot be more than 100` };
+      product /= value / 100;
+    } else {
+      product /= value;
     }
   }
   return product;

@@ -18,3 +18,6 @@ Save per section with toast; errors visible (today silent on load and save).
 
 ## Connected apps (IM10, 2026-10-12)
 Fifth section, Superadmin only: the apps (Claude) allowed to act for this account, Disconnect, and the connector URL with Copy when nothing is connected. `/settings?tab=apps` lands on it. Spec and as-built notes: `src/features/oauth-consent/CLAUDE.md`.
+
+## Scope 3 (S3-0, 2026-10-15)
+Section for Admin and Superadmin, before Connected apps: one line on what Scope 3 settings are and a link to `/settings/scope3` (route `scope3-boundary`, `src/features/scope3/`; Managers can open it read-only, without the Settings section). S3-0 shows a read-only placeholder there; S3-1 replaces it with the company boundary page. `/settings?tab=scope3` lands on the section.

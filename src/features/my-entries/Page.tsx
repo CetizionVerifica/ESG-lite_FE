@@ -52,6 +52,7 @@ import {
   toSupportedPeriod,
   userSites,
 } from "./logic";
+import { twinsTotal } from "../../lib/scope3/fera";
 
 const PAGE_SIZE = 25;
 const FILTER_KEYS = ["category", "status"];
@@ -168,7 +169,7 @@ export default function MyEntriesPage() {
       cell: (r) => (
         <div className="whitespace-nowrap">
           <span>{formatEmissions(Number(r.total_emission))}</span>
-          {r.fera && <p className="text-xs text-muted">+ <InfoTerm>FERA</InfoTerm> {formatEmissions(Number(r.fera.total_emission))}</p>}
+          {r.fera && <p className="text-xs text-muted">+ <InfoTerm>FERA</InfoTerm> {formatEmissions(twinsTotal(r.fera))}</p>}
         </div>
       ),
     },

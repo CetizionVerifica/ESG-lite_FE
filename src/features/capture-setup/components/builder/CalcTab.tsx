@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button, SegmentedControl, Select, TextField, cn, focusRing, panel } from "../../../../ui";
+import { ROW_METHOD_COLUMN } from "../../../../lib/emissions/emissionCalc";
+import { ROW_METHOD_KEYS, methodLabel } from "../../../../lib/scope3/labels";
 import {
   type BuilderDraft,
   type CalcMode,
+  addRowMethod,
   addUnitMethod,
   calcMode,
   describeMethod,
@@ -31,7 +34,7 @@ const MODES: { value: CalcMode; label: string }[] = [
 
 const HELP: Record<CalcMode, string> = {
   none: "The entry's one amount × the factor.",
-  per_method: "A select field picks which numbers multiply together (e.g. Use of sold products).",
+  per_method: "A select field, or the row's calculation method, picks which numbers multiply together (e.g. Use of sold products).",
   per_unit: "The entry's unit picks which numbers multiply (e.g. tonne.km = Weight × Distance).",
 };
 
@@ -56,6 +59,8 @@ export function CalcTab({ draft, onChange }: CalcTabProps) {
   const numbers = draft.fields.filter(isNumber);
   const selects = draft.fields.filter(isSelect);
   const [unit, setUnit] = useState("");
+  const rowMethod = calc?.mode === "per_method" && calc.method_column === ROW_METHOD_COLUMN;
+  const freeMethods = rowMethod ? ROW_METHOD_KEYS.filter((k) => !calc.methods[k]) : [];
 
   return (
     <div className="space-y-4">
@@ -69,9 +74,12 @@ export function CalcTab({ draft, onChange }: CalcTabProps) {
           label="Field that decides the formula"
           value={calc.method_column ?? null}
           onChange={(v) => v && onChange((d) => setMethodField(d, v))}
-          options={selects.map((f) => ({ value: f.column_name, label: fieldTitle(f.column_name) }))}
+          options={[
+            ...selects.map((f) => ({ value: f.column_name, label: fieldTitle(f.column_name) })),
+            { value: ROW_METHOD_COLUMN, label: "Row's method" },
+          ]}
           placeholder="Choose a select field"
-          emptyText="Add a select field first"
+          help={rowMethod ? "The entry picks its calculation method (e.g. Distance travelled); add the methods below." : undefined}
         />
       )}
 
@@ -91,9 +99,21 @@ export function CalcTab({ draft, onChange }: CalcTabProps) {
               </div>
               {m.multiply.length > 0 && (
                 <div className="space-y-1">
+                  <p className="text-xs text-muted">Divide by</p>
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Fields to divide by for ${key}`}>
+                    {numbers
+                      .filter((f) => !m.multiply.includes(f.column_name))
+                      .map((f) => (
+                        <Chip key={f.column_name} on={!!m.divide?.includes(f.column_name)} label={fieldTitle(f.column_name)} onToggle={() => onChange((d) => updateMethod(d, key, { divide: toggleIn(m.divide, f.column_name) }))} />
+                      ))}
+                  </div>
+                </div>
+              )}
+              {m.multiply.length > 0 && (
+                <div className="space-y-1">
                   <p className="text-xs text-muted">Entered as a percentage (divided by 100)</p>
                   <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Percentage fields for ${key}`}>
-                    {m.multiply.map((f) => (
+                    {[...m.multiply, ...(m.divide ?? [])].map((f) => (
                       <Chip key={f} on={!!m.percent?.includes(f)} label={`${fieldTitle(f)} (%)`} onToggle={() => onChange((d) => updateMethod(d, key, { percent: toggleIn(m.percent, f) }))} />
                     ))}
                   </div>
@@ -103,15 +123,27 @@ export function CalcTab({ draft, onChange }: CalcTabProps) {
                 <div className="w-48">
                   <TextField label="Result unit" value={m.activity_unit ?? ""} onChange={(v) => onChange((d) => updateMethod(d, key, { activity_unit: v }))} placeholder="e.g. kWh" help="Preselected on the entry." />
                 </div>
-                {calc.mode === "per_unit" && (
+                {(calc.mode === "per_unit" || rowMethod) && (
                   <Button size="sm" variant="ghost" icon={<Trash2 aria-hidden className="size-4" />} onClick={() => onChange((d) => removeMethod(d, key))}>
-                    Remove {key}
+                    Remove {rowMethod ? methodLabel(key) : key}
                   </Button>
                 )}
               </div>
             </li>
           ))}
         </ol>
+      )}
+
+      {rowMethod && freeMethods.length > 0 && (
+        <div className="w-64">
+          <Select<string>
+            label="Add a method"
+            value={null}
+            onChange={(v) => v && onChange((d) => addRowMethod(d, v))}
+            options={freeMethods.map((k) => ({ value: k, label: methodLabel(k) }))}
+            placeholder="Choose a method"
+          />
+        </div>
       )}
 
       {calc?.mode === "per_unit" && (

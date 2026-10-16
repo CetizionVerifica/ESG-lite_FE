@@ -66,6 +66,7 @@ const CONFIGS = [
 
 async function signIn(page: Page) {
   let sites = makeSites();
+  let lease = { lease_role: null as string | null, lease_type: null as string | null, floor_area_m2: null as number | null, boundary: null, note: null };
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
   const user = { name: "Sam Staff", email: "sam@example.com" };
   await page.addInitScript((u) => {
@@ -118,6 +119,13 @@ async function signIn(page: Page) {
         return json({ message: "Site created successfully", site }, 201);
       }
       if (path.endsWith("/admin/sites")) return json(sites);
+      // S3-11: lease details per site (financial control, so an operating lease is Category 8).
+      if (path.endsWith("/scope3/assets/sites"))
+        return json({ company_id: 1, consolidation_approach: "financial_control", can_edit: true, sites: [{ site_id: 1, name: "Hidd", ...lease }] });
+      if (/\/scope3\/assets\/sites\/1$/.test(path) && method === "PUT") {
+        lease = { ...lease, ...(body as Partial<typeof lease>) };
+        return json({ site_id: 1, name: "Hidd", ...lease });
+      }
       return json({});
     },
   );
@@ -220,4 +228,24 @@ test("a superadmin edits a site, sees its people and deletes it after typing its
   await expect(page.getByText('Site "Hidd" deleted')).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ method: "DELETE", path: expect.stringMatching(/\/admin\/sites\/1$/) });
   await expect(sitesTable(page).getByRole("row")).toHaveCount(2);
+});
+
+// S3-11
+test("a superadmin marks a site as leased and sees where its energy belongs", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/setup/sites?open=1");
+  const drawer = page.getByRole("dialog", { name: "Hidd" });
+  await drawer.getByRole("tab", { name: "Lease" }).click();
+  await drawer.getByRole("combobox", { name: "Lease", exact: true }).selectOption("lessee");
+  await expect(drawer.getByTestId("lease-note")).toContainText("Choose the lease type");
+  await drawer.getByRole("combobox", { name: "Lease type" }).selectOption("operating");
+  await expect(drawer.getByTestId("lease-note")).toHaveText("With financial control, this site's energy belongs in Category 8 · Upstream leased assets.");
+  await drawer.getByRole("textbox", { name: /Floor area/ }).fill("200");
+  await drawer.getByRole("button", { name: "Save lease" }).click();
+  await expect(page.getByText("Lease details saved")).toBeVisible();
+  expect(calls.at(-1)).toMatchObject({
+    method: "PUT",
+    path: expect.stringMatching(/\/scope3\/assets\/sites\/1$/),
+    body: { lease_role: "lessee", lease_type: "operating", floor_area_m2: 200, company_id: 1 },
+  });
 });
