@@ -15,7 +15,7 @@ import { ExtraFields } from "./ExtraFields";
 import { TripCalculator } from "./TripCalculator";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
-import { methodLabel } from "../../../lib/scope3/methods";
+import { methodLabel } from "../../../lib/scope3/labels";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 import { SPEND_FIELDS, isSpendRow, spendPreviewLine } from "../../../lib/scope3/spend";
 import { SpendFields } from "./SpendFields";

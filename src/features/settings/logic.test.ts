@@ -123,3 +123,15 @@ describe("Connected apps section", () => {
     expect(sectionFromTab(null, "Superadmin")).toBeNull();
   });
 });
+
+describe("Scope 3 section", () => {
+  it("shows for company Admins and Superadmins only", () => {
+    for (const role of ["Admin", "Superadmin"]) expect(sectionsFor(role).map((s) => s.id)).toContain("scope3");
+    for (const role of ["User", "Manager", null]) expect(sectionsFor(role).map((s) => s.id)).not.toContain("scope3");
+  });
+
+  it("opens on ?tab=scope3 only for those roles", () => {
+    expect(sectionFromTab("scope3", "Admin")).toBe("scope3");
+    expect(sectionFromTab("scope3", "User")).toBeNull();
+  });
+});

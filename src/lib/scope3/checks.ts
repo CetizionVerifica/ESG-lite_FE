@@ -1,28 +1,14 @@
 /**
  * Review check ids (ESG-lite docs/scope3/01-contracts.md §8) and the fixed
- * copy the review screens show for each. Stand-in written by S3-15 ahead of
- * S3-0: when S3-0 lands `src/lib/scope3/contracts.ts` / `labels.ts`, the ids
- * move there and this file keeps the labels and helpers.
+ * copy the review screens show for each. The ids and `RowChecks` live in
+ * `contracts.ts` (S3-0); this file keeps the labels and helpers.
  *
  * Pages never write their own check copy: every label, hint and icon name
  * comes from here.
  */
+import { CHECK_IDS, type CheckId, type RowChecks } from "./contracts";
 
-export const CHECK_IDS = [
-  "FACTOR_FOUND",
-  "UNIT_OK",
-  "EVIDENCE_ATTACHED",
-  "WITHIN_THRESHOLD",
-  "NO_DUPLICATE",
-  "IMPORT_MATCH_SURE",
-  "METHOD_GIVEN",
-  "DQ_ACCEPTABLE",
-] as const;
-
-export type CheckId = (typeof CHECK_IDS)[number];
-
-/** `emission.checks` as the API sends it; `null` while a pending row hasn't been checked yet. */
-export type RowChecks = { ready: boolean; held: CheckId[] };
+export { CHECK_IDS, type CheckId, type RowChecks } from "./contracts";
 
 /** Icon names; `src/ui/CheckChip` maps them to icons. */
 export type CheckIcon = "factor" | "unit" | "evidence" | "trend" | "duplicate" | "import" | "method" | "quality";
