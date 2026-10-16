@@ -68,7 +68,7 @@ Teleworking energy (optional in the guidance; later follow-up). Spend maths (S3-
 - Preview maths: `src/lib/emissions/emissionCalc.ts` `ROW_METHOD_COLUMN` ("@method"); `divide` was already mirrored by S3-11 and is now S3-9's. Tests: `emissionCalc.rowMethod.test.ts` (7.1 rail, 7.2 rail, 6.1 occupancy).
 - Form rules (`src/lib/emissions/form.ts`): a dependent select with no options for the chosen parent is hidden and ends the mapping chain (Rail has no radiative-forcing choice); a method change keeps divide fields. Tests: `form.travel.test.ts`.
 - Add data (deviation, add-data is not in §4): a "Calculation method" select when the spec's `method_column` is "@method" (writes `row["@method"]`, saved in activity_data until S3-3 adds `emission.method`); the Category 6 note under the first select; a "Trip calculator" for Category 7 distance_based. The row gets the category's `ghg_category` from the signed-in user's site categories.
-- Method labels: `src/lib/scope3/methods.ts` is a STAND-IN for S3-0's FE labels; switch to S3-0's `methodLabel` when it merges and delete it.
+- Method labels come from S3-0's `methodLabel` in `src/lib/scope3/labels.ts` (the S3-9 stand-in `methods.ts` was removed with S3-0 3/3).
 - Survey page `/settings/scope3/commuting` (`scope3-commuting`, Manager+): sites from `GET /scope3/commuting/sites` (added in ESG-lite for this page), CSV/XLSX read in the browser (`logic.ts`), preview by mode, then the server's plan and "Import n rows as Pending". Answers are sent once and never stored.
 - Capture setup: "Row's method" in the formula field select (keeps methods, "Add a method"), "Divide by" chips, percent chips cover divide fields.
 - Playwright: `e2e/scope3-commuting.spec.ts`.
