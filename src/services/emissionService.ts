@@ -28,6 +28,8 @@ export interface EmissionData {
     category_id: number;
     category_name: string;
     scope?: string | null;
+    /** GHG Protocol category 1–15 (S3-1), when the server sends it; words the method label (S3-3). */
+    ghg_category?: number | null;
   };
   reviewed_by?: {
     user_id: number;
@@ -47,6 +49,13 @@ export interface EmissionData {
   fera_partner_status?: EmissionStatus | null;
   /** S3-15 review checks; null while a pending row hasn't been checked; absent on older APIs. */
   checks?: RowChecks | null;
+  /** S3-3: how the row was calculated (a contracts §1 method key); null outside Scope 3 and on older APIs. */
+  method?: string | null;
+  /** S3-3: the row's data quality (contracts §3 `Dq`); read it with `readDq` (src/lib/scope3/dq.ts). */
+  dq?: unknown;
+  data_type?: "primary" | "secondary" | null;
+  /** S3-3: the activity figure is an estimate (e.g. a distance from the route helper). */
+  is_estimate?: boolean | null;
 }
 
 export type ReportFrequency = "yearly" | "monthly";
@@ -136,6 +145,10 @@ export const getEmissionsPaginated = async (params: {
   attention?: boolean | null;
   /** S3-15, with `status=pending`: only rows whose checks are ready (true) or not (false). */
   ready?: boolean | null;
+  /** S3-3: only rows calculated this way (a contracts §1 method key). */
+  method?: string | null;
+  /** S3-3: only rows whose overall data quality is at least this good (1 best). */
+  dqMax?: 1 | 2 | 3 | null;
 }): Promise<PaginatedEmissions> => {
   const query: Record<string, string | number> = {
     page: params.page,
@@ -158,6 +171,8 @@ export const getEmissionsPaginated = async (params: {
   if (params.batchId) query.batchId = params.batchId;
   if (params.batchId && params.attention) query.attention = 1;
   if (params.ready != null) query.ready = params.ready ? 1 : 0;
+  if (params.method) query.method = params.method;
+  if (params.dqMax != null) query.dq_max = params.dqMax;
 
   const response = await api.get("/user/emissions", { params: query });
   return response.data;
@@ -190,6 +205,10 @@ export const createEmission = async (
     // year_type 'CY' or 'FY' and are dated at the period end.
     reporting_period?: "monthly" | "yearly";
     year_type?: "CY" | "FY";
+    /** S3-3: how the row was calculated; refused with METHOD_NOT_ALLOWED when the form doesn't offer it. */
+    method?: string;
+    /** S3-3: the figure is an estimate (the distance helper's estimate flag). */
+    is_estimate?: boolean;
   },
   replace?: boolean
 ) => {

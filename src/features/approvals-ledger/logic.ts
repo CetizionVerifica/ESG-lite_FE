@@ -111,6 +111,10 @@ export type ListInput = {
   attention?: boolean;
   /** S3-15 `?group=` on Approvals (not with a batch): ready or needs-attention rows only. */
   group?: ReviewGroup | null;
+  /** S3-3 `?method=`: rows calculated this way. */
+  method?: string | null;
+  /** S3-3 `?dq=`: rows whose data quality is at least this good (`dq_max`, 1 best). */
+  dqMax?: 1 | 2 | 3 | null;
   sort: SortState;
   page: number;
   pageSize: number;
@@ -127,6 +131,8 @@ export function listParams(input: ListInput) {
     batchId: input.batchId || null,
     attention: input.batchId && input.attention ? true : null,
     ready: input.tab === "approvals" && !input.batchId && input.group ? input.group === "ready" : null,
+    method: input.method || null,
+    dqMax: input.dqMax ?? null,
     sort: sortKey ?? null,
     order: sortKey && input.sort ? input.sort.dir : null,
     // DataTable pages are 0-based, the API's 1-based.
@@ -262,7 +268,8 @@ export type ActivityField = { key: string; label: string; value: string; numeric
 export function activityFields(row: EmissionData, config: ColumnConfig | undefined): ActivityField[] {
   const data = row.activity_data ?? {};
   const order = (config?.columns ?? []).map((c) => c.column_name);
-  const keys = Object.keys(data).filter((k) => !META_KEYS.has(k));
+  // The row's method ("@method") has its own "How it was calculated" line (S3-3).
+  const keys = Object.keys(data).filter((k) => !META_KEYS.has(k) && k !== "@method");
   const ordered = [
     ...order.flatMap((name) => keys.filter((k) => sameText(k, name))),
     ...keys.filter((k) => !order.some((name) => sameText(name, k))),

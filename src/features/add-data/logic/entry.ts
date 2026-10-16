@@ -6,6 +6,7 @@ import { isSupportedCurrency } from "../../../lib/scope3/spend";
 import type { ModalRow } from "../types";
 import { SUPPLIER_ROW_KEYS, supplierMethodOf, supplierPayload } from "./supplier";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
+import { isRowMethod } from "../../../lib/scope3/dq";
 
 /** What is being reported: a month, or a CY/FY year (yearly batches). */
 export type EntryPeriod =
@@ -117,8 +118,10 @@ export interface EmissionPayload {
   /** S3-6: the supplier the goods came from, and for "Supplier's own figure" the figure chosen. */
   supplier_id?: number;
   supplier_factor_id?: number;
-  /** S3-6: sent for the supplier methods only (S3-3's method cards send it for every method). */
+  /** S3-3: how the row was calculated (the row's method), when it has one; S3-6's supplier methods included. */
   method?: string;
+  /** S3-3: sent (true) only when a value came from an estimate, such as the distance helper's rail or sea estimate. */
+  is_estimate?: boolean;
 }
 
 /**
@@ -127,8 +130,15 @@ export interface EmissionPayload {
  * stay out of activity_data. Yearly rows are always filed on the period end;
  * a monthly row keeps its own date_of_reporting when it has one.
  */
-export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: number; period: EntryPeriod }): EmissionPayload {
-  const { activity_data_unit, date_of_reporting: rowDate, _extra_data, ...rest } = row;
+export function buildPayload(
+  row: ModalRow,
+  ctx: {
+    siteId: number;
+    categoryId: number;
+    period: EntryPeriod;
+  },
+): EmissionPayload {
+  const { activity_data_unit, date_of_reporting: rowDate, _extra_data, _estimates, ...rest } = row;
   const activity: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(rest)) {
     if (key === "id") continue;
@@ -141,6 +151,8 @@ export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: n
     activity[key] = value;
   }
   const supplier = supplierPayload(row);
+  const method = row[ROW_METHOD_COLUMN];
+  const estimated = Array.isArray(_estimates) && _estimates.length > 0;
   const date = entryDate(ctx.period);
   return {
     site_id: ctx.siteId,
@@ -155,7 +167,8 @@ export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: n
     year_type: ctx.period.mode === "yearly" ? ctx.period.yearType : undefined,
     ...(supplier.supplier_id ? { supplier_id: supplier.supplier_id } : {}),
     ...(supplier.supplier_factor_id ? { supplier_factor_id: supplier.supplier_factor_id } : {}),
-    ...(supplier.method ? { method: supplier.method } : {}),
+    ...(supplier.method ? { method: supplier.method } : isRowMethod(method) ? { method } : {}),
+    ...(estimated ? { is_estimate: true } : {}),
   };
 }
 

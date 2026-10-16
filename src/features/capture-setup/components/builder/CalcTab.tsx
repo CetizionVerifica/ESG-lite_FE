@@ -20,10 +20,14 @@ import {
   toggleIn,
   updateMethod,
 } from "../../builder";
+import { isGhgCategoryNumber } from "../../../../lib/scope3/contracts";
+import { MethodsOffered } from "./MethodsOffered";
 
 export type CalcTabProps = {
   draft: BuilderDraft;
   onChange: (update: (d: BuilderDraft) => BuilderDraft) => void;
+  /** The form's GHG Protocol category (Scope 3): shows "Methods offered" (S3-3). */
+  ghgCategory?: number | null;
 };
 
 const MODES: { value: CalcMode; label: string }[] = [
@@ -53,7 +57,7 @@ function Chip({ on, label, onToggle }: { on: boolean; label: string; onToggle: (
 }
 
 /** How the activity amount is worked out, in plain words. */
-export function CalcTab({ draft, onChange }: CalcTabProps) {
+export function CalcTab({ draft, onChange, ghgCategory }: CalcTabProps) {
   const mode = calcMode(draft);
   const calc = draft.calculation;
   const numbers = draft.fields.filter(isNumber);
@@ -64,6 +68,7 @@ export function CalcTab({ draft, onChange }: CalcTabProps) {
 
   return (
     <div className="space-y-4">
+      {isGhgCategoryNumber(ghgCategory) && <MethodsOffered draft={draft} onChange={onChange} ghgCategory={ghgCategory} />}
       <div className="space-y-1">
         <SegmentedControl<CalcMode> label="Calculation" value={mode} onChange={(m) => onChange((d) => setCalcMode(d, m))} options={MODES} />
         <p className="text-sm text-muted">{HELP[mode]}</p>

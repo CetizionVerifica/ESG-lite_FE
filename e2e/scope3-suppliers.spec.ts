@@ -2,9 +2,10 @@ import { type Page, type Route, expect, test } from "@playwright/test";
 
 /**
  * S3-6 smoke test: a Manager adds a supplier and its figure on /suppliers; a
- * contributor enters Category 1 with "Supplier's own figure" and sees the
- * matched figure and the preview, and the save carries the supplier and the
- * method. /suppliers answers from an in-memory list; the server, not this
+ * contributor gets the Supplier field only (simple-entry §8, default (a)) and
+ * the save carries the supplier; on a company set to full detail (SE-1) the
+ * contributor picks "Supplier's own figure", sees the matched figure and the
+ * preview, and the save carries the supplier and the method. /suppliers answers from an in-memory list; the server, not this
  * page, calculates every saved total.
  */
 
@@ -55,8 +56,10 @@ function supplierApi(state: { suppliers: Sup[]; figures: Fig[]; calls: Array<{ m
   };
 }
 
-async function signIn(page: Page, role: "Manager" | "User", state: Parameters<typeof supplierApi>[0]) {
-  const user = role === "User" ? { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [site] } : { user_id: 2, name: "Mona Manager", email: "mona@midal.com", sites: [site] };
+/** `fullDetail`: the company shows contributors the calculation (SE-1 `entry_detail = "full"`). */
+async function signIn(page: Page, role: "Manager" | "User", state: Parameters<typeof supplierApi>[0], fullDetail = false) {
+  const userSite = fullDetail ? { ...site, company: { ...site.company, entry_detail: "full" } } : site;
+  const user = role === "User" ? { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [userSite] } : { user_id: 2, name: "Mona Manager", email: "mona@midal.com", sites: [userSite] };
   await page.addInitScript(
     ([u, r]) => {
       localStorage.setItem("token", "test-token");
@@ -129,7 +132,36 @@ test("a Manager adds a supplier and its cradle-to-gate figure", async ({ page })
   await expect(drawer.getByRole("list", { name: "Figures" })).toContainText("8.6 kgCO₂e/kg");
 });
 
-test("a contributor enters Category 1 with the supplier's own figure", async ({ page }) => {
+test("a contributor gets the Supplier field only: no method choice and no supplier figures", async ({ page }) => {
+  const state = {
+    suppliers: [{ supplier_id: 1, name: "Gulf Smelter Co.", country: "AE", email: null }] as Sup[],
+    figures: [
+      { id: 1, supplier_factor_id: 1, supplier_id: 1, item: "P1020 ingot", unit: "kg", kgco2e_per_unit: 8.6, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6", source: "manual", evidence_document_id: null, material_factor_id: null, supplier_request_id: null, has_evidence: true },
+    ] as Fig[],
+    calls: [] as Array<{ method: string; path: string; body: Record<string, unknown> }>,
+  };
+  await signIn(page, "User", state);
+  await page.goto("/data/new?site=4&category=21&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Emission category").selectOption("Aluminium ingot");
+  await row.getByLabel("Quantity").fill("1000");
+  await row.getByLabel("Unit").selectOption("kg");
+  await row.getByRole("combobox", { name: "Supplier" }).click();
+  await page.getByRole("option", { name: "Gulf Smelter Co." }).click();
+  // The form decides the method (average data here): 1,000 kg × 10.
+  await expect(row.getByText("= 10.00 tCO₂e")).toBeVisible();
+  await expect(row.getByLabel("Calculated from")).toHaveCount(0);
+  await expect(row.getByTestId("supplier-figure")).toHaveCount(0);
+  await expect(row.getByText(/From the supplier's figures/)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect.poll(() => state.calls.find((c) => c.path.endsWith("/user/emissions"))?.body).toMatchObject({ supplier_id: 1, category_id: 21 });
+  const sent = state.calls.find((c) => c.path.endsWith("/user/emissions"))?.body as Record<string, unknown>;
+  expect(sent).not.toHaveProperty("method");
+});
+
+test("on a company set to full detail, a contributor enters Category 1 with the supplier's own figure", async ({ page }) => {
   const state = {
     suppliers: [
       { supplier_id: 1, name: "Gulf Smelter Co.", country: "AE", email: null },
@@ -140,7 +172,7 @@ test("a contributor enters Category 1 with the supplier's own figure", async ({ 
     ] as Fig[],
     calls: [] as Array<{ method: string; path: string; body: Record<string, unknown> }>,
   };
-  await signIn(page, "User", state);
+  await signIn(page, "User", state, true);
   await page.goto("/data/new?site=4&category=21&period=2025-09");
   const row = page.getByRole("region", { name: "Row 1" });
   await row.getByLabel("Emission category").selectOption("Aluminium ingot");

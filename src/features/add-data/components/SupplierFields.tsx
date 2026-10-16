@@ -21,8 +21,16 @@ export type SupplierFieldsProps = {
   loadingSuppliers: boolean;
   /** The chosen supplier's figures and facility data, once loaded. */
   detail: SupplierDetail | undefined;
-  /** Managers and above may add a supplier from here. */
+  /** Whoever enters data may add a supplier by name here (ESG-lite POST /suppliers); its figures stay with Managers and above. */
   canCreate: boolean;
+  /**
+   * SE-1 / simple-entry §8 (default (a)): a contributor gets the Supplier field only. The figure,
+   * facility and hybrid lines show only with `showCalcDetail` (Managers and above, or a company set
+   * to full detail).
+   */
+  showCalcDetail?: boolean;
+  /** "Calculated from" shows only with `showCalcDetail` on a form without S3-3 method cards (one picker per row). */
+  showMethodChoice?: boolean;
   onCreate: (name: string) => Promise<number>;
   createError: string | null;
   reportingYear: number;
@@ -92,18 +100,20 @@ export function SupplierFields(p: SupplierFieldsProps) {
           help={p.createError ?? "Who the goods came from."}
           error={p.createError ?? undefined}
         />
-        <Select<CalcChoice>
-          label="Calculated from"
-          value={choice}
-          options={choices}
-          onChange={(v) => p.onPatch({ [ROW_METHOD_COLUMN]: v && v !== "average" ? v : undefined, _supplier_factor_id: undefined })}
-        />
+        {p.showMethodChoice && (
+          <Select<CalcChoice>
+            label="Calculated from"
+            value={choice}
+            options={choices}
+            onChange={(v) => p.onPatch({ [ROW_METHOD_COLUMN]: v && v !== "average" ? v : undefined, _supplier_factor_id: undefined })}
+          />
+        )}
       </div>
 
       {method && !supplierId && <p className="text-sm text-muted">Choose the supplier to use its figures.</p>}
-      {method && supplierId && !detail && <p className="text-sm text-muted">Loading the supplier's figures…</p>}
-      {method === "supplier_specific" && detail && <OwnFigure row={row} detail={detail} name={name} reportingYear={p.reportingYear} onPatch={p.onPatch} />}
-      {method === "hybrid" && detail && <Hybrid row={row} detail={detail} reportingYear={p.reportingYear} factorNames={p.factorNames} onPatch={p.onPatch} />}
+      {p.showCalcDetail && method && supplierId && !detail && <p className="text-sm text-muted">Loading the supplier's figures…</p>}
+      {p.showCalcDetail && method === "supplier_specific" && detail && <OwnFigure row={row} detail={detail} name={name} reportingYear={p.reportingYear} onPatch={p.onPatch} />}
+      {p.showCalcDetail && method === "hybrid" && detail && <Hybrid row={row} detail={detail} reportingYear={p.reportingYear} factorNames={p.factorNames} onPatch={p.onPatch} />}
     </div>
   );
 }

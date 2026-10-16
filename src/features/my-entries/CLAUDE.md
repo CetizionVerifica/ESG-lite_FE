@@ -39,3 +39,7 @@ Filters visible without hover; rejected rows can be fixed and resubmitted in the
 - Uses the shared form and calc in `src/lib/emissions` and `DynamicField` from `src/ui`.
 - Saving calls `updateEmission` and refreshes the table; errors show inline in the drawer.
 - The old `pages/UserEmissionsPage.tsx` was deleted in the M3 switch PR.
+
+## S3-3 as built (method and data quality, 2026-10-16; spec `src/lib/scope3/CLAUDE.md`)
+- Drawer, Calculation section: "How it was calculated" (the method label in the category's wording, "Estimate" when `is_estimate`) and "Data quality" (`DataQualityBadge`, plus primary or secondary data). Shown for Scope 3 rows and any row that carries the fields; "Not recorded" / "Not scored" on older rows.
+- List: a "Data quality" column, hidden by default (column picker). The row's "@method" is no longer listed under "What was entered".

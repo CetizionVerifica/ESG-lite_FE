@@ -62,15 +62,27 @@ const fieldOf = (row: Row, key: string): unknown => {
 /** The row itself asked for the spend method (the spend form sets it). */
 export const rowAsksForSpend = (row: Record<string, unknown>): boolean => String(row[ROW_METHOD] ?? "").trim() === SPEND_METHOD;
 
-/** The row asked for the spend method, or its factor is a spend (EEIO) factor. */
-export const isSpendRow = (row: Row, factor: Pick<SpendFactor, "factor_type"> | null | undefined): boolean =>
-  rowAsksForSpend(row) || factor?.factor_type === "eeio_spend";
-
-/** The currency the factor is per: its price currency, else its unit when that is a supported currency. */
+/** The currency the factor is per: its unit when that is a supported currency, else its price currency (backend factorCurrency). */
 export const factorCurrency = (factor: Pick<SpendFactor, "price_currency" | "denominator_unit">): string | null => {
-  for (const c of [factor.price_currency, factor.denominator_unit]) if (isSupportedCurrency(c)) return String(c).trim().toUpperCase();
+  for (const c of [factor.denominator_unit, factor.price_currency]) if (isSupportedCurrency(c)) return String(c).trim().toUpperCase();
   return null;
 };
+
+/** The row's unit is a currency other than the one its factor is per (backend needsCurrencyConversion). */
+export const needsCurrencyConversion = (unit: unknown, factor: Pick<SpendFactor, "price_currency" | "denominator_unit"> | null | undefined): boolean => {
+  if (!factor || !looksLikeCurrency(unit)) return false;
+  const to = factorCurrency(factor);
+  return !!to && String(unit).trim().toUpperCase() !== to;
+};
+
+/**
+ * The row asked for the spend method, its factor is a spend (EEIO) factor, or
+ * its amount is in a currency other than its factor's, as the backend decides.
+ */
+export const isSpendRow = (row: Row, factor: Pick<SpendFactor, "factor_type"> & Partial<Pick<SpendFactor, "price_currency" | "denominator_unit">> | null | undefined): boolean =>
+  rowAsksForSpend(row) ||
+  factor?.factor_type === "eeio_spend" ||
+  needsCurrencyConversion(row.activity_data_unit, factor ? { price_currency: factor.price_currency, denominator_unit: factor.denominator_unit ?? "" } : null);
 
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})/;
 /** "2026-09-03" (or a timestamp) → "2026-09-03"; anything else → null. */
