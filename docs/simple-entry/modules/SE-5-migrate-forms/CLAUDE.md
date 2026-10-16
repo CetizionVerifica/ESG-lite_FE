@@ -11,10 +11,10 @@ Forms that make Users pick a method today move to the new model without changing
 2. `per_method` specs with `method_column: "@method"` (S3-9 travel/commuting from `migrateScope3Travel.ts`; S3-10 Cat 10/12 from `soldProducts/configs.ts`, merged): one method → `method_options: [{ method: m, units }]`; several → add a select column "What does your record show?" with plain choices (e.g. "Trip distance", "Fuel used", "Amount spent"), `method_by_choice`, and point `method_column` at it. Existing rows keep `activity_data["@method"]`; the engine still reads it for old rows.
 3. Transport `per_unit` forms (S3-8): set `method_options` from the unit → method list in `transport/configs.ts`.
 4. Spend: forms whose extras include `spent_value` + `currency` and whose method is spend get the spend recipe fields.
-5. Inside the same run, before committing: recompute every row of each migrated form with the old and the new config, **in memory only** (never write a recomputed total or factor snapshot; stored totals stay as they are). Any difference aborts the migration for that run (transaction rolled back) and logs form ids only.
+5. Inside the same run, before committing: recompute every row of each migrated form with the old and the new config, **in memory only** (never write a recomputed total or factor snapshot; stored totals stay as they are). Any difference rolls back that run's transaction, logs the form ids as a warning (ids only) and **exits 0**: `migrate-all` stops at the first non-zero exit, so a failure here must never stop the API from starting. The next start tries again.
 
 ## Tests
-Script twice → no second change; dry run changes nothing; golden unchanged.
+Script twice → no second change; dry run changes nothing; a seeded total difference → rolled back, warning logged, exit code 0; golden unchanged.
 
 ## Done when
-No live form uses `@method`; staging totals identical.
+No live form uses `@method` and no differences are logged on staging.
