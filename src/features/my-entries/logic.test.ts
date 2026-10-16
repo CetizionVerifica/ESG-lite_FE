@@ -78,8 +78,20 @@ describe("rows", () => {
     ];
     const out = attachFera(rows);
     expect(out.map((r) => r.pk_id)).toEqual([10, 12]);
-    expect(out[0].fera?.pk_id).toBe(11);
+    expect(out[0].fera?.map((f) => f.pk_id)).toEqual([11]);
     expect(attachFera(rows, true)).toHaveLength(3);
+  });
+
+  it("shows both twins of a Scope 2 entry on it (S3-7)", () => {
+    const fera = { category_id: 99, category_name: "FERA" };
+    const rows = [
+      entry({ pk_id: 20, fera_linked_id: 21 }),
+      entry({ pk_id: 22, category: fera, fera_linked_id: 20, scope3_sub: "3c_td_losses", total_emission: 40 }),
+      entry({ pk_id: 21, category: fera, fera_linked_id: 20, scope3_sub: "3b_upstream_electricity", total_emission: 60 }),
+    ];
+    const out = attachFera(rows);
+    expect(out.map((r) => r.pk_id)).toEqual([20]);
+    expect(out[0].fera?.map((f) => f.scope3_sub)).toEqual(["3b_upstream_electricity", "3c_td_losses"]);
   });
 
   it("finds the quantity the way the reports do", () => {
