@@ -5,4 +5,5 @@ export * from "./emissionCalc";
 export * from "./reportingPeriod";
 export * from "./useEmissionCalc";
 export * from "./form";
+export * from "./currencies";
 export * from "./entryPeriod";

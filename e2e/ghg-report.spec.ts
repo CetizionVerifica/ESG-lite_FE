@@ -19,7 +19,7 @@ const user = {
 
 type Body = { siteIds: number[]; yearType: string; year: number; frequency: string; month?: number; quarter?: number; categoryIds?: number[] };
 
-function tables(body: Body, empty = false) {
+function tables(body: Body, empty = false, scope3 = 0) {
   const site = (siteId: number, siteName: string, value: number) => ({ siteId, siteName, value });
   const selected = empty
     ? []
@@ -27,6 +27,7 @@ function tables(body: Body, empty = false) {
         { scope: "Scope 1", category: "Diesel", bySite: [site(1, "Hidd", 30)], total: 30 },
         { scope: "Scope 2", category: "Electricity", bySite: [site(1, "Hidd", 50), site(2, "Sitra", 20)], total: 70 },
         { scope: "", category: "Renewable Electricity", bySite: [site(2, "Sitra", 4)], total: 4 },
+        ...(scope3 > 0 ? [{ scope: "Scope 3", category: "Purchased goods", bySite: [site(2, "Sitra", scope3)], total: scope3 }] : []),
       ];
   const compare = [
     { scope: "Scope 1", category: "Diesel", bySite: [site(1, "Hidd", 40)], total: 40 },
@@ -38,7 +39,7 @@ function tables(body: Body, empty = false) {
     filters: { siteIds: body.siteIds, categoryIds: null, yearType: body.yearType, year: body.year, compareYear: body.year - 1, fiscalYearStartMonth: 4 },
     ranges: {},
     totals: {
-      [y]: empty ? { scope1: 0, scope2: 0, scope3: 0, total: 0 } : { scope1: 30, scope2: 70, scope3: 0, total: 100 },
+      [y]: empty ? { scope1: 0, scope2: 0, scope3: 0, total: 0 } : { scope1: 30, scope2: 70, scope3, total: 100 + scope3 },
       [p]: { scope1: 40, scope2: 85, scope3: 0, total: 125 },
     },
     tables: {
@@ -101,7 +102,7 @@ function scope3Report() {
   };
 }
 
-async function signIn(page: Page, opts: { emptyYear?: number; failScope3?: boolean } = {}) {
+async function signIn(page: Page, opts: { emptyYear?: number; failScope3?: boolean; scope3?: number } = {}) {
   const bodies: Body[] = [];
   const scope3: URLSearchParams[] = [];
   const details: Body[] = [];
@@ -149,7 +150,7 @@ async function signIn(page: Page, opts: { emptyYear?: number; failScope3?: boole
       if (path.endsWith("/user/ghg/tables")) {
         const body = route.request().postDataJSON() as Body;
         bodies.push(body);
-        return json(tables(body, body.year === opts.emptyYear));
+        return json(tables(body, body.year === opts.emptyYear, opts.scope3));
       }
       return json({});
     },
@@ -237,6 +238,15 @@ test("scope tabs load detail rows on demand, and findings follow the PDF", async
   await page.reload();
   await expect(page.getByRole("tab", { name: "Findings", selected: true })).toBeVisible();
   await expect(page.getByText("About GHG reporting")).toHaveCount(0);
+});
+
+test("when Scope 3 is the largest, the findings name it and add the supplier action (S3-4)", async ({ page }) => {
+  await signIn(page, { scope3: 150 });
+  await page.goto("/reports/ghg?year=2025");
+  await expect(page.getByText("Comparing CY 2025 with CY 2024")).toBeVisible();
+  await page.getByRole("tab", { name: "Findings" }).click();
+  await expect(page.getByText("Scope 3 (value chain) dominates the footprint at 60.0%", { exact: false })).toBeVisible();
+  await expect(page.getByText("Engage the largest suppliers for their own emissions data.")).toBeVisible();
 });
 
 test("the branded PDF downloads with the auth header, not a token in the URL", async ({ page }) => {

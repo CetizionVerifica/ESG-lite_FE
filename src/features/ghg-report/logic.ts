@@ -468,6 +468,9 @@ export function recommendedActions(f: ReportFigures): string[] {
     f.coverage.missing.length > 0
       ? "Close data gaps at non-reporting sites to reach full coverage before the next cycle."
       : "",
+    dominantScope(f).scope === "Scope 3"
+      ? "Engage the largest suppliers for their own emissions data."
+      : "",
     "Prioritise Scope 2 reduction through renewable electricity procurement or on-site generation.",
     "Set a validated, science-based reduction target aligned to a 1.5 °C pathway.",
     f.renewable > 0
