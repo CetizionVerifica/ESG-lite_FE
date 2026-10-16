@@ -24,7 +24,8 @@ export function UploadStep(props: {
   const { ctx, onContext, sites, form, file } = props;
 
   const site = selectedSite(sites.data, ctx, props.contributor);
-  const categoryName = site?.categories?.find((c) => c.category_id === ctx.categoryId)?.category_name;
+  const category = site?.categories?.find((c) => c.category_id === ctx.categoryId);
+  const categoryName = category?.category_name;
 
   const items: FileDropItem[] = file ? [{ id: "sheet", file, status: props.uploading ? "uploading" : "queued" }] : [];
   const noForm = !!site && ctx.categoryId !== null && !form.loading && !form.error && form.data === null;
@@ -79,7 +80,7 @@ export function UploadStep(props: {
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
           <li>Name the columns as in the template and they map themselves.</li>
           <li>One row per entry. Every row needs a category and a unit.</li>
-          <li>For an amount spent, put the amount as the value and its currency code ({SUPPORTED_CURRENCIES.join(", ")}) as the unit; the exchange rate is the one on the row's date.</li>
+          {category?.scope === "Scope 3" && <li>For an amount spent, put the amount as the value and its currency code ({SUPPORTED_CURRENCIES.join(", ")}) as the unit; the exchange rate is the one on the row's date.</li>}
           <li>Rows are saved as Pending for the site's manager to approve.</li>
         </ul>
         <Button variant="secondary" icon={<Download aria-hidden className="size-4" />} disabled={!form.data} onClick={downloadTemplate}>

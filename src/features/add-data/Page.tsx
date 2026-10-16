@@ -81,14 +81,11 @@ export default function AddDataPage() {
   // The draft survives in-app navigation, but evidence files don't, and a half-entered form is easy to forget.
   const blocker = useUnsavedGuard(unsaved);
 
-  const calcInput = {
-    targetYear: factorYear ?? undefined,
-    columns: model?.columns,
-  };
+  const calcInput = useMemo(() => ({ targetYear: factorYear ?? undefined, columns: model?.columns }), [factorYear, model?.columns]);
   const reportingDate = period ? entryDate(period) : null;
   const factors = setup.data?.factors ?? NO_FACTORS;
   // S3-5: exchange rates for rows calculated from the amount spent.
-  const spendLookup = useMemo(() => ({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec }), [calcInput.targetYear, calcInput.columns, factors, model?.spec]); // eslint-disable-line react-hooks/exhaustive-deps
+  const spendLookup = useMemo(() => ({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec }), [calcInput, factors, model?.spec]);
   const spend = useSpendRates(rows, spendLookup, reportingDate);
   const calc = useEmissionCalc({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec, spendRates: spend.rates, reportingDate });
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.

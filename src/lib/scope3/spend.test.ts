@@ -42,7 +42,7 @@ const inrRate: SpendRate = {
 };
 
 const rates = new Map([[spendRateKey("INR", "2026-09-03", "USD", 2022), inrRate]]);
-const row = (over: Record<string, unknown> = {}) => ({ id: 1, emission_category: "Chemicals (USEEIO)", spent_value: "1240000", currency: "INR", invoice_date: "2026-09-03", activity_data_unit: "INR", ...over });
+const row = (over: Record<string, unknown> = {}) => ({ id: 1, "@method": "spend_based", emission_category: "Chemicals (USEEIO)", spent_value: "1240000", currency: "INR", invoice_date: "2026-09-03", activity_data_unit: "INR", ...over });
 
 describe("spend inputs", () => {
   it("is a spend row by method or by an EEIO factor", () => {
@@ -60,6 +60,15 @@ describe("spend inputs", () => {
   it("takes the quantity when the unit is a currency, and not for kWh", () => {
     expect(spendInputOf({ activity_data_unit: "usd" }, "2026-09-30", 500)).toMatchObject({ amount: 500, currency: "USD", amount_from: "quantity" });
     expect(spendInputOf({ activity_data_unit: "kwh" }, "2026-09-30", 500)).toBeNull();
+  });
+
+  it("reads the amount and currency fields only on a row that asks for spend", () => {
+    // An older Category 1 row: quantity in INR with an informational "Currency" extra, no method.
+    const legacy = { id: 1, emission_category: "Chemicals (USEEIO)", quantity: "50000", activity_data_unit: "INR", _extra_data: { currency: "INR" } };
+    expect(spendInputOf(legacy, "2026-09-30", 50000)).toMatchObject({ amount: 50000, currency: "INR", amount_from: "quantity" });
+    expect(spendInputOf({ ...row(), "@method": undefined, activity_data_unit: "kg" }, "2026-09-30", 5)).toBeNull();
+    // A half-filled spend row still says what is missing.
+    expect(spendInputOf(row({ spent_value: "" }), "2026-09-30")).toMatchObject({ currency: "INR", amount_from: "spent_value" });
     expect(looksLikeCurrency("ton")).toBe(false);
   });
 

@@ -21,6 +21,11 @@ const config = {
   ],
   column_options: { "1": [{ id: "chemicals", label: "Chemicals" }] },
   emission_category_mapping: { Chemicals: "Chemicals (USEEIO)" },
+  // Older Category 1 forms carry these as extra fields; the spend form replaces them.
+  extra_fields: [
+    { key: "spent_value", label: "Spent value", type: "number", required: false },
+    { key: "currency", label: "Spend currency", type: "text", required: false },
+  ],
 };
 
 // A USEEIO factor copied from the library: per 2022 USD.
@@ -107,6 +112,9 @@ test("a Category 1 row from the amount spent shows the rate and deflator, and se
   await row.getByLabel("Amount spent").fill("1240000");
   await row.getByLabel("Currency").selectOption("INR");
   await row.getByLabel("Invoice date").fill("2026-09-03");
+  // The form's older "Spent value" / "Currency" extras aren't shown a second time.
+  await expect(row.getByLabel("Spent value")).toHaveCount(0);
+  await expect(row.getByLabel("Spend currency")).toHaveCount(0);
 
   await expect(row.getByTestId("spend-preview")).toHaveText("₹ 12,40,000 ≈ USD 12,362 (rate on 3 Sep 2026) × 0.42 kgCO₂e/USD (2022 USD, deflated)");
   await expect(row.getByText("= 5.19 tCO₂e")).toBeVisible();
@@ -118,7 +126,7 @@ test("a Category 1 row from the amount spent shows the rate and deflator, and se
   expect(created[0]).toMatchObject({
     site_id: 4,
     category_id: 21,
-    activity_data: { material: "chemicals", spent_value: "1240000", currency: "INR", invoice_date: "2026-09-03", emission_category: "Chemicals (USEEIO)" },
+    activity_data: { "@method": "spend_based", material: "chemicals", spent_value: "1240000", currency: "INR", invoice_date: "2026-09-03", emission_category: "Chemicals (USEEIO)" },
     activity_data_unit: "INR",
   });
 });

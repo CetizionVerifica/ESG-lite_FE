@@ -17,8 +17,10 @@ import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
 import { methodLabel } from "../../../lib/scope3/methods";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
-import { isSpendRow, spendPreviewLine } from "../../../lib/scope3/spend";
+import { SPEND_FIELDS, isSpendRow, spendPreviewLine } from "../../../lib/scope3/spend";
 import { SpendFields } from "./SpendFields";
+
+const SPEND_EXTRA_KEYS = new Set<string>(Object.values(SPEND_FIELDS));
 
 export type RowComparison = { text: string; overThreshold: boolean; threshold: number; previousLabel: string } | null;
 
@@ -60,7 +62,7 @@ export function EntryRow(p: Props) {
     (row.emission_category && calc.getExpectedUnit(row.emission_category)) ||
     (model.spec?.mode === "per_method" ? resolveSpecMethod(model.spec, row)?.method.activity_unit : null) ||
     null;
-  const extras = visibleExtraFields(model, row);
+  const allExtras = visibleExtraFields(model, row);
   const fieldError = (f: RowIssue["field"]) => (p.showIssue && p.issue?.field === f ? p.issue.message : undefined);
   const categoryOptions =
     p.mappings.length > 0
@@ -81,6 +83,8 @@ export function EntryRow(p: Props) {
   const specMethod = model.spec ? resolveSpecMethod(model.spec, row) : null;
   const spendForm = isSpendRow(row, factor) && !(specMethod && specMethod.method.multiply.length > 0) && spend?.spend.amount_from !== "quantity";
   const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row) && (!spendForm || c.column_type === "select"));
+  // The spend form's own fields replace the form's older "Spent value" / "Currency" extras.
+  const extras = spendForm ? allExtras.filter((f) => !SPEND_EXTRA_KEYS.has(f.key)) : allExtras;
   const firstSelect = visible.find((c) => c.column_type === "select")?.column_name;
   const unitOptions = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
 

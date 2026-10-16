@@ -1,6 +1,6 @@
 import { DateField, NumberField, Select } from "../../../ui";
 import { useCurrencies } from "../../../lib/scope3/useSpendRates";
-import { SPEND_FIELDS } from "../../../lib/scope3/spend";
+import { SPEND_FIELDS, SPEND_METHOD, SPEND_METHOD_FIELD } from "../../../lib/scope3/spend";
 import type { ModalRow } from "../types";
 
 type Props = {
@@ -19,8 +19,13 @@ const parseAmount = (v: unknown): number | null => {
  * ESGLite converts) and an optional invoice date. The currency is also the
  * row's unit, as the backend stores it.
  */
-export function SpendFields({ row, onChange, amountError }: Props) {
+export function SpendFields({ row, onChange: change, amountError }: Props) {
   const currencies = useCurrencies();
+  // Any value typed here makes the row a spend row for the engine ("From the amount spent").
+  const onChange = (column: string, value: string) => {
+    if (String(row[SPEND_METHOD_FIELD] ?? "") !== SPEND_METHOD) change(SPEND_METHOD_FIELD, SPEND_METHOD);
+    change(column, value);
+  };
   const currency = String(row[SPEND_FIELDS.currency] ?? "");
   return (
     <>

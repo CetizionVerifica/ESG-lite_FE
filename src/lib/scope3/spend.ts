@@ -21,6 +21,8 @@ const SYMBOL: Record<string, string> = { INR: "₹", USD: "$", EUR: "€", GBP: 
 
 /** Row fields a spend row uses (activity_data keys, as the backend reads them). */
 export const SPEND_FIELDS = { amount: "spent_value", currency: "currency", invoiceDate: "invoice_date" } as const;
+/** The row's method key (`@method`) and value the spend form writes. */
+export const SPEND_METHOD_FIELD = "@method";
 
 const ISO_CURRENCY = /^[A-Za-z]{3}$/;
 // Fixed list so "kwh" or "ton" never read as a currency (backend looksLikeCurrency).
@@ -57,9 +59,12 @@ const fieldOf = (row: Row, key: string): unknown => {
   return undefined;
 };
 
+/** The row itself asked for the spend method (the spend form sets it). */
+export const rowAsksForSpend = (row: Record<string, unknown>): boolean => String(row[ROW_METHOD] ?? "").trim() === SPEND_METHOD;
+
 /** The row asked for the spend method, or its factor is a spend (EEIO) factor. */
 export const isSpendRow = (row: Row, factor: Pick<SpendFactor, "factor_type"> | null | undefined): boolean =>
-  String(row[ROW_METHOD] ?? "").trim() === SPEND_METHOD || factor?.factor_type === "eeio_spend";
+  rowAsksForSpend(row) || factor?.factor_type === "eeio_spend";
 
 /** The currency the factor is per: its price currency, else its unit when that is a supported currency. */
 export const factorCurrency = (factor: Pick<SpendFactor, "price_currency" | "denominator_unit">): string | null => {
@@ -86,13 +91,18 @@ export interface SpendInput {
 
 /**
  * Amount, currency and purchase date, as the backend reads them: the amount
- * spent and its currency, else the row's quantity (`quantity`) when its unit
- * is a currency. The date is the invoice date, else the reporting date.
+ * spent and its currency on a row that asks for spend, else the row's
+ * quantity (`quantity`) when its unit is a currency. The date is the invoice
+ * date, else the reporting date.
  */
 export function spendInputOf(row: Row, reportingDate: string, quantity: number | null = null): SpendInput | null {
   const spend_date = isoDay(fieldOf(row, SPEND_FIELDS.invoiceDate)) ?? isoDay(row.date_of_reporting) ?? reportingDate.slice(0, 10);
-  const spent = fieldOf(row, SPEND_FIELDS.amount);
-  const currency = fieldOf(row, SPEND_FIELDS.currency);
+  // As the backend: the amount and currency fields count only on a row that asks for the spend method
+  // (older Category 1/2 rows carry an informational "Currency" extra next to their quantity). Either
+  // field alone is enough here, so a half-filled spend row says what is still missing.
+  const asks = rowAsksForSpend(row);
+  const spent = asks ? fieldOf(row, SPEND_FIELDS.amount) : undefined;
+  const currency = asks ? fieldOf(row, SPEND_FIELDS.currency) : undefined;
   if (present(spent) || present(currency)) {
     return { amount: parseFloat(String(spent ?? "").replace(/,/g, "")), currency: String(currency ?? "").trim().toUpperCase(), spend_date, amount_from: "spent_value" };
   }
