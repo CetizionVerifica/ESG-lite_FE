@@ -97,7 +97,8 @@ export function useScope3Report(q: ReportQuery | null, enabled: boolean) {
 
 /** The Scope 3 report for exactly `q` (the XLSX export), from the cache when fresh. */
 export function fetchScope3Report(client: QueryClient, q: ReportQuery) {
-  return client.fetchQuery<Scope3Report>({ queryKey: keys.scope3(q), queryFn: () => getScope3(q) });
+  // No retry: a failure leaves the Scope 3 sheets out at once instead of holding up the export.
+  return client.fetchQuery<Scope3Report>({ queryKey: keys.scope3(q), queryFn: () => getScope3(q), retry: false });
 }
 
 function save(blob: Blob, fileName: string) {

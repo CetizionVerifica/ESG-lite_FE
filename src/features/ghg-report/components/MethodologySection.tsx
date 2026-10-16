@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Button, EmptyState, Scope3CategoryChip, SkeletonText, cn, formatPercent, panel } from "../../../ui";
 import { CONSOLIDATION_LABEL, isConsolidationApproach } from "../../../lib/scope3/boundary";
-import { NOT_RECORDED, type Scope3Report, datasetText, gwpText, methodMixText, rowLabel } from "../../../lib/scope3/report";
+import { NOT_RECORDED, RF_LABEL, type Scope3Report, datasetText, gwpText, methodMixText, rowLabel } from "../../../lib/scope3/report";
 
 type Props = {
   report: Scope3Report | undefined;
@@ -80,8 +80,11 @@ export function MethodologySection({ report, loading, error, onRetry, baseYear }
                     {report.tracked.method && `, ${formatPercent(r.value_chain_pct)} from suppliers or value-chain partners`}
                     {r.proxy_pct > 0 && `, ${formatPercent(r.proxy_pct)} extrapolated or proxy data`}
                   </Term>
+                  {r.proxy_pct > 0 && <Term label="Proxy basis">{r.proxy_basis?.length ? r.proxy_basis.join("; ") : NOT_RECORDED}</Term>}
+                  {r.rf && <Term label="Radiative forcing">{RF_LABEL[r.rf]}</Term>}
+                  {r.n === 15 && r.tco2e > 0 && <Term label="EEIO boundary">{NOT_RECORDED}</Term>}
                   <Term label="GWP">{r.gwp_sets.join(", ") || NOT_RECORDED}</Term>
-                  <Term label="Assumptions">{r.method_note ?? "None recorded on the boundary page."}</Term>
+                  <Term label="Allocation and assumptions">{r.method_note ?? "None recorded on the boundary page."}</Term>
                 </dl>
               </li>
             ))}

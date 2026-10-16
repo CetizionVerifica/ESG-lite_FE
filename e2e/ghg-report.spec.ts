@@ -87,6 +87,8 @@ function scope3Report() {
     gwp_sets: n === 6 ? ["AR6"] : [],
     biogenic_tco2e: null,
     mapped_categories: n === 1 ? [{ category_id: 30, name: "Steel" }] : n === 6 ? [{ category_id: 31, name: "Flights" }] : [],
+    rf: n === 6 ? "with" : null,
+    proxy_basis: [],
   });
   return {
     company_id: 1,
@@ -99,7 +101,7 @@ function scope3Report() {
   };
 }
 
-async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
+async function signIn(page: Page, opts: { emptyYear?: number; failScope3?: boolean } = {}) {
   const bodies: Body[] = [];
   const scope3: URLSearchParams[] = [];
   const details: Body[] = [];
@@ -123,6 +125,7 @@ async function signIn(page: Page, opts: { emptyYear?: number } = {}) {
       if (path.endsWith("/user/reporting-calendar")) return json({ fiscalYearStartMonth: 4, fiscalYearRule: "" });
       if (path.endsWith("/reports/ghg/scope3")) {
         scope3.push(url.searchParams);
+        if (opts.failScope3) return route.fulfill({ status: 500, json: { message: "Database unavailable" } });
         return json(scope3Report());
       }
       if (path.endsWith("/reports/ghg")) {
@@ -278,6 +281,7 @@ test("Scope 3 by GHG category, its exclusions, the Methodology tab and the XLSX 
   await expect(page.getByText("100-year GWP values from IPCC AR6.")).toBeVisible();
   await expect(page.getByText("Spend for services, supplier figures for steel")).toBeVisible();
   await expect(page.getByText("No Scope 3 base year set.")).toBeVisible();
+  await expect(page.getByText("Flights with radiative forcing")).toBeVisible();
 
   // The XLSX carries both Scope 3 sheets.
   const xlsx = page.waitForEvent("download");
@@ -288,6 +292,21 @@ test("Scope 3 by GHG category, its exclusions, the Methodology tab and the XLSX 
   expect(book.SheetNames).toEqual(expect.arrayContaining(["Scope 3 by category", "Scope 3 methodology"]));
   const rows = XLSX.utils.sheet_to_json<string[]>(book.Sheets["Scope 3 by category"], { header: 1 });
   expect(rows[9][2]).toBe("Customers collect at the gate");
+});
+
+test("the table export still works when Scope 3 by category can't load", async ({ page }) => {
+  await signIn(page, { failScope3: true });
+  await page.goto("/reports/ghg?year=2025");
+  await expect(page.getByText(/^Comparing /)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export tables" })).toBeEnabled();
+  const xlsx = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export tables" }).click();
+  const file = await (await xlsx).path();
+  await expect(page.getByText("Scope 3 sheets left out")).toBeVisible();
+  const XLSX = await import("xlsx");
+  const book = XLSX.read(await readFile(file!));
+  expect(book.SheetNames.length).toBeGreaterThan(0);
+  expect(book.SheetNames).not.toContain("Scope 3 by category");
 });
 
 test("the SBTi 67 % hint shows when Scope 3 is at least 40 % of the total", async ({ page }) => {

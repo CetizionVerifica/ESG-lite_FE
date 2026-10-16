@@ -44,7 +44,18 @@ export interface Scope3ReportRow {
   /** null = "Not tracked" (the engine doesn't store biogenic CO₂ per entry yet). */
   biogenic_tco2e: number | null;
   mapped_categories: { category_id: number; name: string }[];
+  /** Air travel radiative forcing (Standard L4218); null or missing = no flight entries. */
+  rf?: "with" | "without" | "mixed" | null;
+  /** How extrapolated or proxy data was made; missing on older servers. */
+  proxy_basis?: string[];
 }
+
+/** "Flights with radiative forcing". */
+export const RF_LABEL: Record<"with" | "without" | "mixed", string> = {
+  with: "Flights with radiative forcing",
+  without: "Flights without radiative forcing",
+  mixed: "Flights with and without radiative forcing",
+};
 
 export interface Scope3Report {
   company_id: number;
