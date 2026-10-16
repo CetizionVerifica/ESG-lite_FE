@@ -4,7 +4,7 @@
  * (renames move them along) and by column id on save, as the backend stores them.
  */
 import { ROW_METHOD_COLUMN, normalizeUnitKey } from "../../lib/emissions/emissionCalc";
-import { methodLabel } from "../../lib/scope3/methods";
+import { methodLabel } from "../../lib/scope3/labels";
 import type {
   CalculationSpec,
   ColumnConfig,
