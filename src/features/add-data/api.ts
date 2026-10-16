@@ -125,7 +125,8 @@ export function usePeriodTotals(args: { siteId: number | null; categoryId: numbe
 
 export type SaveOutcome =
   /** `warnings`: the engine's notes that never block (an older factor year, no FERA factor), shown on the result line (S3-4). */
-  | { kind: "saved"; emissionId: number | null; warnings?: string[] }
+  /** `status`: what the row was saved as; `draft` with the review workflow on (S3-15), otherwise `pending`. */
+  | { kind: "saved"; emissionId: number | null; warnings?: string[]; status?: string | null }
   | { kind: "duplicate"; message: string; existing: { tco2e: number | null; status: string | null } | null }
   /** `methodNotAllowed`: the form doesn't offer the row's method (S3-3 METHOD_NOT_ALLOWED); the message names the ones it does. */
   | { kind: "error"; message: string; modeLock: boolean; methodNotAllowed?: boolean };
@@ -138,7 +139,7 @@ interface ApiError {
   message?: string;
 }
 
-type SavedBody = { emission?: { pk_id?: number }; warnings?: Array<{ code?: string; message?: string }> } | undefined;
+type SavedBody = { emission?: { pk_id?: number; status?: string }; warnings?: Array<{ code?: string; message?: string }> } | undefined;
 
 /** The engine's warning messages from a save answer (S3-4: FACTOR_FALLBACK_YEAR, FERA_FACTOR_MISSING). */
 export const warningsOf = (body: SavedBody): string[] =>
@@ -148,7 +149,7 @@ export const warningsOf = (body: SavedBody): string[] =>
 export async function saveRow(payload: EmissionPayload, replace = false): Promise<SaveOutcome> {
   try {
     const result = (await createEmission(payload, replace)) as SavedBody;
-    return { kind: "saved", emissionId: result?.emission?.pk_id ?? null, warnings: warningsOf(result) };
+    return { kind: "saved", emissionId: result?.emission?.pk_id ?? null, warnings: warningsOf(result), status: result?.emission?.status ?? null };
   } catch (err) {
     const e = err as ApiError;
     const data = e.response?.data;
@@ -197,7 +198,11 @@ export async function uploadRowEvidence(emissionId: number, files: File[]): Prom
   }
 }
 
-/** Save changes to an entry loaded from "Already entered" (pending or rejected); the backend sets it back to pending. */
+/**
+ * Save changes to an entry loaded from "Already entered" (pending, rejected,
+ * or a draft); the backend sets it back to pending, or to draft with the
+ * review workflow on (S3-15).
+ */
 export async function updateRow(id: number, payload: EmissionPayload): Promise<SaveOutcome> {
   try {
     const result = (await updateEmission(id, {
@@ -206,7 +211,7 @@ export async function updateRow(id: number, payload: EmissionPayload): Promise<S
       date_of_reporting: payload.date_of_reporting,
       activity_data_unit: payload.activity_data_unit,
     })) as SavedBody;
-    return { kind: "saved", emissionId: result?.emission?.pk_id ?? id, warnings: warningsOf(result) };
+    return { kind: "saved", emissionId: result?.emission?.pk_id ?? id, warnings: warningsOf(result), status: result?.emission?.status ?? null };
   } catch (err) {
     const e = err as ApiError;
     return { kind: "error", modeLock: false, message: e.response?.data?.message ?? e.message ?? "Couldn't save this row. Try again." };

@@ -14,7 +14,8 @@ export interface SavedEntry {
   reporting_period?: "monthly" | "yearly";
   year_type?: "CY" | "FY" | null;
   activity_data_unit?: string;
-  status: "pending" | "approved" | "rejected";
+  /** `draft` only with the review workflow on (S3-15). */
+  status: "draft" | "pending" | "approved" | "rejected";
   review_comment?: string;
 }
 
@@ -32,7 +33,14 @@ export function entryInPeriod(e: SavedEntry, p: EntryPeriod): boolean {
   return yearly && date === entryDate(p) && (!e.year_type || e.year_type === p.yearType);
 }
 
-export const canChange = (e: SavedEntry) => e.status === "pending" || e.status === "rejected";
+export const canChange = (e: SavedEntry) => e.status === "pending" || e.status === "rejected" || e.status === "draft";
+
+/** The entry `?fix=` names, when it's in the list and can still change (S3-15 Fix and resubmit). */
+export function fixTarget(entries: SavedEntry[], fixId: number | null): SavedEntry | null {
+  if (fixId === null) return null;
+  const e = entries.find((x) => x.pk_id === fixId);
+  return e && canChange(e) ? e : null;
+}
 
 /**
  * A saved entry as a form row, the way the legacy page's Edit filled its

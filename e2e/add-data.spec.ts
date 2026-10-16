@@ -86,10 +86,18 @@ const extraction = {
   ],
 };
 
-type Extra = { existing?: unknown[]; updated?: unknown[]; uploads?: string[] };
+type Extra = {
+  existing?: unknown[];
+  updated?: unknown[];
+  uploads?: string[];
+  /** S3-15: the company's review workflow switch is on; edits come back as drafts. */
+  workflow?: boolean;
+  submitted?: number[][];
+  checked?: unknown[];
+};
 
 async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>, extra: Extra = {}) {
-  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [site] };
+  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [extra.workflow ? { ...site, company: { ...site.company, review_workflow_v2: true } } : site] };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "User");
@@ -139,7 +147,16 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       }
       if (/\/user\/emissions\/\d+$/.test(path) && request.method() === "PUT") {
         extra.updated?.push({ id: Number(path.split("/").pop()), body: request.postDataJSON() });
-        return json({ emission: { pk_id: Number(path.split("/").pop()) } });
+        return json({ emission: { pk_id: Number(path.split("/").pop()), ...(extra.workflow && { status: "draft" }) } });
+      }
+      if (path.endsWith("/user/emissions/check")) {
+        extra.checked?.push(request.postDataJSON());
+        return json({ ready: false, held: ["FACTOR_FOUND", "EVIDENCE_ATTACHED"] });
+      }
+      if (path.endsWith("/user/emissions/submit")) {
+        const ids = (request.postDataJSON() as { ids: number[] }).ids;
+        extra.submitted?.push(ids);
+        return json({ submitted: ids, refused: [] });
       }
       if (path.endsWith("/user/documents/multiple")) {
         extra.uploads?.push(request.postData() ?? "");
@@ -378,6 +395,37 @@ test("a rejected entry can be fixed from the entries already saved", async ({ pa
   expect(created).toHaveLength(0);
   expect(updated).toHaveLength(1);
   expect(updated[0]).toMatchObject({ id: 55, body: { activity_data: { fuel_type: "diesel", quantity: "1600" }, activity_data_unit: "litre" } });
+});
+
+test("Fix and resubmit (S3-15): a Fix link opens the rejected row with live checks, then Save and submit sends it", async ({ page }) => {
+  const created: unknown[] = [];
+  const updated: { id: number; body: Record<string, unknown> }[] = [];
+  const submitted: number[][] = [];
+  const checked: Record<string, unknown>[] = [];
+  await signIn(page, created, false, [], undefined, { existing: [rejected], updated, workflow: true, submitted, checked });
+  await page.goto("/data/new?site=4&category=9&period=2025-09&fix=55");
+
+  // The row is loaded straight away, with the manager's reason above it.
+  await expect(page.getByText("Sent back to you")).toBeVisible();
+  await expect(page.getByText("Quantity is missing a zero").first()).toBeVisible();
+  const row = page.getByRole("region", { name: "Row 1" });
+  await expect(row.getByLabel("Quantity")).toHaveValue("160");
+  await expect(page).not.toHaveURL(/fix=/);
+
+  // Live checks: a User sees the checks they can act on, not the factor one.
+  const checks = page.getByRole("region", { name: "Checks before you send" });
+  await expect(checks.getByText("No evidence")).toBeVisible();
+  await expect(checks.getByText(/factor/i)).toHaveCount(0);
+  await row.getByLabel("Quantity").fill("1600");
+  await expect.poll(() => checked.some((c) => (c.activity_data as Record<string, unknown>)?.quantity === "1600")).toBe(true);
+  expect(checked.at(-1)).toMatchObject({ pk_id: 55, site_id: 4, category_id: 9, evidence_count: 0 });
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByRole("button", { name: "Save as draft" })).toBeVisible();
+  await page.getByRole("button", { name: "Save and submit" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(updated).toHaveLength(1);
+  expect(submitted).toEqual([[55]]);
 });
 
 test("a passenger.km row works the distance out in the drawer", async ({ page }) => {

@@ -1,6 +1,7 @@
 import api from "../api/axios";
 
-export type MyMonthStatus = "todo" | "pending" | "approved" | "rejected" | "covered";
+/** `draft`: only drafts so far (S3-15, with the review workflow on). */
+export type MyMonthStatus = "todo" | "draft" | "pending" | "approved" | "rejected" | "covered";
 
 export interface MyMonthRejection {
   pk_id: number;
@@ -18,16 +19,21 @@ export interface MyMonthCategory {
   year_type: "CY" | "FY" | null;
   /** Window of the yearly filing (ISO dates), when the category is filed yearly. */
   period: { start: string; end: string } | null;
-  entries: { total: number; pending: number; approved: number; rejected: number };
+  /** `draft`: S3-15 part 2, with the review workflow on; drafts don't count in `total` or the tCO₂e. */
+  entries: { total: number; pending: number; approved: number; rejected: number; draft?: number };
   total_emission: number;
   last_entry_at: string | null;
   rejections: MyMonthRejection[];
+  /** S3-15: the contributor marked the category "Nothing this month". */
+  nothing_this_month?: boolean;
 }
 
 export interface MyMonthSite {
   site_id: number;
   name: string;
   categories: MyMonthCategory[];
+  /** S3-15: the site's month is locked (closed by a manager); nothing can change until it's reopened. */
+  locked?: boolean;
 }
 
 export interface MyMonthResponse {
@@ -39,6 +45,8 @@ export interface MyMonthResponse {
   escalation_date: string;
   summary: { total: number; due: number; done: number; pending: number; rejected: number };
   sites: MyMonthSite[];
+  /** S3-15: the company's review workflow switch, when the server sends it. */
+  review_workflow_v2?: boolean;
 }
 
 /**

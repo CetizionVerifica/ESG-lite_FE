@@ -17,7 +17,8 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | Number, delta and date text | `format.ts` | `formatEmissions` (t → kg below 1 t), `emissionsParts`, `formatIntensity`, `formatDelta` (arrow + tone), `formatMonth`, `formatDate`, `formatReportingYear` |
 | Reporting periods | `period.ts` | `?period=` values `2025-09`, `2025-Q3`, `CY2025`, `FY2025` (start year), `2025-01-01_2025-06-30`; `periodLabel`, `periodRange(p, fyStartMonth)` |
 | `Button` | `Button.tsx` | primary / secondary / ghost / danger, `loading` |
-| `StatusPill` | `StatusPill.tsx` | pending / approved / rejected / missing / draft: icon + label, fixed status colours |
+| `StatusPill` | `StatusPill.tsx` | pending / approved / rejected / missing / draft / locked: icon + label, fixed status colours |
+| `CheckList` | `CheckList.tsx` | S3-15 review checks as a list (held first with hint, then passed; icon + word + Pass/Held): approvals "Why held" and the Fix screen's live checks |
 | `EmptyState` | `EmptyState.tsx` | one sentence, one action; `variant="error"` for failures |
 | `Skeleton` | `Skeleton.tsx` | `SkeletonText`, `SkeletonTableRows`, `SkeletonKpi`, `SkeletonChart` |
 | `Modal` | `Modal.tsx` | confirmations and short forms; focus trap, Esc, `tone="destructive"`, `error` |

@@ -78,9 +78,10 @@ describe("Scope 3 mock handlers", () => {
   it("locks a month once; reopening it leaves no active lock", async () => {
     expect(((await (await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).json()) as Scope3ErrorBody).code).toBe("PERIOD_LOCKED");
     await post("/periods/unlock", { site_id: 1, year: 2026, month: 8, reason: "Late invoice" });
-    const locks = (await (await fetch(`${API}/periods/lock`)).json()) as { reopened_at?: string | null }[];
-    expect(locks.every((l) => l.reopened_at)).toBe(true);
-    expect((await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).status).toBe(201);
+    const after = (await (await fetch(`${API}/periods/lock?year=2026&month=8&siteIds=1`)).json()) as { sites: { locked: boolean }[] };
+    expect(after.sites[0].locked).toBe(false);
+    // August has nothing entered, so it can't be locked again until it's complete.
+    expect(((await (await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).json()) as Scope3ErrorBody).code).toBe("PERIOD_INCOMPLETE");
   });
 
   it("keeps server-owned supplier factor fields and 404s an unknown supplier", async () => {

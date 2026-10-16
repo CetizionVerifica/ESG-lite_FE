@@ -58,7 +58,8 @@ import { twinsTotal } from "../../lib/scope3/fera";
 
 const PAGE_SIZE = 25;
 const FILTER_KEYS = ["category", "status"];
-const STATUS_LABEL = { pending: "Pending", approved: "Approved", rejected: "Rejected" } as const;
+// Draft only appears with the review workflow on (S3-15); the Status filter keeps STATUS_VALUES.
+const STATUS_LABEL = { draft: "Draft", pending: "Pending", approved: "Approved", rejected: "Rejected" } as const;
 
 function serverMessage(e: unknown): string {
   const msg = (e as { response?: { data?: { message?: unknown } } })?.response?.data?.message;
