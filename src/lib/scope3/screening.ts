@@ -1,7 +1,7 @@
 /**
  * Scope 3 screening vocabulary (S3-12): the Table II relevance criteria with
  * their guidance wording, the screening input bases and how an estimate was
- * made. Keys match ESG-lite `src/scope3/boundary/service.ts` RELEVANCE_KEYS
+ * made. Keys match ESG-lite `src/scope3/contracts/schemas.ts` RELEVANCE_KEYS
  * and `src/scope3/screening/rules.ts`.
  */
 import type { BoundaryStatus } from "./boundary";

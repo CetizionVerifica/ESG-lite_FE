@@ -104,6 +104,10 @@ describe("Scope 3 mock handlers", () => {
 
   it("answers the endpoints folded in from the module specs", async () => {
     expect((await put("/scope3/screening/inputs", { year: 2026, inputs: [{ ghg_category: 1, basis: "spend", amount: 1e6, currency: "USD" }] })).status).toBe(200);
+    // Inputs are kept per year and year type (ESG-lite #169); CY when left out.
+    expect(((await (await put("/scope3/screening/inputs", { year: 2026, year_type: "FY", inputs: [] })).json()) as { year_type: string }).year_type).toBe("FY");
+    expect(((await (await put("/scope3/screening/inputs", { year: 2026, inputs: [] })).json()) as { year_type: string }).year_type).toBe("CY");
+    expect((await put("/scope3/screening/inputs", { year: 2026, year_type: "QY", inputs: [] })).status).toBe(400);
     expect(((await (await post("/scope3/extrapolate", { ghg_category: 4, site_id: 1, year: 2026, year_type: "CY", basis: "coverage", coverage_pct: 100 })).json()) as Scope3ErrorBody).code).toBe("EXTRAPOLATION_BASIS_INVALID");
     expect((await post("/scope3/extrapolate", { ghg_category: 4, site_id: 1, year: 2026, year_type: "CY", basis: "coverage", coverage_pct: 85 })).status).toBe(201);
     expect((await post("/v1/scope3/eeio-sector", { lines: [{ description: "Copper rod" }], sectors: [] })).status).toBe(200);

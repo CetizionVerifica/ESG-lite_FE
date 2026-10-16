@@ -104,8 +104,9 @@ const withCompany = (companyId: number | null) => (companyId ? { company_id: com
 export const getScreening = async (companyId: number | null, year: number, yearType: YearType): Promise<Screening> =>
   (await api.get("/scope3/screening", { params: { year, year_type: yearType, ...withCompany(companyId) } })).data;
 
-export const putScreeningInputs = async (companyId: number | null, year: number, inputs: ScreeningInput[]) =>
-  (await api.put("/scope3/screening/inputs", { year, inputs, ...withCompany(companyId) })).data as { year: number; inputs: ScreeningInputRow[] };
+/** Inputs are kept per year and year type: CY 2026 and FY 2026 are separate figures. */
+export const putScreeningInputs = async (companyId: number | null, year: number, yearType: YearType, inputs: ScreeningInput[]) =>
+  (await api.put("/scope3/screening/inputs", { year, year_type: yearType, inputs, ...withCompany(companyId) })).data as { year: number; year_type: YearType; inputs: ScreeningInputRow[] };
 
 /** Relevance ticks and "Apply suggestion" go through the S3-1 boundary (Admin and Superadmin). */
 export const putCategoryStatus = async (

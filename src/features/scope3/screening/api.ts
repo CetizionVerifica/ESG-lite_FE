@@ -42,9 +42,9 @@ const useRefresh = () => {
   return () => Promise.all([qc.invalidateQueries({ queryKey: keys.all }), qc.invalidateQueries({ queryKey: ["scope3-boundary"] })]);
 };
 
-export function useSaveInputs(companyId: number | null, year: number) {
+export function useSaveInputs(companyId: number | null, year: number, yearType: YearType) {
   const refresh = useRefresh();
-  return useMutation({ mutationFn: (inputs: ScreeningInput[]) => putScreeningInputs(companyId, year, inputs), onSettled: refresh });
+  return useMutation({ mutationFn: (inputs: ScreeningInput[]) => putScreeningInputs(companyId, year, yearType, inputs), onSettled: refresh });
 }
 
 export function useSetStatus(companyId: number | null) {

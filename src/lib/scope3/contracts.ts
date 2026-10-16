@@ -495,8 +495,10 @@ export interface ScreeningInput {
   note?: string | null;
 }
 
+/** `year_type` is part of the key (ESG-lite #169): CY 2026 and FY 2026 keep separate figures; the server assumes CY when it's left out. */
 export interface PutScreeningInputsBody {
   year: number;
+  year_type?: YearType;
   inputs: ScreeningInput[];
 }
 

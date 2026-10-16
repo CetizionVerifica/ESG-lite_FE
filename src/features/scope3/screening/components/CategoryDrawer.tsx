@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Badge, Button, Callout, Combobox, Drawer, EMPTY_VALUE, NumberField, Select, TextField, cn, formatEmissions, formatNumber, panel } from "../../../../ui";
-import { categoryLabel, type ScreeningBasis } from "../../../../lib/scope3/contracts";
+import { categoryLabel, type ScreeningBasis, type YearType } from "../../../../lib/scope3/contracts";
 import { ESTIMATE_NOTE, SCREENING_CURRENCIES, SECTOR_CONFIRM_BELOW, isMoneyBasis } from "../../../../lib/scope3/screening";
 import type { ScreeningCategory, SectorSuggestion } from "../../../../services/scope3ScreeningService";
 import { errorMessage, useSaveInputs, useSectorSearch, useSuggestSectors } from "../api";
@@ -10,6 +10,8 @@ export type CategoryDrawerProps = {
   category: ScreeningCategory;
   companyId: number | null;
   year: number;
+  /** Inputs are saved per year and year type (CY and FY are separate figures). */
+  yearType: YearType;
   editable: boolean;
   canExtrapolate: boolean;
   onClose: () => void;
@@ -27,13 +29,13 @@ const codeOf = (name: string): string | null => /\(NAICS ([0-9A-Za-z]+)\)\s*$/.e
  * and its sector), the estimate each gives, "Suggest sector", and the way into
  * "Extrapolate…". Admin and Superadmin edit; others read.
  */
-export function CategoryDrawer({ category: c, companyId, year, editable, canExtrapolate, onClose, onExtrapolate, onSaved }: CategoryDrawerProps) {
+export function CategoryDrawer({ category: c, companyId, year, yearType, editable, canExtrapolate, onClose, onExtrapolate, onSaved }: CategoryDrawerProps) {
   const [draft, setDraft] = useState<InputDraft>(() => draftFor(c));
   const [tried, setTried] = useState(false);
   const [search, setSearch] = useState("");
   const [described, setDescribed] = useState("");
   const [suggested, setSuggested] = useState<SectorSuggestion[] | null>(null);
-  const save = useSaveInputs(companyId, year);
+  const save = useSaveInputs(companyId, year, yearType);
   const suggest = useSuggestSectors(companyId);
   const money = isMoneyBasis(draft.basis);
   const sectors = useSectorSearch(search, editable && money);
