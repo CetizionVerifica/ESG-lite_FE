@@ -133,6 +133,7 @@ export default function AddDataPage() {
 
   const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
     <Review
+      detail={detail}
       rows={activeRows}
       payloads={activeRows.map((r) => buildPayload(r, { siteId: s.site_id, categoryId: c.category_id, period: p }))}
       calc={calc}

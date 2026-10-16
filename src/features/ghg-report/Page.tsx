@@ -24,19 +24,23 @@ import {
 import {
   downloadWorkbook,
   fetchReportDetails,
+  fetchScope3Report,
   useAdminSites,
   useBrandedPdf,
   useDebounced,
   useFyStartMonth,
   useReportDetails,
   useReportTables,
+  useScope3Report,
 } from "./api";
 import { AboutPanel } from "./components/AboutPanel";
 import { FindingsTab } from "./components/FindingsTab";
 import { CategoryTable } from "./components/CategoryTable";
 import { LocationTab } from "./components/LocationTab";
+import { MethodologySection } from "./components/MethodologySection";
 import { ReportFilters } from "./components/ReportFilters";
 import { ScopeChart } from "./components/ScopeChart";
+import { Scope3Tab } from "./components/Scope3Tab";
 import { ScopeTab } from "./components/ScopeTab";
 import { ScopeTable } from "./components/ScopeTable";
 import {
@@ -59,15 +63,17 @@ import {
   topCategories,
   withoutKeys,
   writePeriod,
+  requestPayload,
 } from "./logic";
 
-type Tab = "summary" | "location" | "scope1" | "scope2" | "scope3" | "findings";
+type Tab = "summary" | "location" | "scope1" | "scope2" | "scope3" | "methodology" | "findings";
 const TABS: { value: Tab; label: string }[] = [
   { value: "summary", label: "Summary" },
   { value: "location", label: "By location" },
   { value: "scope1", label: "Scope 1" },
   { value: "scope2", label: "Scope 2" },
   { value: "scope3", label: "Scope 3" },
+  { value: "methodology", label: "Methodology" },
   { value: "findings", label: "Findings" },
 ];
 const SCOPE_TABS: { tab: Tab; scope: ScopeName }[] = [
@@ -156,6 +162,17 @@ export default function GhgReportPage() {
     sites.length ? query : null,
     tab.startsWith("scope"),
   );
+  // S3-13: Scope 3 by GHG category, for the Scope 3 and Methodology tabs.
+  const scope3 = useScope3Report(
+    sites.length ? query : null,
+    tab === "scope3" || tab === "methodology",
+  );
+  // SBTi 40 % rule: Scope 3 and the total from the same filters; off while a category filter narrows the report.
+  const sameQuery = JSON.stringify(requestPayload(shown)) === JSON.stringify(requestPayload(query));
+  const sbtiTotal = query.categoryIds.length || !sameQuery ? 0 : (figures?.selected.total ?? 0);
+  const scope3Error = scope3.isError
+    ? serverMessage(scope3.error, "Couldn't load Scope 3 by category.")
+    : null;
   const locations = useMemo(
     () => (data ? locationRows(data, askedSites) : []),
     [data, askedSites],
@@ -201,7 +218,13 @@ export default function GhgReportPage() {
     setExporting(true);
     try {
       // Fetched for the query behind the figures, so every sheet describes the same period.
-      const detailRows = (await fetchReportDetails(queryClient, shown)).rows;
+      // The Scope 3 sheets are extra: if they can't load, the existing sheets still export.
+      const [detailRows, scope3Report] = await Promise.all([
+        fetchReportDetails(queryClient, shown).then((d) => d.rows),
+        fetchScope3Report(queryClient, shown).catch(() => null),
+      ]);
+      if (!scope3Report)
+        toast({ title: "Scope 3 sheets left out", description: "Scope 3 by category couldn't load; the other sheets are in the file.", tone: "neutral" });
       const sheets = exportSheets({
         figures,
         categories: topCategories(data, Number.POSITIVE_INFINITY),
@@ -216,6 +239,7 @@ export default function GhgReportPage() {
         actions: recommendedActions(figures),
         prevLabel,
         selLabel,
+        scope3: scope3Report ?? undefined,
       });
       await downloadWorkbook(sheets, stem);
     } catch (e) {
@@ -471,6 +495,26 @@ export default function GhgReportPage() {
                   value={value}
                   current={tab}
                 >
+                  {scope === "Scope 3" && (
+                    <div
+                      aria-busy={scope3.isPlaceholderData}
+                      className={cn(
+                        "mb-8 transition-opacity",
+                        scope3.isPlaceholderData && "opacity-60",
+                      )}
+                    >
+                      <Scope3Tab
+                        report={scope3.data}
+                        loading={scope3.isPending}
+                        error={scope3Error}
+                        onRetry={() => scope3.refetch()}
+                        grandTotal={sbtiTotal}
+                      />
+                      <h3 className="mt-8 text-sm font-semibold text-ink">
+                        Scope 3 entries by category and site
+                      </h3>
+                    </div>
+                  )}
                   <div
                     aria-busy={details.isPlaceholderData}
                     className={cn(
@@ -501,6 +545,22 @@ export default function GhgReportPage() {
                   </div>
                 </TabPanel>
               ))}
+              <TabPanel<Tab> idBase="ghg" value="methodology" current={tab}>
+                <div
+                  aria-busy={scope3.isPlaceholderData}
+                  className={cn(
+                    "transition-opacity",
+                    scope3.isPlaceholderData && "opacity-60",
+                  )}
+                >
+                  <MethodologySection
+                    report={scope3.data}
+                    loading={scope3.isPending}
+                    error={scope3Error}
+                    onRetry={() => scope3.refetch()}
+                  />
+                </div>
+              </TabPanel>
               <TabPanel<Tab> idBase="ghg" value="findings" current={tab}>
                 <FindingsTab
                   findings={findings(

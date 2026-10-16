@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
-import { Button, EmptyState, cn, formatNumber, panel } from "../../../ui";
+import { Button, Callout, EmptyState, cn, formatNumber, panel } from "../../../ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateEmissionQueries } from "../../../lib/emissionQueries";
 import { linkBillEvidence, saveRow, updateRow, uploadRowEvidence, type SaveOutcome } from "../api";
@@ -11,11 +11,14 @@ import type { EmissionCalculator } from "../hooks/emissionCalc";
 import type { EmissionPayload } from "../logic/entry";
 import type { ModalRow } from "../types";
 import { DuplicateDialog, type DuplicateChoice } from "../components/DuplicateDialog";
+import { plainProblem } from "../../../lib/entryDetail";
 
 type Outcome = SaveOutcome | { kind: "skipped" } | { kind: "saving" };
 type Evidence = "attached" | "failed";
 
 type Props = {
+  /** SE-1: false for a User: "Sent" only; the engine's notes go to reviewers; save problems in plain words. */
+  detail: boolean;
   rows: ModalRow[];
   payloads: EmissionPayload[];
   calc: EmissionCalculator;
@@ -103,6 +106,11 @@ export function Review(p: Props) {
   const finished = p.rows.length > 0 && p.rows.every((r) => ["saved", "skipped"].includes(outcomes[r.id]?.kind ?? ""));
   const savedCount = p.rows.filter((r) => outcomes[r.id]?.kind === "saved").length;
   const unattached = p.rows.filter((r) => evidence[r.id] === "failed").length;
+  // The engine's notes on saved rows (S3-4): an older factor year, no FERA row. Never blocking.
+  const notes = !p.detail ? [] : p.rows.flatMap((r) => {
+    const o = outcomes[r.id];
+    return o?.kind === "saved" ? (o.warnings ?? []).map((w) => ({ id: `${r.id}:${w}`, text: `${label(r)}: ${w}` })) : [];
+  });
   const evidenceText = (row: ModalRow) => {
     const bill = billOf(row);
     const files = bill ? 0 : p.evidenceFiles(row.id).length;
@@ -144,6 +152,15 @@ export function Review(p: Props) {
             </div>
           }
         />
+        {notes.length > 0 && (
+          <Callout tone="warn" title="Sent, with notes" className="mx-auto mt-4 max-w-xl">
+            <ul className="list-disc space-y-1 pl-4">
+              {notes.map((n) => (
+                <li key={n.id}>{n.text}</li>
+              ))}
+            </ul>
+          </Callout>
+        )}
       </div>
     );
   }
@@ -180,8 +197,15 @@ export function Review(p: Props) {
                     {!o && <span className="text-muted">Ready</span>}
                     {o?.kind === "saving" && <span className="text-muted">Sending…</span>}
                     {o?.kind === "saved" && <span className="text-good">Sent</span>}
+                    {o?.kind === "saved" &&
+                      p.detail &&
+                      o.warnings?.map((w) => (
+                        <span key={w} className="block text-xs text-warn">
+                          {w}
+                        </span>
+                      ))}
                     {o?.kind === "skipped" && <span className="text-muted">Skipped</span>}
-                    {o?.kind === "error" && <span className="text-bad">{o.message}</span>}
+                    {o?.kind === "error" && <span className="text-bad">{p.detail ? o.message : plainProblem(o.message)}</span>}
                     {o?.kind === "duplicate" && (
                       <span className="flex flex-wrap items-center gap-2">
                         <span className="text-warn">Already entered for this period</span>

@@ -279,6 +279,38 @@ test("SE-1: with several methods a User answers \"Type of record\", never \"Calc
   await expect(row.getByText("Choose how this row is calculated")).toHaveCount(0);
 });
 
+// The engine's notes on a saved row (S3-4) go to reviewers; a User sees "Sent" (SE-1).
+const savedWithNote = async (page: Page, note: string) => {
+  await page.route(/\/user\/emissions(\?|$)/, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 201, json: { emission: { pk_id: 301 }, warnings: [{ code: "FERA_FACTOR_MISSING", message: note }] } })
+      : route.fallback(),
+  );
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+};
+const NOTE = 'No 2024 FERA factor for "Diesel (avg biofuel blend)", so no fuel- and energy-related (Category 3) row was added.';
+
+test("the engine's notes on a saved row show on the result when the company shows full detail (S3-4)", async ({ page }) => {
+  await signIn(page, [], false, [], undefined, { entryDetail: "full" });
+  await savedWithNote(page, NOTE);
+  // The warn callout is role="status", so the note is announced.
+  await expect(page.getByRole("status").filter({ hasText: "Sent, with notes" })).toContainText(NOTE);
+});
+
+test("SE-1: a User sees \"Sent\"; the engine's notes are for reviewers", async ({ page }) => {
+  await signIn(page, []);
+  await savedWithNote(page, NOTE);
+  await expect(page.getByText("Sent, with notes")).toHaveCount(0);
+  await expect(page.getByText(NOTE)).toHaveCount(0);
+});
+
 test("with no factor in the factor year, the preview uses the newest factor from another year, as the save does", async ({ page }) => {
   await signIn(page, [], false, [], undefined, { entryDetail: "full" }); // the factor line shows with full detail (SE-1)
   // Only 2022 and 2023 factors exist; Sep 2025 data looks for 2024 first.

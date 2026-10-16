@@ -1,13 +1,11 @@
 /**
  * Category 3 sub-activities of FERA twins (ESG-lite docs/scope3/01-contracts.md
  * §1 `Scope3Sub`, module S3-7). Pages read these labels from here, never
- * their own strings.
- *
- * S3-0 owns src/lib/scope3/; S3-7 wrote this file before S3-0 merged. If
- * S3-0's contracts carry the same list, this file re-exports it.
+ * their own strings. The list itself is S3-0's, in ./contracts.
  */
-export const SCOPE3_SUBS = ["3a_upstream_fuels", "3b_upstream_electricity", "3c_td_losses", "3d_resold_energy"] as const;
-export type Scope3Sub = (typeof SCOPE3_SUBS)[number];
+import { SCOPE3_SUBS, type Scope3Sub } from "./contracts";
+
+export { SCOPE3_SUBS, type Scope3Sub };
 
 export const isScope3Sub = (v: unknown): v is Scope3Sub => typeof v === "string" && (SCOPE3_SUBS as readonly string[]).includes(v);
 
