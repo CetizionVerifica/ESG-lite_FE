@@ -6,6 +6,7 @@ import {
   Button,
   Callout,
   ChartFrame,
+  DataQualityBadge,
   FilterBar,
   GLOSSARY,
   GLOSSARY_LOCALES,
@@ -14,6 +15,7 @@ import {
   infoLanguageEnabled,
   KpiStrip,
   Menu,
+  MethodCards,
   ScopeBar,
   SegmentedControl,
   TabPanel,
@@ -202,6 +204,23 @@ export function PrimitivesDemo() {
         <Badge tone="warn">3 overdue</Badge>
         <Badge tone="bad">2 rejected</Badge>
       </div>
+    </DemoSection>
+  );
+}
+
+/** S3-3: data quality badge and the method radio cards. */
+export function ScopeThreeRowDemo() {
+  const [method, setMethod] = useState<string>("supplier_specific");
+  return (
+    <DemoSection id="data-quality" title="DataQualityBadge and MethodCards">
+      <div className="flex flex-wrap items-center gap-3">
+        <DataQualityBadge dq={{ technology: 1, geography: 1, time: 1, completeness: 1, reliability: 1, overall: 1, source: "auto" }} />
+        <DataQualityBadge dq={{ technology: 2, geography: 2, time: 1, completeness: 1, reliability: 2, overall: 2, source: "manual" }} />
+        <DataQualityBadge dq={{ technology: 3, geography: 3, time: 2, completeness: 1, reliability: 3, overall: 3, source: "auto" }} />
+        <DataQualityBadge dq={null} />
+      </div>
+      <MethodCards methods={["supplier_specific", "hybrid", "average_data", "spend_based"]} value={method} onChange={setMethod} ghgCategory={1} />
+      <MethodCards methods={["direct_use"]} value="direct_use" onChange={() => {}} ghgCategory={11} />
     </DemoSection>
   );
 }
