@@ -17,6 +17,8 @@ import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
 import { methodLabel } from "../../../lib/scope3/methods";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
+import { isSpendRow, spendPreviewLine } from "../../../lib/scope3/spend";
+import { SpendFields } from "./SpendFields";
 
 export type RowComparison = { text: string; overThreshold: boolean; threshold: number; previousLabel: string } | null;
 
@@ -73,7 +75,12 @@ export function EntryRow(p: Props) {
   const rowMethods = model.spec?.mode === "per_method" && model.spec.method_column === ROW_METHOD_COLUMN ? Object.keys(model.spec.methods) : null;
   const rowMethod = String(row[ROW_METHOD_COLUMN] ?? "");
   const tripField = ghg === 7 && rowMethod === "distance_based" ? distanceFieldOf(model.spec?.methods[rowMethod]) : null;
-  const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row));
+  // S3-5: a row calculated from the amount spent takes Amount, Currency and Invoice date instead of
+  // the quantity fields, unless its method multiplies fields into the amount (Category 15).
+  const spend = calc.spendDetail(row);
+  const specMethod = model.spec ? resolveSpecMethod(model.spec, row) : null;
+  const spendForm = isSpendRow(row, factor) && !(specMethod && specMethod.method.multiply.length > 0) && spend?.spend.amount_from !== "quantity";
+  const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row) && (!spendForm || c.column_type === "select"));
   const firstSelect = visible.find((c) => c.column_type === "select")?.column_name;
   const unitOptions = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
 
@@ -164,15 +171,19 @@ export function EntryRow(p: Props) {
               />
             );
           })}
-        <Select<string>
-          label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
-          value={row.activity_data_unit || null}
-          onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
-          options={unitOptions.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
-          placeholder="Choose a unit"
-          help={expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined}
-          error={fieldError("activity_data_unit")}
-        />
+        {spendForm ? (
+          <SpendFields row={row} onChange={p.onChange} amountError={fieldError("values")} />
+        ) : (
+          <Select<string>
+            label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
+            value={row.activity_data_unit || null}
+            onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
+            options={unitOptions.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
+            placeholder="Choose a unit"
+            help={expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined}
+            error={fieldError("activity_data_unit")}
+          />
+        )}
       </div>
 
       {tripField && <TripCalculator field={tripField} onUse={(km) => p.onChange(tripField, String(km))} />}
@@ -212,7 +223,11 @@ export function EntryRow(p: Props) {
 
       <footer className="flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="text-xs text-muted">
-          {factor ? (
+          {spend?.outcome.ok ? (
+            <span className="font-num" data-testid="spend-preview">
+              {spendPreviewLine(spend.spend, spend.outcome, spend.factor)}
+            </span>
+          ) : factor ? (
             <>
               Factor {factor.factor_value} kgCO₂e per {factor.denominator_unit}, {factor.year}
               {factor.year === p.factorYear ? (

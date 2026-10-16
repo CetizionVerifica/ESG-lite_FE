@@ -2,6 +2,8 @@
 import type { BatchChannel, EmissionData, EmissionStatus, EmissionUploadBatch } from "../../services/emissionService";
 import { fyEndYear, fyStartYearOf } from "../../lib/fiscalYear";
 import type { ReviewGroup } from "../../lib/scope3/checks";
+import type { EmissionFx } from "../../lib/scope3/spend";
+import type { DeflatorUsed } from "../../services/fxRateService";
 import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatNumber, formatReportingYear, writeContext } from "../../ui";
 
 export type FactorSnapshot = {
@@ -13,6 +15,8 @@ export type FactorSnapshot = {
   denominator_unit: string;
   source: string;
   year: number;
+  /** S3-5: the deflator a spend row used (index[base_year] ÷ index[spend_year]). */
+  deflator?: DeflatorUsed | null;
 };
 
 /** A factor's value as a number, whether the API sent it as text or a number; null when it isn't one. */
@@ -34,6 +38,8 @@ export function formatFactorValue(factor: { factor_value: number | string | null
 /** A ledger row: the list API also returns these entity fields. */
 export type LedgerRow = EmissionData & {
   emission_factor_snapshot?: FactorSnapshot | null;
+  /** S3-5: the exchange rate a spend row used. */
+  fx?: EmissionFx | null;
   upload_batch_id?: string | null;
 };
 

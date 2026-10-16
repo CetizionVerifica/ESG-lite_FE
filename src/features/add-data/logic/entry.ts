@@ -67,6 +67,12 @@ export type RowIssue = { field: "emission_category" | "activity_data_unit" | "va
  */
 export function rowIssue(row: ModalRow, calc: EmissionCalculator): RowIssue | null {
   if (!row.emission_category) return { field: "emission_category", message: "Choose what this row is" };
+  // S3-5: a spend row needs its amount and currency; the server looks the rate up, so a rate still loading doesn't block.
+  const spend = calc.spendDetail(row);
+  if (spend) {
+    if (spend.outcome.ok || spend.outcome.pending) return null;
+    return { field: "values", message: spend.outcome.status };
+  }
   if (!row.activity_data_unit) return { field: "activity_data_unit", message: "Choose a unit" };
   const expected = calc.getExpectedUnit(row.emission_category);
   if (expected && !unitsMatchExact(expected, row.activity_data_unit) && !canConvert(row.activity_data_unit, expected)) {

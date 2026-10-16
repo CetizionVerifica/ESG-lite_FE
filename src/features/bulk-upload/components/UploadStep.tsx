@@ -5,6 +5,7 @@ import { selectedSite } from "../logic";
 import type { Site } from "../api";
 import type { UploadContext } from "../hooks/useUploadContext";
 import { ACCEPT, MAX_BYTES, buildFields, templateHeaders } from "../logic";
+import { SUPPORTED_CURRENCIES } from "../../../lib/scope3/spend";
 import type { ColumnConfig } from "../../../lib/emissions";
 
 export function UploadStep(props: {
@@ -78,6 +79,7 @@ export function UploadStep(props: {
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
           <li>Name the columns as in the template and they map themselves.</li>
           <li>One row per entry. Every row needs a category and a unit.</li>
+          <li>For an amount spent, put the amount as the value and its currency code ({SUPPORTED_CURRENCIES.join(", ")}) as the unit; the exchange rate is the one on the row's date.</li>
           <li>Rows are saved as Pending for the site's manager to approve.</li>
         </ul>
         <Button variant="secondary" icon={<Download aria-hidden className="size-4" />} disabled={!form.data} onClick={downloadTemplate}>

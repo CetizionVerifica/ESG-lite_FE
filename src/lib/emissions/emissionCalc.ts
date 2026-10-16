@@ -4,6 +4,8 @@
 // golden snapshots in emissionCalc.golden.test.ts pin the outputs. Mirrors the
 // backend (services/calculationSpec.ts) so the preview matches the saved total.
 import { getConversionFactor, unitsMatchExact } from "../../ui/unitMatch";
+import type { SpendRate } from "../../services/fxRateService";
+import { isSpendRow, spendInputOf, spendOutcome } from "../scope3/spend";
 import type {
   CalculationSpec,
   ColumnEntity,
@@ -70,6 +72,10 @@ export interface EmissionCalcInput {
   // already account for the fuel's energy content).
   fallbackToRaw?: boolean;
   calculationSpec?: CalculationSpec | null;
+  // S3-5: rates for spend rows (useSpendRates) and the date rows are filed on
+  // (the purchase date when a row has no invoice date).
+  spendRates?: ReadonlyMap<string, SpendRate>;
+  reportingDate?: string | null;
 }
 
 // Find the factor for an emission category, in the backend's save-time order
@@ -124,6 +130,8 @@ const BOOKKEEPING_FIELDS = [
   "pk_id", "total_emission", "site_id", "category_id", "created_by",
   "reviewed_by", "fera_linked_id", "reporting_period", "year_type",
   "activity_value",
+  // S3-5 spend fields: the purchase date ("2026-09-03" parses as 2026) and the amount spent.
+  "invoice_date", "spent_value",
 ];
 
 // The first positive number in a non-select, non-bookkeeping field (for
@@ -215,6 +223,12 @@ export const calculateEmission = (input: EmissionCalcInput, row: ModalRow): Emis
     return { value: null, status: `No emission factor found${yearMsg}` };
   }
 
+  // S3-5: a spend row is the amount × rate × deflator × factor (engine methods/spend.ts).
+  if (isSpendRow(row, factor)) {
+    const spend = spendRow(input, row);
+    if (spend) return spend;
+  }
+
   let activityValue: number | null;
   if (input.calculationSpec) {
     const fromSpec = specActivityValue(input.calculationSpec, row);
@@ -254,12 +268,41 @@ export const calculateEmission = (input: EmissionCalcInput, row: ModalRow): Emis
   return { value: null, status: "Unit mismatch - no conversion available" };
 };
 
+/** Status of a spend row whose rate hasn't loaded yet; it can still be sent (the server looks the rate up). */
+export const SPEND_RATE_PENDING = "Looking up the exchange rate";
+
+/** A spend row's inputs and outcome for the preview line, or null when the row isn't calculated from spend. */
+export const spendDetail = (input: EmissionCalcInput, row: ModalRow) => {
+  const factor = row.emission_category ? findEmissionFactor(input, row.emission_category) : undefined;
+  if (!factor || !isSpendRow(row, factor)) return null;
+  let quantity: number | null = null;
+  if (input.calculationSpec) {
+    const fromSpec = specActivityValue(input.calculationSpec, row);
+    quantity = typeof fromSpec === "number" ? fromSpec : null;
+  } else {
+    quantity = findActivityValue(input, row);
+  }
+  const spend = spendInputOf(row, input.reportingDate ?? String(row.date_of_reporting ?? ""), quantity);
+  if (!spend) return null;
+  return { factor, spend, outcome: spendOutcome(spend, factor, input.spendRates) };
+};
+
+// A spend row's result, or null when the row has no amount in a currency (then
+// the factor decides as for any row, as the engine does).
+const spendRow = (input: EmissionCalcInput, row: ModalRow): EmissionCalculationResult | null => {
+  const detail = spendDetail(input, row);
+  if (!detail) return null;
+  const { outcome } = detail;
+  return outcome.ok ? { value: outcome.tonnes, status: "ok" } : { value: null, status: outcome.pending ? SPEND_RATE_PENDING : outcome.status };
+};
+
 // One calculator bound to a context (site × category × period).
 export const createEmissionCalculator = (input: EmissionCalcInput) => ({
   getExpectedUnit: (emissionCategory: string) => expectedUnitFor(input, emissionCategory),
   getEmissionFactor: (emissionCategory: string) => findEmissionFactor(input, emissionCategory),
   findActivityValue: (row: ModalRow) => findActivityValue(input, row),
   calculateEmission: (row: ModalRow) => calculateEmission(input, row),
+  spendDetail: (row: ModalRow) => spendDetail(input, row),
 });
 
 export type EmissionCalculator = ReturnType<typeof createEmissionCalculator>;

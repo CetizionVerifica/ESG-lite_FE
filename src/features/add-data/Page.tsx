@@ -4,6 +4,8 @@ import { useAuth } from "../../context/AuthContext";
 import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
 import { useEntrySetup, usePeriodTotals, useThreshold } from "./api";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
+import { useSpendRates } from "../../lib/scope3/useSpendRates";
+import type { EmissionFactor } from "./types";
 import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
 import { useRowEvidence } from "./hooks/useRowEvidence";
 import { billGroups, billOf } from "./logic/bill";
@@ -25,6 +27,7 @@ const STEPS = [
 ];
 
 const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : null);
+const NO_FACTORS: EmissionFactor[] = [];
 
 /** P03 Add data: choose the context, type the rows, review and send for approval. */
 export default function AddDataPage() {
@@ -82,7 +85,12 @@ export default function AddDataPage() {
     targetYear: factorYear ?? undefined,
     columns: model?.columns,
   };
-  const calc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec });
+  const reportingDate = period ? entryDate(period) : null;
+  const factors = setup.data?.factors ?? NO_FACTORS;
+  // S3-5: exchange rates for rows calculated from the amount spent.
+  const spendLookup = useMemo(() => ({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec }), [calcInput.targetYear, calcInput.columns, factors, model?.spec]); // eslint-disable-line react-hooks/exhaustive-deps
+  const spend = useSpendRates(rows, spendLookup, reportingDate);
+  const calc = useEmissionCalc({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec, spendRates: spend.rates, reportingDate });
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.
   const feraCalc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.feraFactors ?? [], fallbackToRaw: true });
 

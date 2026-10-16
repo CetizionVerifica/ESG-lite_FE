@@ -48,6 +48,10 @@ export interface EmissionFactor {
   factor_value: number;
   denominator_unit: string;
   year: number;
+  // S3-2 metadata the factor list returns; S3-5 reads these for spend rows.
+  factor_type?: string | null;
+  price_currency?: string | null;
+  price_base_year?: number | null;
 }
 
 export interface ModalRow {
