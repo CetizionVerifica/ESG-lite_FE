@@ -54,7 +54,7 @@ const rate = {
   no_deflator: false,
 };
 
-async function signIn(page: Page, created: unknown[], rateQueries: URLSearchParams[]) {
+async function signIn(page: Page, created: unknown[], rateQueries: URLSearchParams[], rateStatus = 200) {
   const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [site] };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
@@ -82,7 +82,7 @@ async function signIn(page: Page, created: unknown[], rateQueries: URLSearchPara
       }
       if (path.endsWith("/fx-rates")) {
         rateQueries.push(url.searchParams);
-        return json(rate);
+        return rateStatus === 200 ? json(rate) : json({ message: "unavailable" }, rateStatus);
       }
       if (path.endsWith("/user/emissions") && request.method() === "POST") {
         created.push(request.postDataJSON());
@@ -142,4 +142,28 @@ test("the spend form works at 390px", async ({ page }) => {
   await expect(row.getByText(/× 0.42 kgCO₂e\/USD/)).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("a spend row whose exchange rate can't load says the total is calculated on send, and still sends", async ({ page }) => {
+  const created: Record<string, unknown>[] = [];
+  await signIn(page, created, [], 503);
+  await page.goto("/data/new?site=4&category=21&period=2026-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Material").selectOption({ label: "Chemicals" });
+  // Nothing entered yet: the row asks for the amount (the unit field is hidden on the spend form).
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect(row.getByLabel("Amount spent")).toHaveAccessibleDescription("Enter the amount spent");
+  await row.getByLabel("Amount spent").fill("1240000");
+  // The missing currency shows under Currency, not under the amount.
+  await expect(row.getByLabel("Currency")).toHaveAccessibleDescription("Choose the currency");
+  await expect(row.getByLabel("Amount spent")).not.toHaveAccessibleDescription("Choose the currency");
+  await row.getByLabel("Currency").selectOption("INR");
+  const note = row.getByText("Couldn't load the exchange rate. The total is calculated when you send.");
+  await expect(note).toBeVisible();
+  // A muted note, not an error, even after Review showed the row's issues.
+  await expect(note).toHaveClass(/text-muted/);
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0]).toMatchObject({ activity_data: { spent_value: "1240000", currency: "INR" }, activity_data_unit: "INR" });
 });

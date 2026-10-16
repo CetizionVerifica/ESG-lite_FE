@@ -86,10 +86,22 @@ export default function AddDataPage() {
   const calcInput = useMemo(() => ({ targetYear: factorYear ?? undefined, columns: model?.columns }), [factorYear, model?.columns]);
   const reportingDate = period ? entryDate(period) : null;
   const factors = setup.data?.factors ?? NO_FACTORS;
-  // S3-5: exchange rates for rows calculated from the amount spent.
-  const spendLookup = useMemo(() => ({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec }), [calcInput, factors, model?.spec]);
+  const reportingPeriod = period?.mode;
+  // S3-5: exchange rates for rows calculated from the amount spent; a failed lookup shows a note, not a spinner.
+  const spendLookup = useMemo(
+    () => ({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec, reportingPeriod }),
+    [calcInput, factors, model?.spec, reportingPeriod],
+  );
   const spend = useSpendRates(rows, spendLookup, reportingDate);
-  const calc = useEmissionCalc({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec, spendRates: spend.rates, reportingDate });
+  const calc = useEmissionCalc({
+    ...calcInput,
+    emissionFactors: factors,
+    calculationSpec: model?.spec,
+    spendRates: spend.rates,
+    spendRateErrors: spend.failed,
+    reportingDate,
+    reportingPeriod,
+  });
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.
   // S3-7: td_loss factors make a second, T&D-loss row for Scope 2 categories only.
   // Only the factor year's FERA factors count: the backend never falls back to another year for a twin.

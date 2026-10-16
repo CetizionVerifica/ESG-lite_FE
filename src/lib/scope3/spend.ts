@@ -93,10 +93,13 @@ export interface SpendInput {
  * Amount, currency and purchase date, as the backend reads them: the amount
  * spent and its currency on a row that asks for spend, else the row's
  * quantity (`quantity`) when its unit is a currency. The date is the invoice
- * date, else the reporting date.
+ * date, else the date the row is filed on: its own date_of_reporting in a
+ * monthly period, always the period end (`reportingDate`) in a yearly one, as
+ * buildPayload sends it.
  */
-export function spendInputOf(row: Row, reportingDate: string, quantity: number | null = null): SpendInput | null {
-  const spend_date = isoDay(fieldOf(row, SPEND_FIELDS.invoiceDate)) ?? isoDay(row.date_of_reporting) ?? reportingDate.slice(0, 10);
+export function spendInputOf(row: Row, reportingDate: string, quantity: number | null = null, yearly = false): SpendInput | null {
+  const rowDate = yearly ? null : isoDay(row.date_of_reporting);
+  const spend_date = isoDay(fieldOf(row, SPEND_FIELDS.invoiceDate)) ?? rowDate ?? reportingDate.slice(0, 10);
   // As the backend: the amount and currency fields count only on a row that asks for the spend method
   // (older Category 1/2 rows carry an informational "Currency" extra next to their quantity). Either
   // field alone is enough here, so a half-filled spend row says what is still missing.
@@ -138,20 +141,35 @@ const sameCurrencyRate = (input: SpendInput, to: string): SpendRate => ({
   no_deflator: false,
 });
 
+/** Status of a spend row whose rate hasn't loaded yet; it can still be sent (the server looks the rate up). */
+export const SPEND_RATE_PENDING = "Looking up the exchange rate";
+/** Status of a spend row whose `GET /fx-rates` failed; it can still be sent, the server calculates the total. */
+export const SPEND_RATE_FAILED = "Couldn't load the exchange rate. The total is calculated when you send.";
+
 export type SpendOutcome =
   | { ok: true; kg: number; tonnes: number; converted: number; rate: SpendRate; factorValue: number }
+  /** `pending`: no preview yet, but nothing for the user to fix (the rate is loading or failed to load). */
   | { ok: false; status: string; pending?: boolean };
 
-/** The engine's spend total for a row, given the rate it would use (from `rates`, keyed by spendRateKey). */
-export function spendOutcome(input: SpendInput, factor: SpendFactor, rates: ReadonlyMap<string, SpendRate> | undefined): SpendOutcome {
+/**
+ * The engine's spend total for a row, given the rate it would use (from
+ * `rates`, keyed by spendRateKey). `failed` holds the keys whose rate lookup errored.
+ */
+export function spendOutcome(
+  input: SpendInput,
+  factor: SpendFactor,
+  rates: ReadonlyMap<string, SpendRate> | undefined,
+  failed?: ReadonlySet<string>,
+): SpendOutcome {
   if (!present(input.currency)) return { ok: false, status: "Choose the currency" };
   if (!isSupportedCurrency(input.currency)) return { ok: false, status: `${input.currency} can't be converted; use one of ${SUPPORTED_CURRENCIES.join(", ")}` };
   if (!(input.amount > 0)) return { ok: false, status: "Enter the amount spent (a number greater than 0)" };
   const to = factorCurrency(factor);
   if (!to) return { ok: false, status: "This factor isn't per an amount of money; choose a spend factor" };
   const q = spendRateQuery(input, factor);
-  const rate = q ? rates?.get(spendRateKey(q.currency, q.date, q.to, q.price_year)) : sameCurrencyRate(input, to);
-  if (!rate) return { ok: false, status: "Looking up the exchange rate", pending: true };
+  const key = q ? spendRateKey(q.currency, q.date, q.to, q.price_year) : null;
+  const rate = key ? rates?.get(key) : sameCurrencyRate(input, to);
+  if (!rate) return { ok: false, status: key && failed?.has(key) ? SPEND_RATE_FAILED : SPEND_RATE_PENDING, pending: true };
   const ratio = rate.deflator ? rate.deflator.base_index / rate.deflator.spend_index : 1;
   const converted = input.amount * rate.rate * ratio;
   const factorValue = Number(factor.factor_value);
@@ -163,7 +181,8 @@ export function spendOutcome(input: SpendInput, factor: SpendFactor, rates: Read
 const money = (amount: number, currency: string, decimals = 0) =>
   new Intl.NumberFormat(currency === "INR" ? "en-IN" : "en-US", { minimumFractionDigits: 0, maximumFractionDigits: decimals }).format(amount);
 
-const sig = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 4 });
+// Up to 6 significant digits, as fxLine shows a rate.
+const sig = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 6 });
 
 /** "₹ 12,40,000" (Indian grouping for rupees), "AED 5,000". */
 export const formatMoney = (amount: number, currency: string): string => `${SYMBOL[currency] ?? currency} ${money(amount, currency, 2)}`;
@@ -189,11 +208,30 @@ export interface EmissionFx {
   spend_date?: string;
 }
 
-/** "1 INR = 0.01125 USD, rate of 3 Sep 2026 (ecb)" for drawers. */
-export function fxLine(fx: EmissionFx): string {
-  const rate = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 6 }).format(fx.rate);
+/** The engine's source for an amount already in the factor's currency (backend src/scope3/spend/rates.ts): rate 1, nothing to show. */
+export const isSameCurrencyFx = (fx: Pick<EmissionFx, "source" | "currency" | "to">): boolean => fx.source === "same currency" || fx.currency === fx.to;
+
+/** "1 INR = 0.01125 USD, rate of 3 Sep 2026 (ecb)" for drawers; null for a same-currency row ("1 USD = 1 USD" says nothing). */
+export function fxLine(fx: EmissionFx): string | null {
+  if (isSameCurrencyFx(fx)) return null;
+  const rate = sig.format(fx.rate);
   const late = fx.spend_date && fx.as_of && fx.spend_date !== fx.as_of ? `, bought ${formatDate(fx.spend_date)}` : "";
   return `1 ${fx.currency} = ${rate} ${fx.to}, rate of ${formatDate(fx.as_of)}${late} (${fx.source})`;
+}
+
+/**
+ * The conversion term of a spend row's calculation in drawers: rate × deflator,
+ * so the line multiplies out to the stored total, labelled "USD/INR, deflated"
+ * when the deflator is in it (it then differs from the plain exchange rate).
+ * Null for a same-currency row with no deflator (the term would be "× 1").
+ */
+export function drawerRateTerm(
+  fx: EmissionFx,
+  deflator: { base_index: number; spend_index: number } | null,
+): { value: number; label: string } | null {
+  if (isSameCurrencyFx(fx) && !deflator) return null;
+  const ratio = deflator && deflator.spend_index > 0 ? deflator.base_index / deflator.spend_index : 1;
+  return { value: fx.rate * ratio, label: `${fx.to}/${fx.currency}${deflator ? ", deflated" : ""}` };
 }
 
 /** "deflated from 2026 to 2022 prices (US CPI 330.2 → 292.655)" for drawers. */

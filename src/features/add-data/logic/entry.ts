@@ -2,6 +2,7 @@
 import { canConvert, unitsMatchExact } from "../../../ui/unitMatch";
 import { factorYearForDate, yearlyPeriodEndDate, type PeriodMode, type YearType } from "../hooks/reportingPeriod";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
+import { isSupportedCurrency } from "../../../lib/scope3/spend";
 import type { ModalRow } from "../types";
 
 /** What is being reported: a month, or a CY/FY year (yearly batches). */
@@ -59,7 +60,8 @@ export function periodTotalQuery(p: EntryPeriod) {
   } as const;
 }
 
-export type RowIssue = { field: "emission_category" | "activity_data_unit" | "values"; message: string };
+/** The field an issue shows under; "values" is the quantity (or, on the spend form, the amount spent). */
+export type RowIssue = { field: "emission_category" | "activity_data_unit" | "currency" | "values"; message: string };
 
 /**
  * Why a row can't be saved yet, or null when it can. Same checks and order as
@@ -71,8 +73,14 @@ export function rowIssue(row: ModalRow, calc: EmissionCalculator): RowIssue | nu
   const spend = calc.spendDetail(row);
   if (spend) {
     if (spend.outcome.ok || spend.outcome.pending) return null;
-    return { field: "values", message: spend.outcome.status };
+    // Same order as spendOutcome: the currency first, then the amount.
+    const currencyIssue = !isSupportedCurrency(spend.spend.currency);
+    // On the spend form the currency has its own field; a quantity row's currency is its unit.
+    const field = !currencyIssue ? "values" : spend.spend.amount_from === "spent_value" ? "currency" : "activity_data_unit";
+    return { field, message: spend.outcome.status };
   }
+  // The spend form hides the unit, so a spend row with nothing entered yet asks for the amount, not a unit.
+  if (calc.usesSpendForm(row)) return { field: "values", message: "Enter the amount spent" };
   if (!row.activity_data_unit) return { field: "activity_data_unit", message: "Choose a unit" };
   const expected = calc.getExpectedUnit(row.emission_category);
   if (expected && !unitsMatchExact(expected, row.activity_data_unit) && !canConvert(row.activity_data_unit, expected)) {
