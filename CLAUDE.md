@@ -74,3 +74,4 @@ Run after `npm ci`:
 - Unit tests live next to the code as `*.test.ts(x)` under `src/`. Playwright specs live in `e2e/`; the config starts the Vite dev server on port 4173 itself (or reuses one already running there).
 - Shared components: see `src/ui/README.md`; the dev-only gallery is `/__ui` (`npm run dev`).
 - Run lint:new, typecheck and unit tests before every push.
+- A lane with a backend part runs the end-to-end data workflow test in ESG-lite before review (`bash ci/workflow/local.sh`, see ESG-lite `ci/workflow/README.md`) and puts "Workflow test: N passed, M skipped" in its last PR. It checks the data from client setup to the report; what a User sees stays in Playwright.
