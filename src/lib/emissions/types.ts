@@ -50,6 +50,9 @@ export interface EmissionFactor {
   year: number;
   /** S3-2 factor type; a FERA factor typed td_loss makes the T&D-loss twin (S3-7). */
   factor_type?: string | null;
+  // S3-2 metadata the factor list returns; S3-5 reads these for spend rows.
+  price_currency?: string | null;
+  price_base_year?: number | null;
 }
 
 export interface ModalRow {

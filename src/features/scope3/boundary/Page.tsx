@@ -10,6 +10,7 @@ import { UnmappedPanel } from "./components/UnmappedPanel";
 import { type RowDraft, countStatuses, draftFrom, isRowDirty, rowError, summaryLine } from "./logic";
 import { LEASE_ROLE_LABEL } from "../../../lib/scope3/assets"; // S3-11
 import { categoryLabel } from "../../../lib/scope3/contracts"; // S3-11
+import { BaseYearSection } from "../baseYear/BaseYearSection"; // S3-14
 
 const APPROACH_OPTIONS = CONSOLIDATION_APPROACHES.map((a) => ({ value: a, label: CONSOLIDATION_LABEL[a] }));
 
@@ -230,6 +231,9 @@ export default function Scope3BoundaryPage() {
           </ul>
         </section>
       )}
+
+      {/* S3-14: base year and recalculations (#base-year). */}
+      <BaseYearSection companyId={companyId} ready={ready} />
 
       {editable && dirty.length > 0 && (
         <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-page px-4 py-3">

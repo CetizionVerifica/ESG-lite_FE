@@ -42,6 +42,10 @@ React 19 + Vite + TypeScript + Tailwind. Backend is ESG-lite (Node), AI/OCR endp
 - The FE never saves a total: previews mirror the engine; method and DQ chips read server fields.
 - Copy: "Category 1 · Purchased goods and services" (number then exact GHG Protocol name); plain method labels from contracts §1; status words Draft / Pending / Approved / Rejected / Missing / Locked.
 
+## Simple data entry — see docs/simple-entry/
+- Users (contributors) see their fields and the total tCO₂e only: no method choice, factor, FX, FERA/Category 3 or DQ text. Gate detail with `showCalcDetail` (SE-1).
+- Method, unit, currency and field labels/defaults are set per form by the Superadmin in Capture setup and applied by the server; a User's entry sends field values only.
+
 ## Definition of done (every module)
 
 1. Matches its spec's layout and the screen in the previews artifact.
@@ -70,3 +74,4 @@ Run after `npm ci`:
 - Unit tests live next to the code as `*.test.ts(x)` under `src/`. Playwright specs live in `e2e/`; the config starts the Vite dev server on port 4173 itself (or reuses one already running there).
 - Shared components: see `src/ui/README.md`; the dev-only gallery is `/__ui` (`npm run dev`).
 - Run lint:new, typecheck and unit tests before every push.
+- A lane with a backend part runs the end-to-end data workflow test in ESG-lite before review (`bash ci/workflow/local.sh`, see ESG-lite `ci/workflow/README.md`) and puts "Workflow test: N passed, M skipped" in its last PR. It checks the data from client setup to the report; what a User sees stays in Playwright.

@@ -1,6 +1,7 @@
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { getManagerOverview } from "../../services/overviewService";
 import { getLongTermTargetChart, getNearTermTargetTables } from "../../services/sbtiService";
+import { getBaseYear } from "../../services/scope3Service"; // S3-14
 import { PATHWAYS, type Pathway, type TargetKind, type TargetModel, fromNearTerm, fromNetZero, isNoBaseData } from "./logic";
 
 export const keys = {
@@ -8,12 +9,27 @@ export const keys = {
   target: (kind: TargetKind, siteIds: number[], baseYear: number, targetYear: number, pathway: Pathway) =>
     [...keys.all, kind, siteIds, baseYear, targetYear, kind === "near" ? pathway : null] as const,
   yearHasData: (year: number, siteIds: number[]) => [...keys.all, "has-data", year, siteIds] as const,
+  // The caller's own company only (a Superadmin gets 400 and falls back), and sign-out clears the cache.
+  companyBaseYear: ["targets", "company-base-year"] as const,
 };
+
+/** S3-14: the company's frozen Scope 3 base year and its year type (null when none is set or it can't be read). */
+export function useCompanyBaseYear() {
+  return useQuery<{ year: number; yearType: "CY" | "FY" } | null>({
+    queryKey: keys.companyBaseYear,
+    queryFn: async () => {
+      const row = (await getBaseYear(null)).base_year;
+      return row ? { year: row.base_year, yearType: row.year_type === "FY" ? "FY" : "CY" } : null;
+    },
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 export type TargetQuery = { kind: TargetKind; siteIds: number[]; baseYear: number; targetYear: number; pathway: Pathway };
 
 /** The live pathway for the current setup, as one model for both target kinds. */
-export function useTarget(q: TargetQuery) {
+export function useTarget(q: TargetQuery, ready = true) {
   return useQuery<TargetModel>({
     queryKey: keys.target(q.kind, q.siteIds, q.baseYear, q.targetYear, q.pathway),
     queryFn: async () =>
@@ -22,7 +38,7 @@ export function useTarget(q: TargetQuery) {
             await getNearTermTargetTables({ siteIds: q.siteIds, baseYear: q.baseYear, targetYear: q.targetYear, annualRate: PATHWAYS[q.pathway].rate }),
           )
         : fromNetZero(await getLongTermTargetChart({ siteIds: q.siteIds, baseYear: q.baseYear })),
-    enabled: q.siteIds.length > 0,
+    enabled: ready && q.siteIds.length > 0,
     placeholderData: keepPreviousData,
     // "No data for this base year" is an answer, not a blip.
     retry: (count, error) => !isNoBaseData(error) && count < 2,
