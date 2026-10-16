@@ -13,10 +13,10 @@ describe("MethodCards", () => {
     expect(group).toBeTruthy();
     const radios = screen.getAllByRole("radio");
     expect(radios).toHaveLength(3);
-    expect((screen.getByRole("radio", { name: /Supplier's own figure/ }) as HTMLInputElement).checked).toBe(true);
-    expect(screen.getByRole("radio", { name: /Average for the material/ })).toBeTruthy();
+    expect((screen.getByRole("radio", { name: "Supplier's own figure" }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("radio", { name: "Average for the material" })).toBeTruthy();
     expect(screen.getByText(/Quickest, least exact/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: /From the amount spent/ }));
+    fireEvent.click(screen.getByRole("radio", { name: "From the amount spent" }));
     expect(onChange).toHaveBeenCalledWith("spend_based");
   });
 

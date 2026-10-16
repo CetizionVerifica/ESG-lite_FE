@@ -46,6 +46,7 @@ export function MethodCards({ methods, value, onChange, ghgCategory, label = "Ho
       <div className="grid gap-2 sm:grid-cols-2">
         {methods.map((m, i) => {
           const checked = value === m;
+          const titleId = `${name}-${m}`;
           return (
             <label
               key={m}
@@ -61,14 +62,19 @@ export function MethodCards({ methods, value, onChange, ghgCategory, label = "Ho
                 value={m}
                 checked={checked}
                 onChange={() => onChange(m)}
+                // The method's name only; the hint is its description.
+                aria-labelledby={titleId}
+                aria-describedby={`${titleId}-hint`}
                 className={cn("mt-0.5 size-4 shrink-0 accent-brand", focusRing)}
               />
               <span className="min-w-0">
                 <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink">
-                  {methodLabel(m, ghgCategory)}
+                  <span id={titleId}>{methodLabel(m, ghgCategory)}</span>
                   {i === 0 && <span className="text-[11px] font-normal text-muted">Most specific</span>}
                 </span>
-                <span className="block text-xs text-muted">{methodHint(m)}</span>
+                <span id={`${titleId}-hint`} className="block text-xs text-muted">
+                  {methodHint(m)}
+                </span>
               </span>
             </label>
           );
