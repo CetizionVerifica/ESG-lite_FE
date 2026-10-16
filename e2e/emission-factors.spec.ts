@@ -1,4 +1,5 @@
 import { type Page, expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import * as XLSX from "xlsx";
 
 /**
@@ -143,7 +144,9 @@ async function signIn(page: Page) {
         return json({ message: "Emission factor deleted successfully" });
       }
       if (one && method === "PUT") {
-        factors = factors.map((f) => (f.emission_factor_id === Number(one[1]) ? { ...f, factor_value: String(body!.factor_value) } : f));
+        factors = factors.map((f) =>
+          f.emission_factor_id === Number(one[1]) ? { ...f, ...body, factor_value: body!.factor_value !== undefined ? String(body!.factor_value) : f.factor_value } : f,
+        );
         return json({ message: "Emission factor updated successfully" });
       }
       if (path.endsWith("/admin/emission-factors") && method === "POST") {
@@ -241,7 +244,8 @@ test("a superadmin filters factors by client and year, and adds one", async ({ p
     {
       method: "POST",
       path: expect.stringMatching(/\/admin\/emission-factors$/),
-      body: { site_id: 1, category_id: 1, year: 2024, factor_value: 2.31, denominator_unit: "litre", emission_category_name: "Petrol" },
+      // New factors start on AR6 (D7).
+      body: { site_id: 1, category_id: 1, year: 2024, factor_value: 2.31, denominator_unit: "litre", emission_category_name: "Petrol", gwp_set: "AR6" },
     },
   ]);
   await expect(table.getByRole("row", { name: /Petrol/ })).toContainText("2.31");
@@ -279,6 +283,51 @@ test("a superadmin edits a factor, deletes it after confirming, and sees imports
   await batchConfirm.getByRole("button", { name: "Delete batch" }).click();
   await expect(page.getByText("1 imported factor deleted")).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ method: "DELETE", path: expect.stringMatching(/\/admin\/emission-factors\/batch\/b-1$/) });
+});
+
+test("a superadmin sets a factor's type and GWP set, and they stay after a reload", async ({ page }) => {
+  const { calls, lists } = await signIn(page);
+  await page.goto("/factors");
+  await page.getByRole("button", { name: "Edit Hidd, Fuel, 2024" }).click();
+  const drawer = page.getByRole("dialog", { name: "Edit factor" });
+  await drawer.getByRole("combobox", { name: "Type" }).selectOption({ label: "Combustion (direct)" });
+  await drawer.getByRole("combobox", { name: "GWP set" }).selectOption({ label: "IPCC AR5 (100-year)" });
+  // The gas breakdown is optional; parts that don't add up only warn.
+  await drawer.getByText("Gas breakdown (optional)").click();
+  await drawer.getByRole("textbox", { name: "CO₂", exact: true }).fill("2");
+  await expect(drawer.getByText("Parts don't add up")).toBeVisible();
+  await drawer.getByRole("textbox", { name: "CO₂", exact: true }).fill("2.67");
+  await expect(drawer.getByText("Parts don't add up")).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Factor saved")).toBeVisible();
+  expect(calls.at(-1)).toMatchObject({ method: "PUT", body: { factor_type: "combustion", gwp_set: "AR5", co2_kg: 2.67 } });
+
+  await page.reload();
+  await page.getByRole("button", { name: "Edit Hidd, Fuel, 2024" }).click();
+  const again = page.getByRole("dialog", { name: "Edit factor" });
+  await expect(again.getByRole("combobox", { name: "Type" })).toHaveValue("combustion");
+  await expect(again.getByRole("combobox", { name: "GWP set" })).toHaveValue("AR5");
+  await expect(again.getByRole("textbox", { name: "CO₂", exact: true })).toHaveValue("2.67");
+  await again.getByRole("button", { name: "Cancel" }).click();
+
+  // The Type filter goes to the server.
+  await chooseFilter(page, "Type", "Combustion (direct)");
+  await expect(page).toHaveURL(/type=combustion/);
+  await expect.poll(() => lists.at(-1)?.get("factor_type")).toBe("combustion");
+
+  // The Excel export carries Type and GWP even though the table hides them.
+  await page.getByRole("button", { name: "Export" }).click();
+  const xlsx = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Excel (.xlsx)" }).click();
+  const file = await xlsx;
+  expect(file.suggestedFilename()).toBe("emission-factors.xlsx");
+  expect(lists.at(-1)?.get("limit")).toBe("200");
+  expect(lists.at(-1)?.get("factor_type")).toBe("combustion");
+  const wb = XLSX.read(await readFile((await file.path())!));
+  const [head, first] = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+  expect(head).toEqual(expect.arrayContaining(["Type", "GWP", "Geography", "CO₂ (kg)", "Includes WTT"]));
+  expect(first[head.indexOf("Type")]).toBe("Combustion (direct)");
+  expect(first[head.indexOf("GWP")]).toBe("AR5");
 });
 
 function sheet(rows: Record<string, unknown>[]): Buffer {

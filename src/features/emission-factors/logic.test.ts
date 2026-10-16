@@ -12,6 +12,8 @@ import {
   filterUploads,
   firstId,
   formatFactor,
+  gasSumHint,
+  TYPE_FILTER_VALUES,
   isDirty,
   layoutLabel,
   listParams,
@@ -86,7 +88,7 @@ describe("filter options", () => {
 describe("display", () => {
   it("formats decimals from the API without trailing zeros", () => {
     expect(formatFactor("2.6800")).toBe("2.68");
-    expect(formatFactor(1234.56789)).toBe("1234.5679");
+    expect(formatFactor(1234.567891234)).toBe("1234.56789123");
     expect(formatFactor(null)).toBe("—");
     expect(formatFactor("abc")).toBe("—");
   });
@@ -115,20 +117,30 @@ describe("form", () => {
   it("starts from the filters and validates required fields", () => {
     const d = emptyDraft({ siteId: 1, year: 2024 });
     expect(d).toMatchObject({ siteId: 1, categoryId: null, year: 2024 });
-    expect(validate(d)).toEqual({ categoryId: "Choose a category.", value: "Enter the factor." });
-    expect(validate({ ...d, categoryId: 1, value: -1 }).value).toBe("The factor can't be negative.");
-    expect(validate({ ...d, categoryId: 1, value: 1_000_000 }).value).toMatch(/below 1,000,000/);
-    expect(validate({ ...d, categoryId: 1, value: 0 })).toEqual({});
+    expect(validate(d)).toEqual({ categoryId: "Choose a category.", value: "Enter the factor.", unit: "Enter the unit, e.g. litre or kWh." });
+    const ok = { ...d, categoryId: 1, unit: "litre" };
+    expect(validate({ ...ok, value: -1 }).value).toBe("The factor can't be negative.");
+    // numeric(18,8) since S3-2: 10 digits before the point, 8 after.
+    expect(validate({ ...ok, value: 10_000_000_000 }).value).toMatch(/below 10,000,000,000/);
+    expect(validate({ ...ok, value: 0.123456789 }).value).toBe("Use at most 8 decimals.");
+    expect(validate({ ...ok, value: 0.00012345 })).toEqual({});
+    expect(validate({ ...ok, value: 0 })).toEqual({});
+    expect(validate({ ...ok, value: 1, gases: { ...ok.gases, ch4: -1 } }).ch4).toBe("A gas part can't be negative.");
   });
   it("round-trips a saved factor and spots changes", () => {
     const d = draftFrom(factor);
-    expect(d).toEqual({ siteId: 1, categoryId: 1, name: "Diesel", year: 2024, value: 2.68, unit: "litre", source: "DEFRA 2024" });
+    expect(d).toEqual({
+      siteId: 1, categoryId: 1, name: "Diesel", year: 2024, value: 2.68, unit: "litre", source: "DEFRA 2024",
+      factorType: null, gwpSet: null, geography: null, dataset: "", datasetVersion: "",
+      gases: { co2: null, ch4: null, n2o: null, other: null, biogenic: null },
+    });
     expect(isDirty(d, factor)).toBe(false);
     expect(isDirty({ ...d, source: " DEFRA 2024 " }, factor)).toBe(false);
     expect(isDirty({ ...d, value: 2.7 }, factor)).toBe(true);
   });
   it("leaves blank text out of the payload", () => {
-    expect(toPayload({ siteId: 1, categoryId: 2, name: " ", year: 2024, value: 0.5, unit: "", source: " IPCC " })).toEqual({
+    const blank = { ...emptyDraft(), gwpSet: null };
+    expect(toPayload({ ...blank, siteId: 1, categoryId: 2, name: " ", year: 2024, value: 0.5, unit: "", source: " IPCC " })).toEqual({
       site_id: 1,
       category_id: 2,
       year: 2024,
@@ -158,5 +170,54 @@ describe("uploads", () => {
     const list = [up(1, 1), up(2, 2), up(3, null)];
     expect(filterUploads(list, null)).toHaveLength(3);
     expect(filterUploads(list, [1]).map((u) => u.id)).toEqual([1]);
+  });
+});
+
+describe("factor metadata (S3-2)", () => {
+  const typed: Factor = { ...factor, factor_type: "combustion", gwp_set: "AR6", geography: "GB", dataset: "DEFRA", dataset_version: "2024", co2_kg: "2.60000000", ch4_kg: "0.00012345" };
+
+  it("a new factor starts on AR6 (D7) with no type", () => {
+    expect(emptyDraft()).toMatchObject({ factorType: null, gwpSet: "AR6", geography: null });
+  });
+
+  it("reads and sends the metadata", () => {
+    const d = draftFrom(typed);
+    expect(d).toMatchObject({ factorType: "combustion", gwpSet: "AR6", geography: "GB", dataset: "DEFRA", datasetVersion: "2024" });
+    expect(d.gases).toEqual({ co2: 2.6, ch4: 0.00012345, n2o: null, other: null, biogenic: null });
+    expect(toPayload({ ...d, siteId: 1, categoryId: 1 })).toMatchObject({
+      factor_type: "combustion", gwp_set: "AR6", geography: "GB", dataset: "DEFRA", dataset_version: "2024", co2_kg: 2.6, ch4_kg: 0.00012345,
+    });
+    expect(toPayload({ ...d, siteId: 1, categoryId: 1 })).not.toHaveProperty("n2o_kg");
+  });
+
+  it("edits send changed metadata only, cleared as null", () => {
+    const d = draftFrom(typed);
+    expect(toUpdatePayload(d, typed)).toEqual({});
+    expect(isDirty({ ...d, gases: { ...d.gases } }, typed)).toBe(false);
+    expect(toUpdatePayload({ ...d, factorType: "wtt", geography: null, dataset: " ", gases: { ...d.gases, ch4: null } }, typed)).toEqual({
+      factor_type: "wtt", geography: null, dataset: null, ch4_kg: null,
+    });
+    expect(isDirty({ ...d, gwpSet: "AR5" }, typed)).toBe(true);
+  });
+
+  it("hints when the gas parts don't add up within 1%", () => {
+    const d = { ...emptyDraft(), value: 2.68, gwpSet: "AR6" as const };
+    expect(gasSumHint(d)).toBeNull();
+    // 2.6 + 0.001 × 29.8 + 0.0002 × 273 = 2.6844: within 1%.
+    expect(gasSumHint({ ...d, gases: { co2: 2.6, ch4: 0.001, n2o: 0.0002, other: null, biogenic: 5 } })).toBeNull();
+    expect(gasSumHint({ ...d, gases: { co2: 2.0, ch4: null, n2o: null, other: null, biogenic: null } })).toMatch(/add up to 2 kgCO₂e with AR6/);
+  });
+
+  it("only known types reach the list query", () => {
+    const base = { clientId: null, siteId: null, categoryId: null, year: null, q: "" };
+    expect(listParams({ ...base, factorType: "wtt" }, 0).factor_type).toBe("wtt");
+    expect(listParams({ ...base, factorType: "none" }, 0).factor_type).toBe("none");
+    expect(listParams({ ...base, factorType: "bogus" }, 0)).not.toHaveProperty("factor_type");
+    expect(TYPE_FILTER_VALUES).toContain("none");
+  });
+
+  it("shows factors at up to 8 decimals", () => {
+    expect(formatFactor("0.00012345")).toBe("0.00012345");
+    expect(formatFactor("2.68000000")).toBe("2.68");
   });
 });

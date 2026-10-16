@@ -16,6 +16,8 @@ export const getEmissionFactors = async (params?: {
   company_id?: number | null;
   year?: number | null;
   search?: string;
+  /** S3-2: a factor type, or "none" for factors with no type yet. */
+  factor_type?: string;
 }): Promise<PaginatedResponse<any>> => {
   const query: Record<string, string | number> = {};
   if (params?.page) query.page = params.page;
@@ -25,6 +27,7 @@ export const getEmissionFactors = async (params?: {
   if (params?.company_id) query.company_id = params.company_id;
   if (params?.year) query.year = params.year;
   if (params?.search) query.search = params.search;
+  if (params?.factor_type) query.factor_type = params.factor_type;
   const response = await api.get("/admin/emission-factors", { params: query });
   return response.data;
 };
