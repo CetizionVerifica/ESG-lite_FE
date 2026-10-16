@@ -35,12 +35,12 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Production data", "/data/production"),
       link("Bulk upload", "/capture/upload"),
     ]),
-    group("Reports", [link("GHG report", "/reports/ghg"), link("EDE report", "/reports/ede")]),
+    group("Reports", [link("GHG report", "/reports/ghg"), link("EDE report", "/reports/ede"), link("Scope 3 boundary", "/settings/scope3")]),
     link("Targets (SBTi)", "/targets"),
     link("Products (PCF)", "/products"),
     link("Team", "/team"),
   ],
-  Admin: [link("Users", "/users"), link("Bulk upload", "/capture/upload"), link("Brand theme", "/brand")],
+  Admin: [link("Users", "/users"), link("Bulk upload", "/capture/upload"), link("Brand theme", "/brand"), link("Scope 3 boundary", "/settings/scope3")],
   Superadmin: [
     link("Console", "/console"),
     group("Clients", [
@@ -48,6 +48,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Companies", "/clients"),
       link("Onboard client", "/clients/new"),
       link("Brand themes", `/clients/${CLIENT_ID}/brand`),
+      link("Scope 3 boundary", "/settings/scope3"),
     ]),
     group("Setup", [
       link("Sites", "/setup/sites"),

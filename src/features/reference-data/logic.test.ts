@@ -118,13 +118,23 @@ describe("categories", () => {
   });
 
   it("sends a null scope for savings and every site for 'assign to all'", () => {
-    expect(categoryPayload({ category_name: " Solar ", scope: "saving", site_ids: [2], assign_all_sites: false }, [1, 2, 3])).toEqual({
+    expect(categoryPayload({ category_name: " Solar ", scope: "saving", site_ids: [2], assign_all_sites: false, ghg_category: 4 }, [1, 2, 3])).toEqual({
       category_name: "Solar",
       scope: null,
       site_ids: [2],
       assign_all_sites: false,
     });
-    expect(categoryPayload({ category_name: "Fuel", scope: "s1", site_ids: [], assign_all_sites: true }, [3, 1, 2]).site_ids).toEqual([1, 2, 3]);
+    expect(categoryPayload({ category_name: "Fuel", scope: "s1", site_ids: [], assign_all_sites: true, ghg_category: null }, [3, 1, 2]).site_ids).toEqual([1, 2, 3]);
+  });
+
+  it("keeps the GHG Protocol category on Scope 3 only (S3-1)", () => {
+    const [travel] = categoryRows([{ category_id: 9, category_name: "Travel", scope: "Scope 3", ghg_category: 6 }]);
+    const d = categoryDraftFrom(travel);
+    expect(d.ghg_category).toBe(6);
+    expect(isCategoryDirty({ ...d, ghg_category: 7 }, travel)).toBe(true);
+    expect(categoryPayload({ ...d, ghg_category: 7 }, []).ghg_category).toBe(7);
+    // Other scopes don't send it (the server clears it when a category leaves Scope 3).
+    expect(categoryPayload({ ...d, scope: "s1" }, [])).not.toHaveProperty("ghg_category");
   });
 
   it("groups sites by client, sorted, with search", () => {

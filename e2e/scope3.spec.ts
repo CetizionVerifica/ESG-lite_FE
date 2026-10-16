@@ -2,9 +2,8 @@ import { type Page, expect, test } from "@playwright/test";
 
 /**
  * S3-0 smoke test: Settings → Scope 3 for company Admins and Superadmins,
- * hidden from everyone else. Holds for the placeholder and for S3-1's page;
- * the placeholder's own content is in scope3-placeholder.spec.ts. Every API
- * call is answered locally.
+ * hidden from everyone else (S3-1's boundary page). Every API call is
+ * answered locally.
  */
 
 const company = { company_id: 3, name: "Glochem" };

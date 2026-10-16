@@ -494,7 +494,7 @@ export interface ExtrapolateBody {
   year: number;
   year_type: YearType;
   basis: "coverage" | "intensity";
-  /** 1–99. */
+  /** 1–99; required when basis is "coverage" (ESG-lite schemas.ts refine). */
   coverage_pct?: number;
   source_filter?: Record<string, unknown>;
   output_site_ids?: number[];

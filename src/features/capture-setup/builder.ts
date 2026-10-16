@@ -3,7 +3,8 @@
  * the builder tabs make to it. Choices are keyed by field name while editing
  * (renames move them along) and by column id on save, as the backend stores them.
  */
-import { normalizeUnitKey } from "../../lib/emissions/emissionCalc";
+import { ROW_METHOD_COLUMN, normalizeUnitKey } from "../../lib/emissions/emissionCalc";
+import { methodLabel } from "../../lib/scope3/methods";
 import type {
   CalculationSpec,
   ColumnConfig,
@@ -110,6 +111,7 @@ export function removeField(d: BuilderDraft, pkId: number): BuilderDraft {
     }
     for (const m of Object.values(calculation.methods)) {
       m.multiply = m.multiply.filter((f) => f !== name);
+      if (m.divide) m.divide = m.divide.filter((f) => f !== name);
       if (m.percent) m.percent = m.percent.filter((f) => f !== name);
     }
     if (calculation.identity_columns) calculation.identity_columns = calculation.identity_columns.filter((f) => f !== name);
@@ -138,6 +140,7 @@ export function renameField(d: BuilderDraft, pkId: number, next: string): Builde
     if (calculation.legacy_field) calculation.legacy_field = swap(calculation.legacy_field);
     for (const m of Object.values(calculation.methods)) {
       m.multiply = m.multiply.map(swap);
+      if (m.divide) m.divide = m.divide.map(swap);
       if (m.percent) m.percent = m.percent.map(swap);
     }
     if (calculation.identity_columns) calculation.identity_columns = calculation.identity_columns.map(swap);
@@ -459,9 +462,17 @@ export function setCalcMode(d: BuilderDraft, mode: CalcMode): BuilderDraft {
   return { ...d, calculation: calc };
 }
 
-/** Per method: the select whose choice decides the formula; one method per choice. */
+/**
+ * Per method: the select whose choice decides the formula; one method per choice.
+ * ROW_METHOD_COLUMN ("Row's method", S3-9) keeps the methods already set: the
+ * row's calculation method picks them, and "Add a method" adds more.
+ */
 export function setMethodField(d: BuilderDraft, field: string): BuilderDraft {
   if (!d.calculation) return d;
+  if (field === ROW_METHOD_COLUMN) {
+    const methods = d.calculation.method_column === ROW_METHOD_COLUMN ? d.calculation.methods : {};
+    return { ...d, calculation: { ...d.calculation, method_column: field, methods } };
+  }
   const methods: Record<string, MethodCalculation> = {};
   for (const o of d.options[field] ?? []) methods[String(o.id)] = d.calculation.methods[String(o.id)] ?? { multiply: [] };
   return { ...d, calculation: { ...d.calculation, method_column: field, methods } };
@@ -471,7 +482,9 @@ export function updateMethod(d: BuilderDraft, key: string, patch: Partial<Method
   if (!d.calculation) return d;
   const current = d.calculation.methods[key] ?? { multiply: [] };
   const next = { ...current, ...patch };
-  next.percent = (next.percent ?? []).filter((f) => next.multiply.includes(f));
+  next.divide = (next.divide ?? []).filter((f) => !next.multiply.includes(f));
+  if (!next.divide.length) delete next.divide;
+  next.percent = (next.percent ?? []).filter((f) => next.multiply.includes(f) || !!next.divide?.includes(f));
   if (!next.percent.length) delete next.percent;
   if (!next.activity_unit) delete next.activity_unit;
   return { ...d, calculation: { ...d.calculation, methods: { ...d.calculation.methods, [key]: next } } };
@@ -488,6 +501,12 @@ export function addUnitMethod(d: BuilderDraft, unit: string): BuilderDraft {
   const key = normalizeUnitKey(unit);
   if (!d.calculation || !key || d.calculation.methods[key]) return d;
   return { ...d, calculation: { ...d.calculation, methods: { ...d.calculation.methods, [key]: { multiply: [], activity_unit: key } } } };
+}
+
+/** Row's method: adds a calculation method ("distance_based") with nothing to multiply yet. */
+export function addRowMethod(d: BuilderDraft, key: string): BuilderDraft {
+  if (!d.calculation || d.calculation.method_column !== ROW_METHOD_COLUMN || !key || d.calculation.methods[key]) return d;
+  return { ...d, calculation: { ...d.calculation, methods: { ...d.calculation.methods, [key]: { multiply: [] } } } };
 }
 
 export function removeMethod(d: BuilderDraft, key: string): BuilderDraft {
@@ -507,10 +526,13 @@ export function describeMethod(d: BuilderDraft, key: string): string {
   const calc = d.calculation;
   const m = calc?.methods[key];
   if (!calc || !m) return "";
-  const parts = m.multiply.map((f) => `${fieldTitle(f)}${m.percent?.includes(f) ? " (%)" : ""}`);
-  const what = parts.length ? `multiply ${parts.join(" × ")}` : "nothing is multiplied yet";
+  const title = (f: string) => `${fieldTitle(f)}${m.percent?.includes(f) ? " (%)" : ""}`;
+  const parts = m.multiply.map(title);
+  const by = m.divide?.length ? ` ÷ ${m.divide.map(title).join(" ÷ ")}` : "";
+  const what = parts.length ? `multiply ${parts.join(" × ")}${by}` : "nothing is multiplied yet";
   const unit = m.activity_unit ? `, in ${m.activity_unit}` : "";
   if (calc.mode === "per_unit") return `When the unit is ${key}, ${what}${unit}.`;
+  if (calc.method_column === ROW_METHOD_COLUMN) return `When the row's method is "${methodLabel(key)}", ${what}${unit}.`;
   const label = (d.options[calc.method_column ?? ""] ?? []).find((o) => String(o.id) === key)?.label ?? key;
   return `When ${fieldTitle(calc.method_column ?? "")} is "${label}", ${what}${unit}.`;
 }
@@ -545,7 +567,16 @@ export function validateBuilder(d: BuilderDraft, library: LibraryName[] = []): B
   if (calc) {
     if (calc.mode === "per_method" && !calc.method_column) issues.push({ tab: "calculation", message: "Calculation: choose the field that decides the formula." });
     const keys = Object.keys(calc.methods);
-    if (!keys.length) issues.push({ tab: "calculation", message: calc.mode === "per_unit" ? "Calculation: add at least one unit." : "Calculation: the method field has no choices." });
+    if (!keys.length)
+      issues.push({
+        tab: "calculation",
+        message:
+          calc.mode === "per_unit"
+            ? "Calculation: add at least one unit."
+            : calc.method_column === ROW_METHOD_COLUMN
+              ? "Calculation: add at least one method."
+              : "Calculation: the method field has no choices.",
+      });
     for (const k of keys) {
       if (!(calc.methods[k]?.multiply ?? []).length) {
         issues.push({ tab: "calculation", message: `Calculation: ${describeKey(d, k)} has no fields to multiply.` });
@@ -569,6 +600,7 @@ function choiceListIssue(list: DropdownOptionValue[]): string | null {
 function describeKey(d: BuilderDraft, key: string): string {
   const calc = d.calculation;
   if (calc?.mode !== "per_method") return `"${key}"`;
+  if (calc.method_column === ROW_METHOD_COLUMN) return `"${methodLabel(key)}"`;
   const label = (d.options[calc.method_column ?? ""] ?? []).find((o) => String(o.id) === key)?.label ?? key;
   return `"${label}"`;
 }
