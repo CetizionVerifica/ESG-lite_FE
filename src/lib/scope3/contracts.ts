@@ -293,6 +293,36 @@ export interface SubmitEmissionsResult {
   refused: { id: number; code: SubmitRefusalCode | string }[];
 }
 
+/**
+ * One unsaved row for `POST /user/emissions/check {rows}` (S3-15 live checks):
+ * the row as Add data would save it. `ref` names it in the answer; `id` makes
+ * it an edit of that saved row (not compared with itself).
+ */
+export interface CheckRowBody {
+  ref: string;
+  id?: number;
+  site_id: number;
+  category_id: number;
+  activity_data: Record<string, unknown>;
+  activity_data_unit?: string | null;
+  /** YYYY-MM-DD */
+  date_of_reporting: string;
+  reporting_period?: "monthly" | "yearly";
+  year_type?: YearType | null;
+  method?: string | null;
+  has_evidence?: boolean;
+}
+
+/** Most rows one live check takes. */
+export const CHECK_ROWS_MAX = 50;
+
+/** One answer of `POST /user/emissions/check {rows}`: the checks, and a problem the save would refuse the row for. */
+export interface CheckRowResult {
+  ref: string;
+  checks: RowChecks;
+  issue?: { code: string; message: string; field?: string };
+}
+
 /** `POST /periods/lock`; unlock adds a reason. */
 export interface LockPeriodBody {
   site_id?: number | null;

@@ -2,9 +2,10 @@
 // "Nothing this month", the live checks dry run and the month lock.
 import api from "../api/axios";
 import type {
+  CheckRowBody,
+  CheckRowResult,
   LockPeriodBody,
   NothingThisMonthBody,
-  RowChecks,
   SubmitEmissionsResult,
   UnlockPeriodBody,
 } from "../lib/scope3/contracts";
@@ -30,14 +31,20 @@ export const unmarkNothingThisMonth = async (body: NothingThisMonthBody): Promis
 };
 
 /**
- * `POST /user/emissions/check {ids}`: the review checks on saved rows, as if
- * they were submitted now. Saves nothing. ESG-lite checks the saved row, not
- * unsaved edits, so the Fix screen refreshes it after each save.
+ * `POST /user/emissions/check {rows}`: the review checks on unsaved rows, as
+ * they would be saved now (live checks). Saves nothing. Answers by `ref`;
+ * `signal` cancels a check the typing has made stale.
  */
-export const checkEmissions = async (ids: number[]): Promise<Map<number, RowChecks | null>> => {
-  const { data } = await api.post("/user/emissions/check", { ids });
-  const out = new Map<number, RowChecks | null>();
-  for (const r of Array.isArray(data?.results) ? data.results : []) out.set(Number(r?.id), readChecks(r?.checks) ?? null);
+export const checkRows = async (rows: CheckRowBody[], signal?: AbortSignal): Promise<Map<string, CheckRowResult>> => {
+  const { data } = await api.post("/user/emissions/check", { rows }, { signal });
+  const out = new Map<string, CheckRowResult>();
+  for (const r of Array.isArray(data?.results) ? data.results : []) {
+    const ref = String(r?.ref ?? "");
+    const checks = readChecks(r?.checks);
+    if (!ref || !checks) continue;
+    const issue = r?.issue && typeof r.issue.message === "string" ? { code: String(r.issue.code ?? ""), message: r.issue.message, ...(typeof r.issue.field === "string" ? { field: r.issue.field } : {}) } : undefined;
+    out.set(ref, { ref, checks, ...(issue ? { issue } : {}) });
+  }
   return out;
 };
 

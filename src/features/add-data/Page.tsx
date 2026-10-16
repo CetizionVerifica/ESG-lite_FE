@@ -6,6 +6,8 @@ import { Button, Callout, EmptyState, Loading, Modal, PageHeader, Skeleton, Step
 import { useEntrySetup, useExistingEntries, usePeriodTotals, useSiteCountry, useThreshold } from "./api";
 import { useReviewWorkflow } from "../../lib/reviewWorkflow";
 import { LiveChecks, type LiveCheckRow } from "./components/LiveChecks";
+import { useLiveChecks } from "./hooks/useLiveChecks";
+import { type LiveCheckCandidate, checkRowBodies, serverIssueOf } from "./logic/liveChecks";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
 import { useSpendRates } from "../../lib/scope3/useSpendRates";
 import type { EmissionFactor } from "./types";
@@ -159,6 +161,29 @@ export default function AddDataPage() {
   const activeRows = rows.filter(sendable);
   const issues = rows.map((r) => (billOf(r) || sendable(r) ? rowIssue(r, calc) : null));
   const unconfirmedBills = billGroups(rows).filter((g) => !g.bill.confirmed).length;
+
+  // S3-15 live checks, with the review workflow on: complete rows as Save would send them.
+  const candidates: LiveCheckCandidate[] =
+    workflow && contextReady && period
+      ? rows.flatMap((r, i) =>
+          sendable(r) && rowHasInput(r) && !issues[i]
+            ? [
+                {
+                  rowId: r.id,
+                  payload: buildPayload(r, { siteId: site.site_id, categoryId: category.category_id, period }),
+                  editOf: editOf(r),
+                  hasEvidence: evidence.filesOf(r.id).length > 0 || billOf(r)?.invoiceId != null,
+                },
+              ]
+            : [],
+        )
+      : [];
+  const live = useLiveChecks(checkRowBodies(candidates), workflow && step === 1);
+  const liveRows: LiveCheckRow[] = candidates.map((c) => {
+    const i = rows.findIndex((r) => r.id === c.rowId);
+    return { ref: String(c.rowId), label: `Row ${i + 1} · ${rows[i]?.emission_category || category?.category_name || ""}` };
+  });
+  const serverIssues = rows.map((r) => (workflow ? serverIssueOf(live.results?.get(String(r.id)), calcDetail) : null));
   const emissionCategories = [...new Set(rows.map((r) => r.emission_category).filter(Boolean) as string[])];
   const totals = usePeriodTotals({ siteId: site?.site_id ?? null, categoryId, period, emissionCategories });
   const comparisons: RowComparison[] = rows.map((row, i) => {
@@ -172,14 +197,6 @@ export default function AddDataPage() {
     const arrow = c.pct > 0 ? "▲" : c.pct < 0 ? "▼" : "";
     return { text: `${arrow} ${Math.abs(c.pct).toFixed(1)}%`.trim(), overThreshold: c.overThreshold, threshold: threshold.data ?? 5, previousLabel: entryPeriodLabel(previousPeriod(period)) };
   });
-
-  // S3-15: the checks on the saved entries being fixed (Fix, or Edit of a draft).
-  const liveRows: LiveCheckRow[] = workflow
-    ? rows.flatMap((r, i) => {
-        const id = editOf(r);
-        return id === null ? [] : [{ pkId: id, label: `Row ${i + 1} · ${r.emission_category || category?.category_name || ""}` }];
-      })
-    : [];
 
   const periodLabel = period ? entryPeriodLabel(period) : "";
   // Rows without their own date are filed in the month the period ends, as here.
@@ -273,6 +290,7 @@ export default function AddDataPage() {
         calc={calc}
         feraCalc={feraCalc}
         issues={issues}
+        serverIssues={serverIssues}
         unconfirmedBills={unconfirmedBills}
         siteId={site.site_id}
         categoryId={category.category_id}
@@ -291,7 +309,15 @@ export default function AddDataPage() {
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
       />
-      <LiveChecks rows={liveRows} showCalcDetail={calcDetail} factorYear={factorYear} thresholdPct={threshold.data ?? null} />
+      <LiveChecks
+        rows={liveRows}
+        results={live.results}
+        checking={live.checking}
+        error={live.error}
+        showCalcDetail={calcDetail}
+        factorYear={factorYear}
+        thresholdPct={threshold.data ?? null}
+      />
       </>
     );
   } else {

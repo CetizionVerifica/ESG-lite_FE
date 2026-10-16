@@ -46,6 +46,8 @@ type Props = {
   reportingYear: number;
   issue: RowIssue | null;
   showIssue: boolean;
+  /** S3-15 live checks: what the save would refuse; shown on its field when the form has nothing to say there. */
+  serverIssue?: RowIssue | null;
   comparison: RowComparison;
   canRemove: boolean;
   /** The category's GHG Protocol number (Scope 3 only); picks method labels and travel copy. */
@@ -90,7 +92,11 @@ export function EntryRow(p: Props) {
     (model.spec?.mode === "per_method" ? resolveSpecMethod(model.spec, row)?.method.activity_unit : null) ||
     null;
   const allExtras = visibleExtraFields(model, row);
-  const fieldError = (f: RowIssue["field"]) => (p.showIssue && p.issue?.field === f ? p.issue.message : undefined);
+  const localShown = p.showIssue && !!p.issue;
+  const fieldError = (f: RowIssue["field"]) =>
+    localShown && p.issue?.field === f ? p.issue.message : !localShown && p.serverIssue?.field === f ? p.serverIssue.message : undefined;
+  // A server problem on the values (no factor, a field it refuses) shows under the result.
+  const serverValues = !localShown && p.serverIssue?.field === "values" ? p.serverIssue.message : null;
   const categoryOptions =
     p.mappings.length > 0
       ? p.mappings.map((m) => ({ value: m.global_category_name, label: m.company_category_name }))
@@ -320,8 +326,9 @@ export function EntryRow(p: Props) {
             </p>
           ) : (
             // No issue but no figure: a spend rate loading or that failed to load; a muted note, never an error.
-            <p className={cn("text-sm", p.showIssue && p.issue ? "text-bad" : "text-muted")}>{p.issue?.message ?? result.status}</p>
+            <p className={cn("text-sm", localShown || serverValues ? "text-bad" : "text-muted")}>{p.issue?.message ?? serverValues ?? result.status}</p>
           )}
+          {result.value !== null && serverValues && <p className="text-xs text-bad">{serverValues}</p>}
           {cat3 && (
             <p className="font-num text-xs text-muted">
               + <InfoTerm id="fera">Cat 3</InfoTerm> {cat3.slice(CAT3_PREVIEW_PREFIX.length)}

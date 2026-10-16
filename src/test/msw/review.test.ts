@@ -41,6 +41,28 @@ describe("S3-15 part 2 mocks: drafts and submit", () => {
     expect(res).toEqual({ submitted: [703], refused: [{ id: 801, code: "PERIOD_LOCKED" }] });
   });
 
+  it("checks unsaved rows live: a duplicate of a saved row is held, evidence clears Evidence, an edit isn't its own duplicate", async () => {
+    const base = { site_id: 1, category_id: 1, activity_data: { emission_category: "Diesel (avg biofuel blend)", quantity: "1600" }, date_of_reporting: "2026-09-30" };
+    const res = (await (
+      await post("/user/emissions/check", {
+        rows: [
+          { ref: "a", ...base },
+          { ref: "b", ...base, has_evidence: true, activity_data: { emission_category: "Diesel (avg biofuel blend)", quantity: "1700" } },
+          { ref: "c", ...base, id: 701, has_evidence: true },
+          { ref: "d", ...base, activity_data: { emission_category: "Diesel", quantity: "" } },
+        ],
+      })
+    ).json()) as { results: { ref: string; checks: { held: string[] }; issue?: { code: string } }[] };
+    // Row a has draft 701's values; row c is 701 itself (an edit), so it isn't its own duplicate.
+    expect(res.results.map((r) => [r.ref, r.checks.held, r.issue?.code ?? null])).toEqual([
+      ["a", ["EVIDENCE_ATTACHED", "NO_DUPLICATE"], null],
+      ["b", [], null],
+      ["c", [], null],
+      ["d", [], "FIELD_REQUIRED"],
+    ]);
+    expect((await post("/user/emissions/check", { rows: [] })).status).toBe(400);
+  });
+
   it("checks saved rows as if submitted now, per id", async () => {
     expect(await (await post("/user/emissions/check", { ids: [705, 701] })).json()).toEqual({
       results: [

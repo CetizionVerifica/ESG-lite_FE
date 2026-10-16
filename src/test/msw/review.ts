@@ -7,6 +7,8 @@
 import { http, HttpResponse } from "msw";
 import {
   type BoundaryStatus,
+  CHECK_ROWS_MAX,
+  type CheckRowBody,
   type GhgCategoryNumber,
   GHG_CATEGORY_NUMBERS,
   type LockPeriodBody,
@@ -74,7 +76,7 @@ const row = (pk_id: number, siteId: number, categoryId: number, status: Emission
     status,
     date_of_reporting: "2026-09-30",
     total_emission: tco2e,
-    activity_data: { emission_category: c.category_name },
+    activity_data: { emission_category: c.category_name, quantity: "100" },
     created_by: ME,
     documents: 0,
     ...extra,
@@ -83,9 +85,9 @@ const row = (pk_id: number, siteId: number, categoryId: number, status: Emission
 
 /** September 2026: three drafts on Hidd plant, one pending and one approved row; Sitra yard is complete. */
 const initialRows = (): ReviewRow[] => [
-  row(701, 1, 1, "draft", 4.29, { activity_data: { emission_category: "Diesel (avg biofuel blend)" } }),
+  row(701, 1, 1, "draft", 4.29, { activity_data: { emission_category: "Diesel (avg biofuel blend)", quantity: "1600" } }),
   row(702, 1, 3, "draft", 312.4),
-  row(703, 1, 11, "draft", 5.04, { activity_data: { emission_category: "Aluminium ingot" } }),
+  row(703, 1, 11, "draft", 5.04, { activity_data: { emission_category: "Aluminium ingot", quantity: "1200" } }),
   row(704, 1, 3, "pending", 1.2),
   row(705, 1, 2, "rejected", 0.8, { documents: 1 }),
   row(706, 2, 1, "approved", 2.1, { documents: 1 }),
@@ -208,9 +210,31 @@ export const reviewHandlers = [
     return HttpResponse.json(result);
   }),
 
-  // Checks saved rows as if submitted now; saves nothing.
-  http.post<never, { ids?: number[] }>("*/user/emissions/check", async ({ request }) => {
-    const ids = (await request.json()).ids ?? [];
+  // `{rows}`: unsaved rows as they'd be saved now (live checks); `{ids}`: saved rows as if submitted now. Saves nothing.
+  http.post<never, { ids?: number[]; rows?: Partial<CheckRowBody>[] }>("*/user/emissions/check", async ({ request }) => {
+    const body = await request.json();
+    if (Array.isArray(body.rows)) {
+      if (body.rows.length === 0 || body.rows.length > CHECK_ROWS_MAX) return invalid("rows", "Give 1 to 50 rows.");
+      const results = body.rows.map((r) => {
+        const ref = String(r.ref ?? "");
+        const values = Object.entries(r.activity_data ?? {}).filter(([k]) => k !== "emission_category");
+        if (values.length === 0 || values.some(([, v]) => v === "" || v == null))
+          return { ref, checks: { ready: false, held: [] }, issue: { code: "FIELD_REQUIRED", message: "Enter every value.", field: "values" } };
+        const saved = r.id ? rows.find((x) => x.pk_id === r.id) : undefined;
+        const month = String(r.date_of_reporting ?? "").slice(0, 7);
+        // Same site, category, month and values as another saved row (an edit isn't compared with itself).
+        const duplicate = rows.some(
+          (x) => x.pk_id !== r.id && x.site.site_id === r.site_id && x.category.category_id === r.category_id && x.date_of_reporting.startsWith(month) && JSON.stringify(x.activity_data) === JSON.stringify(r.activity_data),
+        );
+        const held: RowChecks["held"] = [];
+        // As ESG-lite: has_evidence decides; left out on an edit, the saved row's evidence counts.
+        if (!(r.has_evidence ?? (saved ? saved.documents > 0 : false))) held.push("EVIDENCE_ATTACHED");
+        if (duplicate) held.push("NO_DUPLICATE");
+        return { ref, checks: { ready: held.length === 0, held } satisfies RowChecks };
+      });
+      return HttpResponse.json({ results });
+    }
+    const ids = body.ids ?? [];
     if (!Array.isArray(ids) || ids.length === 0 || ids.length > 200) return invalid("ids", "Give 1 to 200 entry ids.");
     const results = ids.map((id) => {
       const saved = rows.find((r) => r.pk_id === id);
