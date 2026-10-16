@@ -6,6 +6,7 @@ import {
   type UseProfileBody,
   type YearType,
   commitImportPlan,
+  deleteSale,
   getSales,
   planSoldProducts,
   postSales,
@@ -39,6 +40,11 @@ export const useAddSales = (companyId: number | null) => {
 export const useEditSale = (companyId: number | null) => {
   const invalidate = useInvalidate();
   return useMutation({ mutationFn: ({ id, body }: { id: number; body: Partial<Omit<SaleInput, "product_id">> }) => putSale(companyId, id, body), onSuccess: invalidate });
+};
+
+export const useDeleteSale = (companyId: number | null) => {
+  const invalidate = useInvalidate();
+  return useMutation({ mutationFn: (id: number) => deleteSale(companyId, id), onSuccess: invalidate });
 };
 
 export const useSaveUseProfile = (companyId: number | null) => {

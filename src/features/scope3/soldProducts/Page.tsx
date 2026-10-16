@@ -106,6 +106,7 @@ export default function SoldProductsPage() {
 
   const [dialog, setDialog] = useState<"sale" | "import" | null>(null);
   const [editing, setEditing] = useState<SoldProduct | null>(null);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [planBody, setPlanBody] = useState<PlanBody | null>(null);
   const plan = usePlanSoldProducts(companyId);
 
@@ -189,7 +190,7 @@ export default function SoldProductsPage() {
         loading={list.isLoading}
         error={list.isError ? errorMessage(list.error, "Couldn't load the sales.") : null}
         onRetry={() => list.refetch()}
-        onRowClick={(s) => setEditing(list.data?.products.find((p) => p.product_id === s.product_id) ?? null)}
+        onRowClick={setEditingSale}
         defaultSort={{ id: "product", dir: "asc" }}
         exportName={`product-sales-${year}`}
         empty={
@@ -230,16 +231,22 @@ export default function SoldProductsPage() {
         </section>
       )}
 
-      {dialog === "sale" && (
+      {(dialog === "sale" || editingSale) && (
         <SaleDrawer
-          products={products}
+          key={editingSale?.id ?? "new"}
+          products={editingSale ? (list.data?.products ?? []) : products}
           companyId={companyId}
           defaultMonth={`${year}-01`}
           maxMonth={`${thisYear + 1}-12`}
-          onClose={() => setDialog(null)}
-          onSaved={(created) => {
-            toast({ title: created ? "Sale added" : "Sale updated", tone: "good" });
+          sale={editingSale}
+          onClose={() => {
             setDialog(null);
+            setEditingSale(null);
+          }}
+          onSaved={(outcome) => {
+            toast({ title: outcome === "added" ? "Sale added" : outcome === "removed" ? "Sale removed" : "Sale updated", tone: "good" });
+            setDialog(null);
+            setEditingSale(null);
           }}
         />
       )}

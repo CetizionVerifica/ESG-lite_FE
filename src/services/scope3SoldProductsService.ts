@@ -121,6 +121,10 @@ export const postSales = async (companyId: number | null, sales: SaleInput[]): P
 export const putSale = async (companyId: number | null, id: number, body: Partial<Omit<SaleInput, "product_id">>): Promise<Sale> =>
   (await api.put(`/scope3/product-sales/${id}`, { ...body, ...withCompany(companyId) })).data;
 
+/** Removes one sale, e.g. a typo; rows already imported from it stay until they are rejected. */
+export const deleteSale = async (companyId: number | null, id: number): Promise<{ deleted: number }> =>
+  (await api.delete(`/scope3/product-sales/${id}`, { params: withCompany(companyId) })).data;
+
 export const putUseProfile = async (companyId: number | null, productId: number, body: UseProfileBody): Promise<SoldProduct> =>
   (await api.put(`/scope3/products/${productId}/use-profile`, { ...body, ...withCompany(companyId) })).data;
 

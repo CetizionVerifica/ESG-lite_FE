@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { SoldProduct } from "../../../../services/scope3SoldProductsService";
+import type { Sale, SoldProduct } from "../../../../services/scope3SoldProductsService";
 import { Button, Drawer, MonthPicker, NumberField, Select, TextField } from "../../../../ui";
-import { errorMessage, useAddSales } from "../api";
+import { errorMessage, useAddSales, useDeleteSale, useEditSale } from "../api";
 
 export type SaleDrawerProps = {
   products: SoldProduct[];
@@ -9,19 +9,31 @@ export type SaleDrawerProps = {
   /** "YYYY-MM" the month picker starts on. */
   defaultMonth: string;
   maxMonth: string;
+  /** A recorded sale to correct or remove; without it the drawer adds a new one. */
+  sale?: Sale | null;
   onClose: () => void;
-  onSaved: (created: boolean) => void;
+  onSaved: (outcome: "added" | "updated" | "removed") => void;
 };
 
-/** Add one month's sale of one product. The same product, month, unit and region replaces the quantity. */
-export function SaleDrawer({ products, companyId, defaultMonth, maxMonth, onClose, onSaved }: SaleDrawerProps) {
-  const [productId, setProductId] = useState<number | null>(products.length === 1 ? products[0].product_id : null);
-  const [month, setMonth] = useState<string | null>(defaultMonth);
-  const [quantity, setQuantity] = useState<number | null>(null);
-  const [unit, setUnit] = useState(products.length === 1 ? products[0].unit : "");
-  const [region, setRegion] = useState("");
+/**
+ * Add one month's sale of one product (the same product, month, unit and region replaces the quantity),
+ * or correct or remove a recorded one so a typo is never counted twice.
+ */
+export function SaleDrawer({ products, companyId, defaultMonth, maxMonth, sale, onClose, onSaved }: SaleDrawerProps) {
+  const editing = !!sale;
+  const only = products.length === 1 ? products[0] : null;
+  const [productId, setProductId] = useState<number | null>(sale?.product_id ?? only?.product_id ?? null);
+  const [month, setMonth] = useState<string | null>(sale ? sale.period.slice(0, 7) : defaultMonth);
+  const [quantity, setQuantity] = useState<number | null>(sale?.quantity ?? null);
+  const [unit, setUnit] = useState(sale?.unit ?? only?.unit ?? "");
+  const [region, setRegion] = useState(sale?.region ?? "");
   const [tried, setTried] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const add = useAddSales(companyId);
+  const edit = useEditSale(companyId);
+  const remove = useDeleteSale(companyId);
+  const busy = add.isPending || edit.isPending || remove.isPending;
+  const failed = add.isError ? add.error : edit.isError ? edit.error : remove.isError ? remove.error : null;
 
   const errors = {
     product: productId === null ? "Choose a product." : undefined,
@@ -34,7 +46,9 @@ export function SaleDrawer({ products, companyId, defaultMonth, maxMonth, onClos
   const onSave = () => {
     setTried(true);
     if (!valid || productId === null || month === null || !quantity) return;
-    add.mutate([{ product_id: productId, period: month, quantity, unit: unit.trim(), region: region.trim() || null }], { onSuccess: (r) => onSaved(r.created > 0) });
+    const fields = { period: month, quantity, unit: unit.trim(), region: region.trim() || null };
+    if (sale) edit.mutate({ id: sale.id, body: fields }, { onSuccess: () => onSaved("updated") });
+    else add.mutate([{ product_id: productId, ...fields }], { onSuccess: (r) => onSaved(r.created > 0 ? "added" : "updated") });
   };
 
   const options = products.map((p) => ({ value: p.product_id, label: products.some((o) => o !== p && o.name === p.name) ? `${p.name} (${p.site_name})` : p.name }));
@@ -44,21 +58,40 @@ export function SaleDrawer({ products, companyId, defaultMonth, maxMonth, onClos
       open
       onClose={onClose}
       size="sm"
-      title="Add sale"
-      subtitle="One product, one month"
+      title={editing ? "Edit sale" : "Add sale"}
+      subtitle={editing ? sale.product : "One product, one month"}
       footer={
         <div className="flex flex-wrap items-center justify-end gap-3">
-          {add.isError && (
+          {failed && (
             <p role="alert" className="mr-auto text-sm text-bad">
-              {errorMessage(add.error, "The sale wasn't saved. Try again.")}
+              {errorMessage(failed, remove.isError ? "The sale wasn't removed. Try again." : "The sale wasn't saved. Try again.")}
             </p>
           )}
-          <Button variant="ghost" onClick={onClose} disabled={add.isPending}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={onSave} loading={add.isPending}>
-            Add sale
-          </Button>
+          {editing && !confirmRemove && (
+            <Button variant="ghost" onClick={() => setConfirmRemove(true)} disabled={busy} className="mr-auto">
+              Remove sale
+            </Button>
+          )}
+          {editing && confirmRemove ? (
+            <>
+              <p className="mr-auto text-sm text-ink">Remove this sale? Rows already imported from it stay until they are rejected.</p>
+              <Button variant="ghost" onClick={() => setConfirmRemove(false)} disabled={busy}>
+                Keep it
+              </Button>
+              <Button variant="danger" onClick={() => remove.mutate(sale.id, { onSuccess: () => onSaved("removed") })} loading={remove.isPending}>
+                Remove
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose} disabled={busy}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={onSave} loading={add.isPending || edit.isPending}>
+                {editing ? "Save sale" : "Add sale"}
+              </Button>
+            </>
+          )}
         </div>
       }
     >
@@ -81,6 +114,8 @@ export function SaleDrawer({ products, companyId, defaultMonth, maxMonth, onClos
           placeholder="Choose a product"
           emptyText="No products on your sites"
           required
+          disabled={editing}
+          help={editing ? "To change the product, remove this sale and add a new one." : undefined}
           error={tried ? errors.product : undefined}
         />
         <MonthPicker label="Month" value={month} onChange={setMonth} min="2015-01" max={maxMonth} required error={tried ? errors.month : undefined} />

@@ -66,6 +66,16 @@ async function signIn(page: Page, opts: { sales?: boolean } = {}) {
         for (const s of added) sales.push({ id: sales.length + 1, product_id: 9401, product: "Cable drum", site_id: 4, period: `${s.period}-01`, quantity: Number(s.quantity), unit: String(s.unit), region: (s.region as string) ?? null, mass_kg: Number(s.quantity) * 2 });
         return json({ created: added.length, updated: 0, unchanged: 0 }, 201);
       }
+      const saleId = path.match(/\/scope3\/product-sales\/(\d+)$/);
+      if (saleId && method === "PUT") {
+        const s = sales.find((x) => x.id === Number(saleId[1]))!;
+        Object.assign(s, { quantity: Number(body.quantity), period: `${body.period}-01`, unit: body.unit, region: body.region, mass_kg: Number(body.quantity) * 2 });
+        return json(s);
+      }
+      if (saleId && method === "DELETE") {
+        sales.splice(sales.findIndex((x) => x.id === Number(saleId[1])), 1);
+        return json({ deleted: 1 });
+      }
       if (path.endsWith("/scope3/products/9401/use-profile")) {
         product.eol_mix = body.eol_mix as typeof product.eol_mix;
         return json({ ...product });
@@ -144,6 +154,25 @@ test("a manager adds a sale, sets the end-of-life mix and imports the Category 1
   await page.getByRole("button", { name: "Import 2 rows as Pending" }).click();
   await expect(page.getByText("2 rows imported as Pending")).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ path: expect.stringMatching(/\/imports\/plans\/plan-12\/commit$/), body: { version: 1, skip_rows_with_issues: true } });
+});
+
+test("a mistyped sale is corrected, then removed", async ({ page }) => {
+  const { calls } = await signIn(page, { sales: true });
+  await page.goto("/settings/scope3/sold-products?year=2026");
+  await page.getByRole("table", { name: "Sales for 2026" }).getByText("Cable drum").click();
+  const drawer = page.getByRole("dialog", { name: "Edit sale" });
+  await drawer.getByRole("textbox", { name: /Quantity/ }).fill("150");
+  await drawer.getByRole("button", { name: "Save sale" }).click();
+  await expect(page.getByText("Sale updated")).toBeVisible();
+  expect(calls.at(-1)).toMatchObject({ method: "PUT", path: expect.stringMatching(/\/scope3\/product-sales\/1$/), body: { period: "2026-03", quantity: 150, unit: "drum", region: "India" } });
+
+  await page.getByRole("table", { name: "Sales for 2026" }).getByText("Cable drum").click();
+  const again = page.getByRole("dialog", { name: "Edit sale" });
+  await again.getByRole("button", { name: "Remove sale" }).click();
+  await again.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(page.getByText("Sale removed")).toBeVisible();
+  expect(calls.at(-1)).toMatchObject({ method: "DELETE", path: expect.stringMatching(/\/scope3\/product-sales\/1$/) });
+  await expect(page.getByText("No sales recorded for 2026")).toBeVisible();
 });
 
 test("a sales sheet with an unknown product says which row", async ({ page }) => {
