@@ -61,6 +61,13 @@ export function BoundaryTable({ categories, drafts, editable, showErrors, onChan
                           Commuting survey
                         </Link>
                       )}
+                      {/* S3-10: sold products behind Categories 10, 11 and 12. */}
+                      {(c.n === 10 || c.n === 11 || c.n === 12) && (
+                        <Link to="/settings/scope3/sold-products" className={cn(focusRing, "rounded-control text-xs font-medium text-brand hover:underline")}>
+                          Sold products
+                        </Link>
+                      )}
+                      {c.n === 10 && <p className="text-xs text-muted">If you can't know what customers make from it, exclude Category 10 and say why.</p>}
                       {/* S3-11: the investments register behind Category 15. */}
                       {c.n === 15 && (
                         <Link to="/settings/scope3/investments" className={cn(focusRing, "rounded-control text-xs font-medium text-brand hover:underline")}>
