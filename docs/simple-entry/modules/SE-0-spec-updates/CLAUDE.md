@@ -13,7 +13,8 @@ Stop future Scope 3 work from building User-facing method or calculation UI.
 4. `modules/S3-6-suppliers/CLAUDE.md` step 2: Supplier stays a field; "Supplier's own figure" vs average is chosen by the form (`method_by_choice` with a client-worded question); the matched supplier factor line is reviewer-only.
 5. `modules/S3-8-transport/CLAUDE.md`: unit help with formulas moves to the builder recipe; User help comes from `field_settings.help`.
 6. `modules/S3-15-review-workflow/CLAUDE.md`: check `METHOD_GIVEN` means "method set by the form or import", never asked of a User.
-7. Add a "Simple data entry" section to ESG-lite root `CLAUDE.md` (3 lines: rules 1–3 of `ESG-lite_FE/docs/simple-entry/README.md`).
+7. `docs/scope3/00-plan.md` S3-3 row: drop "add-data method picker" from what S3-3 owns.
+8. Add a "Simple data entry" section to ESG-lite root `CLAUDE.md` (3 lines: rules 1–3 of `ESG-lite_FE/docs/simple-entry/README.md`).
 
 ## Done when
-The six edits are merged and no Scope 3 spec asks for a User-facing method picker, factor line or DQ line.
+The edits are merged and no Scope 3 spec asks for a User-facing method picker, factor line or DQ line.

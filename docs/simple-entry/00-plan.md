@@ -20,17 +20,17 @@ All of this is visible to Users; nothing in add-data or my-entries checks the ro
 
 | Where | What the User sees | Source |
 |---|---|---|
-| Add data row | "Calculation method" select, "Choose how this row is calculated" (forms whose spec uses `@method`: S3-9 travel/commuting) | production `add-data/components/EntryRow.tsx:129-137` |
-| Add data row | Unit options "X (factor unit)", help "The factor is per X…" | `EntryRow.tsx:171-173`, `my-entries/components/EditEntryForm.tsx:142` |
-| Add data row | Category chip "Company name · Global: factor name" | `EntryRow.tsx:101-103` |
-| Add data row footer | "Factor 2.68 kgCO₂e per litre, 2025 · factor year…", "No factor for this category", "+ FERA … (added on save)" | `EntryRow.tsx:217-246` |
-| Add data row | Travel note "Company-owned cars go in Scope 1…" | `EntryRow.tsx:163`, `lib/scope3/travel.ts:7` |
-| My entries | Drawer section "Calculation", "FERA (upstream fuel and energy)", "+ FERA" in the list, and the raw key `@method · spend_based` in "What was entered" | `EntryDrawer.tsx:138-170`, `my-entries/Page.tsx:171`, `logic.ts:77-87` |
-| Bulk upload (Users) | Map hints "Picks the emission factor…", Preview columns "Factor used", "Factor", "FERA tCO₂e" | `bulk-upload/MapStep.tsx:5-7`, `PreviewStep.tsx:36-55` |
-| FE #202 (S3-5) | Amount spent / Currency / Invoice date; preview "₹ 12,40,000 ≈ USD 12,362 (rate on 3 Sep 2026) × 0.42 kgCO₂e/USD (2022 USD, deflated)"; bulk-upload hint about currency codes | `EntryRow.tsx:231`, `lib/scope3/spend.ts:172-178`, `UploadStep.tsx:83` |
-| FE #191 (S3-7) | "+ Cat 3 0.12 tCO₂e (upstream of electricity) + 0.08 tCO₂e (T&D losses)", twin rows in My entries drawer | `EntryRow.tsx:265`, `EntryDrawer.tsx:150-152` |
-| FE #195 (S3-8, team draft) | Unit help is the formula ("Weight × distance, one row per leg"); the unit select is in effect the method choice; Category 4 vs 9 "Who paid?" help | `logic/transport.ts:8-32` |
-| FE #190 (S3-4, team) | "Sent, with notes" engine warnings on Review ("No 2026 factor for Diesel; the 2025 factor was used") | `steps/Review.tsx:153,199` |
+| Add data row | "Calculation method" select, "Choose how this row is calculated" (forms whose spec uses `@method`: S3-9 travel/commuting) | production `add-data/components/EntryRow.tsx` |
+| Add data row | Unit options "X (factor unit)", help "The factor is per X…" | `EntryRow.tsx`, `my-entries/components/EditEntryForm.tsx` |
+| Add data row | Category chip "Company name · Global: factor name" | `EntryRow.tsx` |
+| Add data row footer | "Factor 2.68 kgCO₂e per litre, 2025 · factor year…", "No factor for this category", "+ FERA … (added on save)" | `EntryRow.tsx` |
+| Add data row | Travel note "Company-owned cars go in Scope 1…" | `EntryRow.tsx`, `lib/scope3/travel.ts` |
+| My entries | Drawer section "Calculation", "FERA (upstream fuel and energy)", "+ FERA" in the list, and the raw key `@method · spend_based` in "What was entered" | `EntryDrawer.tsx`, `my-entries/Page.tsx`, `logic.ts` |
+| Bulk upload (Users) | Map hints "Picks the emission factor…", Preview columns "Factor used", "Factor", "FERA tCO₂e" | `bulk-upload/MapStep.tsx`, `PreviewStep.tsx` |
+| FE #202 (S3-5) | Amount spent / Currency / Invoice date; preview "₹ 12,40,000 ≈ USD 12,362 (rate on 3 Sep 2026) × 0.42 kgCO₂e/USD (2022 USD, deflated)"; bulk-upload hint about currency codes | `EntryRow.tsx`, `lib/scope3/spend.ts`, `UploadStep.tsx` |
+| FE #191 (S3-7) | "+ Cat 3 0.12 tCO₂e (upstream of electricity) + 0.08 tCO₂e (T&D losses)", twin rows in My entries drawer | `EntryRow.tsx`, `EntryDrawer.tsx` |
+| FE #195 (S3-8, team draft) | Unit help is the formula ("Weight × distance, one row per leg"); the unit select is in effect the method choice; Category 4 vs 9 "Who paid?" help | `logic/transport.ts` |
+| FE #190 (S3-4, team) | "Sent, with notes" engine warnings on Review ("No 2026 factor for Diesel; the 2025 factor was used") | `steps/Review.tsx` |
 
 Not contributor-facing (no change needed): FE #198 Sold products, #199 GHG report, #200 Base year (all Manager+); S3-11 assets, S3-9 commuting survey setup (Manager+); smart import (never offered to Users); factor drawers (admin).
 
@@ -51,7 +51,7 @@ From `ESG-lite/src/entities/ColumnConfig.ts` and the builder tabs (Fields, Choic
 ### 5.1 Form config additions (`ColumnConfig`, one idempotent `migrate:entry-forms` script)
 
 ```
-method_options: Method[] | null          // from S3-3 (#135); [0] is the form default
+method_options: [{ method, units[] }] | null   // existing MethodOptionsSchema (scope3 contracts); [0] is the form default
 method_by_choice: {                      // NEW: a select field's choices pick the method
   column: string,                        // e.g. "record_type"
   map: { [choiceId]: Method }            // "fuel_bill" → "fuel_based", "trip" → "distance_based"
@@ -59,7 +59,7 @@ method_by_choice: {                      // NEW: a select field's choices pick t
 field_settings: {                        // NEW, per column name or extra key
   [field]: { label?, help?, default?, hidden?: boolean, readonly?: boolean, required?: boolean }
 }
-units: { allowed?: string[], fixed?: string } | null    // NEW; fixed hides the unit select
+units: { fixed?: string } | null         // NEW; fixed hides the unit select (allowed units per method live in method_options)
 currency: { fixed?: string } | null                    // NEW; else company default
 version: int, published_at, published_by                 // NEW
 ```
@@ -70,7 +70,7 @@ Company gets `default_currency` (default INR for current clients, set in Clients
 ### 5.2 How the server picks things (contracts §6 changes)
 
 Method for a row, first that applies:
-1. Imports by Admin/Superadmin and MCP may send `method` (must be in `method_options`, else `METHOD_NOT_ALLOWED`).
+1. Imports by Admin/Superadmin, Managers' smart import and MCP may send `method` (must be in `method_options`, else the existing `METHOD_NOT_ALLOWED`).
 2. `method_by_choice` from the row's answer.
 3. `method_options[0]`.
 4. Spend when the matched factor is `eeio_spend` (S3-5 rule, kept).
@@ -112,7 +112,7 @@ Small, ordered, each one backend PR then FE PR into `production`, titled `[SE-n 
 | **SE-2 Form config model** | Backend: migration for `method_by_choice`, `field_settings`, `units`, `currency`, `version`; `company.default_currency`, `company.entry_detail`; schemas in `src/forms/contracts.ts`; server-side defaults and currency; method order of §5.2 in `compute.ts` `methodFileFor`; `METHOD_NOT_ALLOWED`; tenant-isolation tests; golden unchanged. | S3-3 part 1 (`method_options`), or SE-2 adds it if #135 is still a draft | 3 d |
 | **SE-3 Builder: method, recipes, field settings** | FE Capture setup: method section, recipes, field settings, units/currency, contributor preview. Add data reads `field_settings` and `method_by_choice`; the `@method` select is removed for Users. | SE-2 | 3 d |
 | **SE-4 Form check and versions** | Backend check endpoint (`GET /admin/column-configs/:id/check`), publish with version, `emission.form_version`; FE Check panel, history, missing-factor notification to Superadmin. | SE-2 | 2.5 d |
-| **SE-5 Migrate existing forms** | Idempotent script: S3-9 travel/commuting `@method` forms → a client-worded select with `method_by_choice`; S3-10 Cat 10/12 and S3-8 transport forms → `method_options`; spend extras → recipe fields. Dry run lists every form changed; stored totals don't move (golden + a before/after total check on staging). | SE-3 | 1.5 d |
+| **SE-5 Migrate existing forms** | Idempotent script: S3-9 travel/commuting `@method` forms → a client-worded select with `method_by_choice`; S3-10 Cat 10/12 and S3-8 transport forms → `method_options`; spend extras → recipe fields. Applies on start (no hand-run step); `--dry-run` is opt-in. Old vs new totals compared in memory only, any difference aborts; no total is ever written. | SE-3 | 1.5 d |
 | **SE-6 Templates and copy** | Save as template, apply to many site × category pairs with the check. | SE-4 | 2 d |
 
 SE-1 can start at once and removes every exposure in §3 in one place, including those from PRs still open. SE-2 → SE-3 → SE-5 is the critical path (about 8 lane days); SE-4 and SE-6 run beside it.
@@ -125,10 +125,10 @@ No running lane is stopped. Merged and open PRs keep going; SE-1 hides their con
 |---|---|---|
 | S3-9 (ESG #147, FE #197) | merged | Its "Calculation method" select and travel note go behind SE-1; its `@method` forms are migrated by SE-5. TripCalculator stays (it's a helper, not a method), shown when the form's method is distance. |
 | S3-5 FE #202 / ESG #154 | open, Claude lane | Fine to merge. Amount/Currency/Invoice date stay as fields (they are real data), but Currency is hidden when the form or company fixes it (SE-2/3). The rate preview line and bulk-upload currency hint are Users-hidden by SE-1. Spend should be chosen by the form (`method_options`/recipe), not by typing in a spend field silently setting `@method`; SE-3 replaces that. |
-| S3-7 FE #191 | open, Claude lane | Fine to merge. "+ Cat 3 … (T&D losses)" line and twin rows in My entries are Users-hidden by SE-1; reviewers keep them. |
+| S3-7 FE #191 | merged |  "+ Cat 3 … (T&D losses)" line and twin rows in My entries are Users-hidden by SE-1; reviewers keep them. |
 | S3-4 FE #190 | open, team (Sami) | "Sent, with notes" engine warnings go to reviewers only (SE-1); the User sees "Sent" and, for a missing factor, the plain message of §5.3. The INR/USD/EUR currency list is replaced by the form/company currency (SE-2). |
 | S3-8 FE #195 / ESG #141 | team drafts (Sami) | Unit help showing formulas moves to the builder recipe; contributor help comes from `field_settings.help`. Transport forms get a fixed unit or a client-worded "What does your record show?" choice instead of the unit acting as method. "Who paid?" stays only if the Superadmin keeps that field. |
-| S3-10 ESG #148 | open, Claude lane | Cat 10/12 forms are seeded with `@method`, which makes Users pick a method. Before merge, seed them with `method_options` (one fixed method) or a client-worded select; else SE-5 migrates them. |
+| S3-10 ESG #148 | merged | Cat 10/12 forms are seeded with `@method`, which makes Users pick a method; SE-1 hides the picker for single-method forms and SE-5 migrates them. |
 | S3-3 ESG #135 (+ FE parts) | team draft (balyancode) | Keep `method_options`, `emission.method/dq/data_type/is_estimate`. **Drop** the contributor method radio cards, the read-only method line and the live "Data quality" line in Add data (spec FE step 3). The method chip and DQ badge go to the Approvals and reviewer drawers only. |
 | S3-6 Suppliers (ESG #143, team draft) | not built in FE | Supplier stays a contributor field (it is real data), but "Supplier's own figure" and the matched factor line show to reviewers only; the form decides supplier-specific vs average via `method_by_choice` ("Do you have the supplier's figure?" in the client's words), set by the Superadmin. |
 | S3-12 Screening, S3-13/14 reports, S3-11, S3-15 | Manager+ pages | No change. S3-15's review checks `METHOD_GIVEN` should read "method set by form", never ask the User. |
@@ -146,5 +146,5 @@ The specs edits above (S3-3, S3-5, S3-6, S3-8, contracts §6) are one docs PR in
 ## 9. Risks
 
 - Hiding the factor line removes a self-check contributors use today to catch a wrong unit. Mitigation: the form check (SE-4) and the reviewer drawer carry it; unit is fixed by the form where possible.
-- Migrating `@method` forms (SE-5) touches live config; it is a dry-run-first script, run on staging, and stored totals never change (rows keep their snapshot).
-- The real prod DB stays untouched by this work; migrations are additive (`prod-db-safety` rules).
+- Migrating `@method` forms (SE-5) touches live config; it runs on start like every migration, compares old and new totals in memory only and aborts on any difference, and never writes a total (rows keep their snapshot).
+- Migrations run on start (`migrate-all`) on staging and later on the real prod DB, so every one is additive and idempotent, and no existing emission row or stored total is rewritten (`prod-db-safety` rules).

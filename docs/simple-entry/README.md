@@ -32,7 +32,7 @@ SE-2 form config model (BE) ─► SE-3 builder + Add data (FE) ─► SE-5 migr
 2. **No method words on User screens.** Method labels (`METHOD_LABELS`), factor values, "(factor unit)", FX lines, FERA/Category 3 lines, DQ and engine warnings show only to Manager, Admin and Superadmin.
 3. **Nothing calculates outside `emissionWrite`** (ESG-lite rule). The builder stores config only. Golden totals (`ci/golden`) don't move.
 4. **Saved rows never change** when a form changes; rows keep their factor snapshot and (from SE-4) `form_version`.
-5. New columns ship as idempotent `migrate:*` scripts; every new endpoint gets a tenant-isolation test. The real prod DB is never touched.
+5. New columns and data changes ship as additive, idempotent `migrate:*` scripts that run on start (`migrate-all`), so they are safe on the real prod DB; no existing emission row or stored total is rewritten. Every new endpoint gets a tenant-isolation test.
 6. FE: tokens only, `src/ui` components, loading/empty/error states, keyboard, 1280/1024/768/390 px (FE CLAUDE.md definition of done).
 
 ## Scope 3 work in flight
