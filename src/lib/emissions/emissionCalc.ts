@@ -72,10 +72,13 @@ export interface EmissionCalcInput {
   // already account for the fuel's energy content).
   fallbackToRaw?: boolean;
   calculationSpec?: CalculationSpec | null;
-  // S3-5: rates for spend rows (useSpendRates) and the date rows are filed on
-  // (the purchase date when a row has no invoice date).
+  // S3-5: rates for spend rows (useSpendRates), the rate keys whose lookup
+  // failed, and the date rows are filed on (the purchase date when a row has
+  // no invoice date; in a yearly period always that date, never the row's own).
   spendRates?: ReadonlyMap<string, SpendRate>;
+  spendRateErrors?: ReadonlySet<string>;
   reportingDate?: string | null;
+  reportingPeriod?: "monthly" | "yearly";
 }
 
 // Find the factor for an emission category, in the backend's save-time order
@@ -273,8 +276,7 @@ export const calculateEmission = (input: EmissionCalcInput, row: ModalRow): Emis
   return { value: null, status: "Unit mismatch - no conversion available" };
 };
 
-/** Status of a spend row whose rate hasn't loaded yet; it can still be sent (the server looks the rate up). */
-export const SPEND_RATE_PENDING = "Looking up the exchange rate";
+export { SPEND_RATE_PENDING } from "../scope3/spend";
 
 /** A spend row's inputs and outcome for the preview line, or null when the row isn't calculated from spend. */
 export const spendDetail = (input: EmissionCalcInput, row: ModalRow) => {
@@ -287,9 +289,22 @@ export const spendDetail = (input: EmissionCalcInput, row: ModalRow) => {
   } else {
     quantity = findActivityValue(input, row);
   }
-  const spend = spendInputOf(row, input.reportingDate ?? String(row.date_of_reporting ?? ""), quantity);
+  const spend = spendInputOf(row, input.reportingDate ?? String(row.date_of_reporting ?? ""), quantity, input.reportingPeriod === "yearly");
   if (!spend) return null;
-  return { factor, spend, outcome: spendOutcome(spend, factor, input.spendRates) };
+  return { factor, spend, outcome: spendOutcome(spend, factor, input.spendRates, input.spendRateErrors) };
+};
+
+/**
+ * Whether Add data shows the spend form (Amount, Currency, Invoice date) for
+ * a row instead of its quantity and unit: its factor or method is spend, its
+ * method doesn't multiply fields into the amount (Category 15), and its amount
+ * isn't a quantity already in a currency unit.
+ */
+export const usesSpendForm = (input: EmissionCalcInput, row: ModalRow): boolean => {
+  const factor = row.emission_category ? findEmissionFactor(input, row.emission_category) : undefined;
+  if (!isSpendRow(row, factor)) return false;
+  if (input.calculationSpec && resolveSpecMethod(input.calculationSpec, row)) return false;
+  return spendDetail(input, row)?.spend.amount_from !== "quantity";
 };
 
 // A spend row's result, or null when the row has no amount in a currency (then
@@ -298,7 +313,7 @@ const spendRow = (input: EmissionCalcInput, row: ModalRow): EmissionCalculationR
   const detail = spendDetail(input, row);
   if (!detail) return null;
   const { outcome } = detail;
-  return outcome.ok ? { value: outcome.tonnes, status: "ok" } : { value: null, status: outcome.pending ? SPEND_RATE_PENDING : outcome.status };
+  return outcome.ok ? { value: outcome.tonnes, status: "ok" } : { value: null, status: outcome.status };
 };
 
 // One calculator bound to a context (site × category × period).
@@ -308,6 +323,7 @@ export const createEmissionCalculator = (input: EmissionCalcInput) => ({
   findActivityValue: (row: ModalRow) => findActivityValue(input, row),
   calculateEmission: (row: ModalRow) => calculateEmission(input, row),
   spendDetail: (row: ModalRow) => spendDetail(input, row),
+  usesSpendForm: (row: ModalRow) => usesSpendForm(input, row),
 });
 
 export type EmissionCalculator = ReturnType<typeof createEmissionCalculator>;

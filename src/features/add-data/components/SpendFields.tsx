@@ -7,6 +7,8 @@ type Props = {
   row: ModalRow;
   onChange: (column: string, value: string) => void;
   amountError?: string;
+  /** "Choose the currency" and similar, under the Currency field. */
+  currencyError?: string;
 };
 
 const parseAmount = (v: unknown): number | null => {
@@ -19,7 +21,7 @@ const parseAmount = (v: unknown): number | null => {
  * ESGLite converts) and an optional invoice date. The currency is also the
  * row's unit, as the backend stores it.
  */
-export function SpendFields({ row, onChange: change, amountError }: Props) {
+export function SpendFields({ row, onChange: change, amountError, currencyError }: Props) {
   const currencies = useCurrencies();
   // Any value typed here makes the row a spend row for the engine ("From the amount spent").
   const onChange = (column: string, value: string) => {
@@ -47,6 +49,7 @@ export function SpendFields({ row, onChange: change, amountError }: Props) {
         }}
         options={currencies.map((c) => ({ value: c.code, label: c.name && c.name !== c.code ? `${c.code} · ${c.name}` : c.code }))}
         placeholder="Choose a currency"
+        error={currencyError}
         required
       />
       <DateField

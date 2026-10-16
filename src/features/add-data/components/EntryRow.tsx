@@ -17,7 +17,7 @@ import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
 import { methodLabel } from "../../../lib/scope3/labels";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
-import { SPEND_FIELDS, isSpendRow, spendPreviewLine } from "../../../lib/scope3/spend";
+import { SPEND_FIELDS, spendPreviewLine } from "../../../lib/scope3/spend";
 import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
 import { SpendFields } from "./SpendFields";
 
@@ -97,8 +97,7 @@ export function EntryRow(p: Props) {
   // S3-5: a row calculated from the amount spent takes Amount, Currency and Invoice date instead of
   // the quantity fields, unless its method multiplies fields into the amount (Category 15).
   const spend = calc.spendDetail(row);
-  const specMethod = model.spec ? resolveSpecMethod(model.spec, row) : null;
-  const spendForm = isSpendRow(row, factor) && !(specMethod && specMethod.method.multiply.length > 0) && spend?.spend.amount_from !== "quantity";
+  const spendForm = calc.usesSpendForm(row);
   const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row) && (!spendForm || c.column_type === "select"));
   // The spend form's own fields replace the form's older "Spent value" / "Currency" extras.
   const extras = spendForm ? allExtras.filter((f) => !SPEND_EXTRA_KEYS.has(f.key)) : allExtras;
@@ -193,7 +192,7 @@ export function EntryRow(p: Props) {
             );
           })}
         {spendForm ? (
-          <SpendFields row={row} onChange={p.onChange} amountError={fieldError("values")} />
+          <SpendFields row={row} onChange={p.onChange} amountError={fieldError("values")} currencyError={fieldError("currency")} />
         ) : (
           <Select<string>
             label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
@@ -277,7 +276,8 @@ export function EntryRow(p: Props) {
               {result.status === "converted" && <span className="block text-xs font-normal text-muted">unit converted</span>}
             </p>
           ) : (
-            <p className={cn("text-sm", p.showIssue ? "text-bad" : "text-muted")}>{p.issue?.message ?? result.status}</p>
+            // No issue but no figure: a spend rate loading or that failed to load; a muted note, never an error.
+            <p className={cn("text-sm", p.showIssue && p.issue ? "text-bad" : "text-muted")}>{p.issue?.message ?? result.status}</p>
           )}
           {cat3 && (
             <p className="font-num text-xs text-muted">

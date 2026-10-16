@@ -10,7 +10,9 @@ export const useEmissionCalc = ({
   fallbackToRaw,
   calculationSpec,
   spendRates,
+  spendRateErrors,
   reportingDate,
+  reportingPeriod,
 }: EmissionCalcInput) =>
   useMemo(
     () =>
@@ -22,7 +24,9 @@ export const useEmissionCalc = ({
         fallbackToRaw,
         calculationSpec,
         spendRates,
+        spendRateErrors,
         reportingDate,
+        reportingPeriod,
       }),
-    [emissionFactors, targetYear, columns, selectColumnNames, fallbackToRaw, calculationSpec, spendRates, reportingDate],
+    [emissionFactors, targetYear, columns, selectColumnNames, fallbackToRaw, calculationSpec, spendRates, spendRateErrors, reportingDate, reportingPeriod],
   );

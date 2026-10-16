@@ -17,15 +17,21 @@ export function useCurrencies(): Currency[] {
  * The rates the spend rows need, keyed by spendRateKey, for the calculator's
  * `spendRates`. One `GET /fx-rates` per distinct currency, day, factor
  * currency and price year; rates for a past day don't change, so they stay cached.
+ * `failed` holds the keys whose lookup errored, for the calculator's
+ * `spendRateErrors` (the preview then says the server calculates the total).
  */
-export function useSpendRates(rows: ModalRow[], input: EmissionCalcInput, reportingDate: string | null): { rates: Map<string, SpendRate>; failed: boolean } {
+export function useSpendRates(
+  rows: ModalRow[],
+  input: EmissionCalcInput,
+  reportingDate: string | null,
+): { rates: Map<string, SpendRate>; failed: ReadonlySet<string> } {
   const queries = useMemo(() => {
     if (!reportingDate) return [];
     const seen = new Map<string, NonNullable<ReturnType<typeof spendRateQuery>>>();
     for (const row of rows) {
       const factor = row.emission_category ? findEmissionFactor(input, row.emission_category) : undefined;
       if (!factor || !isSpendRow(row, factor)) continue;
-      const spend = spendInputOf(row, reportingDate, findActivityValue(input, row));
+      const spend = spendInputOf(row, reportingDate, findActivityValue(input, row), input.reportingPeriod === "yearly");
       const q = spend && spendRateQuery(spend, factor);
       if (q) seen.set(spendRateKey(q.currency, q.date, q.to, q.price_year), q);
     }
@@ -41,8 +47,9 @@ export function useSpendRates(rows: ModalRow[], input: EmissionCalcInput, report
     })),
   });
 
-  // A new map only when a rate arrives, so the calculator isn't rebuilt on every render.
+  // A new map (and set) only when a rate arrives or fails, so the calculator isn't rebuilt on every render.
   const signature = results.map((r, i) => (r.data ? queries[i][0] : "")).join(";");
+  const failedSignature = results.map((r, i) => (r.isError ? queries[i][0] : "")).join(";");
   const rates = useMemo(() => {
     const map = new Map<string, SpendRate>();
     results.forEach((r, i) => {
@@ -51,5 +58,6 @@ export function useSpendRates(rows: ModalRow[], input: EmissionCalcInput, report
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the loaded rates
   }, [signature]);
-  return { rates, failed: results.some((r) => r.isError) };
+  const failed = useMemo(() => new Set(failedSignature.split(";").filter(Boolean)), [failedSignature]);
+  return { rates, failed };
 }
