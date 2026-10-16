@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button, SegmentedControl, Select, TextField, cn, focusRing, panel } from "../../../../ui";
 import { ROW_METHOD_COLUMN } from "../../../../lib/emissions/emissionCalc";
-import { METHOD_KEYS, methodLabel } from "../../../../lib/scope3/methods";
+import { ROW_METHOD_KEYS, methodLabel } from "../../../../lib/scope3/labels";
 import {
   type BuilderDraft,
   type CalcMode,
@@ -60,7 +60,7 @@ export function CalcTab({ draft, onChange }: CalcTabProps) {
   const selects = draft.fields.filter(isSelect);
   const [unit, setUnit] = useState("");
   const rowMethod = calc?.mode === "per_method" && calc.method_column === ROW_METHOD_COLUMN;
-  const freeMethods = rowMethod ? METHOD_KEYS.filter((k) => !calc.methods[k]) : [];
+  const freeMethods = rowMethod ? ROW_METHOD_KEYS.filter((k) => !calc.methods[k]) : [];
 
   return (
     <div className="space-y-4">

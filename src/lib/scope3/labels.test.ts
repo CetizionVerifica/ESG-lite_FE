@@ -33,6 +33,9 @@ describe("Scope 3 labels", () => {
     expect(methodLabel("distance_based", 4)).toBe("Weight × distance");
     expect(methodLabel("site_specific", 9)).toBe("Warehouse energy");
     expect(methodLabel("average_data", 8)).toBe("Average data");
+    expect(methodLabel("lessor_specific")).toBe("Lessor-specific");
+    expect(methodLabel("average_data", null)).toBe("Average data");
+    expect(methodLabel("tonne.km")).toBe("tonne.km");
   });
 
   it("says data quality in words", () => {
