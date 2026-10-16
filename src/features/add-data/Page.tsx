@@ -17,6 +17,8 @@ import { Review } from "./steps/Review";
 import type { RowComparison } from "./components/EntryRow";
 import { ExistingEntries } from "./components/ExistingEntries";
 import { rowFromEntry, savedExcludingEdits } from "./logic/existing";
+import { isScope2, splitFeraFactors, upstreamSubFor } from "../../lib/scope3/fera";
+import type { Cat3Calc } from "./components/EntryRow";
 
 const STEPS = [
   { id: "context", label: "What are you reporting?" },
@@ -84,7 +86,15 @@ export default function AddDataPage() {
   };
   const calc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec });
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.
-  const feraCalc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.feraFactors ?? [], fallbackToRaw: true });
+  // S3-7: td_loss factors make a second, T&D-loss row for Scope 2 categories only.
+  // Only the factor year's FERA factors count: the backend never falls back to another year for a twin.
+  const feraSplit = useMemo(() => splitFeraFactors(setup.data?.feraFactors ?? [], factorYear), [setup.data, factorYear]);
+  const upstreamCalc = useEmissionCalc({ ...calcInput, emissionFactors: feraSplit.upstream, fallbackToRaw: true });
+  const tdLossCalc = useEmissionCalc({ ...calcInput, emissionFactors: isScope2(category?.scope) ? feraSplit.tdLoss : [], fallbackToRaw: true });
+  const feraCalc: Cat3Calc | null =
+    feraSplit.upstream.length || (isScope2(category?.scope) && feraSplit.tdLoss.length)
+      ? { upstream: feraSplit.upstream.length ? upstreamCalc : null, tdLoss: isScope2(category?.scope) && feraSplit.tdLoss.length ? tdLossCalc : null, upstreamSub: upstreamSubFor(category?.scope) }
+      : null;
 
   // Rows that will be sent: bill rows, and typed rows with something in them
   // (all typed rows when there is nothing else, so an empty form still says what's missing).
@@ -181,7 +191,7 @@ export default function AddDataPage() {
         model={model}
         setup={setup.data}
         calc={calc}
-        feraCalc={setup.data.feraFactors.length > 0 ? feraCalc : null}
+        feraCalc={feraCalc}
         issues={issues}
         unconfirmedBills={unconfirmedBills}
         siteId={site.site_id}

@@ -1,18 +1,26 @@
 import type { Look } from "../../theme";
 
-export type SectionId = "profile" | "appearance" | "notifications" | "timezone" | "apps";
+export type SectionId = "profile" | "appearance" | "notifications" | "timezone" | "scope3" | "apps";
 
 export const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "appearance", label: "Appearance" },
   { id: "notifications", label: "Notifications" },
   { id: "timezone", label: "Timezone" },
+  { id: "scope3", label: "Scope 3" },
   { id: "apps", label: "Connected apps" },
 ];
 
-/** Connected apps (Claude, IM10) is for Superadmins only; everyone else never sees the section. */
+/**
+ * Connected apps (Claude, IM10) is for Superadmins only; Scope 3 (S3-0) for
+ * company Admins and Superadmins. Everyone else never sees those sections.
+ */
 export function sectionsFor(role: string | null): { id: SectionId; label: string }[] {
-  return SECTIONS.filter((s) => s.id !== "apps" || role === "Superadmin");
+  return SECTIONS.filter((s) => {
+    if (s.id === "apps") return role === "Superadmin";
+    if (s.id === "scope3") return role === "Admin" || role === "Superadmin";
+    return true;
+  });
 }
 
 /** `/settings?tab=apps` opens on a section; unknown or hidden tabs are ignored. */

@@ -1,5 +1,6 @@
 import { Pencil } from "lucide-react";
-import { type Column, cn, focusRing } from "../../../ui";
+import { Badge, type Column, cn, focusRing } from "../../../ui";
+import { factorTypeLabel } from "../../../lib/scope3/factor";
 import { type Batch, type Factor, batchLabel, factorNumber, formatFactor } from "../logic";
 
 const dash = <span className="text-muted">—</span>;
@@ -13,7 +14,20 @@ export function factorColumns(opts: { batches: Batch[] | undefined; onEdit: (row
       id: "name",
       header: "Emission category name",
       value: (r) => r.emission_category_name ?? "",
-      cell: (r) => (r.emission_category_name ? <span className="block max-w-[18rem] truncate" title={r.emission_category_name}>{r.emission_category_name}</span> : dash),
+      cell: (r) =>
+        !r.emission_category_name ? (
+          dash
+        ) : r.includes_wtt ? (
+          // S3-7: a life-cycle factor that already sums in WTT, which Category 3 may count again. Same width as the plain name.
+          <span className="flex max-w-[18rem] items-center gap-1.5">
+            <span className="min-w-0 truncate" title={r.emission_category_name}>
+              {r.emission_category_name}
+            </span>
+            <Badge tone="warn" className="shrink-0">WTT included</Badge>
+          </span>
+        ) : (
+          <span className="block max-w-[18rem] truncate" title={r.emission_category_name}>{r.emission_category_name}</span>
+        ),
     },
     { id: "year", header: "Year", width: "5rem", value: (r) => r.year, cell: (r) => <span className="font-num">{r.year}</span> },
     {
@@ -25,6 +39,9 @@ export function factorColumns(opts: { batches: Batch[] | undefined; onEdit: (row
       cell: (r) => <span className="font-num">{formatFactor(r.factor_value)}</span>,
     },
     { id: "unit", header: "Unit", width: "7rem", value: (r) => r.denominator_unit ?? "", cell: (r) => (r.denominator_unit ? r.denominator_unit : dash) },
+    // S3-2 metadata: hidden by default (also for prefs saved before S3-2), offered in the column picker.
+    { id: "type", header: "Type", defaultHidden: true, addedLater: true, value: (r) => (r.factor_type ? factorTypeLabel(r.factor_type) : ""), cell: (r) => (r.factor_type ? factorTypeLabel(r.factor_type) : dash) },
+    { id: "gwp", header: "GWP", width: "5rem", defaultHidden: true, addedLater: true, value: (r) => r.gwp_set ?? "", cell: (r) => (r.gwp_set ? r.gwp_set : dash) },
     {
       id: "source",
       header: "Source",
@@ -59,4 +76,25 @@ export function factorColumns(opts: { batches: Batch[] | undefined; onEdit: (row
       ),
     },
   ];
+}
+
+const text = (v: string | null | undefined) => v ?? "";
+
+/**
+ * Columns of the factors export: every table column whatever the column picker
+ * shows (Type and GWP always in), then the rest of the S3-2 metadata.
+ */
+export function factorExportColumns(table: Column<Factor>[]): Column<Factor>[] {
+  const meta: Column<Factor>[] = [
+    { id: "geography", header: "Geography", value: (r) => text(r.geography) },
+    { id: "dataset", header: "Dataset", value: (r) => text(r.dataset) },
+    { id: "dataset_version", header: "Dataset version", value: (r) => text(r.dataset_version) },
+    { id: "co2_kg", header: "CO₂ (kg)", numeric: true, value: (r) => factorNumber(r.co2_kg) },
+    { id: "ch4_kg", header: "CH₄ (kg)", numeric: true, value: (r) => factorNumber(r.ch4_kg) },
+    { id: "n2o_kg", header: "N₂O (kg)", numeric: true, value: (r) => factorNumber(r.n2o_kg) },
+    { id: "other_kgco2e", header: "Other (kgCO₂e)", numeric: true, value: (r) => factorNumber(r.other_kgco2e) },
+    { id: "biogenic_co2_kg", header: "Biogenic CO₂ (kg)", numeric: true, value: (r) => factorNumber(r.biogenic_co2_kg) },
+    { id: "includes_wtt", header: "Includes WTT", value: (r) => (r.includes_wtt === true ? "Yes" : r.includes_wtt === false ? "No" : "") },
+  ];
+  return [...table.filter((c) => c.id !== "edit"), ...meta];
 }
