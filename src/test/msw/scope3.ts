@@ -13,6 +13,7 @@
  * its own PR. Report rows follow `Scope3ReportRow` (§5).
  */
 import { http, HttpResponse } from "msw";
+import type { Screening, ScreeningCategory } from "../../services/scope3ScreeningService";
 import {
   BOUNDARY_STATUSES,
   type BulkApproveBody,
@@ -60,14 +61,8 @@ export interface Scope3CategoryRow extends CompanyScope3Category {
   mapped_categories: { category_id: number; name: string }[];
 }
 
-/** `GET /scope3/screening?year=` row (mock shape, S3-12 confirms). */
-export interface ScreeningRow {
-  ghg_category: GhgCategoryNumber;
-  estimate_tco2e: number;
-  share_pct: number;
-  suggested_status: BoundaryStatus;
-  basis: string;
-}
+/** `GET /scope3/screening?year=&year_type=` (S3-12, ESG-lite src/scope3/screening/service.ts). */
+export type { Screening, ScreeningCategory } from "../../services/scope3ScreeningService";
 
 /** `GET /reports/ghg/scope3`: rows per §5 (`Scope3ReportRow`); the envelope is a mock shape S3-13 confirms. */
 export interface Scope3Report {
@@ -148,13 +143,85 @@ const FX_RATES: FxRate[] = [
   { currency: "INR", date: "2026-09-30", rate_to_usd: 0.0119, source: "ECB" },
 ];
 
-const SCREENING: ScreeningRow[] = [
-  { ghg_category: 1, estimate_tco2e: 18450, share_pct: 71.2, suggested_status: "included", basis: "Spend × EEIO, 2025 purchases" },
-  { ghg_category: 4, estimate_tco2e: 2310, share_pct: 8.9, suggested_status: "included", basis: "Spend × EEIO, freight invoices" },
-  { ghg_category: 9, estimate_tco2e: 1120, share_pct: 4.3, suggested_status: "included", basis: "Weight × distance, top 10 customers" },
-  { ghg_category: 12, estimate_tco2e: 640, share_pct: 2.5, suggested_status: "screening", basis: "Mass sold × landfill factor" },
-  { ghg_category: 10, estimate_tco2e: 85, share_pct: 0.3, suggested_status: "not_relevant", basis: "Customers' processing energy, estimate" },
-];
+/** The report mock's tCO₂e per category (as before S3-12 gave the screening its own shape). */
+const REPORT_TCO2E: Partial<Record<GhgCategoryNumber, number>> = { 1: 18450, 4: 2310, 9: 1120, 12: 640, 10: 85 };
+
+/** Screening sizes per category (tCO₂e): recorded rows and the spend or headcount estimate (never saved). */
+const SCREENING_SIZES: Partial<Record<GhgCategoryNumber, { recorded: number; estimate: number | null; basis: "spend" | "headcount" | null }>> = {
+  1: { recorded: 16200, estimate: 18450, basis: "spend" },
+  4: { recorded: 1890, estimate: 2310, basis: "spend" },
+  6: { recorded: 120, estimate: 145, basis: "spend" },
+  7: { recorded: 0, estimate: 230.9, basis: "headcount" },
+  9: { recorded: 1120, estimate: null, basis: null },
+  12: { recorded: 0, estimate: 640, basis: "spend" },
+  10: { recorded: 0, estimate: 85, basis: "spend" },
+};
+
+/** The screening answer as ESG-lite builds it: sizes, shares and suggestions (mock rules: top 95 %, below 1 %, nothing at all). */
+function screeningFor(year: number, yearType: "CY" | "FY"): Screening {
+  const size = (n: GhgCategoryNumber) => {
+    const s = SCREENING_SIZES[n];
+    return s ? Math.max(s.recorded, s.estimate ?? 0) : null;
+  };
+  const total = GHG_CATEGORIES.reduce((t, c) => t + (size(c.n) ?? 0), 0);
+  const rows: ScreeningCategory[] = categories.map((row) => {
+    const n = row.ghg_category;
+    const s = SCREENING_SIZES[n];
+    const sz = size(n);
+    const share = sz && total ? Math.round((sz / total) * 1000) / 10 : 0;
+    const ticks = Object.entries(row.relevance ?? {}).filter(([, v]) => v).map(([k]) => k);
+    const suggestion: ScreeningCategory["suggestion"] = ticks.length
+      ? { status: "included", reason: `Relevant: ${ticks.join(", ")}` }
+      : !sz
+        ? { status: "not_relevant", reason: `No activity in this category in ${year}` }
+        : share < 1
+          ? { status: "excluded", reason: `Estimated below 1 % of Scope 3 (≈ ${Math.round(sz)} tCO₂e by spend screening, ${year})` }
+          : { status: "included", reason: `Estimated at ${share} % of Scope 3` };
+    return {
+      n,
+      key: row.key,
+      name: row.name,
+      direction: row.direction,
+      status: row.status,
+      reason: row.reason ?? null,
+      relevance: row.relevance ?? {},
+      recorded_tco2e: s?.recorded ?? 0,
+      pending_tco2e: 0,
+      proxy_tco2e: 0,
+      estimate_tco2e: s?.estimate ?? null,
+      basis: s?.basis ?? null,
+      size_tco2e: sz,
+      size_basis: s ? (s.estimate !== null && s.estimate >= s.recorded ? s.basis : "recorded") : null,
+      share_pct: share,
+      suggestion,
+      inputs: screeningInputs
+        .filter((i) => i.ghg_category === n)
+        .map((i) => ({ ...i, updated_at: "2026-10-01T09:00:00.000Z", updated_by: null, estimate_tco2e: null, estimate_note: null, sector: null, fx: null, warnings: [] })),
+      mapped_categories: row.mapped_categories.map((m) => ({ category_id: m.category_id, category_name: m.name })),
+    };
+  });
+  return {
+    company_id: COMPANY_ID,
+    year,
+    year_type: yearType,
+    period: yearType === "FY" ? { start: `${year - 1}-04-01`, end: `${year}-03-31` } : { start: `${year}-01-01`, end: `${year}-12-31` },
+    sites: [
+      { site_id: 1, name: "Jebel Ali plant", ghg_categories: [1, 3, 4, 5, 6, 7] },
+      { site_id: 2, name: "Sharjah warehouse", ghg_categories: [4, 6] },
+    ],
+    totals: {
+      recorded_tco2e: rows.reduce((t, c) => t + c.recorded_tco2e, 0),
+      pending_tco2e: 0,
+      estimate_tco2e: rows.reduce((t, c) => t + (c.estimate_tco2e ?? 0), 0),
+      screened_tco2e: total,
+      included: rows.filter((c) => c.status === "included").length,
+      with_reason: rows.filter((c) => c.status === "included" || !!c.reason).length,
+    },
+    categories: rows,
+    can_edit: true,
+    can_extrapolate: true,
+  };
+}
 
 const initialBaseYear = (): CompanyBaseYear => ({
   company_id: COMPANY_ID,
@@ -294,20 +361,63 @@ export const scope3Handlers = [
   }),
 
   // S3-12 screening and extrapolation
-  http.get("*/scope3/screening", () => HttpResponse.json(SCREENING)),
+  http.get("*/scope3/screening", ({ request }) => {
+    const q = new URL(request.url).searchParams;
+    const year = Number(q.get("year"));
+    if (!Number.isInteger(year) || year < 1990) return invalid("year", "Give the screening year.");
+    return HttpResponse.json(screeningFor(year, q.get("year_type") === "FY" ? "FY" : "CY"));
+  }),
   http.put<never, Partial<PutScreeningInputsBody>>("*/scope3/screening/inputs", async ({ request }) => {
     const body = await request.json();
     if (!body.year || !Array.isArray(body.inputs)) return invalid("inputs", "Give the year and the inputs.");
-    screeningInputs = body.inputs;
+    for (const i of body.inputs) {
+      if ((i.basis === "spend" || i.basis === "revenue") && i.amount > 0 && !i.currency) return invalid("currency", "An amount spent needs its currency.");
+      screeningInputs = [...screeningInputs.filter((x) => !(x.ghg_category === i.ghg_category && x.basis === i.basis)), i];
+    }
     return HttpResponse.json({ year: body.year, inputs: screeningInputs });
+  }),
+  http.post<never, { description?: string }>("*/scope3/screening/sector-suggestions", async ({ request }) => {
+    const body = await request.json();
+    if (!body.description) return invalid("description", "Describe what was bought.");
+    return HttpResponse.json({
+      available: true,
+      confirm_below: 80,
+      suggestions: [
+        { code: "481000", name: "Air transportation (NAICS 481000)", confidence: 91, needs_confirmation: false },
+        { code: "561500", name: "Travel arrangement and reservation services (NAICS 561500)", confidence: 44, needs_confirmation: true },
+      ],
+    });
   }),
   http.post<never, Partial<ExtrapolateBody>>("*/scope3/extrapolate", async ({ request }) => {
     const body = await request.json();
+    const dryRun = new URL(request.url).searchParams.get("dry_run") === "1";
     const badCoverage = body.basis === "coverage" && !(body.coverage_pct !== undefined && body.coverage_pct >= 1 && body.coverage_pct <= 99);
     if ((body.basis !== "coverage" && body.basis !== "intensity") || badCoverage) {
-      return error("EXTRAPOLATION_BASIS_INVALID", 400, "The extrapolation basis isn't valid.");
+      return error("EXTRAPOLATION_BASIS_INVALID", 400, "Give the share of the activity the recorded rows cover, from 1 to 99 %.");
     }
-    return HttpResponse.json({ created: 3, status: "pending" }, { status: 201 });
+    // Mock sources: 850,000 kg approved (rows 501, 502); intensity 1,700 kg per t at the other site, 250 t here.
+    const coverage = body.basis === "coverage";
+    const kg = coverage ? (850_000 * (100 - body.coverage_pct!)) / body.coverage_pct! : 1700 * 250;
+    const answer = {
+      ...(dryRun ? { dry_run: true } : { id: 9001, status: "pending" }),
+      ghg_category: body.ghg_category,
+      site_id: body.site_id,
+      category_id: 8,
+      year: body.year,
+      year_type: body.year_type,
+      basis: body.basis,
+      basis_label: coverage ? "Scaled up from the share of activity with data" : "Intensity per unit of output at sites with data",
+      method: "distance_based",
+      formula: coverage
+        ? `850,000 kgCO₂e × (100 − ${body.coverage_pct}) ÷ ${body.coverage_pct} = ${kg.toLocaleString("en-US", { maximumFractionDigits: 2 })} kgCO₂e`
+        : `850,000 kgCO₂e ÷ 500 t × 250 t = ${kg.toLocaleString("en-US")} kgCO₂e`,
+      total_kgco2e: kg.toFixed(4),
+      total_tco2e: Math.round(kg / 10) / 100,
+      proxy: coverage ? { basis: "coverage", coverage_pct: body.coverage_pct, from: [501, 502] } : { basis: "intensity", coverage_pct: 66.67, from: [501, 502] },
+      sources: { rows: 2, kg: 850_000, site_ids: [1] },
+      ...(coverage ? {} : { production: { source: 500, missing: 250, unit: "t", output_site_ids: body.output_site_ids ?? [body.site_id] } }),
+    };
+    return HttpResponse.json(answer, { status: dryRun ? 200 : 201 });
   }),
   // python_AI_service: EEIO sector suggestions for spend lines (S3-12).
   http.post<never, { lines?: { description: string }[] }>("*/v1/scope3/eeio-sector", async ({ request }) => {
@@ -384,7 +494,7 @@ export const scope3Handlers = [
   http.get("*/reports/ghg/scope3", ({ request }) => {
     const year = Number(new URL(request.url).searchParams.get("year") ?? 2026);
     // Only included categories carry a total; the report total is their sum.
-    const tco2e = (c: Scope3CategoryRow) => (c.status === "included" ? (SCREENING.find((x) => x.ghg_category === c.ghg_category)?.estimate_tco2e ?? 0) : 0);
+    const tco2e = (c: Scope3CategoryRow) => (c.status === "included" ? (REPORT_TCO2E[c.ghg_category] ?? 0) : 0);
     const total = categories.reduce((sum, c) => sum + tco2e(c), 0);
     const rows: Scope3ReportRow[] = categories.map((c) => ({
       n: c.ghg_category,

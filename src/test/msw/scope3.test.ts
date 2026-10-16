@@ -107,6 +107,15 @@ describe("Scope 3 mock handlers", () => {
     expect(((await (await post("/scope3/extrapolate", { ghg_category: 4, site_id: 1, year: 2026, year_type: "CY", basis: "coverage", coverage_pct: 100 })).json()) as Scope3ErrorBody).code).toBe("EXTRAPOLATION_BASIS_INVALID");
     expect((await post("/scope3/extrapolate", { ghg_category: 4, site_id: 1, year: 2026, year_type: "CY", basis: "coverage", coverage_pct: 85 })).status).toBe(201);
     expect((await post("/v1/scope3/eeio-sector", { lines: [{ description: "Copper rod" }], sectors: [] })).status).toBe(200);
+    // S3-12 shapes: 15 categories with sizes and suggestions; a dry run shows the formula and saves nothing.
+    const screening = (await (await fetch(`${API}/scope3/screening?year=2025`)).json()) as { categories: { n: number; suggestion: { status: string } }[]; sites: unknown[] };
+    expect(screening.categories).toHaveLength(15);
+    expect(screening.categories.find((c) => c.n === 1)?.suggestion.status).toBe("included");
+    expect(screening.sites.length).toBeGreaterThan(0);
+    const dry = await post("/scope3/extrapolate?dry_run=1", { ghg_category: 6, site_id: 1, year: 2025, year_type: "CY", basis: "coverage", coverage_pct: 85 });
+    expect(dry.status).toBe(200);
+    expect(((await dry.json()) as { total_kgco2e: string }).total_kgco2e).toBe("150000.0000");
+    expect((await post("/scope3/screening/sector-suggestions", { description: "Flights", amount: 10, currency: "USD" })).status).toBe(200);
 
     const survey = { site_id: 1, year: 2026, year_type: "CY", total_employees: 3, responses: [{ ref: "A1", mode: "Rail", one_way_km: 10, days_per_week: 5, weeks_per_year: 48 }] };
     expect((await post("/scope3/commuting/surveys", survey)).status).toBe(201);
