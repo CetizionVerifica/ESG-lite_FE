@@ -12,6 +12,7 @@ const site = {
   categories: [
     { category_id: 9, category_name: "Stationary combustion", scope: "Scope 1" },
     { category_id: 11, category_name: "Business travel", scope: "Scope 3" },
+    { category_id: 12, category_name: "Purchased electricity", scope: "Scope 2" },
     { category_id: 99, category_name: "FERA", scope: "Scope 3" },
   ],
 };
@@ -22,6 +23,13 @@ const travelConfig = {
   config_name: "Travel",
   columns: [{ pk_id: 1, column_name: "Activity Data", column_type: "number" }],
 };
+// Scope 2 electricity and its Category 3 factors (S3-7): upstream (wtt) and T&D losses (td_loss, per kWh consumed).
+const powerConfig = { pk_id: 3, config_name: "Power", columns: [{ pk_id: 1, column_name: "Consumption", column_type: "number" }] };
+const powerFactors = [{ emission_factor_id: 4, emission_category_name: "Grid AU", factor_value: 0.8, denominator_unit: "kwh", year: 2024, factor_type: "combustion" }];
+const feraFactors = [
+  { emission_factor_id: 5, emission_category_name: "Grid AU", factor_value: 0.12, denominator_unit: "kwh", year: 2024, factor_type: "wtt" },
+  { emission_factor_id: 6, emission_category_name: "Grid AU T&D losses", global_category_name: "Grid AU", factor_value: 0.08, denominator_unit: "kwh", year: 2024, factor_type: "td_loss" },
+];
 const travelFactors = [{ emission_factor_id: 3, emission_category_name: "Car (petrol)", factor_value: 0.17, denominator_unit: "passenger.km", year: 2024 }];
 
 // Already saved for Sep 2025: one rejected diesel row.
@@ -103,7 +111,9 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       if (path.includes("/user/column-configs/site/4/category/9")) return json([config]);
       if (path.includes("/user/column-configs/site/4/category/11")) return json([travelConfig]);
       if (path.endsWith("/user/emission-factors/site/4/category/11")) return json(travelFactors);
-      if (path.endsWith("/user/emission-factors/site/4/category/99")) return json([]);
+      if (path.endsWith("/user/emission-factors/site/4/category/99")) return json(feraFactors);
+      if (path.includes("/user/column-configs/site/4/category/12")) return json([powerConfig]);
+      if (path.endsWith("/user/emission-factors/site/4/category/12")) return json(powerFactors);
       if (path.endsWith("/user/emission-factors/site/4/category/9")) {
         // The page asks for every year; the factors here are 2024's.
         const year = Number(url.searchParams.get("year") ?? 2024);
@@ -197,6 +207,26 @@ test("contributor types a row, sees tCO2e live and submits it", async ({ page })
     date_of_reporting: "2025-09-30",
     reporting_period: "monthly",
   });
+});
+
+test("the engine's notes on a saved row show on the result (S3-4)", async ({ page }) => {
+  await signIn(page, []);
+  const note = 'No 2024 FERA factor for "Diesel (avg biofuel blend)", so no fuel- and energy-related (Category 3) row was added.';
+  await page.route(/\/user\/emissions(\?|$)/, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 201, json: { emission: { pk_id: 301 }, warnings: [{ code: "FERA_FACTOR_MISSING", message: note }] } })
+      : route.fallback(),
+  );
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  // The warn callout is role="status", so the note is announced.
+  await expect(page.getByRole("status").filter({ hasText: "Sent, with notes" })).toContainText(note);
 });
 
 test("with no factor in the factor year, the preview uses the newest factor from another year, as the save does", async ({ page }) => {
@@ -539,4 +569,18 @@ test("files picked on a typed row are attached to it after it is saved", async (
   expect(uploads).toHaveLength(1);
   expect(uploads[0]).toContain("meter-sep.pdf");
   expect(uploads[0]).toContain("101");
+});
+
+test("a Scope 2 row previews its Category 3 rows: upstream of electricity and T&D losses", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=12&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Emission category").selectOption({ label: "Grid AU" });
+  await row.getByLabel("Consumption").fill("500000");
+  await row.getByLabel("Unit").selectOption("kwh");
+  await expect(row.getByText("= 400.00 tCO₂e")).toBeVisible();
+  const cat3 = row.locator("p", { hasText: "added on save" });
+  await expect(cat3).toHaveText(/^\+ Cat 3\s*60\.00 tCO₂e \(upstream of electricity\) \+ 40\.00 tCO₂e \(T&D losses\), added on save$/);
+  // The Cat 3 explainer is a button, so keyboard users reach it too.
+  await expect(cat3.getByRole("button", { name: "What is Cat 3?" })).toBeVisible();
 });

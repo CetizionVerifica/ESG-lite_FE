@@ -171,7 +171,7 @@ function Fields(p: FieldsProps) {
           ) : row.emission_category ? (
             <span className="text-bad">No factor for this category</span>
           ) : null}
-          {entry.fera && <span className="mt-1 block">The linked FERA entry is recalculated when you save.</span>}
+          {entry.fera && <span className="mt-1 block">Linked Category 3 entries are recalculated when you save.</span>}
         </div>
         <div className="text-right" aria-live="polite">
           {result.value !== null ? (
