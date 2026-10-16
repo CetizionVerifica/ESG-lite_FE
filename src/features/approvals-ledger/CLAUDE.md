@@ -73,3 +73,7 @@ After a smart import the manager reviews the batch one row at a time, sees first
 - Decision 6 (uploader = approver audit note) is the backend's; nothing to show here.
 - **Uploader approves own batch** (ESG-lite #127): allowed only while none of its rows was edited after the upload; otherwise ESG-lite refuses the whole batch with 403 (also for the uploader's own Claude or API batch, or rows outside the caller's sites). The dialog says "You can't approve this batch yourself. Ask another manager to approve it." and doesn't guess the cause, which the response doesn't carry (`batchApproveError`).
 - Tests: `logic.test.ts` ("needs attention (XI5)"), `e2e/approvals-ledger.spec.ts` (chip on by default and off by click, count is pending-only and the list loads once with the filter, drawer line, approve dialog → Review them first).
+
+## S3-3 as built (method and data quality, 2026-10-16; spec `src/lib/scope3/CLAUDE.md`)
+- Record drawer, Calculation section: "How it was calculated" (method label, "Estimate" when `is_estimate`) and "Data quality" (`DataQualityBadge` with the five indicators in its tooltip, plus primary or secondary data); nothing for a Scope 1 or 2 row without the fields.
+- Both tabs: a "Data quality" column hidden by default, and "Method" (`?method=` → `method=`) and "Data quality" (`?dq=` → `dq_max=`: Good / Good or fair / Scored) filter chips; the tab counts use them too.

@@ -83,6 +83,33 @@ export function rowMethodText(method: string | null | undefined, ghg?: number | 
   return method ? methodLabel(method, ghg) : METHOD_LABEL_NONE;
 }
 
+/** What a saved row says about its method and data quality (GET /user/emissions fields). */
+export type RowQualityFields = {
+  method?: string | null;
+  dq?: unknown;
+  data_type?: string | null;
+  is_estimate?: boolean | null;
+  category?: { scope?: string | null; ghg_category?: number | null } | null;
+};
+
+/**
+ * The drawer lines for a saved row: "How it was calculated", the data quality
+ * and primary / secondary. `show` is false for a Scope 1 or 2 row that carries
+ * none of it, so those drawers don't gain empty lines.
+ */
+export function rowQuality(row: RowQualityFields) {
+  const dq = readDq(row.dq);
+  const scope3 = /3/.test(String(row.category?.scope ?? "")) || row.category?.ghg_category != null;
+  const dataType = row.data_type === "primary" || row.data_type === "secondary" ? DATA_TYPE_LABELS[row.data_type] : null;
+  return {
+    show: scope3 || !!row.method || dq !== null || !!row.is_estimate,
+    method: rowMethodText(row.method, row.category?.ghg_category),
+    dq,
+    dataType,
+    estimate: !!row.is_estimate,
+  };
+}
+
 /** Badge tone per score: the word and glyph carry the meaning, the tone only helps. */
 export const DQ_TONES: Record<DqScore, "good" | "info" | "warn"> = { 1: "good", 2: "info", 3: "warn" };
 

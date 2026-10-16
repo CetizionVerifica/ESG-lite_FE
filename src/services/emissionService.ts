@@ -28,6 +28,8 @@ export interface EmissionData {
     category_id: number;
     category_name: string;
     scope?: string | null;
+    /** GHG Protocol category 1–15 (S3-1), when the server sends it; words the method label (S3-3). */
+    ghg_category?: number | null;
   };
   reviewed_by?: {
     user_id: number;

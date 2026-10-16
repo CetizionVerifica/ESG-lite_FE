@@ -18,6 +18,7 @@ import {
   readMethodOptions,
   reliabilityScore,
   rowMethodText,
+  rowQuality,
   technologyScore,
   timeScore,
   unitsForMethod,
@@ -167,6 +168,21 @@ describe("words and filters", () => {
     expect(rowMethodText(null)).toBe("Not recorded");
     expect(methodHint("spend_based")).toMatch(/amount spent/);
     expect(methodHint("nope")).toBe("");
+  });
+
+  it("rowQuality: the drawer lines for a saved row, and none for a bare Scope 1 row", () => {
+    const dq = { technology: 3, geography: 3, time: 2, completeness: 1, reliability: 3, overall: 3, source: "auto" };
+    expect(rowQuality({ method: "spend_based", dq, data_type: "secondary", is_estimate: false, category: { scope: "Scope 3", ghg_category: 1 } })).toEqual({
+      show: true,
+      method: "From the amount spent",
+      dq,
+      dataType: "Secondary",
+      estimate: false,
+    });
+    expect(rowQuality({ category: { scope: "Scope 1" } }).show).toBe(false);
+    // An older Scope 3 row: the lines show, saying what is missing.
+    expect(rowQuality({ category: { scope: "Scope 3" } })).toMatchObject({ show: true, method: "Not recorded", dq: null, dataType: null });
+    expect(rowQuality({ is_estimate: true, category: { scope: "Scope 1" } })).toMatchObject({ show: true, estimate: true });
   });
 
   it("parses the method= and dq_max= filters", () => {
