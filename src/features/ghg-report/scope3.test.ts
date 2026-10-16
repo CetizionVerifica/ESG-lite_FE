@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Scope3Report, Scope3ReportRow } from "../../lib/scope3/report";
-import { datasetText, dqWord, gwpText, methodMixText, rowLabel } from "../../lib/scope3/report";
+import { datasetText, dqWord, gwpText, hasScope3, methodMixText, rowLabel } from "../../lib/scope3/report";
 import { coverageSentence, sbtiScope3Applies, scope3CoverageSet } from "../../lib/scope3/sbti";
 import type { GhgCategoryNumber } from "../../lib/scope3/contracts";
 import { type ReportFigures, dominantScope, exportSheets, findings, scope3Params, scope3Sheets } from "./logic";
@@ -189,7 +189,14 @@ describe("Scope 3 XLSX sheets", () => {
     expect(method.rows[0]).toEqual(["Organisational boundary", "Equity share approach"]);
     expect(method.rows[1]).toEqual(["GWP values", "IPCC AR6, 100-year"]);
     const cat1 = method.rows.find((r) => r[0] === "Category 1 · Purchased goods and services");
-    expect(cat1?.[5]).toBe("Spend for services");
+    expect(method.rows.find((r) => r[0] === "Category")?.slice(4, 9)).toEqual([
+      "Proxy basis",
+      "Radiative forcing",
+      "EEIO boundary",
+      "GWP",
+      "Allocation and assumptions",
+    ]);
+    expect(cat1?.[8]).toBe("Spend for services");
   });
   it("hides Not recorded fields behind the tracked flags", () => {
     const r = { ...sample, tracked: { ...sample.tracked, method: false, data_type: false } };
@@ -212,6 +219,29 @@ describe("Scope 3 XLSX sheets", () => {
     expect(exportSheets(args).map((s) => s.name)).not.toContain("Scope 3 by category");
     const names = exportSheets({ ...args, scope3: sample }).map((s) => s.name);
     expect(names.slice(-3)).toEqual(["Scope 3 by category", "Scope 3 methodology", "Findings"]);
+  });
+  it("a Scope 1/2-only client keeps the old sheet list, like the PDF", () => {
+    const args = {
+      figures: figures(1, 1, 0),
+      categories: [],
+      locations: [],
+      details: null,
+      findings: [],
+      actions: [],
+      prevLabel: "CY 2024",
+      selLabel: "CY 2025",
+    };
+    const none = report({});
+    expect(hasScope3(none)).toBe(false);
+    expect(hasScope3(sample)).toBe(true);
+    expect(hasScope3(report({ u: { mapped_categories: [{ category_id: 9, name: "Misc" }] } }))).toBe(true);
+    expect(exportSheets({ ...args, scope3: none }).map((s) => s.name)).toEqual(exportSheets(args).map((s) => s.name));
+  });
+  it("the methodology sheet lists proxy basis and radiative forcing", () => {
+    const r = report({ 6: { status: "included", tco2e: 5, share_pct: 100, rf: "with", proxy_basis: ["Commuting survey scaled to all employees"] } });
+    const row = scope3Sheets(r)[1].rows.find((x) => String(x[0]).startsWith("Category 6"));
+    expect(row?.[4]).toBe("Commuting survey scaled to all employees");
+    expect(row?.[5]).toBe("Flights with radiative forcing");
   });
   it("the Scope 3 query is the PDF query without download", () => {
     const q = { siteIds: [1, 2], categoryIds: [], period: { yearType: "CY" as const, year: 2025, frequency: "yearly" as const } };

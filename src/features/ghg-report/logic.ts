@@ -2,10 +2,12 @@ import { BOUNDARY_STATUS_LABEL, CONSOLIDATION_LABEL, isConsolidationApproach } f
 import {
   NOT_RECORDED,
   NOT_TRACKED,
+  RF_LABEL,
   SCOPE3_TOTAL_NOTE,
   type Scope3Report,
   datasetText,
   gwpText,
+  hasScope3,
   methodMixText,
   rowLabel,
 } from "../../lib/scope3/report";
@@ -616,7 +618,7 @@ export function exportSheets(args: {
           ]),
         ],
       });
-  if (args.scope3) sheets.push(...scope3Sheets(args.scope3));
+  if (args.scope3 && hasScope3(args.scope3)) sheets.push(...scope3Sheets(args.scope3));
   sheets.push({
     name: "Findings",
     rows: [
@@ -680,7 +682,7 @@ export function scope3Sheets(r: Scope3Report): { name: string; rows: Cell[][] }[
         ["Biogenic CO2 and gases", t.biogenic ? "Reported separately per category" : NOT_TRACKED],
         ["Base year", "No Scope 3 base year set"],
         [],
-        ["Category", "Methods", "Data and factors", "Proxy data %", "GWP", "Assumptions"],
+        ["Category", "Methods", "Data and factors", "Proxy data %", "Proxy basis", "Radiative forcing", "EEIO boundary", "GWP", "Allocation and assumptions"],
         ...r.rows
           .filter((x) => x.tco2e > 0 || !!x.method_note)
           .map((x) => [
@@ -688,6 +690,9 @@ export function scope3Sheets(r: Scope3Report): { name: string; rows: Cell[][] }[
             t.method ? methodMixText(x) : NOT_RECORDED,
             datasetText(x),
             r3(x.proxy_pct),
+            (x.proxy_basis ?? []).join("; "),
+            x.rf ? RF_LABEL[x.rf] : "",
+            x.n === 15 && x.tco2e > 0 ? NOT_RECORDED : "",
             x.gwp_sets.join(", ") || NOT_RECORDED,
             x.method_note ?? "",
           ]),

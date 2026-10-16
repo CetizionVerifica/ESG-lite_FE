@@ -317,6 +317,13 @@ test("the SBTi 67 % hint shows when Scope 3 is at least 40 % of the total", asyn
   await expect(page.getByText(/Category 1 covers 75 %/)).toBeVisible();
 });
 
+test("the SBTi hint stays hidden while a category filter narrows the report", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/reports/ghg?year=2025&tab=scope3&category=10");
+  await expect(page.getByRole("table", { name: "Scope 3 emissions by GHG Protocol category" })).toBeVisible();
+  await expect(page.getByText("SBTi near-term targets must cover at least 67 % of Scope 3.")).toHaveCount(0);
+});
+
 test("a superadmin reports on the picked client's sites only", async ({ page }) => {
   const bodies: Body[] = [];
   await page.addInitScript(() => {
