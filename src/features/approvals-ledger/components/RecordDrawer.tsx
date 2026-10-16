@@ -27,6 +27,7 @@ import type { EmissionStatus } from "../../../services/emissionService";
 import { type LedgerDocument, useColumnConfig, useDocuments, useEntryHistory, useFactor } from "../api";
 import { EditForm } from "./EditForm";
 import { type FactorSnapshot, type LedgerRow, activityFields, formatFactorValue, importProvenance, matchedByText, quantityOf, rowMonth, rowPeriodLabel } from "../logic";
+import { feraSubLabel } from "../../../lib/scope3/fera";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -58,7 +59,8 @@ export function RecordDrawer({
   checkContext,
 }: {
   row: LedgerRow | null;
-  fera: LedgerRow | undefined;
+  /** The FERA twins folded into this row (upstream, and T&D losses for Scope 2). */
+  fera: LedgerRow[] | undefined;
   /** Status to show (an approval in its undo window shows as approved). */
   status: EmissionStatus | undefined;
   onClose: () => void;
@@ -140,7 +142,7 @@ export function RecordDrawer({
   );
 }
 
-function Body({ row, fera, status, checkContext }: { row: LedgerRow; fera: LedgerRow | undefined; status: EmissionStatus | undefined; checkContext?: CheckContext }) {
+function Body({ row, fera, status, checkContext }: { row: LedgerRow; fera: LedgerRow[] | undefined; status: EmissionStatus | undefined; checkContext?: CheckContext }) {
   const config = useColumnConfig(row.site?.site_id, row.category?.category_id);
   const fields = activityFields(row, config.data ?? undefined);
   const total = emissionsParts(Number(row.total_emission));
@@ -178,11 +180,12 @@ function Body({ row, fera, status, checkContext }: { row: LedgerRow; fera: Ledge
               </Row>
             ))}
             {row.activity_data_unit && <Row label="Unit">{row.activity_data_unit}</Row>}
-            {fera && (
-              <Row label="FERA (fuel- and energy-related)">
-                <span className="font-num tabular-nums">+{formatEmissions(Number(fera.total_emission))}</span>
+            {row.scope3_sub && <Row label="Part of">{feraSubLabel(row.scope3_sub)}</Row>}
+            {fera?.map((f) => (
+              <Row key={f.pk_id} label={feraSubLabel(f.scope3_sub)}>
+                <span className="font-num tabular-nums">+{formatEmissions(Number(f.total_emission))}</span>
               </Row>
-            )}
+            ))}
             {fields.length === 0 && <p className="text-sm text-muted">No activity values were entered.</p>}
           </dl>
         )}
