@@ -26,6 +26,7 @@ import {
 import type { EmissionStatus } from "../../../services/emissionService";
 import { type LedgerDocument, useColumnConfig, useDocuments, useEntryHistory, useFactor } from "../api";
 import { EditForm } from "./EditForm";
+import { deflatorLine, fxLine } from "../../../lib/scope3/spend";
 import { type FactorSnapshot, type LedgerRow, activityFields, formatFactorValue, importProvenance, matchedByText, quantityOf, rowMonth, rowPeriodLabel } from "../logic";
 import { feraSubLabel } from "../../../lib/scope3/fera";
 
@@ -231,12 +232,26 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
   const fallback = useFactor(snapshot ? null : row.pk_id);
   const factor: FactorSnapshot | null = snapshot ?? fallback.data ?? null;
   if (!snapshot && fallback.isPending) return <SkeletonText lines={2} />;
+  // S3-5: a spend row shows the amount spent and the stored rate (× deflator) before the factor.
+  const fx = row.fx ?? null;
+  const deflator = snapshot?.deflator ?? null;
+  const spent = fx ? Number(String(row.activity_data?.spent_value ?? "").replace(/,/g, "")) : NaN;
+  const amount = fx && Number.isFinite(spent) && spent > 0 ? spent : quantity;
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 font-num text-sm tabular-nums" data-testid="calculation">
-        <span>{quantity === null ? "—" : formatNumber(quantity, 2)} {row.activity_data_unit ?? ""}</span>
+        <span>{amount === null ? "—" : formatNumber(amount, 2)} {fx ? fx.currency : (row.activity_data_unit ?? "")}</span>
         <span aria-hidden className="text-muted">×</span>
         <span className="sr-only">times</span>
+        {fx && (
+          <>
+            <span>
+              {formatFactorValue({ factor_value: fx.rate * (deflator ? deflator.base_index / deflator.spend_index : 1) })} {fx.to}/{fx.currency}
+            </span>
+            <span aria-hidden className="text-muted">×</span>
+            <span className="sr-only">times</span>
+          </>
+        )}
         <span>{factor ? `${formatFactorValue(factor)} per ${factor.denominator_unit}` : "factor unknown"}</span>
         <span aria-hidden className="text-muted">=</span>
         <span className="sr-only">equals</span>
@@ -249,6 +264,12 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
         </p>
       ) : (
         <p className="text-sm text-muted">{fallback.isError ? "Couldn't load the factor." : "No factor matched this entry."}</p>
+      )}
+      {fx && (
+        <p className="text-sm text-muted" data-testid="drawer-fx">
+          Exchange rate: {fxLine(fx)}
+          {deflator && <span className="block">{deflatorLine(deflator)}</span>}
+        </p>
       )}
     </div>
   );
