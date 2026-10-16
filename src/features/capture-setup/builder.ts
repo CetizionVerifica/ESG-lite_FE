@@ -5,6 +5,8 @@
  */
 import { ROW_METHOD_COLUMN, normalizeUnitKey } from "../../lib/emissions/emissionCalc";
 import { methodLabel } from "../../lib/scope3/labels";
+import { type MethodOptions, readMethodOptions } from "../../lib/scope3/dq";
+import { methodOptionIssues } from "./methodOptions";
 import type {
   CalculationSpec,
   ColumnConfig,
@@ -18,7 +20,8 @@ export type { CalculationSpec, ColumnEntity, DropdownOptionValue, ExtraFieldDefi
 
 export type SourceConfig = ColumnConfig & {
   site?: { site_id: number; name: string } | null;
-  category?: { category_id: number; category_name: string } | null;
+  /** `ghg_category`: the GHG Protocol category 1–15 of a Scope 3 category (S3-1); its methods are the "Methods offered" choices (S3-3). */
+  category?: { category_id: number; category_name: string; scope?: string | null; ghg_category?: number | null } | null;
 };
 
 export type BuilderDraft = {
@@ -33,6 +36,8 @@ export type BuilderDraft = {
   mapping: Record<string, string>;
   extraFields: ExtraFieldDefinition[];
   calculation: CalculationSpec | null;
+  /** S3-3 "Methods offered": most specific first, each with the units it offers; empty = the form doesn't limit the method. */
+  methodOptions: MethodOptions;
   /** Column id → name it had when the builder opened. */
   originalNames: Record<number, string>;
 };
@@ -56,6 +61,7 @@ export function draftFromConfig(config: SourceConfig): BuilderDraft {
     mapping: clone(config.emission_category_mapping ?? {}),
     extraFields: clone(config.extra_fields ?? []),
     calculation: config.calculation ? clone(config.calculation) : null,
+    methodOptions: readMethodOptions(config.method_options),
     originalNames: Object.fromEntries(fields.map((c) => [c.pk_id, c.column_name])),
   };
 }
@@ -584,6 +590,7 @@ export function validateBuilder(d: BuilderDraft, library: LibraryName[] = []): B
       }
     }
   }
+  issues.push(...methodOptionIssues(d));
   return issues;
 }
 
@@ -614,6 +621,8 @@ export type UpdatePayload = {
   emission_category_mapping: Record<string, string>;
   extra_fields: ExtraFieldDefinition[];
   calculation: CalculationSpec | null;
+  /** S3-3: contracts §6 `[{method, units}]`, most specific first; null when the form offers no list. */
+  method_options: MethodOptions | null;
   rename_map?: Record<string, string>;
 };
 
@@ -640,6 +649,7 @@ export function toUpdatePayload(d: BuilderDraft): UpdatePayload {
       show_for: f.show_for?.length ? f.show_for : undefined,
     })),
     calculation: d.calculation,
+    method_options: d.methodOptions.length ? d.methodOptions.map((o) => ({ method: o.method, units: o.units.map((u) => u.trim()).filter(Boolean) })) : null,
     ...(Object.keys(renames).length ? { rename_map: renames } : {}),
   };
 }
@@ -657,6 +667,7 @@ export function toPreviewConfig(d: BuilderDraft, id: number): ColumnConfig {
     emission_category_mapping: p.emission_category_mapping,
     extra_fields: p.extra_fields,
     calculation: p.calculation,
+    method_options: p.method_options,
   };
 }
 
