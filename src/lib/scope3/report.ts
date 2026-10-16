@@ -2,14 +2,10 @@
  * The Scope 3 section of the GHG report (S3-13): the shape of
  * `GET /reports/ghg/scope3` and the labels the Scope 3 and Methodology tabs,
  * the XLSX sheets and the PDF share (ESG-lite src/reporting/ghg-scope3.ts).
- *
- * STAND-IN for the report row S3-0 adds to `contracts.ts` (ESG-lite #144 /
- * S3-0 FE). When it lands, import `Scope3ReportRow` from there and keep the
- * labels and helpers here.
+ * The row type comes from S3-0's `contracts.ts`.
  */
-import type { BoundaryStatus } from "./boundary";
-import type { GhgCategoryNumber } from "./contracts";
-import { methodLabel } from "./methods";
+import type { Scope3ReportRow as ContractScope3ReportRow } from "./contracts";
+import { methodLabel } from "./labels";
 
 export type FactorType =
   | "combustion"
@@ -23,32 +19,13 @@ export type FactorType =
   | "other";
 export type GwpSet = "AR4" | "AR5" | "AR6";
 
-export interface Scope3ReportRow {
-  /** 1–15, or null for "Unmapped". */
-  n: GhgCategoryNumber | null;
-  name: string;
-  direction: "upstream" | "downstream" | null;
-  status: BoundaryStatus | null;
-  reason: string | null;
-  method_note: string | null;
-  tco2e: number;
-  share_pct: number;
-  /** Method key → % of the category's tCO₂e; `unknown` = not recorded on the entry. */
-  methods: Record<string, number>;
-  primary_pct: number;
-  value_chain_pct: number;
-  proxy_pct: number;
-  dq: { overall: number | null; good_pct: number; fair_pct: number; poor_pct: number };
-  datasets: { dataset: string; version: string | null; factor_type: FactorType }[];
-  gwp_sets: GwpSet[];
-  /** null = "Not tracked" (the engine doesn't store biogenic CO₂ per entry yet). */
-  biogenic_tco2e: number | null;
-  mapped_categories: { category_id: number; name: string }[];
+/** S3-0's row plus the S3-13 fields the contract doesn't carry yet (S3-0 follow-up). */
+export type Scope3ReportRow = ContractScope3ReportRow & {
   /** Air travel radiative forcing (Standard L4218); null or missing = no flight entries. */
   rf?: "with" | "without" | "mixed" | null;
   /** How extrapolated or proxy data was made; missing on older servers. */
   proxy_basis?: string[];
-}
+};
 
 /** "Flights with radiative forcing". */
 export const RF_LABEL: Record<"with" | "without" | "mixed", string> = {
@@ -103,7 +80,7 @@ export function methodMixText(row: Scope3ReportRow): string {
 export function datasetText(row: Scope3ReportRow): string {
   return row.datasets.length
     ? row.datasets
-        .map((d) => `${d.dataset}${d.version ? ` ${d.version}` : ""} (${FACTOR_TYPE_LABEL[d.factor_type]?.toLowerCase() ?? d.factor_type})`)
+        .map((d) => `${d.dataset}${d.version ? ` ${d.version}` : ""} (${FACTOR_TYPE_LABEL[d.factor_type as FactorType]?.toLowerCase() ?? d.factor_type})`)
         .join("; ")
     : "Factor dataset not recorded";
 }
