@@ -16,7 +16,7 @@ import {
   panel,
 } from "../../../ui";
 import { BOUNDARY_STATUS_LABEL, type BoundaryStatus } from "../../../lib/scope3/boundary";
-import { NOT_RECORDED, NOT_TRACKED, SCOPE3_TOTAL_NOTE, type Scope3Report, type Scope3ReportRow, methodMixText, rowLabel } from "../../../lib/scope3/report";
+import { NOT_RECORDED, NOT_TRACKED, SCOPE3_TOTAL_NOTE, type Scope3Report, type Scope3ReportRow, hasScope3, methodMixText, rowLabel } from "../../../lib/scope3/report";
 import { SBTI_HINT_LEAD, coverageSentence, sbtiScope3Applies, scope3CoverageSet } from "../../../lib/scope3/sbti";
 import { DqCell } from "./DqCell";
 
@@ -34,7 +34,8 @@ type Props = {
 /** Scope 3 by GHG Protocol category: status, emissions, method mix, value-chain data and data quality, then the exclusions. */
 export function Scope3Tab({ report, loading, error, onRetry, grandTotal }: Props) {
   const tracked = report?.tracked;
-  const shown = (report?.rows ?? []).filter((r) => r.n !== null || r.tco2e > 0 || r.mapped_categories.length > 0);
+  // A client with no Scope 3 at all keeps the old empty table instead of 15 "Screening" rows at 0.
+  const shown = report && !hasScope3(report) ? [] : (report?.rows ?? []).filter((r) => r.n !== null || r.tco2e > 0 || r.mapped_categories.length > 0);
   const unmapped = report?.rows.find((r) => r.n === null);
   const excluded = (report?.rows ?? []).filter((r) => r.status === "excluded" || r.status === "not_relevant");
   const coverage = report ? scope3CoverageSet(report.rows) : null;

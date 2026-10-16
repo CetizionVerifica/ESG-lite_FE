@@ -5,19 +5,9 @@
  * The row type comes from S3-0's `contracts.ts`.
  */
 import type { Scope3ReportRow as ContractScope3ReportRow } from "./contracts";
+import { type FactorType, type GwpSet, isFactorType } from "./factor";
 import { methodLabel } from "./labels";
 
-export type FactorType =
-  | "combustion"
-  | "wtt"
-  | "td_loss"
-  | "life_cycle"
-  | "cradle_to_gate"
-  | "eeio_spend"
-  | "supplier"
-  | "process"
-  | "other";
-export type GwpSet = "AR4" | "AR5" | "AR6";
 
 /** S3-0's row plus the S3-13 fields the contract doesn't carry yet (S3-0 follow-up). */
 export type Scope3ReportRow = ContractScope3ReportRow & {
@@ -26,6 +16,15 @@ export type Scope3ReportRow = ContractScope3ReportRow & {
   /** How extrapolated or proxy data was made; missing on older servers. */
   proxy_basis?: string[];
 };
+
+/**
+ * Whether the report has any Scope 3 to show: a total, a category with emissions, or a mapped Scope 3
+ * category. Same rule as ESG-lite `hasScope3`, which leaves the PDF's Scope 3 pages out otherwise, so a
+ * Scope 1/2-only client gets the same XLSX and Scope 3 tab as before S3-13.
+ */
+export function hasScope3(r: Pick<Scope3Report, "total_tco2e" | "rows">): boolean {
+  return r.total_tco2e > 0 || r.rows.some((x) => x.tco2e > 0 || x.mapped_categories.length > 0);
+}
 
 /** "Flights with radiative forcing". */
 export const RF_LABEL: Record<"with" | "without" | "mixed", string> = {
@@ -48,7 +47,12 @@ export interface Scope3Report {
 export const NOT_TRACKED = "Not tracked";
 export const NOT_RECORDED = "Not recorded";
 
-export const FACTOR_TYPE_LABEL: Record<FactorType, string> = {
+/**
+ * Short factor-type words for the report's dataset line. They match the PDF (ESG-lite
+ * `ghg-scope3.ts`) on purpose, so the screen, XLSX and PDF read the same; the Emission factors page
+ * uses the longer `factorTypeLabel` from ./factor.
+ */
+export const REPORT_FACTOR_TYPE_LABEL: Record<FactorType, string> = {
   combustion: "Combustion",
   wtt: "Well-to-tank",
   td_loss: "T&D losses",
@@ -80,7 +84,7 @@ export function methodMixText(row: Scope3ReportRow): string {
 export function datasetText(row: Scope3ReportRow): string {
   return row.datasets.length
     ? row.datasets
-        .map((d) => `${d.dataset}${d.version ? ` ${d.version}` : ""} (${FACTOR_TYPE_LABEL[d.factor_type as FactorType]?.toLowerCase() ?? d.factor_type})`)
+        .map((d) => `${d.dataset}${d.version ? ` ${d.version}` : ""} (${isFactorType(d.factor_type) ? REPORT_FACTOR_TYPE_LABEL[d.factor_type].toLowerCase() : d.factor_type})`)
         .join("; ")
     : "Factor dataset not recorded";
 }
