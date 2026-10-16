@@ -95,6 +95,24 @@ export function listParams(f: ListFilters, page: number): ListParams {
   return out;
 }
 
+/** Page size the export asks for (the server's cap). */
+export const EXPORT_PAGE_SIZE = 200;
+
+/**
+ * Every factor matching the list filters, for the export: pages through the
+ * server at its largest page size. `fetchPage` gets the same params as the
+ * list, with only `page` and `limit` changed.
+ */
+export async function fetchAllFactors(p: ListParams, fetchPage: (p: ListParams) => Promise<FactorPage>): Promise<Factor[]> {
+  const out: Factor[] = [];
+  for (let page = 1; ; page++) {
+    const res = await fetchPage({ ...p, page, limit: EXPORT_PAGE_SIZE });
+    const data = res.data ?? [];
+    out.push(...data);
+    if (data.length === 0 || out.length >= res.total || page >= res.totalPages) return out;
+  }
+}
+
 /** First positive integer in a filter value list, or null. */
 export function firstId(values: string[] | undefined): number | null {
   for (const v of values ?? []) {

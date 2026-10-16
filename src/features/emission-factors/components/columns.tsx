@@ -64,3 +64,24 @@ export function factorColumns(opts: { batches: Batch[] | undefined; onEdit: (row
     },
   ];
 }
+
+const text = (v: string | null | undefined) => v ?? "";
+
+/**
+ * Columns of the factors export: every table column whatever the column picker
+ * shows (Type and GWP always in), then the rest of the S3-2 metadata.
+ */
+export function factorExportColumns(table: Column<Factor>[]): Column<Factor>[] {
+  const meta: Column<Factor>[] = [
+    { id: "geography", header: "Geography", value: (r) => text(r.geography) },
+    { id: "dataset", header: "Dataset", value: (r) => text(r.dataset) },
+    { id: "dataset_version", header: "Dataset version", value: (r) => text(r.dataset_version) },
+    { id: "co2_kg", header: "CO₂ (kg)", numeric: true, value: (r) => factorNumber(r.co2_kg) },
+    { id: "ch4_kg", header: "CH₄ (kg)", numeric: true, value: (r) => factorNumber(r.ch4_kg) },
+    { id: "n2o_kg", header: "N₂O (kg)", numeric: true, value: (r) => factorNumber(r.n2o_kg) },
+    { id: "other_kgco2e", header: "Other (kgCO₂e)", numeric: true, value: (r) => factorNumber(r.other_kgco2e) },
+    { id: "biogenic_co2_kg", header: "Biogenic CO₂ (kg)", numeric: true, value: (r) => factorNumber(r.biogenic_co2_kg) },
+    { id: "includes_wtt", header: "Includes WTT", value: (r) => (r.includes_wtt === true ? "Yes" : r.includes_wtt === false ? "No" : "") },
+  ];
+  return [...table.filter((c) => c.id !== "edit"), ...meta];
+}
