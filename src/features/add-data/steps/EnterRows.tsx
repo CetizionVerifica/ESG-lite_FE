@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Sparkles } from "lucide-react";
 import { Button, Callout, TabPanel, Tabs, formatNumber } from "../../../ui";
@@ -41,6 +41,8 @@ type Props = {
   /** Bulk upload (P27) for this site, category and period. */
   bulkUploadHref: string;
   evidence: RowEvidence;
+  /** S3-6: the Supplier field for a row (Category 1 and 2 only). */
+  renderSupplier?: (row: ModalRow) => ReactNode;
   onBack: () => void;
   onNext: () => void;
 };
@@ -86,6 +88,7 @@ export function EnterRows(p: Props) {
         onDuplicate={() => p.dispatch({ type: "duplicate", id: row.id })}
         onRemove={() => p.dispatch({ type: "remove", id: row.id })}
         onCalculateDistance={(column, field) => setDistanceFor({ rowId: row.id, column, field })}
+        supplierSlot={p.renderSupplier?.(row)}
         evidence={
           billOf(row)
             ? undefined

@@ -148,6 +148,7 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
                       <span className="font-num font-semibold tabular-nums">{formatEmissions(Number(entry.total_emission))}</span>
                     </Row>
                     {entry.scope3_sub && <Row label="Part of">{feraSubLabel(entry.scope3_sub)}</Row>}
+                    {entry.supplier && <Row label="Supplier">{entry.supplier.name}</Row>}
                     {entry.fera?.map((f) => (
                       <Row key={f.pk_id} label={feraSubLabel(f.scope3_sub)}>
                         <span className="font-num tabular-nums">{formatEmissions(Number(f.total_emission))}</span>

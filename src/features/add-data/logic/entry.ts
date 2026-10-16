@@ -3,6 +3,8 @@ import { canConvert, unitsMatchExact } from "../../../ui/unitMatch";
 import { factorYearForDate, yearlyPeriodEndDate, type PeriodMode, type YearType } from "../hooks/reportingPeriod";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import type { ModalRow } from "../types";
+import { SUPPLIER_ROW_KEYS, supplierMethodOf, supplierPayload } from "./supplier";
+import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 
 /** What is being reported: a month, or a CY/FY year (yearly batches). */
 export type EntryPeriod =
@@ -68,6 +70,11 @@ export type RowIssue = { field: "emission_category" | "activity_data_unit" | "va
 export function rowIssue(row: ModalRow, calc: EmissionCalculator): RowIssue | null {
   if (!row.emission_category) return { field: "emission_category", message: "Choose what this row is" };
   if (!row.activity_data_unit) return { field: "activity_data_unit", message: "Choose a unit" };
+  // S3-6: a supplier's figure (or the hybrid lines) sets the unit, not the activity's factor.
+  if (supplierMethodOf(row)) {
+    const r = calc.calculateEmission(row);
+    return r.value === null ? { field: "values", message: r.status } : null;
+  }
   const expected = calc.getExpectedUnit(row.emission_category);
   if (expected && !unitsMatchExact(expected, row.activity_data_unit) && !canConvert(row.activity_data_unit, expected)) {
     const bracket = row.emission_category.match(/\[([^\]]+)\]/)?.[1];
@@ -93,6 +100,11 @@ export interface EmissionPayload {
   activity_data_unit?: string;
   reporting_period: PeriodMode;
   year_type?: YearType;
+  /** S3-6: the supplier the goods came from, and for "Supplier's own figure" the figure chosen. */
+  supplier_id?: number;
+  supplier_factor_id?: number;
+  /** S3-6: sent for the supplier methods only (S3-3's method cards send it for every method). */
+  method?: string;
 }
 
 /**
@@ -109,20 +121,27 @@ export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: n
     if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
     // Private row state: FERA flag, mapping key, the bill a row came from, the saved entry it edits.
     if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf" || key === "_editSaved") continue;
+    if ((SUPPLIER_ROW_KEYS as readonly string[]).includes(key)) continue;
+    // The supplier methods go in `method`; "@method" only matters to a spec that reads it (S3-9).
+    if (key === ROW_METHOD_COLUMN && supplierMethodOf(row)) continue;
     activity[key] = value;
   }
+  const supplier = supplierPayload(row);
   const date = entryDate(ctx.period);
   return {
     site_id: ctx.siteId,
     category_id: ctx.categoryId,
     activity_data: activity,
-    extra_data: _extra_data ?? {},
+    extra_data: supplier.extra ? { ...(_extra_data ?? {}), ...supplier.extra } : (_extra_data ?? {}),
     total_emission: 0,
     unit: "tCO2e",
     date_of_reporting: ctx.period.mode === "yearly" ? date : (rowDate as string | undefined) || date,
     activity_data_unit: activity_data_unit || undefined,
     reporting_period: ctx.period.mode,
     year_type: ctx.period.mode === "yearly" ? ctx.period.yearType : undefined,
+    ...(supplier.supplier_id ? { supplier_id: supplier.supplier_id } : {}),
+    ...(supplier.supplier_factor_id ? { supplier_factor_id: supplier.supplier_factor_id } : {}),
+    ...(supplier.method ? { method: supplier.method } : {}),
   };
 }
 

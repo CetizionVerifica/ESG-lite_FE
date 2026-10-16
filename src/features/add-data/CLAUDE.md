@@ -96,3 +96,7 @@ Below the stepper (or as a tab "Already entered for Sep (4)") a compact `DataTab
 - Comparison while editing: a pending entry loaded with Edit keeps its saved tCO₂e in `_editSaved`, and `savedExcludingEdits` takes it off the saved total so the "vs last period" chip doesn't count it twice (legacy `effectiveSavedTotals`).
 - Not built yet in "Already entered": view factor, documents, and delete (single or batch). My entries (P04) has the drawer with documents; these can move here later.
 - A partial send (some rows saved, others failed) keeps the draft; sending the saved rows again later hits the duplicate dialog rather than creating copies.
+
+## S3-6 · Supplier field (Categories 1 and 2), 2026-10-16
+- `components/SupplierFields.tsx` and `logic/supplier.ts`: who the goods came from and "Calculated from" (average, "Supplier's own figure", "Supplier's energy and materials"). Supplier state is private row state (`_supplier_id`, `_supplier_factor_id`, `_inputs`, `_purchased_value`, set with the reducer's `patch` action) and never goes into `activity_data`; the method uses `row["@method"]` like S3-3's method cards.
+- `withSuppliers(calc, …)` makes the page's calculator read the supplier's figures for those two methods, mirroring the engine; `rowIssue` skips the activity-factor unit check for them. `buildPayload` adds `supplier_id`, `supplier_factor_id`, `method` (supplier methods only) and the hybrid `extra_data.inputs` / `purchased_value`.

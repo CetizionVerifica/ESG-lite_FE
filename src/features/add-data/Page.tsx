@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
-import { useEntrySetup, usePeriodTotals, useThreshold } from "./api";
+import { useCreateSupplier, useEntrySetup, usePeriodTotals, useSupplierDetails, useSupplierOptions, useThreshold } from "./api";
+import { SupplierFields } from "./components/SupplierFields";
+import { hasSupplierField, supplierIdOf, withSuppliers } from "./logic/supplier";
+import { errorMessage as supplierError } from "../../services/scope3SuppliersService";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
 import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
 import { useRowEvidence } from "./hooks/useRowEvidence";
@@ -84,7 +87,38 @@ export default function AddDataPage() {
     targetYear: factorYear ?? undefined,
     columns: model?.columns,
   };
-  const calc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec });
+  const baseCalc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec });
+  // S3-6: Category 1 and 2 rows can name a supplier and be calculated from its own figures.
+  const supplierRows = contextReady && hasSupplierField(category.ghg_category);
+  const reportingYear = factorYear === null ? new Date().getFullYear() : factorYear + 1;
+  const supplierOptions = useSupplierOptions(reportingYear, supplierRows);
+  const supplierDetails = useSupplierDetails(supplierRows ? rows.map(supplierIdOf).filter((id): id is number => id !== null) : []);
+  const createSupplier = useCreateSupplier(reportingYear);
+  const calc = supplierRows
+    ? withSuppliers(baseCalc, { ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec }, supplierDetails, reportingYear)
+    : baseCalc;
+  const factorNames = useMemo(() => [...new Set((setup.data?.factors ?? []).map((f) => f.emission_category_name))].sort(), [setup.data]);
+  const renderSupplier = supplierRows
+    ? (row: (typeof rows)[number]) => {
+        const id = supplierIdOf(row);
+        return (
+          <SupplierFields
+            row={row}
+            ghg={category.ghg_category as number}
+            suppliers={supplierOptions.data?.suppliers ?? []}
+            loadingSuppliers={supplierOptions.isLoading}
+            detail={id ? supplierDetails.get(id) : undefined}
+            // Anyone entering data may add a supplier by name (ESG-lite POST /suppliers); its figures stay with managers.
+            canCreate
+            onCreate={async (name) => (await createSupplier.mutateAsync(name)).supplier_id}
+            createError={createSupplier.isError ? supplierError(createSupplier.error, "The supplier wasn't added.") : null}
+            reportingYear={reportingYear}
+            factorNames={factorNames}
+            onPatch={(patch) => dispatch({ type: "patch", id: row.id, patch })}
+          />
+        );
+      }
+    : undefined;
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.
   // S3-7: td_loss factors make a second, T&D-loss row for Scope 2 categories only.
   // Only the factor year's FERA factors count: the backend never falls back to another year for a twin.
@@ -205,6 +239,7 @@ export default function AddDataPage() {
         reportingYear={(factorYear as number) + 1}
         bulkUploadHref={bulkUploadHref}
         evidence={evidence}
+        renderSupplier={renderSupplier}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
       />

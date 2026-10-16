@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
 import { Badge, Button, FileDrop, InfoTerm, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
@@ -18,6 +19,7 @@ import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
 import { methodLabel } from "../../../lib/scope3/labels";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
+import { supplierMethodOf } from "../logic/supplier";
 
 /**
  * The Category 3 (FERA) rows an entry adds on save (S3-7): the upstream twin
@@ -53,13 +55,17 @@ type Props = {
   onCalculateDistance: (column: string, field: DistanceField) => void;
   /** Evidence files for a typed row; bill rows have their bill. */
   evidence?: { items: FileDropItem[]; onAdd: (files: File[]) => void; onRemove: (id: string) => void };
+  /** S3-6: the Supplier field of a Category 1 or 2 row. */
+  supplierSlot?: ReactNode;
 };
 
 /** One entry as a card: what it is, its values, more details, and the live result. */
 export function EntryRow(p: Props) {
   const { row, model, calc } = p;
   const mapped = Object.keys(model.mapping).length > 0;
-  const factor = row.emission_category ? calc.getEmissionFactor(row.emission_category) : undefined;
+  // S3-6: a supplier-method row is calculated from the supplier's figures, not the activity's factor.
+  const supplierMethod = supplierMethodOf(row);
+  const factor = row.emission_category && !supplierMethod ? calc.getEmissionFactor(row.emission_category) : undefined;
   const result = calc.calculateEmission(row);
   const twin = (c: EmissionCalculator | null | undefined) => (c && row.emission_category && c.getEmissionFactor(row.emission_category) ? c.calculateEmission(row).value : null);
   const cat3 = p.feraCalc
@@ -154,6 +160,8 @@ export function EntryRow(p: Props) {
         />
       )}
 
+      {p.supplierSlot}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((c) => {
             const labelExtra = isAiField(row, c.column_name) ? <AiChip /> : undefined;
@@ -238,6 +246,8 @@ export function EntryRow(p: Props) {
                 <> · no {p.factorYear} factor; {factor.year} used for {p.reportingYear} data</>
               )}
             </>
+          ) : supplierMethod ? (
+            <>From the supplier's figures · {methodLabel(supplierMethod, ghg)}</>
           ) : row.emission_category ? (
             <span className="text-bad">No factor for this category</span>
           ) : null}

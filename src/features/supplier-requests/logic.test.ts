@@ -136,8 +136,10 @@ describe("ask form", () => {
     expect(askProblem({ ...ok, due_date: "2025-12-31" }, "2026-01-01")).toMatch(/past/);
   });
   it("reads ?new=1&study=&input=", () => {
-    expect(askParams(new URLSearchParams("new=1&study=21&input=9"))).toEqual({ open: true, study_id: 21, input_id: 9 });
-    expect(askParams(new URLSearchParams("study=x"))).toEqual({ open: false, study_id: null, input_id: null });
+    expect(askParams(new URLSearchParams("new=1&study=21&input=9"))).toEqual({ open: true, study_id: 21, input_id: 9, supplier_name: "", supplier_email: "" });
+    expect(askParams(new URLSearchParams("study=x"))).toEqual({ open: false, study_id: null, input_id: null, supplier_name: "", supplier_email: "" });
+    // S3-6: the Suppliers page fills in who is asked.
+    expect(askParams(new URLSearchParams("new=1&supplier=Gulf+Smelter+Co.&email=pcf%40gulf.example"))).toMatchObject({ open: true, supplier_name: "Gulf Smelter Co.", supplier_email: "pcf@gulf.example" });
   });
 });
 

@@ -179,13 +179,17 @@ export function askProblem(f: AskForm, today = new Date().toISOString().slice(0,
   return null;
 }
 
-/** Parse `?new=1&study=&input=` into the Ask form's starting point. */
-export function askParams(params: URLSearchParams): { open: boolean; study_id: number | null; input_id: number | null } {
+/**
+ * Parse `?new=1&study=&input=` into the Ask form's starting point. The
+ * Suppliers page (S3-6) adds `&supplier=&email=` to fill in who is asked.
+ */
+export function askParams(params: URLSearchParams): { open: boolean; study_id: number | null; input_id: number | null; supplier_name: string; supplier_email: string } {
   const id = (k: string) => {
     const n = Number(params.get(k));
     return Number.isInteger(n) && n > 0 ? n : null;
   };
-  return { open: params.get("new") === "1", study_id: id("study"), input_id: id("input") };
+  const text = (k: string, max: number) => (params.get(k) ?? "").trim().slice(0, max);
+  return { open: params.get("new") === "1", study_id: id("study"), input_id: id("input"), supplier_name: text("supplier", 200), supplier_email: text("email", 200) };
 }
 
 type AxiosLike = { response?: { status?: number; data?: { message?: unknown; boundary_mismatch?: unknown } } };
