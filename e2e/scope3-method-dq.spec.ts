@@ -23,7 +23,7 @@ const methodOptions = [
 const goodsForm = { pk_id: 5, config_name: "Purchased materials", columns: [{ pk_id: 1, column_name: "amount", column_type: "number" }], method_options: methodOptions };
 // A global spend factor from 2019: technology, geography, time and reliability all poor.
 const factors = [
-  { emission_factor_id: 1, emission_category_name: "Aluminium (spend)", factor_value: 0.9, denominator_unit: "USD", year: 2019, factor_type: "eeio_spend", geography: "GLO" },
+  { emission_factor_id: 1, emission_category_name: "Aluminium (spend)", factor_value: 0.9, denominator_unit: "USD", year: 2019, factor_type: "eeio_spend", geography: "GLO", price_currency: "USD" },
   { emission_factor_id: 2, emission_category_name: "Aluminium", factor_value: 8.6, denominator_unit: "kg", year: 2025, factor_type: "life_cycle", geography: "BH" },
 ];
 const poor = { technology: 3, geography: 3, time: 3, completeness: 1, reliability: 3, overall: 3, source: "auto" };
@@ -80,6 +80,8 @@ async function signIn(page: Page, role: "User" | "Manager", api: Api) {
       if (path.includes("/user/documents/emission/")) return json([]);
       if (path.endsWith("/user/audit-logs")) return json([]);
       if (path.endsWith("/user/emissions/period-total")) return json({ total_emission: 0 });
+      if (path.endsWith("/fx-rates/currencies")) return json({ currencies: [{ code: "USD", name: "US dollar" }, { code: "INR", name: "Indian rupee" }] });
+      if (path.endsWith("/fx-rates")) return json({ currency: "USD", to: "USD", date: "2026-09-30", rate: 1, as_of: "2026-09-30", source: "same currency" });
       if (path.endsWith("/user/emissions/batches")) return json([]);
       if (/\/user\/emissions\/\d+\/history$/.test(path)) return json({ emission_id: 77, months: [] });
       if (path.endsWith("/user/emissions") && request.method() === "POST") {
@@ -112,12 +114,13 @@ test("a contributor saves a spend-based row and the drawer shows the method and 
   await expect(cards.getByRole("radio")).toHaveCount(3);
   await expect(cards.getByRole("radio", { name: "Supplier's own figure" })).toBeChecked();
   await cards.getByRole("radio", { name: "From the amount spent" }).check();
+  // S3-5's spend fields replace the quantity and unit as soon as the spend card is picked.
+  await expect(row.getByRole("textbox", { name: "Amount spent", exact: true })).toBeVisible();
+  await expect(row.getByRole("textbox", { name: "Amount", exact: true })).toHaveCount(0);
 
   await row.getByLabel("Emission category").selectOption("Aluminium (spend)");
-  await row.getByRole("textbox", { name: "Amount" }).fill("25000");
-  // The spend method offers USD only, and picks it.
-  await expect(row.getByLabel("Unit").locator("option:not([value=''])")).toHaveText(["USD (factor unit)"]);
-  await expect(row.getByLabel("Unit")).toHaveValue("USD");
+  await row.getByRole("textbox", { name: "Amount spent", exact: true }).fill("25000");
+  await row.getByLabel("Currency").selectOption("USD");
   await expect(row.getByText("= 22.50 tCO₂e")).toBeVisible();
   await expect(row.getByTestId("row-dq").getByTestId("dq-badge")).toHaveText("Poor");
   await expect(row.getByTestId("row-dq")).toContainText("Secondary data");
@@ -126,8 +129,8 @@ test("a contributor saves a spend-based row and the drawer shows the method and 
   await page.getByRole("button", { name: "Submit for approval" }).click();
   await expect(page.getByText("1 row sent for approval")).toBeVisible();
   expect(api.posts[0]).toMatchObject({ method: "spend_based", activity_data_unit: "USD", site_id: 4, category_id: 21 });
-  // The method has its own field; it isn't stored among the entered values on a form without an "@method" formula.
-  expect(api.posts[0].activity_data).not.toHaveProperty("@method");
+  // The method also stays in activity_data["@method"], where S3-5 reads it on edits; the spend fields go with it.
+  expect(api.posts[0].activity_data).toMatchObject({ "@method": "spend_based", spent_value: "25000", currency: "USD" });
   expect(api.posts[0]).not.toHaveProperty("is_estimate");
 
   await page.goto("/data/mine");

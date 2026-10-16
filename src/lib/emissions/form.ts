@@ -300,8 +300,14 @@ export function applyChange(m: FormModel, row: ModalRow, column: string, value: 
     if (method?.activity_unit) next.activity_data_unit = method.activity_unit;
   }
 
-  // S3-3: a method that offers its own units drops a unit it doesn't offer (one unit is picked for you).
-  if (column === ROW_METHOD_COLUMN) {
+  // S3-5: the spend form's currency is the row's unit; a unit left from another method would make
+  // the row read as a quantity in a currency and hide the spend fields. Not when an "@method" formula
+  // multiplies fields into the amount (Category 15): that one keeps its own currency unit.
+  const specSpend = m.spec?.method_column === ROW_METHOD_COLUMN && !!m.spec.methods[value];
+  if (column === ROW_METHOD_COLUMN && value === "spend_based" && !specSpend) {
+    next.activity_data_unit = String(next.currency ?? "");
+  } else if (column === ROW_METHOD_COLUMN) {
+    // S3-3: a method that offers its own units drops a unit it doesn't offer (one unit is picked for you).
     const units = unitsForMethod(m.methodOptions, value);
     if (units && !units.some((u) => u.toLowerCase() === String(next.activity_data_unit ?? "").toLowerCase())) {
       next.activity_data_unit = units.length === 1 ? units[0] : "";

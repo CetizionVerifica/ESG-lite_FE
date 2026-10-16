@@ -52,6 +52,9 @@ export interface EmissionFactor {
   factor_type?: string | null;
   /** S3-2 geography (ISO-3166 alpha-2, a region code or GLO); the data quality preview reads it (S3-3). */
   geography?: string | null;
+  // S3-2 metadata the factor list returns; S3-5 reads these for spend rows.
+  price_currency?: string | null;
+  price_base_year?: number | null;
 }
 
 export interface ModalRow {

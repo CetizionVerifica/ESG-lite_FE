@@ -2,6 +2,7 @@
 import { canConvert, unitsMatchExact } from "../../../ui/unitMatch";
 import { factorYearForDate, yearlyPeriodEndDate, type PeriodMode, type YearType } from "../hooks/reportingPeriod";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
+import { isSupportedCurrency } from "../../../lib/scope3/spend";
 import type { ModalRow } from "../types";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isRowMethod } from "../../../lib/scope3/dq";
@@ -61,7 +62,8 @@ export function periodTotalQuery(p: EntryPeriod) {
   } as const;
 }
 
-export type RowIssue = { field: "emission_category" | "activity_data_unit" | "values"; message: string };
+/** The field an issue shows under; "values" is the quantity (or, on the spend form, the amount spent). */
+export type RowIssue = { field: "emission_category" | "activity_data_unit" | "currency" | "values"; message: string };
 
 /**
  * Why a row can't be saved yet, or null when it can. Same checks and order as
@@ -69,6 +71,18 @@ export type RowIssue = { field: "emission_category" | "activity_data_unit" | "va
  */
 export function rowIssue(row: ModalRow, calc: EmissionCalculator): RowIssue | null {
   if (!row.emission_category) return { field: "emission_category", message: "Choose what this row is" };
+  // S3-5: a spend row needs its amount and currency; the server looks the rate up, so a rate still loading doesn't block.
+  const spend = calc.spendDetail(row);
+  if (spend) {
+    if (spend.outcome.ok || spend.outcome.pending) return null;
+    // Same order as spendOutcome: the currency first, then the amount.
+    const currencyIssue = !isSupportedCurrency(spend.spend.currency);
+    // On the spend form the currency has its own field; a quantity row's currency is its unit.
+    const field = !currencyIssue ? "values" : spend.spend.amount_from === "spent_value" ? "currency" : "activity_data_unit";
+    return { field, message: spend.outcome.status };
+  }
+  // The spend form hides the unit, so a spend row with nothing entered yet asks for the amount, not a unit.
+  if (calc.usesSpendForm(row)) return { field: "values", message: "Enter the amount spent" };
   if (!row.activity_data_unit) return { field: "activity_data_unit", message: "Choose a unit" };
   const expected = calc.getExpectedUnit(row.emission_category);
   if (expected && !unitsMatchExact(expected, row.activity_data_unit) && !canConvert(row.activity_data_unit, expected)) {
@@ -113,11 +127,6 @@ export function buildPayload(
     siteId: number;
     categoryId: number;
     period: EntryPeriod;
-    /**
-     * Keep the row's method in activity_data too ("@method"): a spec whose
-     * method_column is "@method" (S3-9) reads it there. Default true.
-     */
-    rowMethodInActivity?: boolean;
   },
 ): EmissionPayload {
   const { activity_data_unit, date_of_reporting: rowDate, _extra_data, _estimates, ...rest } = row;
@@ -127,7 +136,6 @@ export function buildPayload(
     if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
     // Private row state: FERA flag, mapping key, the bill a row came from, the saved entry it edits.
     if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf" || key === "_editSaved") continue;
-    if (key === ROW_METHOD_COLUMN && ctx.rowMethodInActivity === false) continue;
     activity[key] = value;
   }
   const method = row[ROW_METHOD_COLUMN];

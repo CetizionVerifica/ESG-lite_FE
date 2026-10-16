@@ -60,16 +60,38 @@ describe("the row's method", () => {
   });
 });
 
+describe("the spend method and S3-5's spend fields", () => {
+  it("lets the spend currency be the unit, so the spend form shows instead of a quantity in USD", () => {
+    const m = toFormModel(goods);
+    let row: ModalRow = { ...newRow(m, 1), activity_data_unit: "kg" };
+    row = applyChange(m, row, "@method", "spend_based");
+    expect(row.activity_data_unit).toBe("");
+    row = applyChange(m, { ...row, currency: "INR" }, "@method", "average_data");
+    row = applyChange(m, row, "@method", "spend_based");
+    expect(row.activity_data_unit).toBe("INR");
+  });
+
+  it("keeps the currency unit of an @method formula that multiplies into the amount (Category 15)", () => {
+    const cat15 = toFormModel({
+      pk_id: 9,
+      config_name: "Investments",
+      columns: [{ pk_id: 1, column_name: "revenue", column_type: "number" }],
+      calculation: { mode: "per_method", method_column: "@method", methods: { spend_based: { multiply: ["revenue"], activity_unit: "USD" } } },
+    });
+    expect(applyChange(cat15, newRow(cat15, 1), "@method", "spend_based").activity_data_unit).toBe("USD");
+  });
+});
+
 describe("the save payload", () => {
-  it("sends the method, and keeps @method in activity_data only for an @method spec", () => {
-    const row = { ...newRow(toFormModel(goods), 1), material: "steel", amount: "1200", activity_data_unit: "USD", "@method": "spend_based", emission_category: "Steel" };
-    const body = buildPayload(row, { ...ctx, rowMethodInActivity: false });
+  it("sends the method, and keeps it in activity_data[\"@method\"] where S3-5 and S3-9 read it", () => {
+    const row = { ...newRow(toFormModel(goods), 1), material: "steel", spent_value: "1200", currency: "USD", activity_data_unit: "USD", "@method": "spend_based", emission_category: "Steel" };
+    const body = buildPayload(row, ctx);
     expect(body.method).toBe("spend_based");
-    expect(body.activity_data).not.toHaveProperty("@method");
+    expect(body.activity_data).toMatchObject({ "@method": "spend_based", spent_value: "1200", currency: "USD" });
     expect(body).not.toHaveProperty("is_estimate");
 
     const trip = { id: 1, distance: "40", "@method": "distance_based", activity_data_unit: "passenger.km", emission_category: "Car" };
-    const tripBody = buildPayload(trip, { ...ctx, rowMethodInActivity: true });
+    const tripBody = buildPayload(trip, ctx);
     expect(tripBody.method).toBe("distance_based");
     expect(tripBody.activity_data["@method"]).toBe("distance_based");
   });
