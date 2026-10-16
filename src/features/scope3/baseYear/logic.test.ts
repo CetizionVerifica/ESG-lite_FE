@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CompanyBaseYear, RecalcEvent } from "../../../lib/scope3/baseYear";
-import { changesYear, draftErrors, draftFrom, historyEntries, isDirty, policyOnly, toBody } from "./logic";
+import { changesYear, draftErrors, draftFrom, historyEntries, isDirty, policyOnly, toBody, withYearType, yearOptions } from "./logic";
 
 const NOW = new Date(2026, 9, 16);
 const ROW: CompanyBaseYear = {
@@ -17,6 +17,19 @@ const ROW: CompanyBaseYear = {
 };
 
 describe("S3-14 base year form", () => {
+  it("switching FY to CY drops a year CY doesn't offer yet", () => {
+    const fy = withYearType(draftFrom(null, NOW), "FY", NOW, null);
+    const fy2026 = { ...fy, base_year: 2026 };
+    expect(withYearType(fy2026, "CY", NOW, null)).toMatchObject({ year_type: "CY", base_year: 2025 });
+    expect(withYearType({ ...fy, base_year: 2020 }, "CY", NOW, null)).toMatchObject({ year_type: "CY", base_year: 2020 });
+  });
+
+  it("keeps the saved year in the list only for its own year type", () => {
+    const savedFy = { ...ROW, base_year: 2026, year_type: "FY" as const };
+    expect(yearOptions(NOW, "FY", savedFy)[0]).toBe(2026);
+    expect(yearOptions(NOW, "CY", savedFy)).not.toContain(2026);
+  });
+
   it("starts from last year and 5 % when none is set, else from the saved row", () => {
     expect(draftFrom(null, NOW)).toMatchObject({ base_year: 2025, year_type: "CY", significance_pct: 5, rationale: "" });
     expect(draftFrom(ROW, NOW)).toMatchObject({ base_year: 2023, rationale: "First year with supplier data" });

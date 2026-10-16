@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, EmptyState, NumberField, Select, SkeletonText, TextField, Textarea, cn, formatDate, panel, useToast } from "../../../ui";
-import { baseYearChoices } from "../../../lib/scope3/baseYear";
 import { errorMessage, useBaseYear, useSaveBaseYear } from "./api";
-import { type BaseYearDraft, changesYear, draftErrors, draftFrom, isDirty, policyOnly, toBody } from "./logic";
+import { type BaseYearDraft, changesYear, draftErrors, draftFrom, isDirty, policyOnly, toBody, withYearType, yearOptions } from "./logic";
 import { FreezeModal } from "./components/FreezeModal";
 import { RecalculationsPanel } from "./components/RecalculationsPanel";
 import { TotalsTable } from "./components/TotalsTable";
@@ -51,8 +50,7 @@ export function BaseYearSection({ companyId, ready }: { companyId: number | null
   const hasErrors = Object.keys(errors).length > 0;
   const dirty = isDirty(d, row);
   const set = (patch: Partial<BaseYearDraft>) => setDraft({ ...d, ...patch });
-  const years = baseYearChoices(now, d.year_type);
-  if (row && !years.includes(row.base_year)) years.unshift(row.base_year);
+  const years = yearOptions(now, d.year_type, row);
 
   const submit = () => {
     setSaveErr(null);
@@ -117,7 +115,7 @@ export function BaseYearSection({ companyId, ready }: { companyId: number | null
               <Select<number>
                 label="Base year"
                 value={d.base_year}
-                options={years.map((y) => ({ value: y, label: String(y) }))}
+                options={years.map((y) => ({ value: y, label: d.year_type === "FY" ? `FY${y}` : String(y) }))}
                 onChange={(v) => v !== null && set({ base_year: v })}
                 disabled={!editable}
               />
@@ -125,7 +123,7 @@ export function BaseYearSection({ companyId, ready }: { companyId: number | null
                 label="Year type"
                 value={d.year_type}
                 options={YEAR_TYPES}
-                onChange={(v) => v && set({ year_type: v })}
+                onChange={(v) => v && setDraft(withYearType(d, v, now, row))}
                 disabled={!editable}
               />
               <NumberField
