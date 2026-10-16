@@ -186,5 +186,8 @@ export function significanceError(v: number | null): string | null {
 
 export const noteError = (note: string) => (note.trim().length < MIN_NOTE ? `Write at least ${MIN_NOTE} characters.` : null);
 
-/** "Company base year 2023 (set in Scope 3 settings)". */
-export const companyBaseYearNote = (year: number) => `Company base year ${year} (set in Scope 3 settings)`;
+/** "Company base year 2023 (set in Scope 3 settings)"; an FY base year says targets use calendar years. */
+export const companyBaseYearNote = (year: number, yearType: "CY" | "FY" = "CY") =>
+  yearType === "FY"
+    ? `Company base year FY${year} (set in Scope 3 settings; targets use calendar years)`
+    : `Company base year ${year} (set in Scope 3 settings)`;

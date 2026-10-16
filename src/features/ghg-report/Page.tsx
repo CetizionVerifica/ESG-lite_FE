@@ -24,6 +24,7 @@ import {
 import {
   downloadWorkbook,
   fetchReportDetails,
+  fetchScope3BaseYear, // S3-14
   fetchScope3Report,
   useAdminSites,
   useBrandedPdf,
@@ -40,6 +41,7 @@ import { CategoryTable } from "./components/CategoryTable";
 import { LocationTab } from "./components/LocationTab";
 import { MethodologySection } from "./components/MethodologySection";
 import { BaseYearBlock } from "./components/BaseYearBlock"; // S3-14
+import { hasScope3 } from "../../lib/scope3/report";
 import { ReportFilters } from "./components/ReportFilters";
 import { ScopeChart } from "./components/ScopeChart";
 import { Scope3Tab } from "./components/Scope3Tab";
@@ -173,6 +175,8 @@ export default function GhgReportPage() {
   const baseYearCompany = isStaff ? (scope3.data?.company_id ?? null) : null;
   const baseYearEnabled = tab === "methodology" && (!isStaff || baseYearCompany !== null);
   const baseYear = useScope3BaseYear(baseYearCompany, baseYearEnabled);
+  // Staff wait for the Scope 3 report to name the company; until then the block is loading, not "none set".
+  const baseYearLoading = baseYearEnabled ? baseYear.isPending : tab === "methodology" && isStaff && !scope3.isError;
   // SBTi 40 % rule: Scope 3 and the total from the same filters; off while a category filter narrows the report.
   const sameQuery = JSON.stringify(requestPayload(shown)) === JSON.stringify(requestPayload(query));
   const sbtiTotal = query.categoryIds.length || !sameQuery ? 0 : (figures?.selected.total ?? 0);
@@ -229,6 +233,11 @@ export default function GhgReportPage() {
         fetchReportDetails(queryClient, shown).then((d) => d.rows),
         fetchScope3Report(queryClient, shown).catch(() => null),
       ]);
+      // S3-14: the base year for the methodology sheet (a Superadmin's client comes from the report).
+      const baseYearData =
+        scope3Report && hasScope3(scope3Report)
+          ? await fetchScope3BaseYear(queryClient, isStaff ? scope3Report.company_id : null).catch(() => "error" as const)
+          : null;
       if (!scope3Report)
         toast({ title: "Scope 3 sheets left out", description: "Scope 3 by category couldn't load; the other sheets are in the file.", tone: "neutral" });
       const sheets = exportSheets({
@@ -246,6 +255,7 @@ export default function GhgReportPage() {
         prevLabel,
         selLabel,
         scope3: scope3Report ?? undefined,
+        baseYear: baseYearData,
       });
       await downloadWorkbook(sheets, stem);
     } catch (e) {
@@ -564,7 +574,15 @@ export default function GhgReportPage() {
                     loading={scope3.isPending}
                     error={scope3Error}
                     onRetry={() => scope3.refetch()}
-                    baseYear={<BaseYearBlock data={baseYear.data} loading={baseYear.isPending && baseYearEnabled} report={scope3.data} />}
+                    baseYear={
+                      <BaseYearBlock
+                        data={baseYear.data}
+                        loading={baseYearLoading}
+                        error={baseYear.isError ? serverMessage(baseYear.error, "Couldn't load the Scope 3 base year.") : null}
+                        onRetry={() => void baseYear.refetch()}
+                        report={scope3.data}
+                      />
+                    }
                   />
                 </div>
               </TabPanel>

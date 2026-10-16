@@ -9,14 +9,18 @@ export const keys = {
   target: (kind: TargetKind, siteIds: number[], baseYear: number, targetYear: number, pathway: Pathway) =>
     [...keys.all, kind, siteIds, baseYear, targetYear, kind === "near" ? pathway : null] as const,
   yearHasData: (year: number, siteIds: number[]) => [...keys.all, "has-data", year, siteIds] as const,
+  // The caller's own company only (a Superadmin gets 400 and falls back), and sign-out clears the cache.
   companyBaseYear: ["targets", "company-base-year"] as const,
 };
 
-/** S3-14: the company's frozen Scope 3 base year (null when none is set or it can't be read). */
+/** S3-14: the company's frozen Scope 3 base year and its year type (null when none is set or it can't be read). */
 export function useCompanyBaseYear() {
-  return useQuery<number | null>({
+  return useQuery<{ year: number; yearType: "CY" | "FY" } | null>({
     queryKey: keys.companyBaseYear,
-    queryFn: async () => (await getBaseYear(null)).base_year?.base_year ?? null,
+    queryFn: async () => {
+      const row = (await getBaseYear(null)).base_year;
+      return row ? { year: row.base_year, yearType: row.year_type === "FY" ? "FY" : "CY" } : null;
+    },
     retry: false,
     staleTime: 5 * 60 * 1000,
   });

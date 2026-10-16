@@ -1,4 +1,4 @@
-import { SkeletonText, emissionsParts, formatDate } from "../../../ui";
+import { Button, EmptyState, SkeletonText, emissionsParts, formatDate } from "../../../ui";
 import { type BaseYearResponse, RECALC_REASON_LABEL, beforeAfterRows, signedT, totalLabel } from "../../../lib/scope3/baseYear";
 import type { Scope3Report } from "../../../lib/scope3/report";
 
@@ -9,8 +9,18 @@ const t = (v: number) => emissionsParts(v).value;
  * policy and threshold, frozen Scope 3 by category beside this report's year,
  * and each approved recalculation with reason, change and note.
  */
-export function BaseYearBlock({ data, loading, report }: { data: BaseYearResponse | undefined; loading: boolean; report: Scope3Report | undefined }) {
+type Props = {
+  data: BaseYearResponse | undefined;
+  loading: boolean;
+  /** Set when GET /scope3/base-year failed: never claim "no base year" then. */
+  error: string | null;
+  onRetry: () => void;
+  report: Scope3Report | undefined;
+};
+
+export function BaseYearBlock({ data, loading, error, onRetry, report }: Props) {
   if (loading) return <SkeletonText lines={3} />;
+  if (error) return <EmptyState compact variant="error" title={error} action={<Button size="sm" onClick={onRetry}>Try again</Button>} />;
   const row = data?.base_year;
   const events = data?.approved_recalculations ?? [];
   if (!row?.snapshot) return <p className="text-sm text-muted">No Scope 3 base year set.</p>;

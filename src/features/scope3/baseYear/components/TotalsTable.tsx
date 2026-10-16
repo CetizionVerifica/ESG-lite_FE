@@ -1,7 +1,7 @@
 import { emissionsParts } from "../../../../ui";
+import { type CategoryTotal, beforeAfterRows, signedT, totalLabel } from "../../../../lib/scope3/baseYear";
 
 const t = (v: number) => emissionsParts(v).value;
-import { type CategoryTotal, beforeAfterRows, signedT, totalLabel } from "../../../../lib/scope3/baseYear";
 
 /** Per-category tCO₂e: one column (what is frozen) or frozen beside today with the change. */
 export function TotalsTable({ caption, totals, after }: { caption: string; totals: CategoryTotal[]; after?: CategoryTotal[] }) {

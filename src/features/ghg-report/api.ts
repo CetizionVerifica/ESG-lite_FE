@@ -104,6 +104,11 @@ export function fetchScope3Report(client: QueryClient, q: ReportQuery) {
   return client.fetchQuery<Scope3Report>({ queryKey: keys.scope3(q), queryFn: () => getScope3(q), retry: false });
 }
 
+/** S3-14: the base year for the XLSX export, from the cache when fresh; no retry, like the Scope 3 report. */
+export function fetchScope3BaseYear(client: QueryClient, companyId: number | null) {
+  return client.fetchQuery<BaseYearResponse>({ queryKey: keys.baseYear(companyId), queryFn: () => getBaseYear(companyId), retry: false });
+}
+
 /** S3-14: the company's Scope 3 base year for the Methodology tab. companyId: the Superadmin's client; null = own company. */
 export function useScope3BaseYear(companyId: number | null, enabled: boolean) {
   return useQuery<BaseYearResponse>({

@@ -60,7 +60,8 @@ export default function TargetsPage() {
   const [params, setParams] = useSearchParams();
   // S3-14: with no base year in the URL, wait for the company's Scope 3 base year before calculating.
   const companyBase = useCompanyBaseYear();
-  const companyYear = companyBase.isError ? null : (companyBase.data ?? null);
+  const company = companyBase.isError ? null : (companyBase.data ?? null);
+  const companyYear = company?.year ?? null;
   const setupReady = params.has("base") || !companyBase.isPending;
   const setup = readSetup(params, now, companyYear);
   const update = (patch: Partial<Setup>) => setParams((p) => writeSetup(p, patch), { replace: true });
@@ -142,11 +143,11 @@ export default function TargetsPage() {
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3 rounded-card border border-line bg-panel p-4">
         <Select<number>
           label="Base year"
-          help={companyYear ? companyBaseYearNote(companyYear) : "2015 or later (SBTi)"}
+          help={company && setup.baseYear === company.year ? companyBaseYearNote(company.year, company.yearType) : "2015 or later (SBTi)"}
           value={setup.baseYear}
           onChange={(v) => v && update({ baseYear: v })}
           options={yearOptions}
-          className={companyYear ? "w-64" : "w-36"}
+          className={company && setup.baseYear === company.year ? "w-64" : "w-36"}
         />
         <Control label="Target">
           <SegmentedControl<TargetKind>

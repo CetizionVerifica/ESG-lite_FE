@@ -243,6 +243,36 @@ describe("Scope 3 XLSX sheets", () => {
     expect(row?.[4]).toBe("Commuting survey scaled to all employees");
     expect(row?.[5]).toBe("Flights with radiative forcing");
   });
+  it("the methodology sheet lists the frozen base year, its policy and approved recalculations (S3-14)", () => {
+    const baseYear = {
+      base_year: {
+        id: 1,
+        company_id: 1,
+        scope: "Scope 3",
+        base_year: 2023,
+        year_type: "FY" as const,
+        significance_pct: 5,
+        policy_note: "Reviewed each April",
+        rationale: "First year with supplier data",
+        snapshot: { version: 2, frozen_at: "2026-01-05T10:00:00Z", base_year: 2023, year_type: "FY" as const, total_tco2e: 80, categories: [{ n: 1, tco2e: 50 }, { n: 4, tco2e: 30 }], rows: 12 },
+        updated_by: 1,
+        updated_at: "2026-01-05T10:00:00Z",
+      },
+      approved_recalculations: [{ reason: "error" as const, delta_tco2e: 4.5, note: "Invoice keyed twice", created_at: "2026-02-01T09:00:00Z" }],
+      drift: null,
+      open_proposal: null,
+      can_edit: true,
+    };
+    const rows = scope3Sheets(sample, baseYear as never)[1].rows;
+    expect(rows.find((r) => r[0] === "Base year")?.[1]).toBe("FY2023");
+    expect(rows.find((r) => r[0] === "Rationale")?.[1]).toBe("First year with supplier data");
+    expect(rows.find((r) => r[0] === "Recalculation policy")?.[1]).toBe("Recalculated when changes move it by 5 % or more. Reviewed each April");
+    expect(rows.find((r) => String(r[0]).startsWith("Category 1 ·") && r.length === 3)).toEqual(["Category 1 · Purchased goods and services", 50, 60]);
+    expect(rows.find((r) => r[0] === "Scope 3 total")).toEqual(["Scope 3 total", 80, 100]);
+    expect(rows.find((r) => r[0] === "2026-02-01")).toEqual(["2026-02-01", "Correction of errors", 4.5, "Invoice keyed twice"]);
+    expect(scope3Sheets(sample, null)[1].rows.find((r) => r[0] === "Base year")?.[1]).toBe("No Scope 3 base year set");
+    expect(scope3Sheets(sample, "error")[1].rows.find((r) => r[0] === "Base year")?.[1]).toMatch(/Couldn't load/);
+  });
   it("the Scope 3 query is the PDF query without download", () => {
     const q = { siteIds: [1, 2], categoryIds: [], period: { yearType: "CY" as const, year: 2025, frequency: "yearly" as const } };
     const p = scope3Params(q as never);
