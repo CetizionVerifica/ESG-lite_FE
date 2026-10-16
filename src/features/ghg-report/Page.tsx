@@ -32,12 +32,14 @@ import {
   useReportDetails,
   useReportTables,
   useScope3Report,
+  useScope3BaseYear,
 } from "./api";
 import { AboutPanel } from "./components/AboutPanel";
 import { FindingsTab } from "./components/FindingsTab";
 import { CategoryTable } from "./components/CategoryTable";
 import { LocationTab } from "./components/LocationTab";
 import { MethodologySection } from "./components/MethodologySection";
+import { BaseYearBlock } from "./components/BaseYearBlock"; // S3-14
 import { ReportFilters } from "./components/ReportFilters";
 import { ScopeChart } from "./components/ScopeChart";
 import { Scope3Tab } from "./components/Scope3Tab";
@@ -166,6 +168,10 @@ export default function GhgReportPage() {
     sites.length ? query : null,
     tab === "scope3" || tab === "methodology",
   );
+  // S3-14: the company's Scope 3 base year for the Methodology tab (company from the Scope 3 report for a Superadmin).
+  const baseYearCompany = isStaff ? (scope3.data?.company_id ?? null) : null;
+  const baseYearEnabled = tab === "methodology" && (!isStaff || baseYearCompany !== null);
+  const baseYear = useScope3BaseYear(baseYearCompany, baseYearEnabled);
   const scope3Error = scope3.isError
     ? serverMessage(scope3.error, "Couldn't load Scope 3 by category.")
     : null;
@@ -551,6 +557,7 @@ export default function GhgReportPage() {
                     loading={scope3.isPending}
                     error={scope3Error}
                     onRetry={() => scope3.refetch()}
+                    baseYear={<BaseYearBlock data={baseYear.data} loading={baseYear.isPending && baseYearEnabled} report={scope3.data} />}
                   />
                 </div>
               </TabPanel>

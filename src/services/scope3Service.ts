@@ -2,6 +2,7 @@ import api from "../api/axios";
 import type { BoundaryStatus, ConsolidationApproach } from "../lib/scope3/boundary";
 import type { Direction, GhgCategoryNumber } from "../lib/scope3/contracts";
 import type { LeaseSite } from "./scope3AssetsService"; // S3-11
+import type { BaseYearPreview, BaseYearResponse, CompanyBaseYear, RecalcEvent, RecalcReason, RecalcStatus } from "../lib/scope3/baseYear"; // S3-14
 
 /** S3-1 Scope 3 boundary and category map (ESG-lite src/scope3/boundary). */
 
@@ -68,3 +69,24 @@ export const confirmCategoryMap = async (companyId: number | null, confirm: { ca
 
 export const setConsolidationApproach = async (companyId: number, consolidation_approach: ConsolidationApproach) =>
   (await api.put(`/company/${companyId}/consolidation-approach`, { consolidation_approach })).data;
+
+// S3-14 · Scope 3 base year and recalculations (ESG-lite src/scope3/baseYear).
+export const getBaseYear = async (companyId: number | null): Promise<BaseYearResponse> =>
+  (await api.get("/scope3/base-year", { params: withCompany(companyId) })).data;
+
+export const previewBaseYear = async (companyId: number | null, base_year: number, year_type: "CY" | "FY"): Promise<BaseYearPreview> =>
+  (await api.get("/scope3/base-year/preview", { params: { base_year, year_type, ...withCompany(companyId) } })).data;
+
+export const putBaseYear = async (
+  companyId: number | null,
+  body: { base_year: number; year_type: "CY" | "FY"; significance_pct: number; rationale: string | null; policy_note: string | null; note?: string },
+): Promise<CompanyBaseYear> => (await api.put("/scope3/base-year", { ...body, ...withCompany(companyId) })).data;
+
+export const getRecalculations = async (companyId: number | null, status?: RecalcStatus): Promise<{ events: RecalcEvent[]; can_edit: boolean }> =>
+  (await api.get("/scope3/recalculations", { params: { ...(status ? { status } : {}), ...withCompany(companyId) } })).data;
+
+export const approveRecalculation = async (companyId: number | null, body: { reason: RecalcReason; note: string }) =>
+  (await api.post("/scope3/recalculations", { ...body, ...withCompany(companyId) })).data;
+
+export const dismissRecalculation = async (companyId: number | null, id: number, note: string) =>
+  (await api.post(`/scope3/recalculations/${id}/dismiss`, { note, ...withCompany(companyId) })).data;

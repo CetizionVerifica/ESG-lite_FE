@@ -16,7 +16,8 @@ import {
   useContextParams,
   useToast,
 } from "../../ui";
-import { useTarget, useYearsWithData } from "./api";
+import { useCompanyBaseYear, useTarget, useYearsWithData } from "./api";
+import { companyBaseYearNote } from "../../lib/scope3/baseYear"; // S3-14
 import { PathwayChart } from "./components/PathwayChart";
 import { RulesCard } from "./components/RulesCard";
 import { TargetStatus, TargetTabs } from "./components/TargetTabs";
@@ -57,7 +58,11 @@ export default function TargetsPage() {
   const sites = useManagerSites();
   const [ctx] = useContextParams();
   const [params, setParams] = useSearchParams();
-  const setup = readSetup(params, now);
+  // S3-14: with no base year in the URL, wait for the company's Scope 3 base year before calculating.
+  const companyBase = useCompanyBaseYear();
+  const companyYear = companyBase.isError ? null : (companyBase.data ?? null);
+  const setupReady = params.has("base") || !companyBase.isPending;
+  const setup = readSetup(params, now, companyYear);
   const update = (patch: Partial<Setup>) => setParams((p) => writeSetup(p, patch), { replace: true });
   const { pack } = useTheme();
   const { toast } = useToast();
@@ -71,7 +76,7 @@ export default function TargetsPage() {
   const siteNames = sites.filter((s) => chosen.includes(s.site_id)).map((s) => s.name);
   const targetYear = targetYearOf(setup);
 
-  const target = useTarget({ kind: setup.kind, siteIds: chosen, baseYear: setup.baseYear, targetYear, pathway: setup.pathway });
+  const target = useTarget({ kind: setup.kind, siteIds: chosen, baseYear: setup.baseYear, targetYear, pathway: setup.pathway }, setupReady);
   const noData = target.isError && isNoBaseData(target.error);
   const otherYears = useMemo(() => baseYearOptions(now).filter((y) => y !== setup.baseYear), [now, setup.baseYear]);
   const suggestions = useYearsWithData(otherYears, chosen, noData);
@@ -137,11 +142,11 @@ export default function TargetsPage() {
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3 rounded-card border border-line bg-panel p-4">
         <Select<number>
           label="Base year"
-          help="2015 or later (SBTi)"
+          help={companyYear ? companyBaseYearNote(companyYear) : "2015 or later (SBTi)"}
           value={setup.baseYear}
           onChange={(v) => v && update({ baseYear: v })}
           options={yearOptions}
-          className="w-36"
+          className={companyYear ? "w-64" : "w-36"}
         />
         <Control label="Target">
           <SegmentedControl<TargetKind>

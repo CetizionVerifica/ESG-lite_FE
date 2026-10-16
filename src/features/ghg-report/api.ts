@@ -14,6 +14,8 @@ import {
 import { getSites } from "../../services/siteService";
 import { reportingCalendarKey } from "../../lib/fiscalYear";
 import type { Scope3Report } from "../../lib/scope3/report";
+import type { BaseYearResponse } from "../../lib/scope3/baseYear"; // S3-14
+import { getBaseYear } from "../../services/scope3Service"; // S3-14
 import {
   type ReportQuery,
   type SiteOption,
@@ -31,6 +33,7 @@ export const keys = {
     [...keys.all, "details", requestPayload(q)] as const,
   scope3: (q: ReportQuery) =>
     [...keys.all, "scope3", requestPayload(q)] as const,
+  baseYear: (companyId: number | null) => [...keys.all, "scope3-base-year", companyId] as const,
   calendar: reportingCalendarKey,
   adminSites: ["admin", "sites"] as const,
 };
@@ -98,6 +101,16 @@ export function useScope3Report(q: ReportQuery | null, enabled: boolean) {
 /** The Scope 3 report for exactly `q` (the XLSX export), from the cache when fresh. */
 export function fetchScope3Report(client: QueryClient, q: ReportQuery) {
   return client.fetchQuery<Scope3Report>({ queryKey: keys.scope3(q), queryFn: () => getScope3(q) });
+}
+
+/** S3-14: the company's Scope 3 base year for the Methodology tab. companyId: the Superadmin's client; null = own company. */
+export function useScope3BaseYear(companyId: number | null, enabled: boolean) {
+  return useQuery<BaseYearResponse>({
+    queryKey: keys.baseYear(companyId),
+    queryFn: () => getBaseYear(companyId),
+    enabled,
+    retry: false,
+  });
 }
 
 function save(blob: Blob, fileName: string) {
