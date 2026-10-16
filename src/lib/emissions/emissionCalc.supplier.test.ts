@@ -96,6 +96,24 @@ describe("hybrid preview", () => {
     expect(hybridEmission(input, { activityValue: 5, unit: "kg", facility: econ, lines: [] }).status).toBe("Enter what was paid, in USD");
   });
 
+  it("falls back to another year's factor for a line as the engine does, and says so", () => {
+    // The engine (FactorIndex.find): the target year first, else the newest year of that name, with FACTOR_FALLBACK_YEAR.
+    const yearly: EmissionCalcInput = {
+      targetYear: 2025,
+      emissionFactors: [{ ...ef(20, "Steel", 2, "kg"), year: 2023 }, { ...ef(21, "Steel", 1.9, "kg"), year: 2024 }, ef(22, "Zinc", 3, "kg"), { ...ef(23, "Zinc", 3.5, "kg"), year: 2024 }],
+    };
+    const lines = [
+      { kind: "material" as const, name: "Steel", quantity: 100, unit: "kg" },
+      { kind: "material" as const, name: "Zinc", quantity: 10, unit: "kg" },
+    ];
+    const r = hybridEmission(yearly, { activityValue: 1, unit: "kg", facility, lines });
+    // Steel: no 2025 factor, so the newest (2024, 1.9) × 100 = 190; Zinc: the 2025 factor, 3 × 10 = 30.
+    expect(r.components.filter((c) => c.kind === "material").map((c) => c.kg)).toEqual([190, 30]);
+    expect(r.notes).toEqual(['No 2025 factor for "Steel"; the 2024 factor was used.']);
+    // Every line in the target year: no note.
+    expect(hybridEmission(input, { activityValue: 1, unit: "tonne", facility, lines: [{ kind: "material", name: "Cotton", quantity: 10, unit: "kg" }] }).notes).toEqual([]);
+  });
+
   it("refuses what the engine refuses", () => {
     expect(hybridEmission(input, { activityValue: 1, unit: "kg", facility: null, lines: [] }).value).toBeNull();
     expect(hybridEmission(input, { activityValue: 200000, unit: "kg", facility, lines: [] }).value).toBeNull();

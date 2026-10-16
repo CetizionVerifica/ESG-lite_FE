@@ -429,6 +429,8 @@ export interface HybridComponentPreview {
 
 export interface HybridCalcResult extends SupplierCalcResult {
   components: HybridComponentPreview[];
+  /** FACTOR_FALLBACK_YEAR, as the engine words it: a line's factor is from another year than the target year. */
+  notes: string[];
 }
 
 /**
@@ -440,7 +442,8 @@ export function hybridEmission(
   input: EmissionCalcInput,
   args: { activityValue: number | null; unit: string | undefined; facility: FacilityInput | null; lines: HybridLineInput[]; purchasedValue?: number | null },
 ): HybridCalcResult {
-  const none = (status: string): HybridCalcResult => ({ value: null, kg: null, status, components: [] });
+  const none = (status: string): HybridCalcResult => ({ value: null, kg: null, status, components: [], notes: [] });
+  const notes: string[] = [];
   const components: HybridComponentPreview[] = [];
   if (!args.lines.some((l) => l.kind === "energy")) {
     const f = args.facility;
@@ -460,12 +463,17 @@ export function hybridEmission(
     components.push({ kind: "supplier_scope12", label: "Supplier's Scope 1 and 2, allocated", kg: allocatedKg(f.scope12_tco2e, allocationShare(purchased, f.output_qty)) });
   }
   for (const [i, line] of args.lines.entries()) {
+    // The engine's lookup (FactorIndex.find): the target year, else the newest year, with a note.
     const factor = findEmissionFactor(input, line.name);
     if (!factor) return none(`Line ${i + 1}: no emission factor named ${line.name}`);
+    if (input.targetYear !== undefined && factor.year !== input.targetYear) {
+      const note = `No ${input.targetYear} factor for "${factor.emission_category_name}"; the ${factor.year} factor was used.`;
+      if (!notes.includes(note)) notes.push(note);
+    }
     const q = toUnit(line.quantity, line.unit, factor.denominator_unit);
     if (q === null) return none(`Line ${i + 1}: unit mismatch - the factor is per ${factor.denominator_unit}`);
     components.push({ kind: line.kind, label: line.name, kg: round4(q * factor.factor_value) });
   }
   const kg = components.reduce((s, c) => s + c.kg, 0);
-  return { value: Math.round((kg / 1000) * 100) / 100, kg: round4(kg), status: "ok", components };
+  return { value: Math.round((kg / 1000) * 100) / 100, kg: round4(kg), status: "ok", components, notes };
 }
