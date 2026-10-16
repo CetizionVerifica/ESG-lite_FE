@@ -170,4 +170,10 @@ describe("What was entered (SE-1)", () => {
     const fields = activityFields({ "@method": "spend_based", _estimate: { column: "x" }, _bill: 1, Amount: "1200", Currency: "INR" });
     expect(fields.map((f) => f.key)).toEqual(["Amount", "Currency"]);
   });
+
+  it("a User doesn't see an old sheet's own factor or total (historical rows); reviewers do", () => {
+    const historical = { fuelType: "Diesel", activity: 1000, emissionFactor: 2.68, emissionFactorUnit: "kgCO2e/litre", calculatedEmission: 999, source: "Log book" };
+    expect(activityFields(historical, undefined, { plain: true }).map((f) => f.key)).toEqual(["fuelType", "activity", "source"]);
+    expect(activityFields(historical).map((f) => f.key)).toEqual(["fuelType", "activity", "emissionFactor", "emissionFactorUnit", "calculatedEmission", "source"]);
+  });
 });

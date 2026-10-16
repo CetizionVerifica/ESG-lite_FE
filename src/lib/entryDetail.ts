@@ -57,5 +57,7 @@ const UNIT_CODES = new Set(["UNIT_NOT_CONVERTIBLE"]);
 export function plainIssue(code: string, message: string): string {
   if (FACTOR_CODES.has(code)) return USER_MISSING_FACTOR;
   if (UNIT_CODES.has(code)) return USER_UNIT_CANNOT_CONVERT;
+  // A name the form doesn't know: keep the "Did you mean" suggestions, they let the User fix the sheet.
+  if (code === "UNKNOWN_ACTIVITY") return message.replace(/ matches no emission factor(?: or mapping)?\./i, " isn't one of this form's options.");
   return plainProblem(message);
 }

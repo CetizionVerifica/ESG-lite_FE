@@ -241,6 +241,44 @@ test("SE-1: a User's problems are in plain words, with no factor talk", async ({
   await expect(row.getByText(/emission factor/i)).toHaveCount(0);
 });
 
+// S3-9-style form whose spec lets the row pick its method (`@method`).
+const methodConfig = (methods: string[]) => ({
+  ...travelConfig,
+  calculation: {
+    mode: "per_method",
+    method_column: "@method",
+    methods: Object.fromEntries(methods.map((m) => [m, { multiply: ["Activity Data"], activity_unit: "passenger.km" }])),
+  },
+});
+
+test("SE-1: a form with one method picks it for the User, out of sight, and still sends it", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  await page.route(/\/user\/column-configs\/site\/4\/category\/11(\?|$)/, (route) => route.fulfill({ json: [methodConfig(["distance_based"])] }));
+  await page.goto("/data/new?site=4&category=11&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Emission category").selectOption({ label: "Car (petrol)" });
+  await expect(row.getByLabel("Calculation method")).toHaveCount(0);
+  await expect(row.getByLabel("Type of record")).toHaveCount(0);
+  await row.getByLabel("Unit").selectOption("passenger.km");
+  await row.getByRole("textbox", { name: "Activity Data" }).fill("100");
+  await expect(row.getByText("= 0.02 tCO₂e")).toBeVisible();
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0].body).toMatchObject({ activity_data: { "@method": "distance_based", "Activity Data": "100" } });
+});
+
+test("SE-1: with several methods a User answers \"Type of record\", never \"Calculation method\"", async ({ page }) => {
+  await signIn(page, []);
+  await page.route(/\/user\/column-configs\/site\/4\/category\/11(\?|$)/, (route) => route.fulfill({ json: [methodConfig(["distance_based", "spend_based"])] }));
+  await page.goto("/data/new?site=4&category=11&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await expect(row.getByLabel("Type of record")).toBeVisible();
+  await expect(row.getByLabel("Calculation method")).toHaveCount(0);
+  await expect(row.getByText("Choose how this row is calculated")).toHaveCount(0);
+});
+
 test("with no factor in the factor year, the preview uses the newest factor from another year, as the save does", async ({ page }) => {
   await signIn(page, [], false, [], undefined, { entryDetail: "full" }); // the factor line shows with full detail (SE-1)
   // Only 2022 and 2023 factors exist; Sep 2025 data looks for 2024 first.

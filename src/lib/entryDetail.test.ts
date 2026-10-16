@@ -62,5 +62,8 @@ describe("plain problems for a User", () => {
     expect(plainIssue("UNIT_REQUIRED", 'The emission factor "Coal" has no unit')).toBe(USER_MISSING_FACTOR);
     expect(plainIssue("UNIT_NOT_CONVERTIBLE", 'Unit mismatch: Expected "litre" but received "kwh".')).toBe(USER_UNIT_CANNOT_CONVERT);
     expect(plainIssue("MISSING_VALUE", "No quantity greater than 0 was found for this row.")).toBe("No quantity greater than 0 was found for this row.");
+    expect(plainIssue("UNKNOWN_ACTIVITY", '"Biogas" matches no emission factor or mapping. Did you mean: Diesel; Coal; Briquette; LSHS; Natural gas?')).toBe(
+      `"Biogas" isn't one of this form's options. Did you mean: Diesel; Coal; Briquette; LSHS; Natural gas?`,
+    );
   });
 });

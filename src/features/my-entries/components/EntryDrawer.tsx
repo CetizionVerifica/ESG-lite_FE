@@ -103,9 +103,9 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
 
   const files = (docs.data ?? []).map(fromEmissionDocument);
   const quantity = entry ? quantityOf(entry.activity_data) : null;
-  const fields = entry ? activityFields(entry.activity_data, config.data ?? undefined) : [];
   // SE-1: a User sees the entry and its total; the calculation (category match, Category 3 rows) is for reviewers.
   const detail = useCalcDetailForSite(entry?.site?.site_id);
+  const fields = entry ? activityFields(entry.activity_data, config.data ?? undefined, { plain: !detail }) : [];
 
   return (
     <>
