@@ -123,6 +123,7 @@ export const putSale = async (companyId: number | null, id: number, body: Partia
 
 /** Removes one sale, e.g. a typo; rows already imported from it stay until they are rejected. */
 export const deleteSale = async (companyId: number | null, id: number): Promise<{ deleted: number }> =>
+  // data-loss-reviewed: one sale row the user picked; SaleDrawer asks "Remove this sale?" inline first; imported emission rows are untouched
   (await api.delete(`/scope3/product-sales/${id}`, { params: withCompany(companyId) })).data;
 
 export const putUseProfile = async (companyId: number | null, productId: number, body: UseProfileBody): Promise<SoldProduct> =>
