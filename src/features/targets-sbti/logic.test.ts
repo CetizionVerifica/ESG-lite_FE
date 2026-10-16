@@ -9,6 +9,7 @@ import {
   latestScored,
   milestonesIn,
   readSetup,
+  defaultBaseYear,
   rulesCheck,
   targetYearOf,
   writeSetup,
@@ -75,6 +76,15 @@ describe("setup in the URL", () => {
     expect(readSetup(new URLSearchParams("base=2014"), NOW).baseYear).toBe(2025);
     expect(readSetup(new URLSearchParams("base=2027"), NOW).baseYear).toBe(2025);
     expect(readSetup(new URLSearchParams("base=2015"), NOW).baseYear).toBe(2015);
+  });
+
+  it("S3-14: defaults to the company's Scope 3 base year; the URL value still wins", () => {
+    expect(defaultBaseYear(NOW)).toBe(2025);
+    expect(defaultBaseYear(NOW, 2023)).toBe(2023);
+    expect(defaultBaseYear(NOW, 2012)).toBe(2025); // before 2015: SBTi won't take it
+    expect(defaultBaseYear(NOW, null)).toBe(2025);
+    expect(readSetup(new URLSearchParams(), NOW, 2023).baseYear).toBe(2023);
+    expect(readSetup(new URLSearchParams("base=2020"), NOW, 2023).baseYear).toBe(2020);
     expect(baseYearOptions(NOW).slice(-1)[0]).toBe(2015);
     expect(baseYearOptions(NOW)[0]).toBe(2026);
   });
