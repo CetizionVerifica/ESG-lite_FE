@@ -51,7 +51,7 @@ export function BaseYearSection({ companyId, ready }: { companyId: number | null
   const hasErrors = Object.keys(errors).length > 0;
   const dirty = isDirty(d, row);
   const set = (patch: Partial<BaseYearDraft>) => setDraft({ ...d, ...patch });
-  const years = baseYearChoices(now);
+  const years = baseYearChoices(now, d.year_type);
   if (row && !years.includes(row.base_year)) years.unshift(row.base_year);
 
   const submit = () => {

@@ -8,6 +8,11 @@ describe("S3-14 base year wording", () => {
     expect(years[years.length - 1]).toBe(2015);
   });
 
+  it("offers an FY once it has ended", () => {
+    expect(baseYearChoices(new Date(2026, 9, 16), "FY")[0]).toBe(2026);
+    expect(baseYearChoices(new Date(2026, 1, 10), "FY")[0]).toBe(2025);
+  });
+
   it("writes the proposal sentence from the spec", () => {
     expect(proposalSentence({ delta_pct: 7.2, largest_category: 1 }, 5)).toBe("Base year moved by +7.2 %, above your 5 % threshold, mostly Category 1.");
     expect(proposalSentence({ delta_pct: -6, largest_category: null }, 5)).toBe("Base year moved by −6 %, above your 5 % threshold.");

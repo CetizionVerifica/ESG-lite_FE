@@ -137,10 +137,14 @@ export interface BaseYearPreview {
   rows: number;
 }
 
-/** Years an Admin can pick: 2015 up to last year, newest first. */
-export function baseYearChoices(now: Date): number[] {
+/** The server's FY runs April to March and is named by the year it ends in (FY2026 = Apr 2025 to Mar 2026). */
+const SERVER_FY_START_MONTH = 4;
+
+/** Completed years an Admin can pick, newest first: CY up to last year; an FY once its March is over. */
+export function baseYearChoices(now: Date, yearType: "CY" | "FY" = "CY"): number[] {
+  const thisYearDone = yearType === "FY" && now.getMonth() + 1 >= SERVER_FY_START_MONTH;
   const out: number[] = [];
-  for (let y = now.getFullYear() - 1; y >= MIN_BASE_YEAR; y--) out.push(y);
+  for (let y = now.getFullYear() - (thisYearDone ? 0 : 1); y >= MIN_BASE_YEAR; y--) out.push(y);
   return out;
 }
 
