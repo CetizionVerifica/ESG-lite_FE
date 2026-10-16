@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
-import { useEntrySetup, usePeriodTotals, useThreshold } from "./api";
+import { useEntrySetup, usePeriodTotals, useSiteCountry, useThreshold } from "./api";
+import { ROW_METHOD_COLUMN } from "../../lib/emissions/emissionCalc";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
 import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
 import { useRowEvidence } from "./hooks/useRowEvidence";
@@ -70,6 +71,10 @@ export default function AddDataPage() {
   });
   const threshold = useThreshold(site?.company_id ?? null);
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
+  // S3-3: the data quality preview scores a factor for the site's own country best; Scope 3 only.
+  const siteCountry = useSiteCountry(site?.site_id ?? null, contextReady && category?.ghg_category != null);
+  // Rows the server refused for their method (METHOD_NOT_ALLOWED), shown on the row's method cards.
+  const [methodErrors, setMethodErrors] = useState<Record<number, { method: string; message: string }>>({});
   // Per user: a draft survives a reload, so the next person signing in on this tab mustn't get it.
   const draftKey = contextReady ? entryDraftKey(userIdOf(user), site.site_id, category.category_id, formatEntryPeriodParam(period)) : null;
   const { rows, sent, dispatch, clearDraft, markSent } = useEntryRows(model, draftKey);
@@ -131,11 +136,19 @@ export default function AddDataPage() {
   const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
     <Review
       rows={activeRows}
-      payloads={activeRows.map((r) => buildPayload(r, { siteId: s.site_id, categoryId: c.category_id, period: p }))}
+      payloads={activeRows.map((r) =>
+        buildPayload(r, { siteId: s.site_id, categoryId: c.category_id, period: p, rowMethodInActivity: model?.spec?.method_column === ROW_METHOD_COLUMN }),
+      )}
       calc={calc}
       evidenceFiles={evidence.filesOf}
       periodLabel={periodLabel}
       onBack={() => setStep(1)}
+      onFixMethod={(refused, sentIds) => {
+        // Rows already sent leave the form, so going back can't send them twice.
+        for (const id of sentIds) dispatch({ type: "remove", id });
+        setMethodErrors(Object.fromEntries(refused.map((r) => [r.rowId, { method: r.method, message: r.message }])));
+        setStep(1);
+      }}
       onFinished={markSent}
       onAnother={() => {
         clearDraft();
@@ -205,6 +218,8 @@ export default function AddDataPage() {
         reportingYear={(factorYear as number) + 1}
         bulkUploadHref={bulkUploadHref}
         evidence={evidence}
+        siteCountry={siteCountry.data ?? null}
+        methodErrors={methodErrors}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
       />

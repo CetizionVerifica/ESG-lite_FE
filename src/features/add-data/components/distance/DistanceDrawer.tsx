@@ -13,7 +13,8 @@ type Props = {
   onClose: () => void;
   /** The row's unit: km, miles, passenger.km… The result is converted to it. */
   unit: string;
-  onUse: (distance: number) => void;
+  /** `estimate`: a rail or sea estimate (or straight-line fallback), saved as the row's `is_estimate` (S3-3). */
+  onUse: (distance: number, estimate: boolean) => void;
 };
 
 const MODES: { value: TravelMode; label: string }[] = [
@@ -71,7 +72,7 @@ export function DistanceDrawer({ open, onClose, unit, onUse }: Props) {
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={!usable} onClick={() => result && (onUse(result.value), onClose())}>
+          <Button variant="primary" disabled={!usable} onClick={() => result && (onUse(result.value, result.estimate), onClose())}>
             Use this distance
           </Button>
         </div>
@@ -112,6 +113,7 @@ export function DistanceDrawer({ open, onClose, unit, onUse }: Props) {
               <p className="flex flex-wrap items-center gap-2 text-xs text-muted">
                 {result.note}
                 {result.estimate && <Badge tone="warn">Estimate</Badge>}
+                {result.estimate && <span className="w-full">The entry is saved as an estimate.</span>}
               </p>
               <p className="mt-1 font-num text-xl font-semibold text-ink">
                 {formatNumber(result.value, 2)} {shownUnit}

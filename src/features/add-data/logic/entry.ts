@@ -3,6 +3,8 @@ import { canConvert, unitsMatchExact } from "../../../ui/unitMatch";
 import { factorYearForDate, yearlyPeriodEndDate, type PeriodMode, type YearType } from "../hooks/reportingPeriod";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import type { ModalRow } from "../types";
+import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
+import { isRowMethod } from "../../../lib/scope3/dq";
 
 /** What is being reported: a month, or a CY/FY year (yearly batches). */
 export type EntryPeriod =
@@ -93,6 +95,10 @@ export interface EmissionPayload {
   activity_data_unit?: string;
   reporting_period: PeriodMode;
   year_type?: YearType;
+  /** S3-3: how the row was calculated (the row's method), when it has one. */
+  method?: string;
+  /** S3-3: sent (true) only when a value came from an estimate, such as the distance helper's rail or sea estimate. */
+  is_estimate?: boolean;
 }
 
 /**
@@ -101,16 +107,31 @@ export interface EmissionPayload {
  * stay out of activity_data. Yearly rows are always filed on the period end;
  * a monthly row keeps its own date_of_reporting when it has one.
  */
-export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: number; period: EntryPeriod }): EmissionPayload {
-  const { activity_data_unit, date_of_reporting: rowDate, _extra_data, ...rest } = row;
+export function buildPayload(
+  row: ModalRow,
+  ctx: {
+    siteId: number;
+    categoryId: number;
+    period: EntryPeriod;
+    /**
+     * Keep the row's method in activity_data too ("@method"): a spec whose
+     * method_column is "@method" (S3-9) reads it there. Default true.
+     */
+    rowMethodInActivity?: boolean;
+  },
+): EmissionPayload {
+  const { activity_data_unit, date_of_reporting: rowDate, _extra_data, _estimates, ...rest } = row;
   const activity: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(rest)) {
     if (key === "id") continue;
     if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
     // Private row state: FERA flag, mapping key, the bill a row came from, the saved entry it edits.
     if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf" || key === "_editSaved") continue;
+    if (key === ROW_METHOD_COLUMN && ctx.rowMethodInActivity === false) continue;
     activity[key] = value;
   }
+  const method = row[ROW_METHOD_COLUMN];
+  const estimated = Array.isArray(_estimates) && _estimates.length > 0;
   const date = entryDate(ctx.period);
   return {
     site_id: ctx.siteId,
@@ -123,6 +144,8 @@ export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: n
     activity_data_unit: activity_data_unit || undefined,
     reporting_period: ctx.period.mode,
     year_type: ctx.period.mode === "yearly" ? ctx.period.yearType : undefined,
+    ...(isRowMethod(method) ? { method } : {}),
+    ...(estimated ? { is_estimate: true } : {}),
   };
 }
 

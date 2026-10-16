@@ -96,3 +96,10 @@ Below the stepper (or as a tab "Already entered for Sep (4)") a compact `DataTab
 - Comparison while editing: a pending entry loaded with Edit keeps its saved tCO₂e in `_editSaved`, and `savedExcludingEdits` takes it off the saved total so the "vs last period" chip doesn't count it twice (legacy `effectiveSavedTotals`).
 - Not built yet in "Already entered": view factor, documents, and delete (single or batch). My entries (P04) has the drawer with documents; these can move here later.
 - A partial send (some rows saved, others failed) keeps the draft; sending the saved rows again later hits the duplicate dialog rather than creating copies.
+
+### S3-3 as built (method and data quality, 2026-10-16; spec `src/lib/scope3/CLAUDE.md`)
+- A form's `method_options` (or, on a form with none, a spec whose `method_column` is "@method") puts the shared `MethodCards` above the fields: radio cards, most specific first, a one-line hint each; one method is a read-only "Calculated:" line. A new row starts on `method_options[0]`. The choice lives in `row["@method"]` and is sent as `method`; it stays in `activity_data` only for an "@method" spec (S3-9 reads it there).
+- A method that names its units offers only those in the Unit select; switching method drops a unit it doesn't offer.
+- The distance helper's estimate (rail, sea fallback) is kept per column in the private `_estimates` and sent as `is_estimate: true`; typing over the distance clears it.
+- The result footer shows the live "Data quality" badge from `autoDq` (mirror of the engine's defaults) with the site's country (`/user/sites/:id`), the factor's geography, year and type, and whether evidence is attached.
+- `METHOD_NOT_ALLOWED` on send: the row says why, and "Change the method" goes back to the rows (rows already sent leave the form) with the server's words on that row's cards.

@@ -6,7 +6,8 @@
 // getOptionLabel, getAutoEmissionCategory, handleModalRowChange …) with the
 // same lookup order, so a row resolves to the same emission category here as
 // on the legacy page.
-import { resolveSpecMethod, specNumericColumns } from "./emissionCalc";
+import { ROW_METHOD_COLUMN, resolveSpecMethod, specNumericColumns } from "./emissionCalc";
+import { type MethodOptions, readMethodOptions, unitsForMethod } from "../scope3/dq";
 import type {
   CalculationSpec,
   ColumnConfig,
@@ -28,6 +29,8 @@ export interface FormModel {
   mapping: EmissionCategoryMapping;
   extraFields: ExtraFieldDefinition[];
   spec: CalculationSpec | null;
+  /** S3-3: the methods the form offers, most specific first, with their units; empty when it doesn't limit them. */
+  methodOptions: MethodOptions;
 }
 
 export const toFormModel = (config: ColumnConfig | null | undefined): FormModel => ({
@@ -38,7 +41,18 @@ export const toFormModel = (config: ColumnConfig | null | undefined): FormModel 
   mapping: config?.emission_category_mapping ?? {},
   extraFields: config?.extra_fields ?? [],
   spec: config?.calculation ?? null,
+  methodOptions: readMethodOptions(config?.method_options),
 });
+
+/**
+ * The methods a row can pick, most specific first: the form's `method_options`
+ * (S3-3), or, on a form that offers none, the methods of a spec whose
+ * `method_column` is "@method" (S3-9). Empty when the row has no method to pick.
+ */
+export function rowMethodChoices(m: FormModel): string[] {
+  if (m.methodOptions.length) return m.methodOptions.map((o) => o.method);
+  return m.spec?.mode === "per_method" && m.spec.method_column === ROW_METHOD_COLUMN ? Object.keys(m.spec.methods) : [];
+}
 
 const lower = (s: string) => s.toLowerCase();
 
@@ -249,6 +263,9 @@ export function newRow(m: FormModel, id: number): ModalRow {
     row[c.column_name] = "";
   });
   row._extra_data = Object.fromEntries(m.extraFields.map((f) => [f.key, ""]));
+  // S3-3: the form's first (most specific) method is the default. Set as is, so a
+  // fresh row holds nothing typed (no unit or percentages preselected yet).
+  if (m.methodOptions.length) row[ROW_METHOD_COLUMN] = m.methodOptions[0].method;
   return row;
 }
 
@@ -281,6 +298,14 @@ export function applyChange(m: FormModel, row: ModalRow, column: string, value: 
       if (!next[f]) next[f] = "100";
     });
     if (method?.activity_unit) next.activity_data_unit = method.activity_unit;
+  }
+
+  // S3-3: a method that offers its own units drops a unit it doesn't offer (one unit is picked for you).
+  if (column === ROW_METHOD_COLUMN) {
+    const units = unitsForMethod(m.methodOptions, value);
+    if (units && !units.some((u) => u.toLowerCase() === String(next.activity_data_unit ?? "").toLowerCase())) {
+      next.activity_data_unit = units.length === 1 ? units[0] : "";
+    }
   }
 
   const auto = autoEmissionCategory(m, next);
