@@ -46,6 +46,8 @@ type Props = {
   siteCountry?: string | null;
   /** Rows the server refused for their method (METHOD_NOT_ALLOWED): the method and the server's words. */
   methodErrors?: Record<number, { method: string; message: string }>;
+  /** SE-1: Managers and above (or a company set to full detail) see the method and data quality. */
+  showCalcDetail?: boolean;
   onBack: () => void;
   onNext: () => void;
 };
@@ -87,6 +89,7 @@ export function EnterRows(p: Props) {
         canRemove={canRemove}
         ghgCategory={p.ghgCategory}
         siteCountry={p.siteCountry}
+        showCalcDetail={p.showCalcDetail}
         // Shown while the row still has the refused method; picking another clears it.
         methodError={p.methodErrors?.[row.id]?.method === row[ROW_METHOD_COLUMN] ? p.methodErrors?.[row.id]?.message : undefined}
         onChange={(column, value) => p.dispatch({ type: "change", model: p.model, id: row.id, column, value })}

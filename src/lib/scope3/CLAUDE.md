@@ -1,10 +1,10 @@
 # S3-3 · Method and data quality on every row
 
 > Module spec. Lane L3. Copy it to `ESG-lite/src/scope3/dq/CLAUDE.md` and `ESG-lite_FE/src/lib/scope3/CLAUDE.md`. PR titles `[S3-3 k/m] …`.
-> Depends on (merged): S3-0 · Owns: `emission.method/dq/data_type/is_estimate`, `src/scope3/dq/*`, `ColumnConfig.method_options`, FE `src/lib/scope3/dq.ts`, `src/ui/DataQualityBadge`, the add-data method picker · Touches: `emissionWrite/index.ts`, `src/imports/contracts.ts` (row shape), approvals-ledger drawer, my-entries drawer
+> Depends on (merged): S3-0 · Owns: `emission.method/dq/data_type/is_estimate`, `src/scope3/dq/*`, `ColumnConfig.method_options`, FE `src/lib/scope3/dq.ts`, `src/ui/DataQualityBadge`, the add-data method picker (shown only with SE-1 `showCalcDetail`) · Touches: `emissionWrite/index.ts`, `src/imports/contracts.ts` (row shape), approvals-ledger drawer, my-entries drawer
 
 ## Job to be done
-Each emission row records how it was calculated (method) and how good its data is (DQ, primary or secondary, estimated or not). Contributors pick the method in plain words. Managers and reports can see quality at a glance.
+Each emission row records how it was calculated (method) and how good its data is (DQ, primary or secondary, estimated or not). The form sets the method (its first `method_options` entry); contributors don't pick one (simple-entry §8, SE-0). Managers and reports can see quality at a glance.
 
 ## Guidance
 - Methods are ranked by specificity, and companies may mix methods within a category (Introduction, L1100–1180).
@@ -54,5 +54,12 @@ None calculate. DQ default unit tests cover every rule in §3.
 ## Done when
 - New rows always carry a method (Scope 3) and a DQ.
 - Old Scope 3 rows are backfilled.
-- The method picker shows on multi-method forms.
+- The method picker shows on multi-method forms where `showCalcDetail` is true (Managers and above, or a company set to `entry_detail = "full"`).
 - DQ is visible in the drawers.
+
+## Deviations (carry PR for FE #209, after SE-0)
+- Contributors (Users) see no method cards and no data quality line in Add data, and no "How it was calculated" or data quality in the My entries drawer, unless `showCalcDetail` (SE-1, `src/lib/entryDetail.ts`, copied unchanged from SE-1's PR) is true. Their rows send the form's first method.
+- A form whose fields depend on the row's method through an S3-9 `@method` spec and that has no `method_options` keeps production's plain "Calculation method" select, because the fields can't be filled without it. SE-2/SE-3 move that choice to the Superadmin.
+- The Capture setup preview shows the default method as a read-only line, as contributors would be calculated.
+- Approvals and the ledger drawer keep the method and data quality lines.
+

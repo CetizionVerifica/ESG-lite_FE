@@ -47,7 +47,8 @@ export function Preview({ draft, formId, siteName, categoryName, ghgCategory }: 
         </Button>
       </div>
 
-      <MethodCards methods={methods} value={method} onChange={(v) => setRow((r) => applyChange(model, r, ROW_METHOD_COLUMN, v))} ghgCategory={ghgCategory} />
+      {/* Contributors don't pick a method (simple-entry §8): the form's first is shown as the line they'd be calculated by. */}
+      <MethodCards methods={method ? [method] : []} value={method} onChange={(v) => setRow((r) => applyChange(model, r, ROW_METHOD_COLUMN, v))} ghgCategory={ghgCategory} />
 
       {columns.length === 0 ? (
         <p className="rounded-control border border-dashed border-line px-3 py-3 text-sm text-muted">No fields yet.</p>

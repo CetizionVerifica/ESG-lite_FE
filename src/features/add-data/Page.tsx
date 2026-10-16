@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
 import { useEntrySetup, usePeriodTotals, useSiteCountry, useThreshold } from "./api";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
@@ -38,6 +39,8 @@ export default function AddDataPage() {
   const [params, setParams] = useSearchParams();
   const siteId = num(params.get("site")) ?? (sites.length === 1 ? sites[0].site_id : null);
   const categoryId = num(params.get("category"));
+  // SE-1 · simple-entry §8: a contributor never picks a method or reads data quality; the form decides.
+  const calcDetail = useCalcDetailForSite(siteId);
   const period = parseEntryPeriod(params.get("period"));
   const site = sites.find((s) => s.site_id === siteId);
   const categories = entryCategories(site);
@@ -235,6 +238,7 @@ export default function AddDataPage() {
         evidence={evidence}
         siteCountry={siteCountry.data ?? null}
         methodErrors={methodErrors}
+        showCalcDetail={calcDetail}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
       />

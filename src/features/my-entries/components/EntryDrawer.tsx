@@ -23,6 +23,7 @@ import {
   useToast,
 } from "../../../ui";
 import { useEntryDocuments, useLabelConfig, useUpdateEntry } from "../api";
+import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
 import { type EntryUpdate, canEdit, saveErrorMessage } from "../edit";
 import { EDIT_FORM_ID, EditEntryForm } from "./EditEntryForm";
 import { type EntryRow, activityFields, keyActivity, periodText, quantityOf } from "../logic";
@@ -106,7 +107,9 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
   const files = (docs.data ?? []).map(fromEmissionDocument);
   const quantity = entry ? quantityOf(entry.activity_data) : null;
   const fields = entry ? activityFields(entry.activity_data, config.data ?? undefined) : [];
-  const quality = entry ? rowQuality(entry) : null;
+  // SE-1: the method and data quality lines are for Managers and above (or a company set to full detail).
+  const calcDetail = useCalcDetailForSite(entry?.site?.site_id ?? null);
+  const quality = entry && calcDetail ? rowQuality(entry) : null;
 
   return (
     <>

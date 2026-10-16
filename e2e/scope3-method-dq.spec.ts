@@ -3,9 +3,12 @@ import { type Page, type Route, expect, test } from "@playwright/test";
 /**
  * S3-3 method and data quality smoke tests (src/lib/scope3/CLAUDE.md). Every
  * API call is answered locally:
- * - a contributor picks "From the amount spent" on a Category 1 form, sees
- *   the live data quality, saves, and the My entries drawer shows the method
- *   and "Poor" (the spec's Playwright case);
+ * - a contributor (User) gets no method choice and no data quality: the form's
+ *   first method is sent, and My entries shows the total only (simple-entry §8, SE-1);
+ * - on a company set to full detail (SE-1 `entry_detail = "full"`), the
+ *   contributor picks "From the amount spent" on a Category 1 form, sees the
+ *   live data quality, saves, and the My entries drawer shows the method and
+ *   "Poor" (the spec's Playwright case);
  * - a method the form refuses (METHOD_NOT_ALLOWED) goes back to the cards;
  * - a manager's ledger drawer shows both lines and the filters reach the API;
  * - a Superadmin picks "Methods offered" in the form builder.
@@ -50,8 +53,10 @@ const saved = (over: object = {}) => ({
 
 type Api = { posts: Record<string, unknown>[]; lists: URLSearchParams[]; refuseOnce?: string };
 
-async function signIn(page: Page, role: "User" | "Manager", api: Api) {
-  const user = { user_id: 7, name: role === "User" ? "Uma User" : "Mia Manager", email: "u@midal.com", sites: [site] };
+/** `fullDetail`: the company is set to show contributors the calculation (SE-1 `entry_detail = "full"`). */
+async function signIn(page: Page, role: "User" | "Manager", api: Api, fullDetail = false) {
+  const userSite = fullDetail ? { ...site, company: { ...company, entry_detail: "full" } } : site;
+  const user = { user_id: 7, name: role === "User" ? "Uma User" : "Mia Manager", email: "u@midal.com", sites: [userSite] };
   await page.addInitScript(
     ([u, r]) => {
       localStorage.setItem("token", "test-token");
@@ -103,9 +108,38 @@ async function signIn(page: Page, role: "User" | "Manager", api: Api) {
   );
 }
 
-test("a contributor saves a spend-based row and the drawer shows the method and Poor", async ({ page }) => {
+test("a contributor enters values only: the form's method is sent, no method choice or data quality shown", async ({ page }) => {
   const api: Api = { posts: [], lists: [] };
   await signIn(page, "User", api);
+  await page.goto("/data/new?site=4&category=21&period=2026-09");
+
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Emission category").selectOption("Aluminium");
+  await row.getByRole("textbox", { name: "Amount" }).fill("1000");
+  await row.getByLabel("Unit").selectOption("kg");
+  await expect(row.getByText("= 8.60 tCO₂e")).toBeVisible();
+  await expect(row.getByRole("group", { name: "How is row 1 calculated?" })).toHaveCount(0);
+  await expect(row.getByRole("radio")).toHaveCount(0);
+  await expect(row.getByLabel("Calculation method")).toHaveCount(0);
+  await expect(row.getByTestId("row-dq")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  // The form decides: its first (most specific) method.
+  expect(api.posts[0]).toMatchObject({ method: "supplier_specific", site_id: 4, category_id: 21 });
+
+  await page.goto("/data/mine");
+  await page.getByRole("table", { name: "My entries" }).getByRole("row").filter({ hasText: "Purchased materials" }).click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer.getByText("Emissions")).toBeVisible();
+  await expect(drawer.getByTestId("entry-method")).toHaveCount(0);
+  await expect(drawer.getByTestId("dq-badge")).toHaveCount(0);
+});
+
+test("on a company set to full detail, a contributor saves a spend-based row and the drawer shows the method and Poor", async ({ page }) => {
+  const api: Api = { posts: [], lists: [] };
+  await signIn(page, "User", api, true);
   await page.goto("/data/new?site=4&category=21&period=2026-09");
 
   const row = page.getByRole("region", { name: "Row 1" });
@@ -142,9 +176,9 @@ test("a contributor saves a spend-based row and the drawer shows the method and 
   await expect(drawer.getByText("Secondary data")).toBeVisible();
 });
 
-test("a method the form refuses sends the contributor back to the method cards", async ({ page }) => {
+test("on a company set to full detail, a method the form refuses goes back to the method cards", async ({ page }) => {
   const api: Api = { posts: [], lists: [], refuseOnce: "supplier_specific" };
-  await signIn(page, "User", api);
+  await signIn(page, "User", api, true);
   await page.goto("/data/new?site=4&category=21&period=2026-09");
   const row = page.getByRole("region", { name: "Row 1" });
   await row.getByLabel("Emission category").selectOption("Aluminium");
@@ -222,8 +256,9 @@ test("a Superadmin picks the methods a Category 1 form offers", async ({ page })
   await page.getByRole("button", { name: "Save form" }).click();
   await expect(page.getByText(/Fix 1 thing before saving/)).toBeVisible();
   await offered.getByLabel("Units for Supplier's own figure").fill("kg");
-  // The preview shows the cards contributors will see.
-  await expect(page.getByTestId("form-preview").getByRole("radio")).toHaveCount(2);
+  // The preview shows what contributors see: no choice, the form's first method as a line.
+  await expect(page.getByTestId("form-preview").getByRole("radio")).toHaveCount(0);
+  await expect(page.getByTestId("form-preview").getByTestId("method-line")).toContainText("Supplier's own figure");
   await page.getByRole("button", { name: "Save form" }).click();
   await expect.poll(() => puts.length).toBe(1);
   expect((puts[0] as { method_options: unknown }).method_options).toEqual([

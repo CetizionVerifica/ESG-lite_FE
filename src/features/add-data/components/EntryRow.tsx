@@ -15,6 +15,7 @@ import { ExtraFields } from "./ExtraFields";
 import { TripCalculator } from "./TripCalculator";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
+import { methodLabel } from "../../../lib/scope3/labels";
 import { DATA_TYPE_LABELS, autoDq, dataTypeFor, isMethod, unitsForMethod, type Method } from "../../../lib/scope3/dq";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 import { SPEND_FIELDS, spendPreviewLine } from "../../../lib/scope3/spend";
@@ -61,6 +62,11 @@ type Props = {
   siteCountry?: string | null;
   /** The server refused the row's method (METHOD_NOT_ALLOWED): its words, shown on the method cards. */
   methodError?: string;
+  /**
+   * SE-1: the method cards and the data quality line are for Managers and above (or a company set
+   * to full detail). A contributor's row keeps the form's first method (simple-entry §8 decision 2).
+   */
+  showCalcDetail?: boolean;
 };
 
 /** One entry as a card: what it is, its values, more details, and the live result. */
@@ -95,7 +101,10 @@ export function EntryRow(p: Props) {
   const unsure = confidence !== null && confidence < LOW_CONFIDENCE;
   const ghg = isGhgCategoryNumber(p.ghgCategory) ? p.ghgCategory : null;
   // S3-3: the form's method_options, or (S3-9) a spec whose method_column is "@method", let the row pick its method.
-  const rowMethods = rowMethodChoices(model);
+  // A contributor gets no S3-3 method choice. A form whose own fields depend on the row's method
+  // (an S3-9 "@method" spec with no method_options) keeps the plain select it has on production.
+  const rowMethods = p.showCalcDetail || !model.methodOptions.length ? rowMethodChoices(model) : [];
+  const legacyMethodSelect = !p.showCalcDetail && rowMethods.length > 1;
   const rowMethod = String(row[ROW_METHOD_COLUMN] ?? "");
   const methodUnits = unitsForMethod(model.methodOptions, rowMethod);
   const tripField = ghg === 7 && rowMethod === "distance_based" ? distanceFieldOf(model.spec?.methods[rowMethod]) : null;
@@ -166,14 +175,27 @@ export function EntryRow(p: Props) {
       )}
       </div>
 
-      <MethodCards
-        methods={rowMethods}
-        value={rowMethod || null}
-        onChange={(v) => p.onChange(ROW_METHOD_COLUMN, v)}
-        ghgCategory={ghg}
-        label={`How is row ${p.index + 1} calculated?`}
-        error={p.methodError}
-      />
+      {legacyMethodSelect ? (
+        <Select<string>
+          label="Calculation method"
+          value={rowMethod || null}
+          onChange={(v) => p.onChange(ROW_METHOD_COLUMN, v ?? "")}
+          options={rowMethods.map((k) => ({ value: k, label: methodLabel(k, ghg) }))}
+          placeholder="Choose how this row is calculated"
+          className="sm:max-w-sm"
+        />
+      ) : p.showCalcDetail ? (
+        <MethodCards
+          methods={rowMethods}
+          value={rowMethod || null}
+          onChange={(v) => p.onChange(ROW_METHOD_COLUMN, v)}
+          ghgCategory={ghg}
+          label={`How is row ${p.index + 1} calculated?`}
+          error={p.methodError}
+        />
+      ) : p.methodError ? (
+        <p className="text-xs text-bad">{p.methodError}</p>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((c) => {
@@ -270,7 +292,7 @@ export function EntryRow(p: Props) {
           ) : row.emission_category ? (
             <span className="text-bad">No factor for this category</span>
           ) : null}
-          {dq && dqMethod && (
+          {p.showCalcDetail && dq && dqMethod && (
             <span className="mt-1 flex flex-wrap items-center gap-1.5" data-testid="row-dq">
               Data quality <DataQualityBadge dq={dq} />
               <span>
