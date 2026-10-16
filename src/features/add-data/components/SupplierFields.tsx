@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { type HybridLineKind, ROW_METHOD_COLUMN, pickFacility } from "../../../lib/emissions/emissionCalc";
 import { methodLabel } from "../../../lib/scope3/labels";
+import { SPEND_METHOD } from "../../../lib/scope3/spend";
 import type { SupplierDetail, SupplierListItem } from "../../../services/scope3SuppliersService";
 import { Badge, Button, Combobox, NumberField, Select, TextField, cn, formatNumber, panel } from "../../../ui";
 import type { ModalRow } from "../types";
 import { type DraftLine, HYBRID_LINE_KINDS, LINE_KIND_LABEL, NO_FIGURE_HINT, figureFor, linesOf, supplierIdOf, supplierMethodOf } from "../logic/supplier";
 
 const NEW = -1;
-type CalcChoice = "average" | "supplier_specific" | "hybrid";
+type CalcChoice = "average" | "supplier_specific" | "hybrid" | "spend_based";
 
 const fmt = (n: number) => formatNumber(n, n % 1 ? Math.min(6, String(n).split(".")[1]?.length ?? 2) : 0);
 
@@ -41,7 +42,8 @@ export function SupplierFields(p: SupplierFieldsProps) {
   const [creating, setCreating] = useState(false);
   const supplierId = supplierIdOf(row);
   const method = supplierMethodOf(row);
-  const choice: CalcChoice = method ?? "average";
+  // S3-5's spend form reads the same "@method" key.
+  const choice: CalcChoice = method ?? (row[ROW_METHOD_COLUMN] === SPEND_METHOD ? "spend_based" : "average");
   const name = detail?.supplier.name ?? p.suppliers.find((s) => s.supplier_id === supplierId)?.name ?? "";
 
   const trimmed = query.trim();
@@ -72,6 +74,7 @@ export function SupplierFields(p: SupplierFieldsProps) {
     { value: "average", label: methodLabel("average_data", p.ghg) },
     { value: "supplier_specific", label: methodLabel("supplier_specific", p.ghg) },
     { value: "hybrid", label: methodLabel("hybrid", p.ghg) },
+    { value: "spend_based", label: methodLabel("spend_based", p.ghg) },
   ];
 
   return (

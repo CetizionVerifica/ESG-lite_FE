@@ -7,6 +7,8 @@ import { SupplierFields } from "./components/SupplierFields";
 import { hasSupplierField, supplierIdOf, withSuppliers } from "./logic/supplier";
 import { errorMessage as supplierError } from "../../services/scope3SuppliersService";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
+import { useSpendRates } from "../../lib/scope3/useSpendRates";
+import type { EmissionFactor } from "./types";
 import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
 import { useRowEvidence } from "./hooks/useRowEvidence";
 import { billGroups, billOf } from "./logic/bill";
@@ -30,6 +32,7 @@ const STEPS = [
 ];
 
 const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : null);
+const NO_FACTORS: EmissionFactor[] = [];
 
 /** P03 Add data: choose the context, type the rows, review and send for approval. */
 export default function AddDataPage() {
@@ -83,21 +86,33 @@ export default function AddDataPage() {
   // The draft survives in-app navigation, but evidence files don't, and a half-entered form is easy to forget.
   const blocker = useUnsavedGuard(unsaved);
 
-  const calcInput = {
-    targetYear: factorYear ?? undefined,
-    columns: model?.columns,
-  };
-  const baseCalc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec });
+  const calcInput = useMemo(() => ({ targetYear: factorYear ?? undefined, columns: model?.columns }), [factorYear, model?.columns]);
+  const reportingDate = period ? entryDate(period) : null;
+  const factors = setup.data?.factors ?? NO_FACTORS;
+  const reportingPeriod = period?.mode;
+  // S3-5: exchange rates for rows calculated from the amount spent; a failed lookup shows a note, not a spinner.
+  const spendLookup = useMemo(
+    () => ({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec, reportingPeriod }),
+    [calcInput, factors, model?.spec, reportingPeriod],
+  );
+  const spend = useSpendRates(rows, spendLookup, reportingDate);
+  const baseCalc = useEmissionCalc({
+    ...calcInput,
+    emissionFactors: factors,
+    calculationSpec: model?.spec,
+    spendRates: spend.rates,
+    spendRateErrors: spend.failed,
+    reportingDate,
+    reportingPeriod,
+  });
   // S3-6: Category 1 and 2 rows can name a supplier and be calculated from its own figures.
   const supplierRows = contextReady && hasSupplierField(category.ghg_category);
   const reportingYear = factorYear === null ? new Date().getFullYear() : factorYear + 1;
   const supplierOptions = useSupplierOptions(reportingYear, supplierRows);
   const supplierDetails = useSupplierDetails(supplierRows ? rows.map(supplierIdOf).filter((id): id is number => id !== null) : []);
   const createSupplier = useCreateSupplier(reportingYear);
-  const calc = supplierRows
-    ? withSuppliers(baseCalc, { ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec }, supplierDetails, reportingYear)
-    : baseCalc;
-  const factorNames = useMemo(() => [...new Set((setup.data?.factors ?? []).map((f) => f.emission_category_name))].sort(), [setup.data]);
+  const calc = supplierRows ? withSuppliers(baseCalc, spendLookup, supplierDetails, reportingYear) : baseCalc;
+  const factorNames = useMemo(() => [...new Set(factors.map((f) => f.emission_category_name))].sort(), [factors]);
   const renderSupplier = supplierRows
     ? (row: (typeof rows)[number]) => {
         const id = supplierIdOf(row);

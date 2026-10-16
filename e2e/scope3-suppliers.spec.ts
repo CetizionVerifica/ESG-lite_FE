@@ -149,8 +149,12 @@ test("a contributor enters Category 1 with the supplier's own figure", async ({ 
   // Average data until a supplier method is chosen: 1,000 kg × 10.
   await expect(row.getByText("= 10.00 tCO₂e")).toBeVisible();
 
+  // "From the amount spent" switches the row to S3-5's spend fields; a supplier method switches back.
+  await row.getByLabel("Calculated from").selectOption("spend_based");
+  await expect(row.getByLabel("Amount spent")).toBeVisible();
   // A supplier with no figure: the hint, never an average.
   await row.getByLabel("Calculated from").selectOption("supplier_specific");
+  await expect(row.getByLabel("Amount spent")).toHaveCount(0);
   const supplier = row.getByRole("combobox", { name: "Supplier" });
   // A contributor may add a supplier by name.
   await supplier.fill("Bahrain Alloys");

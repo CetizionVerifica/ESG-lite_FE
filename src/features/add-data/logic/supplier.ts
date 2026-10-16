@@ -100,7 +100,13 @@ export function withSuppliers(calc: EmissionCalculator, input: EmissionCalcInput
     const r = hybridEmission(input, { activityValue: activity, unit: row.activity_data_unit, facility: pickFacility(detail.facility_data, reportingYear), lines: engineLines(lines), purchasedValue: paid });
     return { value: r.value, status: r.status };
   };
-  return { ...calc, calculateEmission };
+  // A supplier-method row never takes S3-5's spend path, even when its activity's factor is a spend factor.
+  return {
+    ...calc,
+    calculateEmission,
+    spendDetail: (row: ModalRow) => (supplierMethodOf(row) ? null : calc.spendDetail(row)),
+    usesSpendForm: (row: ModalRow) => (supplierMethodOf(row) ? false : calc.usesSpendForm(row)),
+  };
 }
 
 /** What a row adds to the createEmission body: the supplier, the figure, the method, and hybrid inputs in extra_data. */

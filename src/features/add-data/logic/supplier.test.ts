@@ -72,4 +72,15 @@ describe("Supplier field on Category 1 and 2 rows", () => {
     expect(plain.method).toBeUndefined();
     expect(plain.supplier_id).toBe(7);
   });
+
+  it("keeps S3-5's spend path for spend rows and off supplier-method rows", () => {
+    const spendFactors: EmissionFactor[] = [{ emission_factor_id: 9, emission_category_name: "Aluminium (spend)", factor_value: 0.4, denominator_unit: "USD", year: 2024, factor_type: "eeio_spend" }];
+    const spendInput = { emissionFactors: spendFactors, targetYear: 2024 };
+    const wrapped = withSuppliers(createEmissionCalculator(spendInput), spendInput, new Map([[7, detail()]]), 2025);
+    const spendRow = row({ emission_category: "Aluminium (spend)", "@method": "spend_based" });
+    expect(wrapped.usesSpendForm(spendRow)).toBe(true);
+    const supplierRow = row({ emission_category: "Aluminium (spend)", "@method": "supplier_specific", _supplier_id: 7 });
+    expect(wrapped.usesSpendForm(supplierRow)).toBe(false);
+    expect(wrapped.spendDetail(supplierRow)).toBeNull();
+  });
 });

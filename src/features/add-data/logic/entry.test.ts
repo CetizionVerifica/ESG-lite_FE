@@ -71,6 +71,41 @@ describe("rows", () => {
     expect(rowIssue({ id: 1, emission_category: "Diesel", activity_data_unit: "gallon", quantity: "5" }, calc)).toBeNull();
   });
 
+  it("a spend row says what is missing under the field the spend form shows", () => {
+    const eeio = {
+      emission_factor_id: 3,
+      emission_category_name: "Chemicals (USEEIO)",
+      factor_value: 0.42,
+      denominator_unit: "USD",
+      year: 2024,
+      factor_type: "eeio_spend",
+      price_currency: "USD",
+      price_base_year: 2022,
+    };
+    const spendCalc = createEmissionCalculator({ emissionFactors: [eeio], targetYear: 2024, reportingDate: "2026-09-30" });
+    const base = { id: 1, emission_category: "Chemicals (USEEIO)" };
+    // An EEIO factor shows the spend form (no unit field): nothing entered yet, or only the invoice date.
+    expect(spendCalc.usesSpendForm(base)).toBe(true);
+    expect(rowIssue(base, spendCalc)).toEqual({ field: "values", message: "Enter the amount spent" });
+    expect(rowIssue({ ...base, "@method": "spend_based", invoice_date: "2026-09-03" }, spendCalc)).toEqual({ field: "values", message: "Enter the amount spent" });
+    // Amount without currency: the message goes under Currency.
+    expect(rowIssue({ ...base, "@method": "spend_based", spent_value: "500" }, spendCalc)).toEqual({ field: "currency", message: "Choose the currency" });
+    expect(rowIssue({ ...base, "@method": "spend_based", currency: "INR" }, spendCalc)?.field).toBe("values");
+    // A quantity in a currency unit the engine can't convert: the unit field is visible, so it goes there.
+    expect(rowIssue({ ...base, quantity: "5", activity_data_unit: "JPY" }, spendCalc)?.field).toBe("activity_data_unit");
+    // A rate still loading or that failed to load doesn't block the row: the server calculates it.
+    expect(rowIssue({ ...base, "@method": "spend_based", spent_value: "500", currency: "INR" }, spendCalc)).toBeNull();
+    const failed = createEmissionCalculator({
+      emissionFactors: [eeio],
+      targetYear: 2024,
+      reportingDate: "2026-09-30",
+      spendRateErrors: new Set(["INR|2026-09-30|USD|2022"]),
+    });
+    expect(rowIssue({ ...base, "@method": "spend_based", spent_value: "500", currency: "INR" }, failed)).toBeNull();
+    // Rows on a non-spend factor keep asking for a unit.
+    expect(calc.usesSpendForm({ id: 1, emission_category: "Diesel" })).toBe(false);
+  });
+
   it("builds the legacy page's payload", () => {
     const row = {
       id: 3,
