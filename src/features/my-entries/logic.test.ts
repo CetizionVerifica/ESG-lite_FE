@@ -164,3 +164,10 @@ describe("breakdownRows", () => {
     expect(breakdownRows(mixed, "consumption").map((r) => r.share)).toEqual([null, null]);
   });
 });
+
+describe("What was entered (SE-1)", () => {
+  it("never lists internal keys: @method or anything starting with _", () => {
+    const fields = activityFields({ "@method": "spend_based", _estimate: { column: "x" }, _bill: 1, Amount: "1200", Currency: "INR" });
+    expect(fields.map((f) => f.key)).toEqual(["Amount", "Currency"]);
+  });
+});

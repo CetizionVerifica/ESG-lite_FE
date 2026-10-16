@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
 import { Badge, Button, FileDrop, InfoTerm, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
@@ -18,6 +19,7 @@ import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
 import { methodLabel } from "../../../lib/scope3/labels";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
+import { plainProblem } from "../../../lib/entryDetail";
 
 /**
  * The Category 3 (FERA) rows an entry adds on save (S3-7): the upstream twin
@@ -34,6 +36,11 @@ type Props = {
   model: FormModel;
   calc: EmissionCalculator;
   feraCalc: Cat3Calc | null;
+  /**
+   * SE-1: the calculation detail (factor line, "(factor unit)", Global chip,
+   * Category 3 line, method words). False for a User: fields and the total only.
+   */
+  detail: boolean;
   factors: EmissionFactor[];
   mappings: CategoryMapping[];
   units: string[];
@@ -76,7 +83,8 @@ export function EntryRow(p: Props) {
     (model.spec?.mode === "per_method" ? resolveSpecMethod(model.spec, row)?.method.activity_unit : null) ||
     null;
   const extras = visibleExtraFields(model, row);
-  const fieldError = (f: RowIssue["field"]) => (p.showIssue && p.issue?.field === f ? p.issue.message : undefined);
+  const fieldError = (f: RowIssue["field"]) =>
+    p.showIssue && p.issue?.field === f ? (p.detail ? p.issue.message : plainProblem(p.issue.message)) : undefined;
   const categoryOptions =
     p.mappings.length > 0
       ? p.mappings.map((m) => ({ value: m.global_category_name, label: m.company_category_name }))
@@ -89,6 +97,15 @@ export function EntryRow(p: Props) {
   // S3-9: a spec whose method_column is "@method" lets the row pick its method.
   const rowMethods = model.spec?.mode === "per_method" && model.spec.method_column === ROW_METHOD_COLUMN ? Object.keys(model.spec.methods) : null;
   const rowMethod = String(row[ROW_METHOD_COLUMN] ?? "");
+  // SE-1: a User never picks a method the form has only one of: it's chosen for them, out of sight.
+  // With several, the question stays (until SE-3/SE-5 give it the client's words) as "Type of record".
+  const onlyMethod = rowMethods?.length === 1 ? rowMethods[0] : null;
+  const autoMethod = !p.detail && !!onlyMethod;
+  const onChange = useRef(p.onChange);
+  onChange.current = p.onChange;
+  useEffect(() => {
+    if (autoMethod && onlyMethod && rowMethod !== onlyMethod) onChange.current(ROW_METHOD_COLUMN, onlyMethod);
+  }, [autoMethod, onlyMethod, rowMethod]);
   const tripField = ghg === 7 && rowMethod === "distance_based" ? distanceFieldOf(model.spec?.methods[rowMethod]) : null;
   const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row));
   const firstSelect = visible.find((c) => c.column_type === "select")?.column_name;
@@ -117,7 +134,7 @@ export function EntryRow(p: Props) {
           {row.emission_category ? (
             <span className="mt-1 inline-flex flex-wrap items-center gap-1 rounded-chip bg-tint px-2 py-1 text-ink">
               {row._ecmKey || row.emission_category}
-              {row._ecmKey && row._ecmKey !== row.emission_category && <span className="text-muted">· Global: {row.emission_category}</span>}
+              {p.detail && row._ecmKey && row._ecmKey !== row.emission_category && <span className="text-muted">· Global: {row.emission_category}</span>}
             </span>
           ) : (
             <span className={cn("mt-1 block", fieldError("emission_category") ? "text-bad" : "text-muted")}>
@@ -143,13 +160,13 @@ export function EntryRow(p: Props) {
       )}
       </div>
 
-      {rowMethods && (
+      {rowMethods && !autoMethod && (
         <Select<string>
-          label="Calculation method"
+          label={p.detail ? "Calculation method" : "Type of record"}
           value={rowMethod || null}
           onChange={(v) => p.onChange(ROW_METHOD_COLUMN, v ?? "")}
           options={rowMethods.map((k) => ({ value: k, label: methodLabel(k, ghg) }))}
-          placeholder="Choose how this row is calculated"
+          placeholder={p.detail ? "Choose how this row is calculated" : "Choose one"}
           className="sm:max-w-sm"
         />
       )}
@@ -177,7 +194,7 @@ export function EntryRow(p: Props) {
                 row={row}
                 onChange={p.onChange}
                 labelExtra={labelExtra}
-                help={ghg === 6 && c.column_name === firstSelect ? TRAVEL_MODE_NOTE : undefined}
+                help={p.detail && ghg === 6 && c.column_name === firstSelect ? TRAVEL_MODE_NOTE : undefined}
               />
             );
           })}
@@ -185,9 +202,9 @@ export function EntryRow(p: Props) {
           label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
           value={row.activity_data_unit || null}
           onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
-          options={unitOptions.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
+          options={unitOptions.map((u) => ({ value: u, label: p.detail && u === expectedUnit ? `${u} (factor unit)` : u }))}
           placeholder="Choose a unit"
-          help={expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined}
+          help={p.detail && expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined}
           error={fieldError("activity_data_unit")}
         />
       </div>
@@ -229,7 +246,7 @@ export function EntryRow(p: Props) {
 
       <footer className="flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="text-xs text-muted">
-          {factor ? (
+          {!p.detail ? null : factor ? (
             <>
               Factor {factor.factor_value} kgCO₂e per {factor.denominator_unit}, {factor.year}
               {factor.year === p.factorYear ? (
@@ -258,9 +275,9 @@ export function EntryRow(p: Props) {
               {result.status === "converted" && <span className="block text-xs font-normal text-muted">unit converted</span>}
             </p>
           ) : (
-            <p className={cn("text-sm", p.showIssue ? "text-bad" : "text-muted")}>{p.issue?.message ?? result.status}</p>
+            <p className={cn("text-sm", p.showIssue ? "text-bad" : "text-muted")}>{p.detail ? (p.issue?.message ?? result.status) : plainProblem(p.issue?.message ?? result.status)}</p>
           )}
-          {cat3 && (
+          {p.detail && cat3 && (
             <p className="font-num text-xs text-muted">
               + <InfoTerm id="fera">Cat 3</InfoTerm> {cat3.slice(CAT3_PREVIEW_PREFIX.length)}
             </p>

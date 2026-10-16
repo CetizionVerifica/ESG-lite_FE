@@ -1,4 +1,5 @@
 import type { ColumnConfig, ColumnEntity } from "../../lib/emissions";
+import { ENGINE_NOTE_CODES, plainIssue, plainProblem } from "../../lib/entryDetail";
 
 /** Where a row's numbers go. Keys are what the AI service reads (`/v1/excel/*`). */
 export type FieldKind = "category" | "value" | "column" | "unit" | "extra" | "date";
@@ -197,6 +198,25 @@ export function rowIssue(row: PreviewRow): RowIssue | null {
   if (row.state === "issue" || row.state === "skipped" || row.row_error) return { kind: "skip", text: `Won't import: ${row.row_error || "see the issue on this row"}` };
   if (row.row_warning) return { kind: "warn", text: row.row_warning };
   return null;
+}
+
+/**
+ * SE-1: rowIssue as a User reads it. Problems about the factor library or
+ * units in plain words (plainIssue); engine notes that never block (older
+ * factor year, no Category 3 row…) left out, as reviewers handle those.
+ */
+export function contributorRowIssue(row: PreviewRow): RowIssue | null {
+  const issue = rowIssue(row);
+  if (!issue) return null;
+  const list = row.issues ?? [];
+  if (issue.kind === "skip") {
+    const errors = list.filter((i) => i.severity === "error");
+    const text = errors.length ? [...new Set(errors.map((i) => plainIssue(i.code, i.message)))].join(" ") : plainProblem(row.row_error ?? "");
+    return { kind: "skip", text: `Won't import: ${text || "see the issue on this row"}` };
+  }
+  if (!list.length) return { kind: "warn", text: plainProblem(issue.text) };
+  const notes = list.filter((i) => i.severity !== "error" && !ENGINE_NOTE_CODES.has(i.code));
+  return notes.length ? { kind: "warn", text: [...new Set(notes.map((i) => plainIssue(i.code, i.message)))].join(" ") } : null;
 }
 
 export interface PlanCounts {

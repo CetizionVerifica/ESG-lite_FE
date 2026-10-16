@@ -169,6 +169,7 @@ test("a superadmin uploads a sheet, maps it, previews and imports the rows", asy
   expect(previewSent.plan_id).toBeUndefined();
   const table = page.getByRole("table", { name: "Preview of the rows to import" });
   await expect(table.getByRole("row")).toHaveCount(4);
+  await expect(table.getByRole("columnheader", { name: "Factor used" })).toBeVisible(); // reviewer detail stays (SE-1)
   await expect(page.getByText("3 rows. 2 ready, 1 need a look.")).toBeVisible();
   await expect(page.getByText("Will import", { exact: true })).toBeVisible();
   await page.getByRole("radio", { name: "Issues (1)" }).click();
@@ -257,6 +258,24 @@ test("a superadmin previews a historical sheet, imports it and sees the invite w
   expect(historical[1]).toContain('name="commit"');
   // No password is ever shown.
   await expect(page.getByText(/password/i)).toHaveCount(0);
+});
+
+test("SE-1: a contributor's preview shows entered values and tCO₂e only; a superadmin's shows the factor", async ({ page }) => {
+  await signIn(page, "User", CONTRIBUTOR);
+  await page.goto("/capture/upload?site=1&category=1&period=2026-08");
+  await page.locator('input[type="file"]').setInputFiles({ name: "fuel-aug.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("x") });
+  await page.getByRole("button", { name: "Upload and map columns" }).click();
+  await expect(page.locator("[aria-current=step]")).toContainText("Map columns");
+  await expect(page.getByText("Picks the emission factor for each row.")).toHaveCount(0);
+  await expect(page.getByText("What each row is, for example Diesel.")).toBeVisible();
+  await page.getByLabel("Sheet column for Activity unit").selectOption("Unit");
+  await page.getByRole("button", { name: "Preview rows" }).click();
+  const table = page.getByRole("table", { name: "Preview of the rows to import" });
+  await expect(table.getByRole("row")).toHaveCount(4);
+  await expect(table.getByRole("columnheader", { name: "tCO₂e" })).toBeVisible();
+  for (const name of ["Factor used", "Factor"]) await expect(table.getByRole("columnheader", { name, exact: true })).toHaveCount(0);
+  await expect(table).toContainText("Won't import: We can't work this row out yet. Ask your administrator.");
+  await expect(table).not.toContainText("emission factor");
 });
 
 test("the Add data link opens bulk upload for a contributor's own site", async ({ page }) => {

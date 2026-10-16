@@ -209,3 +209,31 @@ describe("withClientSites (Admin)", () => {
     expect(withClientSites([], [{ site_id: 3, name: "Askar" }])).toEqual([]);
   });
 });
+
+describe("contributorRowIssue (SE-1)", () => {
+  it("says factor and unit problems plainly and leaves engine notes out", async () => {
+    const { contributorRowIssue } = await import("./logic");
+    const noFactor = {
+      state: "issue",
+      row_error: 'No emission factor found for emission category "Diesel" (year 2025)',
+      issues: [{ code: "NO_FACTOR_FOR_YEAR", severity: "error", message: 'No emission factor found for emission category "Diesel" (year 2025)' }],
+    };
+    expect(contributorRowIssue(noFactor)).toEqual({ kind: "skip", text: "Won't import: We can't work this row out yet. Ask your administrator." });
+    const badUnit = { state: "issue", row_error: "Unit mismatch", issues: [{ code: "UNIT_NOT_CONVERTIBLE", severity: "error", message: 'Unit mismatch: Expected "litre" but received "kwh".' }] };
+    expect(contributorRowIssue(badUnit)?.text).toBe("Won't import: This unit can't be used here. Choose another unit.");
+    const ownData = { state: "issue", row_error: "No quantity greater than 0 was found for this row.", issues: [{ code: "MISSING_VALUE", severity: "error", message: "No quantity greater than 0 was found for this row." }] };
+    expect(contributorRowIssue(ownData)?.text).toBe("Won't import: No quantity greater than 0 was found for this row.");
+    const notesOnly = {
+      state: "ready",
+      row_warning: 'No 2024 factor for "Diesel"; the 2025 factor was used.',
+      issues: [
+        { code: "FACTOR_FALLBACK_YEAR", severity: "warning", message: 'No 2024 factor for "Diesel"; the 2025 factor was used.' },
+        { code: "FERA_FACTOR_MISSING", severity: "warning", message: "No 2024 FERA factor for \"Diesel\"" },
+      ],
+    };
+    expect(contributorRowIssue(notesOnly)).toBeNull();
+    const duplicate = { state: "ready", row_warning: "Already entered for Sep 2025", issues: [{ code: "DUPLICATE_SAVED", severity: "warning", message: "Already entered for Sep 2025" }] };
+    expect(contributorRowIssue(duplicate)).toEqual({ kind: "warn", text: "Already entered for Sep 2025" });
+    expect(contributorRowIssue({ state: "ready" })).toBeNull();
+  });
+});

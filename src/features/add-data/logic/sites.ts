@@ -14,13 +14,15 @@ export interface EntrySite {
   name: string;
   categories: Category[];
   company_id: number | null;
+  /** The company's `entry_detail` (SE-2); missing = "total" (SE-1). */
+  entry_detail?: string | null;
 }
 
 interface RawSite {
   site_id: number;
   name: string;
   categories?: Category[];
-  company?: { company_id: number } | null;
+  company?: { company_id: number; entry_detail?: string | null } | null;
 }
 
 const toSite = (s: RawSite): EntrySite => ({
@@ -28,6 +30,7 @@ const toSite = (s: RawSite): EntrySite => ({
   name: s.name,
   categories: s.categories ?? [],
   company_id: s.company?.company_id ?? null,
+  entry_detail: s.company?.entry_detail ?? null,
 });
 
 /** user.sites, or the single user.site of older accounts. */

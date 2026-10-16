@@ -12,6 +12,7 @@ import { SmartImportFlow } from "./components/smart/SmartImportFlow";
 import { useUploadContext } from "./hooks/useUploadContext";
 import { smartImportEnabled } from "./smart/logic";
 import { type ImportResult, type MapField, STEPS, autoMap, buildFields, contributorSites, fileProblem, mappingsFor, monthEndDate, setHeader, skippedMatrix, toggleSkip, withClientSites } from "./logic";
+import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 
 type Sheet = { documentId: number; headers: string[]; fileName: string };
 
@@ -69,6 +70,8 @@ export default function BulkUploadPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, contributor, ownSites.length]);
   const form = useFormConfig(ctx.siteId, ctx.categoryId, contributor);
+  // SE-1: a User's manual upload shows entered values and tCO₂e only.
+  const detail = useCalcDetailForSite(ctx.siteId);
   const upload = useUploadFile();
 
   const [step, setStep] = useState(0);
@@ -279,6 +282,7 @@ export default function BulkUploadPage() {
             onToggleAll={toggleAll}
             onBack={() => setStep(0)}
             onNext={toPreview}
+            detail={detail}
           />
         )}
         {step === 2 && (
@@ -291,10 +295,12 @@ export default function BulkUploadPage() {
             onRetry={() => void preview.refetch()}
             onBack={() => setStep(1)}
             onImport={runImport}
+            detail={detail}
           />
         )}
         {step === 3 && importState && (
           <ImportStep
+            detail={detail}
             state={importState}
             total={preview.data?.plan.counts.ready ?? 0}
             skippedFile={skipped ? { partial: skipped.partial } : null}

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useCalcDetail } from "../../lib/useCalcDetail";
 import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
 import { useEntrySetup, usePeriodTotals, useThreshold } from "./api";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
@@ -37,6 +38,8 @@ export default function AddDataPage() {
   const categoryId = num(params.get("category"));
   const period = parseEntryPeriod(params.get("period"));
   const site = sites.find((s) => s.site_id === siteId);
+  // SE-1: a User sees their fields and the total only, unless the company shows full detail.
+  const detail = useCalcDetail(site ? { entry_detail: site.entry_detail } : null);
   const categories = entryCategories(site);
   const category = categories.find((c) => c.category_id === categoryId) ?? null;
   const contextReady = !!site && !!category && !!period;
@@ -192,6 +195,7 @@ export default function AddDataPage() {
         setup={setup.data}
         calc={calc}
         feraCalc={feraCalc}
+        detail={detail}
         issues={issues}
         unconfirmedBills={unconfirmedBills}
         siteId={site.site_id}

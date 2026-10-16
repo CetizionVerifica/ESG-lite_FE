@@ -25,6 +25,7 @@ import { type EntryUpdate, canEdit, saveErrorMessage } from "../edit";
 import { EDIT_FORM_ID, EditEntryForm } from "./EditEntryForm";
 import { type EntryRow, activityFields, keyActivity, periodText, quantityOf } from "../logic";
 import { feraSubLabel } from "../../../lib/scope3/fera";
+import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -103,6 +104,8 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
   const files = (docs.data ?? []).map(fromEmissionDocument);
   const quantity = entry ? quantityOf(entry.activity_data) : null;
   const fields = entry ? activityFields(entry.activity_data, config.data ?? undefined) : [];
+  // SE-1: a User sees the entry and its total; the calculation (category match, Category 3 rows) is for reviewers.
+  const detail = useCalcDetailForSite(entry?.site?.site_id);
 
   return (
     <>
@@ -136,19 +139,21 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
               <EditEntryForm entry={entry} saveError={saveError} onSubmit={save} />
             ) : (
               <>
-                <Section title="Calculation">
+                <Section title={detail ? "Calculation" : "Entry"}>
                   <dl className="divide-y divide-line rounded-control border border-line px-3">
-                    <Row label="Emission category">{keyActivity(entry) ?? "—"}</Row>
-                    <Row label="Quantity">
-                      <span className="font-num tabular-nums">
-                        {quantity === null ? "—" : formatNumber(quantity, Number.isInteger(quantity) ? 0 : 2)} {entry.activity_data_unit ?? ""}
-                      </span>
-                    </Row>
+                    {detail && <Row label="Emission category">{keyActivity(entry) ?? "—"}</Row>}
+                    {detail && (
+                      <Row label="Quantity">
+                        <span className="font-num tabular-nums">
+                          {quantity === null ? "—" : formatNumber(quantity, Number.isInteger(quantity) ? 0 : 2)} {entry.activity_data_unit ?? ""}
+                        </span>
+                      </Row>
+                    )}
                     <Row label="Emissions">
                       <span className="font-num font-semibold tabular-nums">{formatEmissions(Number(entry.total_emission))}</span>
                     </Row>
-                    {entry.scope3_sub && <Row label="Part of">{feraSubLabel(entry.scope3_sub)}</Row>}
-                    {entry.fera?.map((f) => (
+                    {detail && entry.scope3_sub && <Row label="Part of">{feraSubLabel(entry.scope3_sub)}</Row>}
+                    {detail && entry.fera?.map((f) => (
                       <Row key={f.pk_id} label={feraSubLabel(f.scope3_sub)}>
                         <span className="font-num tabular-nums">{formatEmissions(Number(f.total_emission))}</span>
                       </Row>

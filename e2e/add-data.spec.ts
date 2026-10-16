@@ -86,10 +86,12 @@ const extraction = {
   ],
 };
 
-type Extra = { existing?: unknown[]; updated?: unknown[]; uploads?: string[] };
+type Extra = { existing?: unknown[]; updated?: unknown[]; uploads?: string[]; entryDetail?: "full" };
 
 async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>, extra: Extra = {}) {
-  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [site] };
+  // SE-1: company.entry_detail "full" shows a User the calculation detail; missing = total only.
+  const userSite = extra.entryDetail ? { ...site, company: { ...site.company, entry_detail: extra.entryDetail } } : site;
+  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [userSite] };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "User");
@@ -186,12 +188,14 @@ test("contributor types a row, sees tCO2e live and submits it", async ({ page })
   await expect(page.getByText("Bahrain plant · Stationary combustion · Sep 2025")).toBeVisible();
   const row = page.getByRole("region", { name: "Row 1" });
   await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
-  await expect(row.getByText("Global: Diesel (avg biofuel blend)")).toBeVisible();
   await row.getByLabel("Quantity").fill("1600");
   await row.getByLabel("Unit").selectOption("litre");
   await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
-  await expect(row.getByText("factor year 2024 used for 2025 data")).toBeVisible();
   await expect(row.getByText("▲ 7.3% vs Aug 2025 (threshold 5%)")).toBeVisible();
+  // SE-1: a User sees the total, not how it was worked out.
+  for (const text of ["Global:", "Factor ", "kgCO₂e per", "factor year", "(factor unit)", "FERA", "Calculation method"]) {
+    await expect(row.getByText(text, { exact: false })).toHaveCount(0);
+  }
 
   await page.getByRole("button", { name: "Review" }).click();
   await expect(page.getByRole("table")).toContainText("Diesel");
@@ -209,8 +213,36 @@ test("contributor types a row, sees tCO2e live and submits it", async ({ page })
   });
 });
 
-test("with no factor in the factor year, the preview uses the newest factor from another year, as the save does", async ({ page }) => {
+test("SE-1: with company detail set to full, a User sees how the row is worked out", async ({ page }) => {
+  await signIn(page, [], false, [], undefined, { entryDetail: "full" });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await expect(row.getByText("Global: Diesel (avg biofuel blend)")).toBeVisible();
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
+  await expect(row.getByText("factor year 2024 used for 2025 data")).toBeVisible();
+  await expect(row.getByText(/Factor 2\.68 kgCO₂e per litre/)).toBeVisible();
+  await expect(row.getByLabel("Unit").locator("option", { hasText: "(factor unit)" })).toHaveCount(1);
+});
+
+test("SE-1: a User's problems are in plain words, with no factor talk", async ({ page }) => {
   await signIn(page, []);
+  // No factor at all for this site × category.
+  await page.route(/\/user\/emission-factors\/site\/4\/category\/9(\?|$)/, (route) => route.fulfill({ json: [] }));
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("10");
+  await row.getByLabel("Unit").selectOption("litre");
+  await expect(row.getByText("We can't work this row out yet. Ask your administrator.")).toBeVisible();
+  await expect(row.getByText("No factor for this category")).toHaveCount(0);
+  await expect(row.getByText(/emission factor/i)).toHaveCount(0);
+});
+
+test("with no factor in the factor year, the preview uses the newest factor from another year, as the save does", async ({ page }) => {
+  await signIn(page, [], false, [], undefined, { entryDetail: "full" }); // the factor line shows with full detail (SE-1)
   // Only 2022 and 2023 factors exist; Sep 2025 data looks for 2024 first.
   const older = [
     { ...factors[0], emission_factor_id: 21, factor_value: 2.5, year: 2023 },
@@ -552,7 +584,7 @@ test("files picked on a typed row are attached to it after it is saved", async (
 });
 
 test("a Scope 2 row previews its Category 3 rows: upstream of electricity and T&D losses", async ({ page }) => {
-  await signIn(page, []);
+  await signIn(page, [], false, [], undefined, { entryDetail: "full" }); // Category 3 rows show with full detail (SE-1)
   await page.goto("/data/new?site=4&category=12&period=2025-09");
   const row = page.getByRole("region", { name: "Row 1" });
   await row.getByLabel("Emission category").selectOption({ label: "Grid AU" });

@@ -24,6 +24,8 @@ type Props = {
   setup: EntrySetup;
   calc: EmissionCalculator;
   feraCalc: Cat3Calc | null;
+  /** SE-1: show the calculation detail (factor, Category 3, method); false for a User = total only. */
+  detail: boolean;
   /** Per row of `rows`; null when the row is fine or won't be sent (an empty typed row next to bill rows). */
   issues: (RowIssue | null)[];
   /** Bills whose rows the user hasn't checked yet. */
@@ -71,6 +73,7 @@ export function EnterRows(p: Props) {
         model={p.model}
         calc={p.calc}
         feraCalc={p.feraCalc}
+        detail={p.detail}
         factors={p.setup.factors}
         mappings={p.setup.mappings}
         units={p.setup.units}

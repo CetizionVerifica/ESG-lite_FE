@@ -210,7 +210,8 @@ export type ActivityField = { key: string; value: string };
 export function activityFields(activityData: Record<string, unknown> | null | undefined, config?: LabelConfig): ActivityField[] {
   const data = activityData ?? {};
   return Object.entries(data)
-    .filter(([key, value]) => !META_KEYS.has(key) && value !== null && value !== undefined && value !== "")
+    // `@method` and `_private` keys are internal (SE-1): never shown as something the user entered.
+    .filter(([key, value]) => !META_KEYS.has(key) && !key.startsWith("@") && !key.startsWith("_") && value !== null && value !== undefined && value !== "")
     .map(([key, value]) => ({
       key,
       value: typeof value === "object" ? JSON.stringify(value) : optionLabel(key, String(value), config, data),
