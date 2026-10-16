@@ -2,10 +2,17 @@
  * S3-14 Scope 3 base year: API shapes, reason labels and the sentences the
  * Boundary page, targets page and GHG report share. Pure; unit tested.
  */
-import { type GhgCategoryNumber, categoryLabel, isGhgCategoryNumber } from "./contracts";
+import {
+  type GhgCategoryNumber,
+  type RecalculationReason,
+  type RecalculationStatus,
+  categoryLabel,
+  isGhgCategoryNumber,
+} from "./contracts";
 
-export const RECALC_REASONS = ["error", "methodology", "data_quality", "structural"] as const;
-export type RecalcReason = (typeof RECALC_REASONS)[number];
+/** S3-0's reasons, in the order the screens list them. */
+export type RecalcReason = RecalculationReason;
+export const RECALC_REASONS: readonly RecalcReason[] = ["error", "methodology", "data_quality", "structural"];
 
 /** Scope 3 Standard §9.3 triggers, in plain words. */
 export const RECALC_REASON_LABEL: Record<RecalcReason, string> = {
@@ -15,7 +22,7 @@ export const RECALC_REASON_LABEL: Record<RecalcReason, string> = {
   structural: "Structural change",
 };
 
-export type RecalcStatus = "proposed" | "approved" | "dismissed";
+export type RecalcStatus = RecalculationStatus;
 
 export const RECALC_STATUS_LABEL: Record<RecalcStatus, string> = {
   proposed: "Pending",
