@@ -266,6 +266,12 @@ export function newRow(m: FormModel, id: number): ModalRow {
   // S3-3: the form's first (most specific) method is the default. Set as is, so a
   // fresh row holds nothing typed (no unit or percentages preselected yet).
   if (m.methodOptions.length) row[ROW_METHOD_COLUMN] = m.methodOptions[0].method;
+  // SE-1: an S3-9 `@method` form with a single method has nothing to choose: the row starts on it
+  // (set here, not after the first render, so a fresh row isn't an unsaved change).
+  else {
+    const only = rowMethodChoices(m);
+    if (only.length === 1) row[ROW_METHOD_COLUMN] = only[0];
+  }
   return row;
 }
 

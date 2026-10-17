@@ -44,8 +44,13 @@ describe("the row's method", () => {
     expect(row["@method"]).toBe("supplier_specific");
     expect(row.activity_data_unit).toBeUndefined();
     expect(rowHasInput(row)).toBe(false);
-    // A form without method_options leaves the method to the person (S3-9 behaviour).
-    expect(newRow(toFormModel(travel), 1)).not.toHaveProperty("@method");
+    // A form without method_options: its only @method is the start (SE-1, nothing to choose; not input
+    // either); with several, the person picks (S3-9 behaviour).
+    const single = newRow(toFormModel(travel), 1);
+    expect(single["@method"]).toBe("distance_based");
+    expect(rowHasInput(single)).toBe(false);
+    const twoMethods = { ...travel, calculation: { ...travel.calculation!, methods: { ...travel.calculation!.methods!, average_data: { multiply: ["distance"], activity_unit: "passenger.km" } } } } as ColumnConfig;
+    expect(newRow(toFormModel(twoMethods), 1)).not.toHaveProperty("@method");
   });
 
   it("keeps a unit the new method offers, picks its only one, or clears it", () => {

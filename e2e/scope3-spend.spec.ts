@@ -8,7 +8,8 @@ import { type Page, expect, test } from "@playwright/test";
 const site = {
   site_id: 4,
   name: "Bahrain plant",
-  company: { company_id: 1, name: "Midal Cables" },
+  // SE-1: the rate and deflator preview is calculation detail; this client shows Users the full detail.
+  company: { company_id: 1, name: "Midal Cables", entry_detail: "full" },
   categories: [{ category_id: 21, category_name: "Purchased goods and services", scope: "Scope 3", ghg_category: 1 }],
 };
 
