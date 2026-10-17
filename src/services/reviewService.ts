@@ -27,6 +27,7 @@ export const markNothingThisMonth = async (body: NothingThisMonthBody): Promise<
 
 /** `DELETE /user/my-month/nothing` (same body): take the mark off again. */
 export const unmarkNothingThisMonth = async (body: NothingThisMonthBody): Promise<void> => {
+  // data-loss-reviewed: removes only the caller's own "Nothing this month" mark for one category and month (Undo in the toast or on the row); no emission data is deleted, and the mark can be set again
   await api.delete("/user/my-month/nothing", { data: body });
 };
 
