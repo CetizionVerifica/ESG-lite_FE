@@ -102,6 +102,14 @@ describe("rows", () => {
     expect(quantityOf(null)).toBeNull();
   });
 
+  it("a spend row's quantity is its amount spent (in its currency, the row's unit)", () => {
+    // As the spend form saves it (S3-5), and as an older Category 1 form did.
+    expect(quantityOf({ emission_category: "Chemicals (USEEIO)", "@method": "spend_based", spent_value: "1240000", currency: "INR" })).toBe(1240000);
+    expect(quantityOf({ "Spent value": "1000", emission_category: "AMC Charges" })).toBe(1000);
+    // An older form's informational "Spent value" never replaces the row's own quantity.
+    expect(quantityOf({ Quantity: "20", "Spent value": "5000" })).toBe(20);
+  });
+
   it("reads the emission category and status", () => {
     expect(keyActivity(entry({ activity_data: { Emission_Category: " Diesel " } }))).toBe("Diesel");
     expect(keyActivity(entry({}))).toBeNull();
