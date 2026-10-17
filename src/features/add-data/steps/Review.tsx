@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { invalidateEmissionQueries } from "../../../lib/emissionQueries";
 import { linkBillEvidence, saveRow, updateRow, uploadRowEvidence, type SaveOutcome } from "../api";
 import { editOf } from "../logic/existing";
+import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { billOf } from "../logic/bill";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import type { EmissionPayload } from "../logic/entry";
@@ -23,6 +24,11 @@ type Props = {
   evidenceFiles: (rowId: number) => File[];
   periodLabel: string;
   onBack: () => void;
+  /**
+   * Back to the rows to pick another method for the rows the server refused
+   * (S3-3 METHOD_NOT_ALLOWED). `sentIds`: rows already sent, which leave the form.
+   */
+  onFixMethod?: (refused: { rowId: number; method: string; message: string }[], sentIds: number[]) => void;
   /** Every row is sent or skipped. */
   onFinished: () => void;
   onAnother: () => void;
@@ -103,6 +109,16 @@ export function Review(p: Props) {
   const finished = p.rows.length > 0 && p.rows.every((r) => ["saved", "skipped"].includes(outcomes[r.id]?.kind ?? ""));
   const savedCount = p.rows.filter((r) => outcomes[r.id]?.kind === "saved").length;
   const unattached = p.rows.filter((r) => evidence[r.id] === "failed").length;
+  // S3-3: rows the form refused for their method; they go back to the rows to pick another.
+  const refused = p.rows.flatMap((r) => {
+    const o = outcomes[r.id];
+    return o?.kind === "error" && o.methodNotAllowed ? [{ rowId: r.id, method: String(r[ROW_METHOD_COLUMN] ?? ""), message: o.message }] : [];
+  });
+  const fixMethod = () =>
+    p.onFixMethod?.(
+      refused,
+      p.rows.filter((r) => outcomes[r.id]?.kind === "saved" || outcomes[r.id]?.kind === "skipped").map((r) => r.id),
+    );
   // The engine's notes on saved rows (S3-4): an older factor year, no FERA row. Never blocking.
   const notes = p.rows.flatMap((r) => {
     const o = outcomes[r.id];
@@ -217,6 +233,16 @@ export function Review(p: Props) {
           </tbody>
         </table>
       </div>
+
+      {refused.length > 0 && !sending && p.onFixMethod && (
+        <Callout
+          tone="warn"
+          title={refused.length === 1 ? "1 row uses a method this form doesn't offer" : `${refused.length} rows use a method this form doesn't offer`}
+          action={<Button size="sm" onClick={fixMethod}>Change the method</Button>}
+        >
+          Pick one of the methods the form offers, then send again.{savedCount > 0 ? " Rows already sent stay sent." : ""}
+        </Callout>
+      )}
 
       <DuplicateDialog
         open={askDuplicates && duplicates.length > 0}

@@ -1,8 +1,8 @@
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
-import { Badge, Button, FileDrop, InfoTerm, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
+import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
-import { formColumns, isColumnVisible, visibleExtraFields, type FormModel } from "../logic/form";
+import { formColumns, isColumnVisible, rowMethodChoices, visibleExtraFields, type FormModel } from "../logic/form";
 import type { RowIssue } from "../logic/entry";
 import type { CategoryMapping } from "../api";
 import type { EmissionFactor, ModalRow } from "../types";
@@ -16,6 +16,7 @@ import { TripCalculator } from "./TripCalculator";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
 import { methodLabel } from "../../../lib/scope3/labels";
+import { DATA_TYPE_LABELS, autoDq, dataTypeFor, isMethod, unitsForMethod, type Method } from "../../../lib/scope3/dq";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 import { SPEND_FIELDS, spendPreviewLine } from "../../../lib/scope3/spend";
 import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
@@ -57,6 +58,15 @@ type Props = {
   onCalculateDistance: (column: string, field: DistanceField) => void;
   /** Evidence files for a typed row; bill rows have their bill. */
   evidence?: { items: FileDropItem[]; onAdd: (files: File[]) => void; onRemove: (id: string) => void };
+  /** The site's country (ISO alpha-2), for the data quality preview (S3-3). */
+  siteCountry?: string | null;
+  /** The server refused the row's method (METHOD_NOT_ALLOWED): its words, shown on the method cards. */
+  methodError?: string;
+  /**
+   * SE-1: the method cards and the data quality line are for Managers and above (or a company set
+   * to full detail). A contributor's row keeps the form's first method (simple-entry §8 decision 2).
+   */
+  showCalcDetail?: boolean;
 };
 
 /** One entry as a card: what it is, its values, more details, and the live result. */
@@ -90,19 +100,31 @@ export function EntryRow(p: Props) {
   const confidence = aiCategory ? (bill?.confidence ?? null) : null;
   const unsure = confidence !== null && confidence < LOW_CONFIDENCE;
   const ghg = isGhgCategoryNumber(p.ghgCategory) ? p.ghgCategory : null;
-  // S3-9: a spec whose method_column is "@method" lets the row pick its method.
-  const rowMethods = model.spec?.mode === "per_method" && model.spec.method_column === ROW_METHOD_COLUMN ? Object.keys(model.spec.methods) : null;
+  // S3-3: the form's method_options, or (S3-9) a spec whose method_column is "@method", let the row pick its method.
+  // A contributor gets no S3-3 method choice. A form whose own fields depend on the row's method
+  // (an S3-9 "@method" spec with no method_options) keeps the plain select it has on production.
+  const rowMethods = p.showCalcDetail || !model.methodOptions.length ? rowMethodChoices(model) : [];
+  const legacyMethodSelect = !p.showCalcDetail && rowMethods.length > 1;
   const rowMethod = String(row[ROW_METHOD_COLUMN] ?? "");
+  const methodUnits = unitsForMethod(model.methodOptions, rowMethod);
   const tripField = ghg === 7 && rowMethod === "distance_based" ? distanceFieldOf(model.spec?.methods[rowMethod]) : null;
   // S3-5: a row calculated from the amount spent takes Amount, Currency and Invoice date instead of
   // the quantity fields, unless its method multiplies fields into the amount (Category 15).
   const spend = calc.spendDetail(row);
   const spendForm = calc.usesSpendForm(row);
+  // The live data quality line mirrors the engine: a row priced from spend is spend_based (S3-5's file
+  // says so); else the row's method, else the form's first, else average data (Scope 3 only).
+  const dqMethod: Method | null = spend ? "spend_based" : isMethod(rowMethod) ? rowMethod : (model.methodOptions[0]?.method ?? (ghg !== null ? "average_data" : null));
+  const hasEvidence = !!bill || (p.evidence?.items.length ?? 0) > 0;
+  const dq = dqMethod && factor && ghg !== null ? autoDq({ method: dqMethod, factor, siteCountry: p.siteCountry, reportingYear: p.reportingYear, hasEvidence }) : null;
   const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row) && (!spendForm || c.column_type === "select"));
   // The spend form's own fields replace the form's older "Spent value" / "Currency" extras.
   const extras = spendForm ? allExtras.filter((f) => !SPEND_EXTRA_KEYS.has(f.key)) : allExtras;
   const firstSelect = visible.find((c) => c.column_type === "select")?.column_name;
-  const unitOptions = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
+  // A method that names its units (S3-3 method_options) offers only those.
+  const unitOptions = [
+    ...new Set([...(methodUnits ?? [...(expectedUnit ? [expectedUnit] : []), ...p.units]), ...(row.activity_data_unit ? [row.activity_data_unit] : [])]),
+  ];
 
   return (
     <section aria-label={`Row ${p.index + 1}`} className={cn(panel, "space-y-4 p-4")}>
@@ -153,7 +175,7 @@ export function EntryRow(p: Props) {
       )}
       </div>
 
-      {rowMethods && (
+      {legacyMethodSelect ? (
         <Select<string>
           label="Calculation method"
           value={rowMethod || null}
@@ -162,7 +184,18 @@ export function EntryRow(p: Props) {
           placeholder="Choose how this row is calculated"
           className="sm:max-w-sm"
         />
-      )}
+      ) : p.showCalcDetail ? (
+        <MethodCards
+          methods={rowMethods}
+          value={rowMethod || null}
+          onChange={(v) => p.onChange(ROW_METHOD_COLUMN, v)}
+          ghgCategory={ghg}
+          label={`How is row ${p.index + 1} calculated?`}
+          error={p.methodError}
+        />
+      ) : p.methodError ? (
+        <p className="text-xs text-bad">{p.methodError}</p>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((c) => {
@@ -259,6 +292,16 @@ export function EntryRow(p: Props) {
           ) : row.emission_category ? (
             <span className="text-bad">No factor for this category</span>
           ) : null}
+          {p.showCalcDetail && dq && dqMethod && (
+            <span className="mt-1 flex flex-wrap items-center gap-1.5" data-testid="row-dq">
+              Data quality <DataQualityBadge dq={dq} />
+              <span>
+                {DATA_TYPE_LABELS[dataTypeFor({ method: dqMethod, hasEvidence })]} data
+                {row._estimates?.length ? " · estimated distance" : ""}
+                {p.evidence && !hasEvidence && dataTypeFor({ method: dqMethod }) === "secondary" ? " · evidence makes it primary" : ""}
+              </span>
+            </span>
+          )}
           {p.comparison && (
             <span className="mt-1 block">
               <Badge tone={p.comparison.overThreshold ? "warn" : "neutral"}>

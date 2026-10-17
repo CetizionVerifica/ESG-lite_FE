@@ -8,6 +8,7 @@ import {
   Button,
   type Column,
   ContextChips,
+  DataQualityBadge,
   DataTable,
   DocumentViewer,
   EMPTY_FILTERS,
@@ -35,6 +36,7 @@ import {
   writeFilterParams,
 } from "../../ui";
 import { useBreakdown, useEntries } from "./api";
+import { dqLabel, readDq } from "../../lib/scope3/dq";
 import { BreakdownPanel } from "./components/BreakdownPanel";
 import { EntryDrawer } from "./components/EntryDrawer";
 import {
@@ -188,6 +190,18 @@ export default function MyEntriesPage() {
           {r.status === "rejected" && r.review_comment && <p className="mt-1 line-clamp-2 text-xs text-muted">{r.review_comment}</p>}
         </div>
       ),
+    },
+    {
+      // S3-3: hidden by default; the column picker shows it.
+      id: "dq",
+      header: "Data quality",
+      defaultHidden: true,
+      addedLater: true,
+      value: (r) => {
+        const dq = readDq(r.dq);
+        return dq ? dqLabel(dq.overall) : "";
+      },
+      cell: (r) => <DataQualityBadge dq={r.dq} />,
     },
     { id: "submitted", header: "Submitted", sortable: true, value: (r) => r.created_at, cell: (r) => <span className="whitespace-nowrap">{formatDate(r.created_at)}</span> },
     {

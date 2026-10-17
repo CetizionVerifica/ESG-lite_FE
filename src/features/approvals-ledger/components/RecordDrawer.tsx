@@ -7,6 +7,7 @@ import {
   Button,
   CHECK_ICONS,
   ChartFrame,
+  DataQualityBadge,
   DocumentViewer,
   Drawer,
   EntityAuditTimeline,
@@ -29,6 +30,7 @@ import { EditForm } from "./EditForm";
 import { deflatorLine, drawerRateTerm, fxLine } from "../../../lib/scope3/spend";
 import { type FactorSnapshot, type LedgerRow, activityFields, formatFactorValue, importProvenance, matchedByText, quantityOf, rowMonth, rowPeriodLabel } from "../logic";
 import { feraSubLabel } from "../../../lib/scope3/fera";
+import { rowQuality } from "../../../lib/scope3/dq";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -194,6 +196,7 @@ function Body({ row, fera, status, checkContext }: { row: LedgerRow; fera: Ledge
 
       <Section title="Calculation">
         <Calculation row={row} quantity={quantityOf(fields)} />
+        <Quality row={row} />
       </Section>
 
       <MonthHistory row={row} />
@@ -275,6 +278,30 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
         </p>
       )}
     </div>
+  );
+}
+
+/** S3-3: how the row was calculated and how good its data is; nothing for a Scope 1 or 2 row without them. */
+function Quality({ row }: { row: LedgerRow }) {
+  const q = rowQuality(row);
+  if (!q.show) return null;
+  return (
+    <dl className="mt-2" data-testid="drawer-quality">
+      <Row label="How it was calculated">
+        <span data-testid="drawer-method">{q.method}</span>
+        {q.estimate && (
+          <Badge tone="warn" className="ml-1.5">
+            Estimate
+          </Badge>
+        )}
+      </Row>
+      <Row label="Data quality">
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          <DataQualityBadge dq={q.dq} />
+          {q.dataType && <span className="text-xs text-muted">{q.dataType} data</span>}
+        </span>
+      </Row>
+    </dl>
   );
 }
 

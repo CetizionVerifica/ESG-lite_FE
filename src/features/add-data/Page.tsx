@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
-import { useEntrySetup, usePeriodTotals, useThreshold } from "./api";
+import { useEntrySetup, usePeriodTotals, useSiteCountry, useThreshold } from "./api";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
 import { useSpendRates } from "../../lib/scope3/useSpendRates";
 import type { EmissionFactor } from "./types";
@@ -38,6 +39,8 @@ export default function AddDataPage() {
   const [params, setParams] = useSearchParams();
   const siteId = num(params.get("site")) ?? (sites.length === 1 ? sites[0].site_id : null);
   const categoryId = num(params.get("category"));
+  // SE-1 · simple-entry §8: a contributor never picks a method or reads data quality; the form decides.
+  const calcDetail = useCalcDetailForSite(siteId);
   const period = parseEntryPeriod(params.get("period"));
   const site = sites.find((s) => s.site_id === siteId);
   const categories = entryCategories(site);
@@ -73,6 +76,10 @@ export default function AddDataPage() {
   });
   const threshold = useThreshold(site?.company_id ?? null);
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
+  // S3-3: the data quality preview scores a factor for the site's own country best; Scope 3 only.
+  const siteCountry = useSiteCountry(site?.site_id ?? null, contextReady && category?.ghg_category != null);
+  // Rows the server refused for their method (METHOD_NOT_ALLOWED), shown on the row's method cards.
+  const [methodErrors, setMethodErrors] = useState<Record<number, { method: string; message: string }>>({});
   // Per user: a draft survives a reload, so the next person signing in on this tab mustn't get it.
   const draftKey = contextReady ? entryDraftKey(userIdOf(user), site.site_id, category.category_id, formatEntryPeriodParam(period)) : null;
   const { rows, sent, dispatch, clearDraft, markSent } = useEntryRows(model, draftKey);
@@ -148,11 +155,18 @@ export default function AddDataPage() {
   const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
     <Review
       rows={activeRows}
+      // The row's method stays in activity_data["@method"] too: S3-5 and S3-9 read it there on edits and recalculations.
       payloads={activeRows.map((r) => buildPayload(r, { siteId: s.site_id, categoryId: c.category_id, period: p }))}
       calc={calc}
       evidenceFiles={evidence.filesOf}
       periodLabel={periodLabel}
       onBack={() => setStep(1)}
+      onFixMethod={(refused, sentIds) => {
+        // Rows already sent leave the form, so going back can't send them twice.
+        for (const id of sentIds) dispatch({ type: "remove", id });
+        setMethodErrors(Object.fromEntries(refused.map((r) => [r.rowId, { method: r.method, message: r.message }])));
+        setStep(1);
+      }}
       onFinished={markSent}
       onAnother={() => {
         clearDraft();
@@ -222,6 +236,9 @@ export default function AddDataPage() {
         reportingYear={(factorYear as number) + 1}
         bulkUploadHref={bulkUploadHref}
         evidence={evidence}
+        siteCountry={siteCountry.data ?? null}
+        methodErrors={methodErrors}
+        showCalcDetail={calcDetail}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
       />
