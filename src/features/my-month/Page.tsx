@@ -21,6 +21,7 @@ import { errorText } from "../../services/reviewService";
 import type { MyMonthCategory } from "../../services/myMonthService";
 import { useMyDrafts, useMyMonth, useNothingThisMonth } from "./api";
 import { AtAGlance } from "./components/AtAGlance";
+import { KpisDueCard } from "./components/KpisDueCard";
 import { Checklist, type ChecklistWorkflow } from "./components/Checklist";
 import { DraftsPanel } from "./components/DraftsPanel";
 import { DueBanner } from "./components/DueBanner";
@@ -216,7 +217,10 @@ export default function MyMonthPage() {
                   <Checklist key={site.site_id} site={site} month={month} showSiteName={multiSite} workflow={checklistWorkflow(site.site_id)} />
                 ))}
               </div>
-              <AtAGlance glance={glance(shown)} month={month} />
+              <div className="space-y-4">
+                {!readOnly && <KpisDueCard month={month} />}
+                <AtAGlance glance={glance(shown)} month={month} />
+              </div>
             </div>
           </div>
         </div>

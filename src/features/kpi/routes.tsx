@@ -6,9 +6,10 @@ import { ComingSoon } from "./components/ComingSoon";
 // Until a module lands, its route shows a placeholder behind the switch (KPI-1).
 const LibraryPage = lazy(() => import("./library/Page")); // KPI-2
 const SetupPage = lazy(() => import("./setup/Page")); // KPI-3
+const MyKpisPage = lazy(() => import("./my-kpis/Page")); // KPI-7
 
 export const pages: ModulePages = {
-  "kpi-my": <ComingSoon title="My KPIs" description="The KPIs you enter for your sites, by due date." what="Your KPI list" />, // KPI-7
+  "kpi-my": <MyKpisPage />, // KPI-7
   "kpi-setup": <SetupPage />, // KPI-3
   "kpi-targets": <ComingSoon title="KPI targets" description="Targets per KPI and progress against a baseline." what="KPI targets" />, // KPI-9
   "kpi-dashboard": <ComingSoon title="KPIs" description="How complete the year is per framework, and what's missing." what="The KPI dashboard" />, // KPI-10

@@ -40,6 +40,7 @@ async function mockApi(page: Page, role: string, user: object, opts: { companies
         if (opts.kpiStatus === null || opts.kpiStatus === undefined) return json({});
         return json({ enabled: opts.kpiStatus, setup_completed: false });
       }
+      if (path.endsWith("/kpi/my") && opts.kpiStatus) return json({ period: "2026-09", items: [] });
       if (path.startsWith("/kpi/") || path === "/kpi") return json({ code: "KPI_TRACKING_OFF", message: "Off" }, 403);
       const one = /\/admin\/companies\/(\d+)$/.exec(path);
       if (one && method === "PUT") {
@@ -128,7 +129,7 @@ test("with the switch on, a user sees My KPIs in the nav and can open it", async
   await link.click();
   await expect(page).toHaveURL(/\/kpi$/);
   await expect(page.getByRole("heading", { name: "My KPIs", level: 1 })).toBeVisible();
-  await expect(page.getByText("Your KPI list is coming in the next build step.")).toBeVisible();
+  await expect(page.getByText("No KPIs are assigned to you yet.")).toBeVisible();
 });
 
 test("the server's switch wins over the session: turned on since sign-in shows the nav", async ({ page }) => {
