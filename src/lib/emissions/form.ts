@@ -324,7 +324,10 @@ export function applyChange(m: FormModel, row: ModalRow, column: string, value: 
   if (auto) {
     next.emission_category = auto.category;
     next._ecmKey = auto.key;
-  } else if (isParentColumn(m, column) || isDependentColumn(m, column)) {
+  } else if (isParentColumn(m, column) || isDependentColumn(m, column) || next._ecmKey) {
+    // No choice maps to an activity any more. Also when the activity came from the choices map
+    // (_ecmKey) through a select outside any dependency chain: clearing that select must clear the
+    // activity, or the row keeps calculating (and sends) the one picked before.
     next.emission_category = "";
     next._ecmKey = "";
   }
