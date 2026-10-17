@@ -20,6 +20,8 @@ export function UploadStep(props: {
   uploading: boolean;
   error: string | null;
   onNext: () => void;
+  /** SE-1: false for a User: the hints leave out the exchange rate. */
+  detail: boolean;
 }) {
   const { ctx, onContext, sites, form, file } = props;
 
@@ -80,7 +82,12 @@ export function UploadStep(props: {
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
           <li>Name the columns as in the template and they map themselves.</li>
           <li>One row per entry. Every row needs a category and a unit.</li>
-          {category?.scope === "Scope 3" && <li>For an amount spent, put the amount as the value and its currency code ({SUPPORTED_CURRENCIES.join(", ")}) as the unit; the exchange rate is the one on the row's date.</li>}
+          {category?.scope === "Scope 3" && (
+            <li>
+              For an amount spent, put the amount as the value and its currency code ({SUPPORTED_CURRENCIES.join(", ")}) as the unit
+              {props.detail ? "; the exchange rate is the one on the row's date." : "."}
+            </li>
+          )}
           <li>Rows are saved as Pending for the site's manager to approve.</li>
         </ul>
         <Button variant="secondary" icon={<Download aria-hidden className="size-4" />} disabled={!form.data} onClick={downloadTemplate}>

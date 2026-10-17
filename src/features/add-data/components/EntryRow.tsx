@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
 import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
@@ -22,7 +22,7 @@ import { DATA_TYPE_LABELS, autoDq, dataTypeFor, isMethod, unitsForMethod, type M
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 import { SPEND_FIELDS, spendPreviewLine } from "../../../lib/scope3/spend";
 import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
-import { plainProblem } from "../../../lib/entryDetail";
+import { allMethodUnits, methodForUnit, plainProblem } from "../../../lib/entryDetail";
 import { supplierMethodOf } from "../logic/supplier";
 import { SpendFields } from "./SpendFields";
 
@@ -57,6 +57,11 @@ type Props = {
   /** The category's GHG Protocol number (Scope 3 only); picks method labels and travel copy. */
   ghgCategory?: number | null;
   onChange: (column: string, value: string) => void;
+  /**
+   * SE-1: sets the method a User's unit says, as is: unlike onChange it preselects no unit or
+   * percentages and clears nothing, and the method alone isn't input (rowHasInput).
+   */
+  onRowMethod?: (method: string) => void;
   onExtraChange: (key: string, value: string) => void;
   onDuplicate: () => void;
   onRemove: () => void;
@@ -124,7 +129,20 @@ export function EntryRow(p: Props) {
   const rowMethods = p.showCalcDetail || !model.methodOptions.length ? rowMethodChoices(model) : [];
   const legacyMethodSelect = !p.showCalcDetail && rowMethods.length > 1;
   const rowMethod = String(row[ROW_METHOD_COLUMN] ?? "");
-  const methodUnits = unitsForMethod(model.methodOptions, rowMethod);
+  // SE-1: a form offering several methods whose fields don't depend on the method (the S3-8 transport
+  // forms) and that asks a User no question yet (SE-3/SE-5): the User picks from every method's units
+  // (spend keeps its own Amount and Currency fields), and the unit says which method the row is, as the
+  // engine records it (methodForUnit). Before, the units of the form's first method were the only ones.
+  const methodPicksFields = model.spec?.mode === "per_method" && model.spec.method_column === ROW_METHOD_COLUMN;
+  const byUnit = !p.showCalcDetail && model.methodOptions.length > 1 && !methodPicksFields;
+  const unitMethods = model.methodOptions.filter((o) => o.method !== "spend_based");
+  const unitMethod = byUnit ? methodForUnit(unitMethods, row.activity_data_unit) : null;
+  const setRowMethod = useRef(p.onRowMethod);
+  setRowMethod.current = p.onRowMethod;
+  useEffect(() => {
+    if (unitMethod && rowMethod !== unitMethod) setRowMethod.current?.(unitMethod);
+  }, [unitMethod, rowMethod]);
+  const methodUnits = byUnit ? allMethodUnits(unitMethods) : unitsForMethod(model.methodOptions, rowMethod);
   const tripField = ghg === 7 && rowMethod === "distance_based" ? distanceFieldOf(model.spec?.methods[rowMethod]) : null;
   // S3-5: a row calculated from the amount spent takes Amount, Currency and Invoice date instead of
   // the quantity fields, unless its method multiplies fields into the amount (Category 15).
@@ -245,7 +263,7 @@ export function EntryRow(p: Props) {
             );
           })}
         {spendForm ? (
-          <SpendFields row={row} onChange={p.onChange} amountError={fieldError("values")} currencyError={fieldError("currency")} />
+          <SpendFields row={row} onChange={p.onChange} amountError={fieldError("values")} currencyError={fieldError("currency")} showCalcDetail={p.showCalcDetail} />
         ) : (
           <Select<string>
             label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}

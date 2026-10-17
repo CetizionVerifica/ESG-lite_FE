@@ -261,6 +261,7 @@ export default function BulkUploadPage() {
             uploading={upload.isPending}
             error={fileError ?? (upload.error ? errorMessage(upload.error, "The file couldn't be uploaded. Try again.") : null)}
             onNext={uploadSheet}
+            detail={detail}
           />
         )}
         {step === 1 && sheet && (
