@@ -46,6 +46,12 @@ React 19 + Vite + TypeScript + Tailwind. Backend is ESG-lite (Node), AI/OCR endp
 - Users (contributors) see their fields and the total tCO₂e only: no method choice, factor, FX, FERA/Category 3 or DQ text. Gate detail with `showCalcDetail` (SE-1).
 - Method, unit, currency and field labels/defaults are set per form by the Superadmin in Capture setup and applied by the server; a User's entry sends field values only.
 
+## KPI tracking — see docs/kpi/ (in ESG-lite)
+- Pages live in `src/features/kpi/` (setup, my-kpis, review, dashboard, reports, library); shared logic in `src/lib/kpi/`. Labels, framework names and units come from `src/lib/kpi/` only.
+- Nothing KPI is visible unless `kpiTrackingOn(user)` (`src/lib/kpi/switch.ts`): nav, routes, command palette, My month card, Approvals tab. Deep links to KPI routes when off land on a friendly "not available" state.
+- `docs/kpi/05-ux.md` is binding: plain questions (not disclosure codes) for contributors, one KPI at a time, framework badges, auto values read-only with "From your data", drafts save as you type, progress always visible.
+- The FE never calculates a reported figure; previews (unit conversion, formula) mirror `src/lib/kpi/` and the server's numbers win.
+
 ## Definition of done (every module)
 
 1. Matches its spec's layout and the screen in the previews artifact.
