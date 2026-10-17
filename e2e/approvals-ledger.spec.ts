@@ -19,6 +19,8 @@ type Row = {
   upload_batch_id?: string | null;
   // S3-15 review checks; null = not checked yet.
   checks?: { ready: boolean; held: string[] } | null;
+  // SE-4: the form version the row was calculated with.
+  form_version?: number | null;
 };
 
 const company = { company_id: 1, name: "Midal Cables" };
@@ -38,6 +40,7 @@ function makeRows(): Row[] {
     category: diesel,
     // Rows 1 and 2 came in Claude's batch b-2; row 3 was typed in. Row 2 was matched below 80 % (XI5).
     upload_batch_id: n < 3 ? "b-2" : null,
+    form_version: 4,
     extra_data: n < 3 ? { import: { channel: "mcp", row_ref: `Fuel!A${n + 1}`, ...(n === 2 && { meta: { source: "llm", confidence: 0.64 } }) } } : undefined,
     // Row 1 passes every check; row 2 the smart import was unsure of; row 3 has no evidence and jumped.
     checks: n === 1 ? { ready: true, held: [] } : n === 2 ? { ready: false, held: ["IMPORT_MATCH_SURE"] } : { ready: false, held: ["EVIDENCE_ATTACHED", "WITHIN_THRESHOLD"] },
@@ -223,6 +226,8 @@ test("a row opens in the drawer with its calculation", async ({ page }) => {
   await expect(drawer).toContainText("DEFRA");
   await expect(drawer).toContainText("No documents attached.");
   await expect(drawer).toContainText("0.804 tCO₂e");
+  // SE-4: the form version the row was entered on.
+  await expect(drawer).toContainText("Form version 4");
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
 });

@@ -293,3 +293,30 @@ export const updateColumnOptions = async (
   });
   return response.data;
 };
+
+// SE-4 · the form check and versions (Superadmin). `year` is a factor year; the server defaults it.
+export const checkColumnConfig = async (id: number, year?: number) => {
+  const response = await api.get(`/admin/column-configs/${id}/check`, { params: year ? { year } : {} });
+  return response.data;
+};
+
+/** The builder's unsaved form: the PUT body with `pk_id`, checked without saving. */
+export const checkColumnConfigDraft = async (body: object, year?: number) => {
+  const response = await api.post(`/admin/column-configs/check`, body, { params: year ? { year } : {} });
+  return response.data;
+};
+
+export const publishColumnConfig = async (id: number, note?: string | null) => {
+  const response = await api.post(`/admin/column-configs/${id}/publish`, { note: note?.trim() || null });
+  return response.data;
+};
+
+export const getColumnConfigVersions = async (id: number) => {
+  const response = await api.get(`/admin/column-configs/${id}/versions`);
+  return response.data;
+};
+
+export const getColumnConfigChecks = async () => {
+  const response = await api.get(`/admin/column-configs/checks`);
+  return response.data;
+};

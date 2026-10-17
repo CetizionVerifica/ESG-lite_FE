@@ -184,6 +184,7 @@ function Body({ row, fera, status, checkContext }: { row: LedgerRow; fera: Ledge
             ))}
             {row.activity_data_unit && <Row label="Unit">{row.activity_data_unit}</Row>}
             {row.scope3_sub && <Row label="Part of">{feraSubLabel(row.scope3_sub)}</Row>}
+            {row.form_version != null && <Row label="Form">Form version {row.form_version}</Row>}
             {fera?.map((f) => (
               <Row key={f.pk_id} label={feraSubLabel(f.scope3_sub)}>
                 <span className="font-num tabular-nums">+{formatEmissions(Number(f.total_emission))}</span>

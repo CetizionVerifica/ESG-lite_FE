@@ -42,6 +42,8 @@ export type LedgerRow = EmissionData & {
   /** S3-5: the exchange rate a spend row used. */
   fx?: EmissionFx | null;
   upload_batch_id?: string | null;
+  /** SE-4: the version of the data-entry form the row was calculated with (null before SE-4). */
+  form_version?: number | null;
 };
 
 type Option = { id: string | number; label: string };

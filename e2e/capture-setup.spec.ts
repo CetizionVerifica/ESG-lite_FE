@@ -527,3 +527,118 @@ test("form builder: one method from its recipe, fields in the client's words, a 
     { column_name: "Your share of the load (%)", column_type: "number", dropdown_options: null },
   ]);
 });
+
+// SE-4 · the form check, publishing and history. Factors exist for "Van - Diesel" and "HGV - Diesel" only,
+// so the saved transport form already has one problem (Boat › Ferry → "Ferry crossing").
+const FACTORS = ["Van - Diesel", "HGV - Diesel"];
+const checkOf = (mapping: Record<string, string>) => {
+  const errors = Object.entries(mapping)
+    .filter(([, target]) => !FACTORS.includes(target))
+    .map(([key, target]) => ({
+      code: "NO_FACTOR_FOR_YEAR",
+      field: `emission_category_mapping.${key}`,
+      message: `${key.split("|").join(" › ")} points to "${target}", which has no emission factor.`,
+    }));
+  return { ok: errors.length === 0, errors, warnings: [], form_id: 7, year: 2025, version: 2 };
+};
+
+test("form builder: the check stops a change that adds a problem, a clean save is published with its note, and the history shows it (SE-4)", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await routeTransport(page, calls);
+  let saved = transport;
+  await page.route(/\/admin\/column-configs\/7\/check/, (route) => route.fulfill({ json: checkOf(saved.emission_category_mapping) }));
+  await page.route(/\/admin\/column-configs\/check/, (route) => {
+    calls.push({ method: "POST", path: "/admin/column-configs/check", body: route.request().postDataJSON() });
+    return route.fulfill({ json: checkOf(route.request().postDataJSON().emission_category_mapping) });
+  });
+  await page.route(/\/admin\/column-configs\/7\/publish/, (route) => {
+    calls.push({ method: "POST", path: "/admin/column-configs/7/publish", body: route.request().postDataJSON() });
+    return route.fulfill({ json: { message: "Form version 3 published.", unchanged: false, version: { version: 3 } } });
+  });
+  await page.route(/\/admin\/column-configs\/7\/versions/, (route) =>
+    route.fulfill({
+      json: {
+        form_id: 7,
+        version: 3,
+        versions: [
+          { version: 3, published_at: "2026-10-17T10:00:00Z", note: "Ferry and HGV matched", published_by: { user_id: 5, name: "Sam Staff" }, config: { ...transport, ...saved, columns: transport.columns } },
+          { version: 2, published_at: "2026-10-01T10:00:00Z", note: null, published_by: { user_id: 5, name: "Sam Staff" }, config: { ...transport } },
+        ],
+      },
+    }),
+  );
+  await page.route(/\/admin\/column-configs\/7$/, (route) => {
+    if (route.request().method() !== "PUT") return route.fulfill({ json: saved });
+    calls.push({ method: "PUT", path: "/admin/column-configs/7", body: route.request().postDataJSON() });
+    saved = { ...saved, ...route.request().postDataJSON() };
+    return route.fulfill({ json: { message: "updated", columnConfig: saved } });
+  });
+
+  // The notification's link opens the check: the saved form's problem, with the tab that fixes it.
+  await page.goto("/capture/forms/7?tab=check");
+  const check = page.getByTestId("form-check");
+  await expect(check).toContainText('Boat › Ferry points to "Ferry crossing", which has no emission factor.');
+  await expect(check).toContainText("checked against the factors for 2025 (rows dated 2026)");
+  await expect(page.getByRole("tab", { name: /Check/ })).toContainText("1");
+  await check.getByRole("button", { name: "Go to Factor match" }).click();
+  await expect(page.getByRole("tab", { name: "Factor match" })).toHaveAttribute("aria-selected", "true");
+
+  // A change that adds a problem isn't saved: the new rule points to a category with no factor.
+  await page.getByRole("button", { name: "Generate from choices (1)" }).click();
+  await page.getByRole("button", { name: "Save form" }).click();
+  const blocked = page.getByRole("status").filter({ hasText: "Fix 1 thing before saving" });
+  await expect(blocked).toContainText('Road › HGV points to "Road - HGV", which has no emission factor.');
+  await expect(page.getByRole("tab", { name: /Check/ })).toHaveAttribute("aria-selected", "true");
+  await expect(check).toContainText("Your unsaved changes");
+  expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+
+  // Fixed, with a note: saved, then published as version 3. The old Ferry problem doesn't block, but it stops publishing.
+  await page.getByRole("tab", { name: "Factor match" }).click();
+  await page.getByLabel("Emission category for Road › HGV").fill("HGV - Diesel");
+  await page.getByLabel("Note for this version (optional)").fill("HGV matched");
+  await page.getByRole("button", { name: "Save form" }).click();
+  await expect(page.getByText('Form "Hidd transport" saved')).toBeVisible();
+  await expect(page.getByText("1 thing still to fix before a new version can go live (see Check).")).toBeVisible();
+  expect(calls.filter((c) => c.path.endsWith("/publish"))).toHaveLength(0);
+
+  // Ferry fixed too: the form passes, so the save publishes it with the note.
+  await page.getByRole("tab", { name: "Factor match" }).click();
+  await page.getByLabel("Emission category for Boat › Ferry").fill("Van - Diesel");
+  await page.getByLabel("Note for this version (optional)").fill("Ferry and HGV matched");
+  await page.getByRole("button", { name: "Save form" }).click();
+  await expect(page.getByText("Version 3 is live.")).toBeVisible();
+  const order = calls.filter((c) => c.method === "PUT" || c.path.endsWith("/publish")).map((c) => c.path);
+  expect(order).toEqual(["/admin/column-configs/7", "/admin/column-configs/7", "/admin/column-configs/7/publish"]);
+  expect(calls.find((c) => c.path.endsWith("/publish"))?.body).toEqual({ note: "Ferry and HGV matched" });
+
+  // History: version 3 is live, with its note and what changed from version 2.
+  await page.getByRole("button", { name: "History" }).click();
+  const history = page.getByTestId("form-history");
+  const v3 = history.locator('[data-version="3"]');
+  await expect(v3).toContainText("Live");
+  await expect(v3).toContainText("Ferry and HGV matched");
+  await expect(v3).toContainText("Factor match");
+  await expect(v3).toContainText("added Road › HGV; changed Boat › Ferry");
+  await expect(history.locator('[data-version="2"]')).toContainText("The first version recorded.");
+});
+
+test("forms: a form whose check finds problems is marked on the list (SE-4)", async ({ page }) => {
+  await signIn(page);
+  await page.route(/\/admin\/column-configs\/checks/, (route) =>
+    route.fulfill({
+      json: {
+        year: 2025,
+        forms: [
+          { form_id: 7, site_id: 1, category_id: 10, version: 1, errors: 2, warnings: 0, first_error: 'Diesel points to "Diesel", which has no emission factor.' },
+          { form_id: 9, site_id: 3, category_id: 20, version: 1, errors: 0, warnings: 1, first_error: null },
+        ],
+      },
+    }),
+  );
+  await page.goto("/capture/forms");
+  const table = page.getByRole("table");
+  const marked = table.getByRole("row", { name: /Hidd fuel/ }).getByTestId("form-check-mark");
+  await expect(marked).toHaveText("2 things to fix");
+  await expect(marked).toHaveAttribute("title", 'Diesel points to "Diesel", which has no emission factor.');
+  await expect(table.getByRole("row", { name: /Dallas power/ }).getByTestId("form-check-mark")).toHaveCount(0);
+});

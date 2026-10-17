@@ -1,14 +1,17 @@
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { FileQuestion, Save } from "lucide-react";
-import { Button, Callout, EmptyState, Modal, PageHeader, SkeletonText, TabPanel, Tabs, cn, panel, useToast, useUnsavedGuard } from "../../ui";
-import { useAddLibraryColumns, useFactorNames, useForm, useLibrary, useSaveForm, useTestSetup } from "./api";
+import { FileQuestion, History, Save } from "lucide-react";
+import { Button, Callout, EmptyState, Modal, PageHeader, SkeletonText, TabPanel, Tabs, TextField, cn, panel, useToast, useUnsavedGuard } from "../../ui";
+import { type SaveResult, useAddLibraryColumns, useDraftCheck, useFactorNames, useForm, useFormCheck, useLibrary, useSaveForm, useTestSetup } from "./api";
+import { type CheckIssue, type FormCheck, fixCount, newErrors, tabForIssue } from "./check";
 import { applyRecipe, formSettingsIssues, missingRecipeColumns, setChoiceColumn, setFieldSetting } from "./formSettings";
 import { recipeFor } from "../../lib/forms/recipes";
 import type { RowMethod } from "../../lib/scope3/dq";
 import { addField, type ColumnEntity } from "./builder";
 import { type BuilderDraft, type BuilderTab, type SourceConfig, draftFromConfig, hasRemovals, isDirty, renameMap, savedRemovals, toUpdatePayload, validateBuilder } from "./builder";
 import { CalcTab } from "./components/builder/CalcTab";
+import { CheckTab } from "./components/builder/CheckTab";
+import { HistoryDrawer } from "./components/HistoryDrawer";
 import { ChoicesTab } from "./components/builder/ChoicesTab";
 import { ExtraTab } from "./components/builder/ExtraTab";
 import { FieldsTab } from "./components/builder/FieldsTab";
@@ -24,7 +27,9 @@ const TABS: { value: BuilderTab; label: string }[] = [
   { value: "extra", label: "Extra details" },
   { value: "calculation", label: "Calculation" },
   { value: "test", label: "Test" },
+  { value: "check", label: "Check" },
 ];
+const tabLabel = (t: BuilderTab) => TABS.find((x) => x.value === t)?.label ?? t;
 const isTab = (v: string | null): v is BuilderTab => TABS.some((t) => t.value === v);
 
 /** P24 `/capture/forms/:id`: one place to edit a data-entry form, with a live preview. */
@@ -85,9 +90,30 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
   const library = useLibrary();
   const factors = useFactorNames(source.category?.category_id, source.site?.site_id);
   const save = useSaveForm(id);
+  // SE-4: the saved form's check (on open), the unsaved form's (before save and on demand), history.
+  const savedCheck = useFormCheck(id);
+  const draftCheck = useDraftCheck();
+  const [draftResult, setDraftResult] = useState<{ check: FormCheck | null; json: string } | null>(null);
+  const [blocked, setBlocked] = useState<CheckIssue[] | null>(null);
+  const [pendingCheck, setPendingCheck] = useState<FormCheck | null>(null);
+  const [note, setNote] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const testSetup = useTestSetup(tab === "test" ? source.site?.site_id : null, source.category?.category_id);
 
   const dirty = isDirty(draft, initial);
+  const draftJson = JSON.stringify(toUpdatePayload(draft));
+  const showDraft = dirty && !!draftResult;
+  const checkView = showDraft ? draftResult?.check : savedCheck.data;
+  const runDraftCheck = async (): Promise<FormCheck | null> => {
+    try {
+      const check = await draftCheck.mutateAsync({ ...toUpdatePayload(draft), pk_id: id });
+      setDraftResult({ check, json: draftJson });
+      return check;
+    } catch {
+      // No check from the server: saving works as before, with nothing published.
+      return null;
+    }
+  };
   const blocker = useUnsavedGuard(dirty && !save.isPending);
   const issues = [...validateBuilder(draft, library.data ?? []), ...formSettingsIssues(draft)];
   const addColumns = useAddLibraryColumns();
@@ -134,19 +160,32 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
   const [resetKey, setResetKey] = useState(0);
   const update = (fn: (d: BuilderDraft) => BuilderDraft) => setDraft((d) => fn(d));
 
-  const doSave = () => {
-    setSaveErr(null);
-    save.mutate(toUpdatePayload(draft), {
-      onSuccess: (res) => {
-        toast({
-          title: res?.migrationWarning ? "Form saved, but some saved entries still use the old keys" : `Form "${draft.name.trim()}" saved`,
-          tone: res?.migrationWarning ? "bad" : "good",
-        });
-      },
-      onError: (e) => setSaveErr(errorMessage(e, "Nothing was saved. Try again.")),
-    });
+  // SE-4: a form that passes the check is published as a new version once saved.
+  const publishedLine = (res: SaveResult, check: FormCheck | null): { text?: string; bad?: boolean } => {
+    if (res.publishError) return { text: `Not published: ${errorMessage(res.publishError, "the check failed on the server.")}`, bad: true };
+    const v = res.published?.version?.version;
+    if (v) return { text: res.published?.unchanged ? `Nothing changed since version ${v}, which stays live.` : `Version ${v} is live.` };
+    if (check && !check.ok) return { text: `${fixCount(check.errors.length)} still to fix before a new version can go live (see Check).` };
+    return {};
   };
-  const onSave = () => {
+  const doSave = (check: FormCheck | null) => {
+    setSaveErr(null);
+    save.mutate(
+      { payload: toUpdatePayload(draft), publish: !!check?.ok, note },
+      {
+        onSuccess: (res) => {
+          const line = publishedLine(res, check);
+          toast({
+            title: res?.migrationWarning ? "Form saved, but some saved entries still use the old keys" : `Form "${draft.name.trim()}" saved`,
+            description: line.text,
+            tone: res?.migrationWarning || line.bad ? "bad" : "good",
+          });
+        },
+        onError: (e) => setSaveErr(errorMessage(e, "Nothing was saved. Try again.")),
+      },
+    );
+  };
+  const onSave = async () => {
     setTried(true);
     if (issues.length) {
       setTab(issues[0].tab);
@@ -157,11 +196,23 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
       setSaveErr(library.isError ? "Couldn't load the column library to check the new keys. Reload and try again." : "Checking the new keys against the column library. Try again in a moment.");
       return;
     }
+    // SE-4: a change may not add a problem the saved form doesn't have.
+    const check = await runDraftCheck();
+    const added = newErrors(check, savedCheck.data);
+    if (added.length) {
+      setBlocked(added);
+      setTab("check");
+      return;
+    }
+    setBlocked(null);
+    setPendingCheck(check);
     if (Object.keys(renames).length || removes) setConfirmRename(true);
-    else doSave();
+    else doSave(check);
   };
 
-  const counts = Object.fromEntries(TABS.map((t) => [t.value, tried ? issues.filter((i) => i.tab === t.value).length : 0]));
+  const counts = Object.fromEntries(
+    TABS.map((t) => [t.value, t.value === "check" ? (checkView?.errors.length ?? 0) : tried ? issues.filter((i) => i.tab === t.value).length : 0]),
+  );
   const where = [source.site?.name, source.category?.category_name].filter(Boolean).join(" · ");
 
   return (
@@ -169,21 +220,48 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
       <PageHeader
         title={draft.name.trim() || source.config_name}
         description={where || undefined}
-        primaryAction={{ label: dirty ? "Save form" : "Saved", onClick: onSave, icon: <Save aria-hidden className="size-4" />, disabled: !dirty, loading: save.isPending }}
-        secondaryActions={
-          dirty
+        primaryAction={{ label: dirty ? "Save form" : "Saved", onClick: () => void onSave(), icon: <Save aria-hidden className="size-4" />, disabled: !dirty, loading: save.isPending || draftCheck.isPending }}
+        secondaryActions={[
+          { label: "History", onClick: () => setHistoryOpen(true), icon: <History aria-hidden className="size-4" /> },
+          ...(dirty
             ? [
                 {
                   label: "Discard changes",
                   onClick: () => {
                     setDraft(initial);
                     setResetKey((k) => k + 1);
+                    setBlocked(null);
+                    setDraftResult(null);
                   },
                 },
               ]
-            : []
-        }
+            : []),
+        ]}
       />
+      {dirty && (
+        <TextField
+          label="Note for this version (optional)"
+          help="Shown in the form's history beside what changed."
+          value={note}
+          onChange={setNote}
+          maxLength={500}
+          className="max-w-xl"
+        />
+      )}
+      {blocked && blocked.length > 0 && (
+        <Callout tone="warn" title={`Fix ${fixCount(blocked.length)} before saving`} onDismiss={() => setBlocked(null)}>
+          <p>These changes would add problems the saved form doesn't have:</p>
+          <ul className="list-disc pl-5">
+            {blocked.slice(0, 5).map((i) => (
+              <li key={`${i.code}-${i.field}`}>
+                <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => setTab(tabForIssue(i.field))}>
+                  {i.message}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Callout>
+      )}
       {saveErr && (
         <Callout tone="warn" title="Not saved" onDismiss={() => setSaveErr(null)}>
           {saveErr}
@@ -234,6 +312,19 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
           <TabPanel idBase="builder" value="calculation" current={tab}>
             <CalcTab draft={draft} onChange={update} ghgCategory={ghg} onApplyRecipe={onApplyRecipe} onAddQuestion={onAddQuestion} busy={addColumns.isPending} />
           </TabPanel>
+          <TabPanel idBase="builder" value="check" current={tab}>
+            <CheckTab
+              check={checkView}
+              isDraft={showDraft}
+              stale={showDraft && draftResult?.json !== draftJson}
+              loading={!showDraft && savedCheck.isPending}
+              error={!showDraft && savedCheck.isError}
+              checking={draftCheck.isPending || savedCheck.isFetching}
+              onCheck={() => void (dirty ? runDraftCheck() : savedCheck.refetch())}
+              onGo={setTab}
+              tabLabel={tabLabel}
+            />
+          </TabPanel>
           <TabPanel idBase="builder" value="test" current={tab}>
             <TestTab
               draft={draft}
@@ -273,12 +364,13 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
             label: "Save form",
             onClick: () => {
               setConfirmRename(false);
-              doSave();
+              doSave(pendingCheck);
             },
           }}
           onClose={() => setConfirmRename(false)}
         />
       )}
+      <HistoryDrawer formId={id} open={historyOpen} onClose={() => setHistoryOpen(false)} />
       <Modal
         open={blocker.state === "blocked"}
         onClose={() => blocker.reset?.()}
