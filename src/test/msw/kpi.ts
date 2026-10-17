@@ -338,6 +338,9 @@ const json = async <T>(request: Request): Promise<Partial<T>> => {
   }
 };
 
+/** `definitions` -> `definition`: the server answers a write with the row under its singular name. */
+const singular = (name: string) => name.replace(/s$/, "");
+
 /** POST and PUT for a library collection: `POST /kpi/library/<name>` and `PUT /kpi/library/<name>/:id`. */
 function libraryWrite<T extends { id: number }>(name: string, rows: () => T[], set: (rows: T[]) => void, check?: (row: T) => Response | null) {
   return [
@@ -347,7 +350,7 @@ function libraryWrite<T extends { id: number }>(name: string, rows: () => T[], s
       const refused = check?.(row);
       if (refused) return refused;
       set([...rows(), row]);
-      return HttpResponse.json(row, { status: 201 });
+      return HttpResponse.json({ [singular(name)]: row }, { status: 201 });
     }),
     http.put(`*/kpi/library/${name}/:id`, async ({ request, params }) => {
       const id = Number(params.id);
@@ -357,7 +360,7 @@ function libraryWrite<T extends { id: number }>(name: string, rows: () => T[], s
       const refused = check?.(row);
       if (refused) return refused;
       set(rows().map((r) => (r.id === id ? row : r)));
-      return HttpResponse.json(row);
+      return HttpResponse.json({ [singular(name)]: row });
     }),
   ];
 }
@@ -368,7 +371,7 @@ const unknownFormulaCodes = (formula: string | null, defs: KpiDefinition[]) =>
 
 function checkDefinition(row: KpiDefinition): Response | null {
   if (!row.code || !row.name || !row.question) return badRequest("Code, name and question are required.");
-  if (state.definitions.some((d) => d.code === row.code && d.id !== row.id && d.company_id === null)) return error("KPI_VALUE_INVALID", "A KPI with this code already exists.");
+  if (state.definitions.some((d) => d.code === row.code && d.id !== row.id && d.company_id === null)) return error("KPI_CODE_TAKEN", "That code is already used.");
   if (row.source === "formula" && (!row.formula || unknownFormulaCodes(row.formula, state.definitions).length || row.formula.includes(row.code))) {
     return error("KPI_FORMULA_INVALID", "The formula uses an unknown KPI code or refers to itself.");
   }
@@ -385,7 +388,7 @@ export const kpiHandlers = [
   http.get("*/kpi/status", () => HttpResponse.json<KpiStatus>({ enabled: state.enabled, setup_completed: state.enabled && !!state.setup.settings.setup_completed_at })),
 
   // KPI-2: library (Superadmin, not behind the switch)
-  http.get("*/kpi/library/frameworks", () => HttpResponse.json<KpiFramework[]>(state.frameworks)),
+  http.get("*/kpi/library/frameworks", () => HttpResponse.json({ frameworks: state.frameworks })),
   http.get("*/kpi/library/definitions", ({ request }) => {
     const q = new URL(request.url).searchParams;
     const fw = frameworkIds(q.get("framework"));
@@ -393,15 +396,15 @@ export const kpiHandlers = [
     const rows = state.definitions.filter(
       (d) => d.company_id === null && (!mapped || mapped.has(d.id)) && (!q.get("topic") || d.topic === q.get("topic")) && (!q.get("source") || d.source === q.get("source")),
     );
-    return HttpResponse.json<KpiDefinition[]>(rows);
+    return HttpResponse.json({ definitions: rows });
   }),
   http.get("*/kpi/library/disclosures", ({ request }) => {
     const fw = frameworkIds(new URL(request.url).searchParams.get("framework"));
-    return HttpResponse.json<KpiDisclosure[]>(state.disclosures.filter((d) => !fw || fw.has(d.framework_id)));
+    return HttpResponse.json({ disclosures: state.disclosures.filter((d) => !fw || fw.has(d.framework_id)) });
   }),
   http.get("*/kpi/library/mappings", ({ request }) => {
     const fw = frameworkIds(new URL(request.url).searchParams.get("framework"));
-    return HttpResponse.json<KpiDisclosureMap[]>(state.mappings.filter((m) => !fw || fw.has(state.disclosures.find((d) => d.id === m.disclosure_id)?.framework_id ?? 0)));
+    return HttpResponse.json({ mappings: state.mappings.filter((m) => !fw || fw.has(state.disclosures.find((d) => d.id === m.disclosure_id)?.framework_id ?? 0)) });
   }),
   ...libraryWrite<KpiDefinition>(
     "definitions",
@@ -514,7 +517,7 @@ export const kpiHandlers = [
           (!q.get("to") || v.period_start <= (q.get("to") as string)) &&
           (!statuses?.length || statuses.includes(v.status)),
       );
-      return HttpResponse.json<KpiValue[]>(rows);
+      return HttpResponse.json<{ values: KpiValue[] }>({ values: rows });
     }),
   ),
   http.put(
@@ -522,7 +525,8 @@ export const kpiHandlers = [
     gated(async ({ request }) => {
       const body = await json<PutKpiValuesBody>(request);
       if (!Array.isArray(body.items) || body.items.length === 0) return badRequest("items is a non-empty list.");
-      return HttpResponse.json<PutKpiValuesResult>({ results: body.items.map((item, i) => upsert(item, i)) });
+      const results = body.items.map((item, i) => upsert(item, i));
+      return HttpResponse.json<PutKpiValuesResult>({ saved: results.filter((r) => r.ok).length, results });
     }),
   ),
   http.post(
@@ -551,7 +555,7 @@ export const kpiHandlers = [
       if (!state.values.some((v) => v.id === id)) return notFound("Value not found.");
       const row: KpiValueEvidence = { id: nextId(state.evidence), kpi_value_id: id, document_url: `https://assets.example.invalid/kpi/${id}.pdf`, document_name: "evidence.pdf", uploaded_by: CALLER.user_id, uploaded_at: NOW };
       state.evidence = [...state.evidence, row];
-      return HttpResponse.json(row, { status: 201 });
+      return HttpResponse.json({ evidence: row }, { status: 201 });
     }),
   ),
   // data-loss-reviewed: mock handler only (no production data); removes one evidence row from the in-memory sample.
@@ -560,7 +564,7 @@ export const kpiHandlers = [
     gated(({ params }) => {
       const before = state.evidence.length;
       state.evidence = state.evidence.filter((e) => !(e.id === Number(params.eid) && e.kpi_value_id === Number(params.id)));
-      return state.evidence.length < before ? HttpResponse.json({ deleted: true }) : notFound("Evidence not found.");
+      return state.evidence.length < before ? HttpResponse.json({ removed: Number(params.eid) }) : notFound("Evidence not found.");
     }),
   ),
 
@@ -671,7 +675,7 @@ export const kpiHandlers = [
       const id = Number(params.id ?? new URL(request.url).searchParams.get("id"));
       if (!state.targets.some((t) => t.id === id)) return notFound("Target not found.");
       state.targets = state.targets.filter((t) => t.id !== id);
-      return HttpResponse.json({ deleted: true });
+      return HttpResponse.json({ removed: Number(params.eid) });
     }),
   ),
 

@@ -18,7 +18,13 @@ import { ERROR_MESSAGE } from "../lib/kpi/labels";
  */
 
 const companyParams = (companyId: number | null | undefined) => (companyId ? { company_id: companyId } : undefined);
-const asList = <T>(data: unknown): T[] => (Array.isArray(data) ? (data as T[]) : []);
+/** The server wraps lists and rows by name (`{definitions: [...]}`, `{definition}`); a bare array or row is also read. */
+const asList = <T>(data: unknown, key: string): T[] => {
+  const inner = data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>)[key] : data;
+  return Array.isArray(inner) ? (inner as T[]) : [];
+};
+const asRow = <T>(data: unknown, key: string): T =>
+  (data && typeof data === "object" && key in (data as object) ? (data as Record<string, unknown>)[key] : data) as T;
 
 // KPI-1
 /** `GET /kpi/status`: answers even when the switch is off. A body without `enabled` (an older server) reads as unknown. */
@@ -28,17 +34,17 @@ export async function getKpiStatus(companyId?: number | null): Promise<Partial<K
 }
 
 // KPI-2: the library (Superadmin) and the catalogue (any role of a company that is on)
-export const getLibraryFrameworks = async () => asList<KpiFramework>((await api.get("/kpi/library/frameworks")).data);
-export const getLibraryDefinitions = async () => asList<KpiDefinition>((await api.get("/kpi/library/definitions")).data);
+export const getLibraryFrameworks = async () => asList<KpiFramework>((await api.get("/kpi/library/frameworks")).data, "frameworks");
+export const getLibraryDefinitions = async () => asList<KpiDefinition>((await api.get("/kpi/library/definitions")).data, "definitions");
 export const getLibraryDisclosures = async (framework?: number | string) =>
-  asList<KpiDisclosure>((await api.get("/kpi/library/disclosures", { params: framework ? { framework } : undefined })).data);
+  asList<KpiDisclosure>((await api.get("/kpi/library/disclosures", { params: framework ? { framework } : undefined })).data, "disclosures");
 export const getLibraryMappings = async (framework?: number | string) =>
-  asList<KpiDisclosureMap>((await api.get("/kpi/library/mappings", { params: framework ? { framework } : undefined })).data);
+  asList<KpiDisclosureMap>((await api.get("/kpi/library/mappings", { params: framework ? { framework } : undefined })).data, "mappings");
 export const getKpiCatalogue = async (companyId?: number | null) =>
   (await api.get<KpiCatalogue>("/kpi/catalogue", { params: companyParams(companyId) })).data;
 /** `PUT /kpi/library/definitions/:id` (Superadmin): any part of the definition; answers with the saved row. */
 export const updateLibraryDefinition = async (id: number, patch: Partial<LibraryDefinitionBody>) =>
-  (await api.put<KpiDefinition>(`/kpi/library/definitions/${id}`, patch)).data;
+  asRow<KpiDefinition>((await api.put(`/kpi/library/definitions/${id}`, patch)).data, "definition");
 
 /** The server's message, or a plain one for a KPI error code; never the raw code. */
 export function kpiErrorMessage(e: unknown, fallback: string): string {

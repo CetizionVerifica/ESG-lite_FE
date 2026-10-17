@@ -433,6 +433,8 @@ export interface PutKpiValuesBody {
 /** Per-item result of `PUT /kpi/values`, in the order sent (mock shape). */
 export type KpiValueUpsertResult = { index: number; ok: true; value: KpiValue } | { index: number; ok: false; code: KpiErrorCode; message: string };
 export interface PutKpiValuesResult {
+  /** How many items were saved. */
+  saved: number;
   results: KpiValueUpsertResult[];
 }
 
@@ -610,6 +612,12 @@ export const KPI_ERROR_STATUS = {
   KPI_EVIDENCE_REQUIRED: 422,
   KPI_FORMULA_INVALID: 422,
   KPI_REASON_REQUIRED: 400,
+  // Plumbing codes the server adds on every route (ESG-lite src/kpi/contracts/errors.ts).
+  KPI_VALIDATION: 400,
+  KPI_NOT_FOUND: 404,
+  KPI_FORBIDDEN: 403,
+  KPI_COMPANY_REQUIRED: 400,
+  KPI_CODE_TAKEN: 409,
 } as const;
 export type KpiErrorCode = keyof typeof KPI_ERROR_STATUS;
 export const KPI_ERROR_CODES = Object.keys(KPI_ERROR_STATUS) as KpiErrorCode[];

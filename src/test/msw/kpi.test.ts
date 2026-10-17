@@ -32,6 +32,11 @@ afterAll(() => server.close());
 const send = (method: string, path: string, body?: unknown) =>
   fetch(`${API}${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 const get = async <T = unknown>(path: string) => (await (await fetch(`${API}${path}`)).json()) as T;
+/** A list the server wraps by name: `GET /kpi/library/definitions` answers `{definitions: [...]}`. */
+const list = async <T = unknown>(path: string) => {
+  const key = new URL(path, API).pathname.split("/").pop()!;
+  return (await get<Record<string, T[]>>(path))[key];
+};
 
 // ---------------------------------------------------------------------------
 // Runtime mirrors of the contract types: a key list per shape and the enum
@@ -121,20 +126,20 @@ describe("KPI mock handlers: shapes match the contract types", () => {
   });
 
   it("GET /kpi/library/*", async () => {
-    all(await get<unknown[]>("/kpi/library/definitions"), DEFINITION, "definitions");
-    all(await get<unknown[]>("/kpi/library/frameworks"), FRAMEWORK, "frameworks");
-    all(await get<unknown[]>("/kpi/library/disclosures"), DISCLOSURE, "disclosures");
-    all(await get<unknown[]>("/kpi/library/mappings"), MAPPING, "mappings");
+    all(await list<unknown>("/kpi/library/definitions"), DEFINITION, "definitions");
+    all(await list<unknown>("/kpi/library/frameworks"), FRAMEWORK, "frameworks");
+    all(await list<unknown>("/kpi/library/disclosures"), DISCLOSURE, "disclosures");
+    all(await list<unknown>("/kpi/library/mappings"), MAPPING, "mappings");
   });
 
   it("filters the library by framework (id or code), topic and source", async () => {
-    const esrs = await get<{ framework_id: number }[]>("/kpi/library/disclosures?framework=ESRS");
+    const esrs = await list<{ framework_id: number }>("/kpi/library/disclosures?framework=ESRS");
     expect(esrs.length).toBeGreaterThan(0);
     expect(new Set(esrs.map((d) => d.framework_id))).toEqual(new Set([3]));
-    expect(await get("/kpi/library/disclosures?framework=3")).toEqual(esrs);
-    const water = await get<{ topic: string }[]>("/kpi/library/definitions?topic=water");
+    expect(await list("/kpi/library/disclosures?framework=3")).toEqual(esrs);
+    const water = await list<{ topic: string }>("/kpi/library/definitions?topic=water");
     expect(water.every((d) => d.topic === "water")).toBe(true);
-    expect(await get<unknown[]>("/kpi/library/definitions?source=auto")).toHaveLength(8);
+    expect(await list<unknown>("/kpi/library/definitions?source=auto")).toHaveLength(8);
   });
 
   it("GET /kpi/catalogue", async () => {
@@ -165,11 +170,11 @@ describe("KPI mock handlers: shapes match the contract types", () => {
   });
 
   it("GET /kpi/values, /kpi/targets", async () => {
-    all(await get<unknown[]>("/kpi/values"), VALUE, "values");
-    const pending = await get<{ status: string }[]>("/kpi/values?status=pending");
+    all(await list<unknown>("/kpi/values"), VALUE, "values");
+    const pending = await list<{ status: string }>("/kpi/values?status=pending");
     expect(pending.length).toBeGreaterThan(0);
     expect(pending.every((v) => v.status === "pending")).toBe(true);
-    const held = (await get<{ checks: { id: string }[] | null }[]>("/kpi/values")).flatMap((v) => v.checks ?? []);
+    const held = (await list<{ checks: { id: string }[] | null }>("/kpi/values")).flatMap((v) => v.checks ?? []);
     for (const c of held) expect(KPI_CHECK_IDS).toContain(c.id);
     all(await get<unknown[]>("/kpi/targets"), TARGET, "targets");
   });
@@ -258,13 +263,13 @@ describe("KPI mock handlers: behaviour", () => {
   it("validates library writes: duplicate codes and unknown formula codes", async () => {
     const base = { ...KPI_DEFINITIONS[20], code: "NEW_KPI" };
     const dup = await send("POST", "/kpi/library/definitions", { ...base, code: "REVENUE" });
-    expect(((await dup.json()) as { code: string }).code).toBe("KPI_VALUE_INVALID");
+    expect(((await dup.json()) as { code: string }).code).toBe("KPI_CODE_TAKEN");
     const bad = await send("POST", "/kpi/library/definitions", { ...base, source: "formula", formula: "NOPE / REVENUE" });
     expect(((await bad.json()) as { code: string }).code).toBe("KPI_FORMULA_INVALID");
     const ok = await send("POST", "/kpi/library/definitions", base);
     expect(ok.status).toBe(201);
     const edited = await send("PUT", `/kpi/library/definitions/21`, { question: "What did the company earn in {period}?" });
-    expect(((await edited.json()) as { question: string }).question).toBe("What did the company earn in {period}?");
+    expect(((await edited.json()) as { definition: { question: string } }).definition.question).toBe("What did the company earn in {period}?");
   });
 
   it("keeps targets and setup reasons", async () => {

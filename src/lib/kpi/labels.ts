@@ -187,6 +187,11 @@ export const ERROR_MESSAGE: Record<KpiErrorCode, string> = {
   KPI_EVIDENCE_REQUIRED: "Attach a document before sending this value: BRSR Core needs evidence.",
   KPI_FORMULA_INVALID: "The formula uses a KPI that doesn't exist, refers to itself, or mixes units.",
   KPI_REASON_REQUIRED: "Add a short reason.",
+  KPI_VALIDATION: "Some fields aren't filled in correctly. Check them and try again.",
+  KPI_NOT_FOUND: "We couldn't find this item. It may have been removed.",
+  KPI_FORBIDDEN: "Your role can't do this.",
+  KPI_COMPANY_REQUIRED: "Choose a client first.",
+  KPI_CODE_TAKEN: "A KPI with this code already exists. Pick another code.",
 };
 
 /** "GRI 303-3", "BRSR P6-E3", "ESRS E3-4": a badge's text. */
