@@ -196,3 +196,31 @@ export const ERROR_MESSAGE: Record<KpiErrorCode, string> = {
 
 /** "GRI 303-3", "BRSR P6-E3", "ESRS E3-4": a badge's text. */
 export const disclosureBadge = (framework: FrameworkCode, code: string): string => `${FRAMEWORK_LABEL[framework]} ${code}`;
+
+/** Breakdown parts and dimensions in plain words ("third_party" → "Third party"); unknown keys are written out. */
+export const BREAKDOWN_LABEL: Record<string, string> = {
+  source: "Source",
+  type: "Type",
+  gender: "Gender",
+  state: "State",
+  renewable: "Renewable",
+  non_renewable: "Non-renewable",
+  groundwater: "Groundwater",
+  surface: "Surface water",
+  third_party: "Third party",
+  seawater: "Seawater",
+  produced: "Produced water",
+  hazardous: "Hazardous",
+  non_hazardous: "Non-hazardous",
+  women: "Women",
+  men: "Men",
+  other: "Other",
+  resolved: "Resolved",
+  open: "Open",
+};
+
+export function breakdownLabel(key: string): string {
+  if (BREAKDOWN_LABEL[key]) return BREAKDOWN_LABEL[key];
+  const words = key.replace(/_/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}

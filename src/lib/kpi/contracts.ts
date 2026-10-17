@@ -271,7 +271,14 @@ export interface KpiValue {
   auto_snapshot: { read_at: string; rows: number; link?: string | null } | null;
   created_at: string;
   updated_at: string;
+  /** The server adds these to every value it answers with (KPI-4 as built). */
+  kpi_code?: string;
+  canonical_unit?: string | null;
+  evidence?: KpiEvidenceOut[];
 }
+
+/** Evidence as listed on a value (`GET /kpi/values`, `PUT /kpi/values` results, `/kpi/my`). */
+export type KpiEvidenceOut = Pick<KpiValueEvidence, "id" | "document_url" | "document_name" | "uploaded_by" | "uploaded_at">;
 
 /** `kpi_value_evidence` (KPI-4). */
 export interface KpiValueEvidence {
@@ -356,6 +363,26 @@ export interface KpiSetup {
   material_topics: CompanyMaterialTopic[];
   kpis: CompanyKpi[];
   assignments: KpiAssignment[];
+  /** KPI-3: ids the recommendation rule picks for the saved frameworks and material topics (a list of ids, or rows with `kpi_definition_id`). */
+  recommended?: (number | { kpi_definition_id: number })[];
+  /** Assumed (KPI-3 FE): the company's sites and people for the owners step, so a Superadmin needs no other endpoint. */
+  sites?: KpiSetupSite[];
+  people?: KpiSetupPerson[];
+}
+export interface KpiSetupSite {
+  site_id: number;
+  name: string;
+}
+export interface KpiSetupPerson {
+  user_id: number;
+  name: string;
+  role: string;
+  /** Sites the person works at; empty for Admins (the whole company). */
+  site_ids: number[];
+}
+/** Assumed (KPI-3 FE): `POST /kpi/setup/invite` tells every owner what they now enter (`kpi_assigned` notifications). */
+export interface KpiInviteResult {
+  notified: number;
 }
 export type PutKpiSetupBody = Partial<{
   settings: Partial<Omit<CompanyKpiSettings, "company_id" | "setup_completed_at">> & { complete?: boolean };
@@ -400,6 +427,29 @@ export interface MyKpiItem {
   last_value: { value: number | null; unit: string | null; period_start: string } | null;
   /** Framework disclosure codes the KPI is used in, e.g. `GRI 303-3`. */
   used_in: { framework: FrameworkCode; code: string; core?: boolean }[];
+  // KPI-7 spec fields (`kpi.breakdowns`, `needs_evidence` …); optional until the server confirms them.
+  level?: KpiLevel;
+  decimals?: number;
+  breakdowns?: KpiBreakdowns | null;
+  /** BRSR Core (D15) or the company's setting: evidence is needed to submit. */
+  needs_evidence?: boolean;
+  auto_source?: AutoSourceKey | null;
+  formula?: string | null;
+  /** Formula items (KPI-6): the inputs the preview reads. Assumed shape. */
+  inputs?: MyKpiFormulaInput[];
+  year_type?: YearType;
+  /** Who reviews it, e.g. "Mia Haddad"; null = the site's managers. */
+  reviewer_name?: string | null;
+}
+
+/** One input of a calculated item on My KPIs (KPI-6 preview). Assumed shape. */
+export interface MyKpiFormulaInput {
+  code: string;
+  name: string;
+  value: number | null;
+  unit: string | null;
+  status?: KpiValueStatus | null;
+  breakdown?: Record<string, number> | null;
 }
 
 /** `GET /kpi/my?period=YYYY-MM`. Mock shape (KPI-7 confirms). */
@@ -417,6 +467,8 @@ export type KpiValues = KpiValue[];
 export interface KpiValueInput {
   id?: number;
   kpi_definition_id: number;
+  kpi_code?: string;
+  year_type?: YearType;
   site_id: number | null;
   period_start: string;
   frequency: KpiFrequency;
@@ -431,7 +483,7 @@ export interface PutKpiValuesBody {
   items: KpiValueInput[];
 }
 /** Per-item result of `PUT /kpi/values`, in the order sent (mock shape). */
-export type KpiValueUpsertResult = { index: number; ok: true; value: KpiValue } | { index: number; ok: false; code: KpiErrorCode; message: string };
+export type KpiValueUpsertResult = { index: number; ok: true; value: KpiValue } | { index: number; ok: false; code: KpiErrorCode; message: string; details?: unknown };
 export interface PutKpiValuesResult {
   /** How many items were saved. */
   saved: number;
