@@ -154,7 +154,7 @@ function status(year: number, month: number, siteIds: number[]) {
       site_id: s.site_id,
       name: s.name,
       locked: !!lock,
-      lock: lock ? { locked_at: lock.locked_at, locked_by: lock.locked_by, locked_by_name: "Mia Manager" } : null,
+      lock: lock ? { site_id: lock.site_id, locked_at: lock.locked_at, locked_by: lock.locked_by, locked_by_name: "Mia Manager" } : null,
       reopened: null,
       left: left.filter((l) => l.site_id === s.site_id).length,
       categories,
