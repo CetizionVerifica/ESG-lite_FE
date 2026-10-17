@@ -8,6 +8,14 @@ const KIND_HELP: Partial<Record<MapField["kind"], string>> = {
   date: "Optional. Each row is filed in its own month.",
 };
 
+/** SE-1: the same hints for a User, without factor words. */
+const PLAIN_HELP: Partial<Record<MapField["kind"], string>> = {
+  category: "What each row is, for example Diesel.",
+  value: "The amount on each row.",
+  unit: "The unit of the amount, for example litre or kWh.",
+  date: "Optional. Each row is filed in its own month.",
+};
+
 function Chip({ field }: { field: MapField }) {
   const chip = matchChip(field);
   if (chip === "matched") return <Badge tone="good">Matched</Badge>;
@@ -28,7 +36,10 @@ export function MapStep(props: {
   onToggleAll: () => void;
   onBack: () => void;
   onNext: () => void;
+  /** SE-1: false for a User: hints without factor words. */
+  detail?: boolean;
 }) {
+  const help = props.detail === false ? PLAIN_HELP : KIND_HELP;
   const { fields, headers, categories, selected } = props;
   const missing = unmapped(fields);
   const options = headers.map((h) => ({ value: h, label: h }));
@@ -51,7 +62,7 @@ export function MapStep(props: {
                 {f.required ? <span className="text-xs font-normal text-muted">Required</span> : <span className="text-xs font-normal text-muted">Optional</span>}
                 <Chip field={f} />
               </p>
-              {KIND_HELP[f.kind] && <p className="text-xs text-muted">{KIND_HELP[f.kind]}</p>}
+              {help[f.kind] && <p className="text-xs text-muted">{help[f.kind]}</p>}
             </div>
             <Select<string>
               label={`Sheet column for ${f.label}`}

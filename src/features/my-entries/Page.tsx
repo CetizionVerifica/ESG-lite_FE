@@ -55,6 +55,7 @@ import {
   userSites,
 } from "./logic";
 import { twinsTotal } from "../../lib/scope3/fera";
+import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 
 const PAGE_SIZE = 25;
 const FILTER_KEYS = ["category", "status"];
@@ -74,6 +75,8 @@ export default function MyEntriesPage() {
   const queryClient = useQueryClient();
 
   const sites = useMemo(() => userSites(user), [user]);
+  // SE-1: a User sees totals only (no "+ FERA" line under them).
+  const detail = useCalcDetailForSite(null);
   const [ctx, updateCtx] = useContextParams();
   const [filters, setFilters] = useFilterParams(FILTER_KEYS);
   const [, setSearchParams] = useSearchParams();
@@ -172,7 +175,7 @@ export default function MyEntriesPage() {
       cell: (r) => (
         <div className="whitespace-nowrap">
           <span>{formatEmissions(Number(r.total_emission))}</span>
-          {r.fera && <p className="text-xs text-muted">+ <InfoTerm>FERA</InfoTerm> {formatEmissions(twinsTotal(r.fera))}</p>}
+          {detail && r.fera && <p className="text-xs text-muted">+ <InfoTerm>FERA</InfoTerm> {formatEmissions(twinsTotal(r.fera))}</p>}
         </div>
       ),
     },

@@ -22,6 +22,7 @@ import { DATA_TYPE_LABELS, autoDq, dataTypeFor, isMethod, unitsForMethod, type M
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 import { SPEND_FIELDS, spendPreviewLine } from "../../../lib/scope3/spend";
 import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
+import { plainProblem } from "../../../lib/entryDetail";
 import { supplierMethodOf } from "../logic/supplier";
 import { SpendFields } from "./SpendFields";
 
@@ -70,8 +71,10 @@ type Props = {
   /** The server refused the row's method (METHOD_NOT_ALLOWED): its words, shown on the method cards. */
   methodError?: string;
   /**
-   * SE-1: the method cards and the data quality line are for Managers and above (or a company set
-   * to full detail). A contributor's row keeps the form's first method (simple-entry §8 decision 2).
+   * SE-1: the calculation detail is for Managers and above (or a company set to full detail): method
+   * cards, data quality, the factor line and spend/FX preview, "(factor unit)", the Global chip and the
+   * Category 3 line. A contributor sees their fields and the total; their row keeps the form's first
+   * method (simple-entry §8 decision 2).
    */
   showCalcDetail?: boolean;
 };
@@ -100,8 +103,10 @@ export function EntryRow(p: Props) {
     null;
   const allExtras = visibleExtraFields(model, row);
   const localShown = p.showIssue && !!p.issue;
+  // SE-1: a User reads the local problem in plain words; server issues already are (serverIssueOf).
+  const localMessage = (m: string) => (p.showCalcDetail ? m : plainProblem(m));
   const fieldError = (f: RowIssue["field"]) =>
-    localShown && p.issue?.field === f ? p.issue.message : !localShown && p.serverIssue?.field === f ? p.serverIssue.message : undefined;
+    localShown && p.issue?.field === f ? localMessage(p.issue.message) : !localShown && p.serverIssue?.field === f ? p.serverIssue.message : undefined;
   // A server problem on the values (no factor, a field it refuses) shows under the result.
   const serverValues = !localShown && p.serverIssue?.field === "values" ? p.serverIssue.message : null;
   const categoryOptions =
@@ -162,7 +167,7 @@ export function EntryRow(p: Props) {
           {row.emission_category ? (
             <span className="mt-1 inline-flex flex-wrap items-center gap-1 rounded-chip bg-tint px-2 py-1 text-ink">
               {row._ecmKey || row.emission_category}
-              {row._ecmKey && row._ecmKey !== row.emission_category && <span className="text-muted">· Global: {row.emission_category}</span>}
+              {p.showCalcDetail && row._ecmKey && row._ecmKey !== row.emission_category && <span className="text-muted">· Global: {row.emission_category}</span>}
             </span>
           ) : (
             <span className={cn("mt-1 block", fieldError("emission_category") ? "text-bad" : "text-muted")}>
@@ -190,11 +195,11 @@ export function EntryRow(p: Props) {
 
       {legacyMethodSelect ? (
         <Select<string>
-          label="Calculation method"
+          label={p.showCalcDetail ? "Calculation method" : "Type of record"}
           value={rowMethod || null}
           onChange={(v) => p.onChange(ROW_METHOD_COLUMN, v ?? "")}
           options={rowMethods.map((k) => ({ value: k, label: methodLabel(k, ghg) }))}
-          placeholder="Choose how this row is calculated"
+          placeholder={p.showCalcDetail ? "Choose how this row is calculated" : "Choose one"}
           className="sm:max-w-sm"
         />
       ) : p.showCalcDetail ? (
@@ -235,7 +240,7 @@ export function EntryRow(p: Props) {
                 row={row}
                 onChange={p.onChange}
                 labelExtra={labelExtra}
-                help={ghg === 6 && c.column_name === firstSelect ? TRAVEL_MODE_NOTE : undefined}
+                help={p.showCalcDetail && ghg === 6 && c.column_name === firstSelect ? TRAVEL_MODE_NOTE : undefined}
               />
             );
           })}
@@ -246,11 +251,11 @@ export function EntryRow(p: Props) {
             label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
             value={row.activity_data_unit || null}
             onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
-            options={unitOptions.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
+            options={unitOptions.map((u) => ({ value: u, label: p.showCalcDetail && u === expectedUnit ? `${u} (factor unit)` : u }))}
             placeholder="Choose a unit"
             help={
               transportUnitHelp(model.spec, row.activity_data_unit, row[TRANSPORT_MODE_COLUMN]) ??
-              (expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined)
+              (p.showCalcDetail && expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined)
             }
             error={fieldError("activity_data_unit")}
           />
@@ -294,7 +299,8 @@ export function EntryRow(p: Props) {
 
       <footer className="flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="text-xs text-muted">
-          {spend?.outcome.ok ? (
+          {/* SE-1: the factor line and the spend/FX preview are calculation detail. */}
+          {!p.showCalcDetail ? null : spend?.outcome.ok ? (
             <span className="font-num" data-testid="spend-preview">
               {spendPreviewLine(spend.spend, spend.outcome, spend.factor)}
             </span>
@@ -346,10 +352,10 @@ export function EntryRow(p: Props) {
             </p>
           ) : (
             // No issue but no figure: a spend rate loading or that failed to load; a muted note, never an error.
-            <p className={cn("text-sm", localShown || serverValues ? "text-bad" : "text-muted")}>{p.issue?.message ?? serverValues ?? result.status}</p>
+            <p className={cn("text-sm", localShown || serverValues ? "text-bad" : "text-muted")}>{p.issue ? localMessage(p.issue.message) : (serverValues ?? (p.showCalcDetail ? result.status : plainProblem(result.status)))}</p>
           )}
           {result.value !== null && serverValues && <p className="text-xs text-bad">{serverValues}</p>}
-          {cat3 && (
+          {p.showCalcDetail && cat3 && (
             <p className="font-num text-xs text-muted">
               + <InfoTerm id="fera">Cat 3</InfoTerm> {cat3.slice(CAT3_PREVIEW_PREFIX.length)}
             </p>

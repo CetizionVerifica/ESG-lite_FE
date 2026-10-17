@@ -242,6 +242,7 @@ export default function AddDataPage() {
 
   const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
     <Review
+      detail={calcDetail}
       rows={activeRows}
       // The row's method stays in activity_data["@method"] too: S3-5 and S3-9 read it there on edits and recalculations.
       payloads={activeRows.map((r) => buildPayload(r, { siteId: s.site_id, categoryId: c.category_id, period: p }))}

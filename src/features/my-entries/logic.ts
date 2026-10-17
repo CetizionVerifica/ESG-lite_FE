@@ -206,12 +206,21 @@ export function optionLabel(columnName: string, value: string, config: LabelConf
 
 export type ActivityField = { key: string; value: string };
 
-/** What the user entered, in entry order, with option labels; bookkeeping keys left out. */
-export function activityFields(activityData: Record<string, unknown> | null | undefined, config?: LabelConfig): ActivityField[] {
+/**
+ * An old sheet's own calculation, kept on historical rows for the record but
+ * never used (S3-4: the engine calculates every total). Reviewers see it; a
+ * User doesn't (SE-1).
+ */
+export const SHEET_CALC_KEYS = new Set(["emissionFactor", "emissionFactorUnit", "calculatedEmission"]);
+
+/** What the user entered, in entry order, with option labels; bookkeeping keys left out. `plain`: a User's view (SE-1). */
+export function activityFields(activityData: Record<string, unknown> | null | undefined, config?: LabelConfig, opts: { plain?: boolean } = {}): ActivityField[] {
   const data = activityData ?? {};
   return Object.entries(data)
-    // The row's method ("@method") has its own "How it was calculated" line (S3-3).
-    .filter(([key, value]) => !META_KEYS.has(key) && key !== "@method" && value !== null && value !== undefined && value !== "")
+    // `@method` and `_private` keys are internal (SE-1): never shown as something the user entered; the
+    // row's method has its own "How it was calculated" line (S3-3).
+    .filter(([key]) => !(opts.plain && SHEET_CALC_KEYS.has(key)))
+    .filter(([key, value]) => !META_KEYS.has(key) && !key.startsWith("@") && !key.startsWith("_") && value !== null && value !== undefined && value !== "")
     .map(([key, value]) => ({
       key,
       value: typeof value === "object" ? JSON.stringify(value) : optionLabel(key, String(value), config, data),

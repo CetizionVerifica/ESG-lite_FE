@@ -109,6 +109,17 @@ describe("row's method (@method) picks and clears fields (S3-9)", () => {
     expect(row.activity_data_unit).toBe("passenger.km");
   });
 
+  it("a fresh row has no method while there are several to choose from (SE-1)", () => {
+    expect(newRow(m, 1)[ROW_METHOD_COLUMN]).toBeUndefined();
+  });
+
+  it("a fresh row starts on the only method, set as is (SE-1)", () => {
+    const one = toFormModel({ ...commuting, calculation: { ...commuting.calculation!, methods: { distance_based: commuting.calculation!.methods!.distance_based } } } as ColumnConfig);
+    const row = newRow(one, 1);
+    expect(row[ROW_METHOD_COLUMN]).toBe("distance_based");
+    expect(row.activity_data_unit).toBeUndefined();
+  });
+
   it("clears fields the new method doesn't use and prefills its percentages", () => {
     let row = applyChange(m, { ...newRow(m, 1), "Employees surveyed": "3" }, "@method", "average_data");
     expect(row["Employees surveyed"]).toBe("");

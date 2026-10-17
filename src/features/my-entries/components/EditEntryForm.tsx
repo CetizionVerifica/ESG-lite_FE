@@ -4,6 +4,8 @@ import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Te
 import { useEditSetup } from "../api";
 import { type EditIssue, type EntryUpdate, buildUpdate, editIssue, editedDate, entryMonth, factorYearFor, monthBounds, rowFromEntry } from "../edit";
 import { type EntryRow, periodText } from "../logic";
+import { plainProblem } from "../../../lib/entryDetail";
+import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
 
 export const EDIT_FORM_ID = "edit-entry-form";
 
@@ -89,7 +91,10 @@ function Fields(p: FieldsProps) {
   const factor = row.emission_category ? calc.getEmissionFactor(row.emission_category) : undefined;
   const expectedUnit = row.emission_category ? calc.getExpectedUnit(row.emission_category) : null;
   const issue = editIssue(row, calc, entry.status, reason);
-  const shown = (field: EditIssue["field"]) => (tried && issue?.field === field ? issue.message : undefined);
+  // SE-1: a User sees their fields and the total; problems in plain words.
+  const detail = useCalcDetailForSite(entry.site?.site_id);
+  const say = (message: string) => (detail ? message : plainProblem(message));
+  const shown = (field: EditIssue["field"]) => (tried && issue?.field === field ? say(issue.message) : undefined);
 
   const mapped = Object.keys(model.mapping).length > 0;
   const categoryOptions = [...new Set([...p.factors.map((f) => f.emission_category_name), ...(row.emission_category ? [row.emission_category] : [])])];
@@ -139,7 +144,7 @@ function Fields(p: FieldsProps) {
           onChange={(v) => change("activity_data_unit", v ?? "")}
           options={unitOptions.map((u) => ({
             value: u,
-            label: u === expectedUnit ? `${u} (factor unit)` : u,
+            label: detail && u === expectedUnit ? `${u} (factor unit)` : u,
           }))}
           placeholder="Choose a unit"
           error={shown("activity_data_unit")}
@@ -162,7 +167,7 @@ function Fields(p: FieldsProps) {
 
       <div className="flex flex-col gap-1 rounded-control border border-line p-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="text-xs text-muted">
-          {p.loadingFactors ? (
+          {!detail ? null : p.loadingFactors ? (
             "Loading factors…"
           ) : factor ? (
             <>
@@ -171,13 +176,13 @@ function Fields(p: FieldsProps) {
           ) : row.emission_category ? (
             <span className="text-bad">No factor for this category</span>
           ) : null}
-          {entry.fera && <span className="mt-1 block">Linked Category 3 entries are recalculated when you save.</span>}
+          {detail && entry.fera && <span className="mt-1 block">Linked Category 3 entries are recalculated when you save.</span>}
         </div>
         <div className="text-right" aria-live="polite">
           {result.value !== null ? (
             <p className="font-num text-base font-semibold text-ink">= {formatNumber(result.value, 2)} tCO₂e</p>
           ) : (
-            <p className={cn("text-sm", shown("values") ? "text-bad" : "text-muted")}>{result.status}</p>
+            <p className={cn("text-sm", shown("values") ? "text-bad" : "text-muted")}>{say(result.status)}</p>
           )}
           <p className="font-num text-xs text-muted">was {formatEmissions(Number(entry.total_emission))}</p>
         </div>

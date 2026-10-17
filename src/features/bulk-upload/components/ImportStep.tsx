@@ -21,8 +21,11 @@ export function ImportStep(props: {
   onRetry: () => void;
   onBack: () => void;
   onAnother: () => void;
+  /** SE-1: false for a User: no Category 3 (FERA) count. */
+  detail?: boolean;
 }) {
   const { state, total } = props;
+  const detail = props.detail !== false;
 
   if (state.status === "running") {
     return (
@@ -71,7 +74,7 @@ export function ImportStep(props: {
       </p>
       <KpiStrip
         items={[
-          { label: "Imported", value: result.inserted, format: "number", primary: true, hint: result.fera_inserted ? `plus ${result.fera_inserted} FERA ${result.fera_inserted === 1 ? "row" : "rows"}` : undefined },
+          { label: "Imported", value: result.inserted, format: "number", primary: true, hint: detail && result.fera_inserted ? `plus ${result.fera_inserted} FERA ${result.fera_inserted === 1 ? "row" : "rows"}` : undefined },
           { label: "Skipped", value: result.skipped, format: "number" },
           { label: "Rows in the sheet", value: result.total_rows, format: "number" },
         ]}

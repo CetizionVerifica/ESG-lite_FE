@@ -106,9 +106,10 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
 
   const files = (docs.data ?? []).map(fromEmissionDocument);
   const quantity = entry ? quantityOf(entry.activity_data) : null;
-  const fields = entry ? activityFields(entry.activity_data, config.data ?? undefined) : [];
-  // SE-1: the method and data quality lines are for Managers and above (or a company set to full detail).
+  // SE-1: a User sees the entry and its total; the calculation (category match, method and data quality,
+  // Category 3 rows) is for Managers and above (or a company set to full detail).
   const calcDetail = useCalcDetailForSite(entry?.site?.site_id ?? null);
+  const fields = entry ? activityFields(entry.activity_data, config.data ?? undefined, { plain: !calcDetail }) : [];
   const quality = entry && calcDetail ? rowQuality(entry) : null;
 
   return (
@@ -143,14 +144,16 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
               <EditEntryForm entry={entry} saveError={saveError} onSubmit={save} />
             ) : (
               <>
-                <Section title="Calculation">
+                <Section title={calcDetail ? "Calculation" : "Entry"}>
                   <dl className="divide-y divide-line rounded-control border border-line px-3">
-                    <Row label="Emission category">{keyActivity(entry) ?? "—"}</Row>
-                    <Row label="Quantity">
-                      <span className="font-num tabular-nums">
-                        {quantity === null ? "—" : formatNumber(quantity, Number.isInteger(quantity) ? 0 : 2)} {entry.activity_data_unit ?? ""}
-                      </span>
-                    </Row>
+                    {calcDetail && <Row label="Emission category">{keyActivity(entry) ?? "—"}</Row>}
+                    {calcDetail && (
+                      <Row label="Quantity">
+                        <span className="font-num tabular-nums">
+                          {quantity === null ? "—" : formatNumber(quantity, Number.isInteger(quantity) ? 0 : 2)} {entry.activity_data_unit ?? ""}
+                        </span>
+                      </Row>
+                    )}
                     <Row label="Emissions">
                       <span className="font-num font-semibold tabular-nums">{formatEmissions(Number(entry.total_emission))}</span>
                     </Row>
@@ -172,9 +175,9 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
                         </Row>
                       </>
                     )}
-                    {entry.scope3_sub && <Row label="Part of">{feraSubLabel(entry.scope3_sub)}</Row>}
+                    {calcDetail && entry.scope3_sub && <Row label="Part of">{feraSubLabel(entry.scope3_sub)}</Row>}
                     {entry.supplier && <Row label="Supplier">{entry.supplier.name}</Row>}
-                    {entry.fera?.map((f) => (
+                    {calcDetail && entry.fera?.map((f) => (
                       <Row key={f.pk_id} label={feraSubLabel(f.scope3_sub)}>
                         <span className="font-num tabular-nums">{formatEmissions(Number(f.total_emission))}</span>
                       </Row>

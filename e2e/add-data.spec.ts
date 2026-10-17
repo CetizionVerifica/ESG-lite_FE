@@ -95,10 +95,14 @@ type Extra = {
   workflow?: boolean;
   submitted?: number[][];
   checked?: unknown[][];
+  /** SE-1: the company's entry_detail; "full" shows a User the calculation detail. */
+  entryDetail?: "full";
 };
 
 async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>, extra: Extra = {}) {
-  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [extra.workflow ? { ...site, company: { ...site.company, review_workflow_v2: true } } : site] };
+  // S3-15: the review workflow switch; SE-1: company.entry_detail "full" shows a User the calculation detail (missing = total only).
+  const company = { ...site.company, ...(extra.workflow ? { review_workflow_v2: true } : {}), ...(extra.entryDetail ? { entry_detail: extra.entryDetail } : {}) };
+  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [{ ...site, company }] };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "User");
@@ -217,12 +221,14 @@ test("contributor types a row, sees tCO2e live and submits it", async ({ page })
   await expect(page.getByText("Bahrain plant · Stationary combustion · Sep 2025")).toBeVisible();
   const row = page.getByRole("region", { name: "Row 1" });
   await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
-  await expect(row.getByText("Global: Diesel (avg biofuel blend)")).toBeVisible();
   await row.getByLabel("Quantity").fill("1600");
   await row.getByLabel("Unit").selectOption("litre");
   await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
-  await expect(row.getByText("factor year 2024 used for 2025 data")).toBeVisible();
   await expect(row.getByText("▲ 7.3% vs Aug 2025 (threshold 5%)")).toBeVisible();
+  // SE-1: a User sees the total, not how it was worked out.
+  for (const text of ["Global:", "Factor ", "kgCO₂e per", "factor year", "(factor unit)", "FERA", "Calculation method"]) {
+    await expect(row.getByText(text, { exact: false })).toHaveCount(0);
+  }
 
   await page.getByRole("button", { name: "Review" }).click();
   await expect(page.getByRole("table")).toContainText("Diesel");
@@ -334,9 +340,74 @@ test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends w
   expect(created[0].body).not.toHaveProperty("is_estimate");
 });
 
-test("the engine's notes on a saved row show on the result (S3-4)", async ({ page }) => {
+test("SE-1: with company detail set to full, a User sees how the row is worked out", async ({ page }) => {
+  await signIn(page, [], false, [], undefined, { entryDetail: "full" });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await expect(row.getByText("Global: Diesel (avg biofuel blend)")).toBeVisible();
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
+  await expect(row.getByText("factor year 2024 used for 2025 data")).toBeVisible();
+  await expect(row.getByText(/Factor 2\.68 kgCO₂e per litre/)).toBeVisible();
+  await expect(row.getByLabel("Unit").locator("option", { hasText: "(factor unit)" })).toHaveCount(1);
+});
+
+test("SE-1: a User's problems are in plain words, with no factor talk", async ({ page }) => {
   await signIn(page, []);
-  const note = 'No 2024 FERA factor for "Diesel (avg biofuel blend)", so no fuel- and energy-related (Category 3) row was added.';
+  // No factor at all for this site × category.
+  await page.route(/\/user\/emission-factors\/site\/4\/category\/9(\?|$)/, (route) => route.fulfill({ json: [] }));
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("10");
+  await row.getByLabel("Unit").selectOption("litre");
+  await expect(row.getByText("We can't work this row out yet. Ask your administrator.")).toBeVisible();
+  await expect(row.getByText("No factor for this category")).toHaveCount(0);
+  await expect(row.getByText(/emission factor/i)).toHaveCount(0);
+});
+
+// S3-9-style form whose spec lets the row pick its method (`@method`).
+const methodConfig = (methods: string[]) => ({
+  ...travelConfig,
+  calculation: {
+    mode: "per_method",
+    method_column: "@method",
+    methods: Object.fromEntries(methods.map((m) => [m, { multiply: ["Activity Data"], activity_unit: "passenger.km" }])),
+  },
+});
+
+test("SE-1: a form with one method picks it for the User, out of sight, and still sends it", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  await page.route(/\/user\/column-configs\/site\/4\/category\/11(\?|$)/, (route) => route.fulfill({ json: [methodConfig(["distance_based"])] }));
+  await page.goto("/data/new?site=4&category=11&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Emission category").selectOption({ label: "Car (petrol)" });
+  await expect(row.getByLabel("Calculation method")).toHaveCount(0);
+  await expect(row.getByLabel("Type of record")).toHaveCount(0);
+  await row.getByLabel("Unit").selectOption("passenger.km");
+  await row.getByRole("textbox", { name: "Activity Data" }).fill("100");
+  await expect(row.getByText("= 0.02 tCO₂e")).toBeVisible();
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0].body).toMatchObject({ activity_data: { "@method": "distance_based", "Activity Data": "100" } });
+});
+
+test("SE-1: with several methods a User answers \"Type of record\", never \"Calculation method\"", async ({ page }) => {
+  await signIn(page, []);
+  await page.route(/\/user\/column-configs\/site\/4\/category\/11(\?|$)/, (route) => route.fulfill({ json: [methodConfig(["distance_based", "spend_based"])] }));
+  await page.goto("/data/new?site=4&category=11&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await expect(row.getByLabel("Type of record")).toBeVisible();
+  await expect(row.getByLabel("Calculation method")).toHaveCount(0);
+  await expect(row.getByText("Choose how this row is calculated")).toHaveCount(0);
+});
+
+// The engine's notes on a saved row (S3-4) go to reviewers; a User sees "Sent" (SE-1).
+const savedWithNote = async (page: Page, note: string) => {
   await page.route(/\/user\/emissions(\?|$)/, (route) =>
     route.request().method() === "POST"
       ? route.fulfill({ status: 201, json: { emission: { pk_id: 301 }, warnings: [{ code: "FERA_FACTOR_MISSING", message: note }] } })
@@ -350,12 +421,25 @@ test("the engine's notes on a saved row show on the result (S3-4)", async ({ pag
   await page.getByRole("button", { name: "Review" }).click();
   await page.getByRole("button", { name: "Submit for approval" }).click();
   await expect(page.getByText("1 row sent for approval")).toBeVisible();
+};
+const NOTE = 'No 2024 FERA factor for "Diesel (avg biofuel blend)", so no fuel- and energy-related (Category 3) row was added.';
+
+test("the engine's notes on a saved row show on the result when the company shows full detail (S3-4)", async ({ page }) => {
+  await signIn(page, [], false, [], undefined, { entryDetail: "full" });
+  await savedWithNote(page, NOTE);
   // The warn callout is role="status", so the note is announced.
-  await expect(page.getByRole("status").filter({ hasText: "Sent, with notes" })).toContainText(note);
+  await expect(page.getByRole("status").filter({ hasText: "Sent, with notes" })).toContainText(NOTE);
+});
+
+test("SE-1: a User sees \"Sent\"; the engine's notes are for reviewers", async ({ page }) => {
+  await signIn(page, []);
+  await savedWithNote(page, NOTE);
+  await expect(page.getByText("Sent, with notes")).toHaveCount(0);
+  await expect(page.getByText(NOTE)).toHaveCount(0);
 });
 
 test("with no factor in the factor year, the preview uses the newest factor from another year, as the save does", async ({ page }) => {
-  await signIn(page, []);
+  await signIn(page, [], false, [], undefined, { entryDetail: "full" }); // the factor line shows with full detail (SE-1)
   // Only 2022 and 2023 factors exist; Sep 2025 data looks for 2024 first.
   const older = [
     { ...factors[0], emission_factor_id: 21, factor_value: 2.5, year: 2023 },
@@ -787,7 +871,7 @@ test("files picked on a typed row are attached to it after it is saved", async (
 });
 
 test("a Scope 2 row previews its Category 3 rows: upstream of electricity and T&D losses", async ({ page }) => {
-  await signIn(page, []);
+  await signIn(page, [], false, [], undefined, { entryDetail: "full" }); // Category 3 rows show with full detail (SE-1)
   await page.goto("/data/new?site=4&category=12&period=2025-09");
   const row = page.getByRole("region", { name: "Row 1" });
   await row.getByLabel("Emission category").selectOption({ label: "Grid AU" });

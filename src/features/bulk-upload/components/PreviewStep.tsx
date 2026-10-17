@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, type Column, DataTable, EmptyState, KpiStrip, SegmentedControl, formatNumber } from "../../../ui";
 import type { PlanSummary } from "../api";
-import { type PreviewRow, previewCounts, rowIssue } from "../logic";
+import { type PreviewRow, contributorRowIssue, previewCounts, rowIssue as reviewerRowIssue } from "../logic";
 
 type Shown = "all" | "issues";
 type Row = PreviewRow & { _i: number };
@@ -22,7 +22,11 @@ export function PreviewStep(props: {
   onRetry: () => void;
   onBack: () => void;
   onImport: () => void;
+  /** SE-1: false for a User: entered values and tCO₂e only (no factor or FERA columns, plain issues). */
+  detail?: boolean;
 }) {
+  const detail = props.detail !== false;
+  const rowIssue = detail ? reviewerRowIssue : contributorRowIssue;
   const [shown, setShown] = useState<Shown>("all");
   const rows = useMemo<Row[]>(() => (props.rows ?? []).map((r, i) => ({ ...r, _i: i })), [props.rows]);
   const counts = previewCounts(rows, props.plan?.counts);
@@ -30,7 +34,7 @@ export function PreviewStep(props: {
   const total = props.total ?? 0;
   const shownIssues = rows.filter((r) => rowIssue(r)).length;
 
-  const columns: Column<Row>[] = [
+  const allColumns: Column<Row>[] = [
     { id: "row", header: "Row", numeric: true, width: "4rem", hideable: false, value: (r) => r.row ?? r._i + 1 },
     { id: "category", header: "Category", sortable: true, value: (r) => String(r.emission_category ?? "") },
     { id: "global", header: "Factor used", sortable: true, value: (r) => r.global_category_name ?? "", cell: (r) => r.global_category_name ?? <span className="text-muted">None</span> },
@@ -69,6 +73,7 @@ export function PreviewStep(props: {
     },
   ];
 
+  const columns = detail ? allColumns : allColumns.filter((c) => c.id !== "global" && c.id !== "factor" && c.id !== "fera");
   const ready = props.plan ? props.plan.counts.ready : counts.valid;
 
   return (
@@ -76,7 +81,7 @@ export function PreviewStep(props: {
       {props.plan && (
         <KpiStrip
           items={[
-            { label: "Will import", value: props.plan.counts.ready, format: "number", primary: true, hint: props.plan.counts.warnings ? `${props.plan.counts.warnings} with a warning` : undefined },
+            { label: "Will import", value: props.plan.counts.ready, format: "number", primary: true, hint: detail && props.plan.counts.warnings ? `${props.plan.counts.warnings} with a warning` : undefined },
             { label: "Won't import", value: counts.issues, format: "number", hint: counts.issues ? "Fix the file or import without them" : undefined },
             { label: "Total", value: props.plan.totals.tco2e, format: "emissions", hint: "of the rows that will import" },
           ]}
