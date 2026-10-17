@@ -9,12 +9,13 @@ const SetupPage = lazy(() => import("./setup/Page")); // KPI-3
 const MyKpisPage = lazy(() => import("./my-kpis/Page")); // KPI-7
 const ReviewView = lazy(() => import("./review/View")); // KPI-8
 const TargetsPage = lazy(() => import("./targets/Page")); // KPI-9
+const DashboardPage = lazy(() => import("./dashboard/Page")); // KPI-10
 
 export const pages: ModulePages = {
   "kpi-my": <MyKpisPage />, // KPI-7
   "kpi-setup": <SetupPage />, // KPI-3
   "kpi-targets": <TargetsPage />, // KPI-9
-  "kpi-dashboard": <ComingSoon title="KPIs" description="How complete the year is per framework, and what's missing." what="The KPI dashboard" />, // KPI-10
+  "kpi-dashboard": <DashboardPage />, // KPI-10
   "kpi-reports": <ComingSoon title="Framework reports" description="GRI, BRSR and ESRS reports from approved values." what="Framework reports" />, // KPI-11
   "kpi-library": <LibraryPage />, // KPI-2
 };

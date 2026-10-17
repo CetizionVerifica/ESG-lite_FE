@@ -192,7 +192,7 @@ function DrawerBody({ item, onClose, review, canRefresh }: { item: KpiValueItem;
                 </span>
                 {item.change && (
                   <span className="text-sm text-muted">
-                    {item.change} on {item.lastLabel.charAt(0).toLowerCase() + item.lastLabel.slice(1)}
+                    {item.change} on {item.lastLabel.startsWith("Last ") ? `l${item.lastLabel.slice(1)}` : item.lastLabel}
                   </span>
                 )}
               </p>
@@ -303,7 +303,7 @@ function LastPeriods({ value, unit }: { value: KpiValue; unit: string | null }) 
       option={(t) => ({
         grid: { left: 8, right: 8, top: 12, bottom: 4, containLabel: true },
         tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: (n) => (typeof n === "number" ? formatWithUnit(n, shownUnit) : "—") },
-        xAxis: { type: "category", data: points.map((p) => (p.mine ? `${p.label} ·` : p.label)) },
+        xAxis: { type: "category", data: points.map((p) => (p.mine ? `${p.label} (this)` : p.label)) },
         yAxis: { type: "value" },
         series: [{ name: shownUnit ?? "Value", type: "bar", barMaxWidth: 24, data: points.map((p) => ({ value: p.value, itemStyle: { color: t.color[0], opacity: p.mine ? 1 : 0.55 } })) }],
       })}
