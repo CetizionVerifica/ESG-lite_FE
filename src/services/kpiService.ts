@@ -1,12 +1,15 @@
 import api from "../api/axios";
-import type {
-  KpiCatalogue,
-  KpiDefinition,
-  KpiDisclosure,
-  KpiDisclosureMap,
-  KpiFramework,
-  KpiStatus,
+import {
+  type KpiCatalogue,
+  type KpiDefinition,
+  type KpiDisclosure,
+  type KpiDisclosureMap,
+  type KpiFramework,
+  type KpiStatus,
+  type LibraryDefinitionBody,
+  isKpiErrorCode,
 } from "../lib/kpi/contracts";
+import { ERROR_MESSAGE } from "../lib/kpi/labels";
 
 /**
  * KPI tracking (ESG-lite src/kpi, mounted at /kpi; docs/kpi/01-contracts.md §3).
@@ -33,3 +36,13 @@ export const getLibraryMappings = async (framework?: number | string) =>
   asList<KpiDisclosureMap>((await api.get("/kpi/library/mappings", { params: framework ? { framework } : undefined })).data);
 export const getKpiCatalogue = async (companyId?: number | null) =>
   (await api.get<KpiCatalogue>("/kpi/catalogue", { params: companyParams(companyId) })).data;
+/** `PUT /kpi/library/definitions/:id` (Superadmin): any part of the definition; answers with the saved row. */
+export const updateLibraryDefinition = async (id: number, patch: Partial<LibraryDefinitionBody>) =>
+  (await api.put<KpiDefinition>(`/kpi/library/definitions/${id}`, patch)).data;
+
+/** The server's message, or a plain one for a KPI error code; never the raw code. */
+export function kpiErrorMessage(e: unknown, fallback: string): string {
+  const data = (e as { response?: { data?: { code?: unknown; message?: unknown } } })?.response?.data;
+  if (isKpiErrorCode(data?.code)) return ERROR_MESSAGE[data.code];
+  return typeof data?.message === "string" && data.message ? data.message : fallback;
+}
