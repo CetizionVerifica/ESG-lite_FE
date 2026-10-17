@@ -14,6 +14,7 @@ const site = {
     { category_id: 11, category_name: "Business travel", scope: "Scope 3" },
     { category_id: 12, category_name: "Purchased electricity", scope: "Scope 2" },
     { category_id: 99, category_name: "FERA", scope: "Scope 3" },
+    { category_id: 13, category_name: "Upstream transportation and distribution", scope: "Scope 3" },
   ],
 };
 
@@ -207,6 +208,100 @@ test("contributor types a row, sees tCO2e live and submits it", async ({ page })
     date_of_reporting: "2025-09-30",
     reporting_period: "monthly",
   });
+});
+
+// The S3-8 standard transport form (ESG-lite src/scope3/transport/configs.ts), trimmed to the chains used here.
+const transportConfig = {
+  pk_id: 13,
+  config_name: "Transport - Standard - Upstream",
+  columns: [
+    { pk_id: 31, column_name: "Travel Mode", column_type: "select" },
+    { pk_id: 32, column_name: "Vehicle Type", column_type: "select" },
+    { pk_id: 33, column_name: "Fuel Type/Class", column_type: "select" },
+    { pk_id: 34, column_name: "Shipment Ref", column_type: "text" },
+    { pk_id: 35, column_name: "Weight (tonne)", column_type: "number" },
+    { pk_id: 36, column_name: "Distance travelled", column_type: "number" },
+    { pk_id: 37, column_name: "Fuel used (litres)", column_type: "number" },
+    { pk_id: 38, column_name: "Your share of the load (%)", column_type: "number" },
+  ],
+  column_options: {
+    "31": [{ id: "Road", label: "Road" }],
+    "32": [{ id: "HGV (all diesel)", label: "HGV (all diesel)" }],
+    "33": [{ id: "All rigids [tonne.km]", label: "All rigids [tonne.km]" }, { id: "Diesel used [litre]", label: "Diesel used [litre]" }],
+  },
+  column_dependencies: { "Vehicle Type": "Travel Mode", "Fuel Type/Class": "Vehicle Type" },
+  dependent_options: {
+    "Vehicle Type": { Road: [{ id: "HGV (all diesel)", label: "HGV (all diesel)" }] },
+    "Fuel Type/Class": {
+      "HGV (all diesel)": [
+        { id: "All rigids [tonne.km]", label: "All rigids [tonne.km]" },
+        { id: "Diesel used [litre]", label: "Diesel used [litre]" },
+      ],
+    },
+  },
+  emission_category_mapping: {
+    "Road|HGV (all diesel)|All rigids [tonne.km]": "Road - HGV (all diesel) - All rigids [tonne.km]",
+    "Road|HGV (all diesel)|Diesel used [litre]": "Fuel - Diesel (average biofuel blend) [litre]",
+  },
+  extra_fields: [{ key: "paid_by", label: "Who paid for this transport?", type: "select", required: false, options: ["We paid", "Customer or other"] }],
+  calculation: {
+    mode: "per_unit",
+    identity_columns: ["Shipment Ref"],
+    legacy_field: "Distance travelled",
+    methods: {
+      "tonne.km": { multiply: ["Weight (tonne)", "Distance travelled"], activity_unit: "tonne.km" },
+      km: { multiply: ["Distance travelled"], activity_unit: "km" },
+      litre: { multiply: ["Fuel used (litres)", "Your share of the load (%)"], percent: ["Your share of the load (%)"], activity_unit: "litre" },
+    },
+  },
+};
+
+test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends what the engine saves (S3-8)", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  await page.route(/\/user\/column-configs\/site\/4\/category\/13(\?|$)/, (route) => route.fulfill({ json: [transportConfig] }));
+  await page.route(/\/user\/emission-factors\/site\/4\/category\/13(\?|$)/, (route) => {
+    const year = Number(new URL(route.request().url()).searchParams.get("year") ?? 2024);
+    return route.fulfill({
+      json: [
+        { emission_factor_id: 41, emission_category_name: "Fuel - Diesel (average biofuel blend) [litre]", factor_value: 3.1238, denominator_unit: "litre", year },
+        { emission_factor_id: 42, emission_category_name: "Road - HGV (all diesel) - All rigids [tonne.km]", factor_value: 0.2408, denominator_unit: "tonne.km", year },
+      ],
+    });
+  });
+  await page.route(/\/user\/units\/site\/4\/category\/13(\?|$)/, (route) =>
+    route.fulfill({ json: ["km", "tonne.km", "litre"].map((unit_name, i) => ({ unit_id: 50 + i, unit_name })) }),
+  );
+  await page.goto("/data/new?site=4&category=13&period=2025-09");
+
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Travel Mode", { exact: true }).selectOption({ label: "Road" });
+  await row.getByLabel("Vehicle Type", { exact: true }).selectOption({ label: "HGV (all diesel)" });
+  await row.getByLabel("Fuel Type/Class", { exact: true }).selectOption({ label: "Diesel used [litre]" });
+  await row.getByLabel("Shipment Ref", { exact: true }).fill("GL-FUEL-0925");
+  await row.getByLabel("Fuel Used (Litres)", { exact: true }).fill("1000");
+  await row.getByLabel("Your Share Of The Load (%)", { exact: true }).fill("100");
+  await row.getByLabel("Unit").selectOption("litre");
+  // 1,000 L × 100 % × 3.1238 kg/L (life-cycle diesel, factor year 2024) = 3.12 t
+  await expect(row.getByText("= 3.12 tCO₂e")).toBeVisible();
+  await expect(row.getByText(/^Litres your carrier used for your goods/)).toBeVisible();
+
+  await row.getByText("More details").click();
+  await row.getByLabel("Who paid for this transport?").selectOption({ label: "We paid" });
+  await expect(row.getByText(/^If you paid for it, it belongs in Category 4/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created).toHaveLength(1);
+  expect(created[0].body).toMatchObject({
+    site_id: 4,
+    category_id: 13,
+    activity_data_unit: "litre",
+    activity_data: { "Fuel used (litres)": "1000", "Your share of the load (%)": "100", emission_category: "Fuel - Diesel (average biofuel blend) [litre]" },
+    extra_data: { paid_by: "We paid" },
+  });
+  expect(created[0].body).not.toHaveProperty("is_estimate");
 });
 
 test("the engine's notes on a saved row show on the result (S3-4)", async ({ page }) => {

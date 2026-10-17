@@ -16,11 +16,14 @@ import type {
 } from "./types";
 
 // "tonne.km", "Tonne KM", "tonne-km", "tonne_km", "tkm" → "tonne.km"
+// S3-8: "m³.day", "m3 day" → "m3.day"; "pallet day", "teu day"; "kWh" → "kwh"; "litres" → "litre"
 // (mirrors backend services/calculationSpec.ts normalizeUnitKey)
 export const normalizeUnitKey = (unit: unknown): string => {
-  let u = String(unit ?? "").trim().toLowerCase().replace(/[\s_-]+/g, ".");
+  let u = String(unit ?? "").trim().toLowerCase().replace(/[\s_-]+/g, ".").replace(/³/g, "3");
   if (u === "tkm" || u === "t.km" || u === "tonnes.km" || u === "tonne.kms") u = "tonne.km";
   if (u === "kms") u = "km";
+  if (u === "litres" || u === "liters" || u === "liter") u = "litre";
+  if (u === "pallets.day") u = "pallet.day";
   return u;
 };
 
@@ -245,7 +248,9 @@ export const calculateEmission = (input: EmissionCalcInput, row: ModalRow): Emis
   if (!row.activity_data_unit) return { value: null, status: "Select unit" };
 
   const expectedUnit = factor.denominator_unit;
-  const currentUnit = row.activity_data_unit;
+  // A per-unit spec compares the factor with the normalised unit key, as the
+  // backend does (computeSpecActivityValue's unitKey): "m³.day" is "m3.day" (S3-8).
+  const currentUnit = input.calculationSpec?.mode === "per_unit" ? normalizeUnitKey(row.activity_data_unit) : row.activity_data_unit;
   // A factor with no unit can't be checked against the quantity: the engine
   // refuses the row (UNIT_REQUIRED, S3-4), so the preview shows no total.
   if (!String(expectedUnit ?? "").trim()) {
