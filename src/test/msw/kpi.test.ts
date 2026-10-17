@@ -176,21 +176,23 @@ describe("KPI mock handlers: shapes match the contract types", () => {
     expect(pending.every((v) => v.status === "pending")).toBe(true);
     const held = (await list<{ checks: { id: string }[] | null }>("/kpi/values")).flatMap((v) => v.checks ?? []);
     for (const c of held) expect(KPI_CHECK_IDS).toContain(c.id);
-    all(await get<unknown[]>("/kpi/targets"), TARGET, "targets");
+    all(await list<unknown>("/kpi/targets"), TARGET, "targets");
   });
 
   it("GET /kpi/periods/lock, /kpi/dashboard and /kpi/reports/:framework", async () => {
     const lock = await get<{ year: number; sites: unknown[]; left: unknown[] }>("/kpi/periods/lock?year=2026&period=9");
     all(lock.sites, { site_id: "number?", name: "string", locked: "boolean", lock: "object?", kpis: "array" }, "lock.sites");
     all(lock.left, { site_id: "number?", site_name: "string?", kpi_definition_id: "number", kpi_name: "string", reason: ["missing", "draft", "pending", "rejected"] }, "lock.left");
-    const dash = await get<{ frameworks: unknown[]; cards: unknown[]; gaps: unknown[]; pending_count: number }>("/kpi/dashboard?year=2026");
-    all(dash.frameworks, { framework: FRAMEWORK_CODES, version: "string", percent: "number", gaps: "number", core: "object?" }, "dashboard.frameworks");
-    all(dash.cards, { kpi_definition_id: "number", code: "string", name: "string", topic: KPI_TOPICS, unit: "string?", value: "number?", previous: "number?", change_pct: "number?", monthly: "array", target_progress_pct: "number?" }, "dashboard.cards");
+    const dash = await get<{ coverage: unknown[]; cards: unknown[]; gaps: unknown[]; pending_not_in: unknown }>("/kpi/dashboard?year=2026");
+    all(dash.coverage, { framework: FRAMEWORK_CODES, version: "string?", required: "number", approved: "number", pending: "number", missing: "number", percent: "number", core: "object?" }, "dashboard.coverage");
+    all(dash.cards, { kpi_definition_id: "number", code: "string", name: "string", topic: KPI_TOPICS, unit: "string?", value: "number?", previous: "number?", change_pct: "number?", series: "array", target: "object?" }, "dashboard.cards");
+    all(dash.gaps, { kpi_definition_id: "number", kpi_name: "string", site_id: "number?", site_name: "string?", periods_missing: "array", owner_name: "string?", frameworks: "array" }, "dashboard.gaps");
+    check(dash.pending_not_in, { count: "number" }, "dashboard.pending_not_in");
     for (const fw of FRAMEWORK_CODES) {
       const r = await get<{ framework: string; rows: unknown[]; omissions: unknown[] }>(`/kpi/reports/${fw}?year=2026`);
       expect(r.framework).toBe(fw);
-      all(r.rows, { disclosure_id: "number", code: "string", title: "string", section: "string", unit: "string?", notes: "string?" }, `report.${fw}.rows`);
-      all(r.omissions, { disclosure_id: "number", code: "string", title: "string", reason: "string" }, `report.${fw}.omissions`);
+      all(r.rows, { disclosure_id: "number", code: "string", title: "string", section: "string", unit: "string?", notes: "string?", value_ids: "array", kpi_definition_ids: "array" }, `report.${fw}.rows`);
+      all(r.omissions, { disclosure_id: "number?", code: "string", title: "string", reason: "string", kind: ["not_material", "excluded", "missing", "not_tracked"] }, `report.${fw}.omissions`);
     }
     const xlsx = await fetch(`${API}/kpi/reports/BRSR?year=2026&format=xlsx`);
     expect(xlsx.headers.get("content-type")).toContain("spreadsheetml");
@@ -198,8 +200,9 @@ describe("KPI mock handlers: shapes match the contract types", () => {
   });
 
   it("POST /kpi/auto/refresh and /kpi/ai/*", async () => {
-    const auto = (await (await send("POST", "/kpi/auto/refresh?year=2026")).json()) as { refreshed: number; values: unknown[] };
+    const auto = (await (await send("POST", "/kpi/auto/refresh?year=2026")).json()) as { refreshed: number; unchanged: number; removed: number; locked: number; values: unknown[]; formulas: unknown[] };
     expect(auto.refreshed).toBeGreaterThan(0);
+    expect(auto).toMatchObject({ unchanged: 0, removed: 0, locked: 0, formulas: [] });
     all(auto.values, VALUE, "auto.values");
     const sv = (await (await send("POST", "/kpi/ai/suggest-values", { document_id: 7 })).json()) as { suggestions: unknown[] };
     all(sv.suggestions, { kpi: "string", value: "number", unit: "string", period: "string", source_page: "number?", confidence: "number" }, "suggest-values");
@@ -260,6 +263,32 @@ describe("KPI mock handlers: behaviour", () => {
     expect(body.details.left.length).toBeGreaterThan(0);
   });
 
+  it("locks a complete month, reopens it with a reason, and lets a reviewer edit a pending value with a reason", async () => {
+    const status = await get<{ left: unknown[] }>("/kpi/periods/lock?year=2026&period=8");
+    expect(status.left).toEqual([]);
+    expect((await send("POST", "/kpi/periods/lock", { year: 2026, period: 8, site_id: 2 })).status).toBe(200);
+    const after = await get<{ sites: { site_id: number; locked: boolean }[] }>("/kpi/periods/lock?year=2026&period=8");
+    expect(after.sites.find((s) => s.site_id === 2)?.locked).toBe(true);
+    expect(((await (await send("POST", "/kpi/periods/unlock", { year: 2026, period: 8, site_id: 2 })).json()) as { code: string }).code).toBe("KPI_REASON_REQUIRED");
+    expect((await send("POST", "/kpi/periods/unlock", { year: 2026, period: 8, site_id: 2, reason: "Meter reading corrected" })).status).toBe(200);
+
+    const item = { id: 10, kpi_definition_id: 13, site_id: 2, period_start: "2026-09-01", frequency: "monthly", value_numeric: 1200, unit: "m³" };
+    const noReason = (await (await send("PUT", "/kpi/values", { items: [item] })).json()) as { results: { ok: boolean; code?: string }[] };
+    expect(noReason.results[0]).toMatchObject({ ok: false, code: "KPI_REASON_REQUIRED" });
+    const edited = (await (await send("PUT", "/kpi/values", { items: [{ ...item, reason: "Typo: 3,600 was the quarter" }] })).json()) as { results: { ok: boolean; value: { status: string; value_numeric: number } }[] };
+    expect(edited.results[0].value).toMatchObject({ status: "pending", value_numeric: 1200 });
+  });
+
+  it("reminds an owner once a day and filters the dashboard's gaps by framework", async () => {
+    const first = (await (await send("POST", "/kpi/dashboard/remind", { kpi: 14, site: 3 })).json()) as { reminded: boolean; owner_name: string };
+    expect(first).toMatchObject({ reminded: true, owner_name: "João Mendes" });
+    expect(((await (await send("POST", "/kpi/dashboard/remind", { kpi: 14, site: 3 })).json()) as { reminded: boolean }).reminded).toBe(false);
+    const all = await get<{ gaps: unknown[] }>("/kpi/dashboard?year=2026");
+    const brsr = await get<{ gaps: { frameworks: string[] }[] }>("/kpi/dashboard?year=2026&framework=BRSR");
+    expect(brsr.gaps.length).toBeLessThan(all.gaps.length);
+    expect(brsr.gaps.every((g) => g.frameworks.includes("BRSR"))).toBe(true);
+  });
+
   it("validates library writes: duplicate codes and unknown formula codes", async () => {
     const base = { ...KPI_DEFINITIONS[20], code: "NEW_KPI" };
     const dup = await send("POST", "/kpi/library/definitions", { ...base, code: "REVENUE" });
@@ -273,10 +302,16 @@ describe("KPI mock handlers: behaviour", () => {
   });
 
   it("keeps targets and setup reasons", async () => {
-    expect((await send("PUT", "/kpi/targets", { kpi_definition_id: 5, baseline_year: 2024, baseline_value: 50000, target_year: 2030, target_value: 40000, direction: "reduce" })).status).toBe(200);
-    expect(await get<unknown[]>("/kpi/targets")).toHaveLength(3);
+    const created = await send("PUT", "/kpi/targets", { kpi_definition_id: 5, baseline_year: 2024, baseline_value: 50000, target_year: 2030, target_value: 40000, direction: "reduce" });
+    expect(created.status).toBe(201);
+    const target = ((await created.json()) as { target: { id: number; status: string; kpi_name: string; progress_pct: number | null } }).target;
+    expect(target).toMatchObject({ id: 3, kpi_name: "Energy consumed" });
+    expect(["on_track", "behind"]).toContain(target.status);
+    expect(await list<unknown>("/kpi/targets")).toHaveLength(3);
+    const wrongWay = await send("PUT", "/kpi/targets", { kpi_definition_id: 5, baseline_year: 2024, baseline_value: 50000, target_year: 2030, target_value: 60000, direction: "reduce" });
+    expect(((await wrongWay.json()) as { code: string }).code).toBe("KPI_VALIDATION");
     expect((await send("DELETE", "/kpi/targets/3")).status).toBe(200);
-    expect(await get<unknown[]>("/kpi/targets")).toHaveLength(2);
+    expect(await list<unknown>("/kpi/targets")).toHaveLength(2);
     const noReason = await send("PUT", "/kpi/setup", { material_topics: [{ esrs_topic: "E4", material: false, reason: "" }] });
     expect(((await noReason.json()) as { code: string }).code).toBe("KPI_REASON_REQUIRED");
   });

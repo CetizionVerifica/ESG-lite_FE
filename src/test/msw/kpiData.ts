@@ -390,6 +390,19 @@ const value = ({ id, code, site_id, period_start, value: v, unit, ...rest }: Val
   };
 };
 
+/** The entered, site-level, monthly KPIs ACME tracks (what closing a month needs). */
+const AUGUST_CODES = ["WATER_WITHDRAWAL", "WATER_DISCHARGE", "WASTE_GENERATED", "WASTE_DIVERTED", "WASTE_DISPOSED", "LTIFR", "FATALITIES", "RECORDABLE_INJURIES"] as const;
+const AUGUST_VALUE: Record<(typeof AUGUST_CODES)[number], number> = {
+  WATER_WITHDRAWAL: 1100,
+  WATER_DISCHARGE: 820,
+  WASTE_GENERATED: 11,
+  WASTE_DIVERTED: 7.5,
+  WASTE_DISPOSED: 3.5,
+  LTIFR: 0.4,
+  FATALITIES: 0,
+  RECORDABLE_INJURIES: 0,
+};
+
 const SEP = "2026-09-01";
 const Q3 = "2026-07-01";
 const LAST_SEP = "2025-09-01";
@@ -424,6 +437,15 @@ export const KPI_VALUES_SEED: KpiValue[] = [
   value({ id: 29, code: "GHG_SCOPE2_LB", site_id: 1, period_start: LAST_SEP, value: 1890.6 }),
   value({ id: 30, code: "ENERGY_TOTAL", site_id: 1, period_start: LAST_SEP, value: 4305 }),
   value({ id: 31, code: "ENERGY_RENEWABLE", site_id: 1, period_start: LAST_SEP, value: 0 }),
+  // Dammam and Matola, last September (the review list's "vs last year").
+  value({ id: 32, code: "WATER_WITHDRAWAL", site_id: 2, period_start: LAST_SEP, value: 1150 }),
+  value({ id: 33, code: "WASTE_GENERATED", site_id: 2, period_start: LAST_SEP, value: 10.4 }),
+  value({ id: 34, code: "WASTE_GENERATED", site_id: 3, period_start: LAST_SEP, value: 13.6 }),
+  value({ id: 35, code: "RECORDABLE_INJURIES", site_id: 3, period_start: LAST_SEP, value: 1 }),
+  // August 2026: every entered monthly KPI of every plant approved, so the month can be closed (KPI-8).
+  ...AUGUST_CODES.flatMap((code, i) =>
+    KPI_SITES.map((s, j) => value({ id: 100 + i * KPI_SITES.length + j, code, site_id: s.site_id, period_start: "2026-08-01", value: Math.round(AUGUST_VALUE[code] * (1 + j * 0.1) * 100) / 100 })),
+  ),
 ];
 
 export const KPI_EVIDENCE_SEED: KpiValueEvidence[] = [

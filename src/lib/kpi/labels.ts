@@ -14,6 +14,7 @@ import type {
   KpiFrequency,
   KpiLevel,
   KpiLockLeftReason,
+  KpiOmissionKind,
   KpiSource,
   KpiTopic,
   KpiValueStatus,
@@ -22,6 +23,7 @@ import type {
   MyKpiGroup,
   RequirementLevel,
   TargetDirection,
+  TargetStatus,
   UnitDimension,
   YearType,
 } from "./contracts";
@@ -152,6 +154,34 @@ export const esrsTopicLabel = (t: EsrsTopic): string => `${t} ${ESRS_TOPIC_LABEL
 export const YEAR_TYPE_LABEL: Record<YearType, string> = { CY: "Calendar year", FY: "Financial year" };
 
 export const TARGET_DIRECTION_LABEL: Record<TargetDirection, string> = { reduce: "Reduce", increase: "Increase", maintain: "Keep level" };
+
+/** KPI-9 progress words. */
+export const TARGET_STATUS_LABEL: Record<TargetStatus, string> = { on_track: "On track", behind: "Behind", no_data: "No data yet" };
+
+/** Badge tone per target status (src/ui Badge tones). */
+export const TARGET_STATUS_TONE: Record<TargetStatus, "good" | "warn" | "neutral"> = { on_track: "good", behind: "warn", no_data: "neutral" };
+
+/**
+ * One colour per framework, the categorical chart tokens the previews use
+ * (GRI blue, BRSR orange, ESRS teal): rings, dots and chart series. Full
+ * class names so Tailwind keeps them.
+ */
+export const FRAMEWORK_COLOR: Record<FrameworkCode, { token: "series-1" | "series-2" | "series-3"; stroke: string; bg: string; text: string }> = {
+  GRI: { token: "series-1", stroke: "stroke-series-1", bg: "bg-series-1", text: "text-series-1" },
+  BRSR: { token: "series-2", stroke: "stroke-series-2", bg: "bg-series-2", text: "text-series-2" },
+  ESRS: { token: "series-3", stroke: "stroke-series-3", bg: "bg-series-3", text: "text-series-3" },
+};
+
+/** Reason chips when a reviewer sends a KPI value back (KPI-8). */
+export const KPI_REJECT_REASONS = ["Wrong unit", "Missing evidence", "Looks too high", "Wrong period"];
+
+/** Why a disclosure is left out of a framework report (KPI-11). */
+export const OMISSION_KIND_LABEL: Record<KpiOmissionKind, string> = {
+  not_material: "Not material",
+  excluded: "Left out in setup",
+  missing: "No approved value",
+  not_tracked: "Not tracked in ESGLite",
+};
 
 export const MY_KPI_GROUP_LABEL: Record<MyKpiGroup, string> = { due: "Due", sent_back: "Sent back", done: "Done" };
 

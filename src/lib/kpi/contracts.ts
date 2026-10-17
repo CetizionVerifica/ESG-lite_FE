@@ -275,6 +275,12 @@ export interface KpiValue {
   kpi_code?: string;
   canonical_unit?: string | null;
   evidence?: KpiEvidenceOut[];
+  /** Assumed (KPI-8 FE): read when the server adds them to a pending value; the review list falls back to the catalogue, the setup and last year's value. */
+  kpi_name?: string | null;
+  site_name?: string | null;
+  entered_by_name?: string | null;
+  last_value?: { value: number | null; unit: string | null; period_start: string } | null;
+  change_pct?: number | null;
 }
 
 /** Evidence as listed on a value (`GET /kpi/values`, `PUT /kpi/values` results, `/kpi/my`). */
@@ -452,12 +458,12 @@ export interface MyKpiFormulaInput {
   breakdown?: Record<string, number> | null;
 }
 
-/** `GET /kpi/my?period=YYYY-MM`. Mock shape (KPI-7 confirms). */
+/** `GET /kpi/my?period=YYYY-MM` (KPI-7 as built). */
 export interface MyKpis {
   /** YYYY-MM */
   period: string;
   items: MyKpiItem[];
-  counts: { due: number; sent_back: number; done: number; total: number };
+  counts: { due: number; sent_back: number; done: number; total: number; auto?: number };
 }
 
 /** `GET /kpi/values?kpi=&site=&from=&to=&status=`: bare array. */
@@ -478,6 +484,8 @@ export interface KpiValueInput {
   breakdown?: Record<string, number> | null;
   is_estimate?: boolean;
   comment?: string | null;
+  /** Assumed (KPI-8 FE): a reviewer editing a pending value (with `id`) says why; it stays pending and goes in its history. */
+  reason?: string | null;
 }
 export interface PutKpiValuesBody {
   items: KpiValueInput[];
@@ -505,7 +513,7 @@ export interface ReviewKpiValuesBody {
   only_ready?: boolean;
   reason?: string;
 }
-/** Mock shape: the ids changed and the ids left as they were, with why. */
+/** KPI-8 as built: the ids changed and the ids left as they were, with why. */
 export interface ReviewKpiValuesResult {
   updated: number[];
   refused: { id: number; code: KpiErrorCode | string }[];
@@ -533,7 +541,7 @@ export interface KpiLockLeftItem {
   reason: KpiLockLeftReason;
 }
 
-/** `GET /kpi/periods/lock?year=&period=`: the same shape as `GET /periods/lock`, with KPIs for categories. */
+/** `GET /kpi/periods/lock?year=&period=&site=`: the same shape as `GET /periods/lock`, with KPIs for categories (assumed until KPI-8 confirms it; the reader is tolerant). */
 export interface KpiPeriodLockStatus {
   year: number;
   period: number | null;
@@ -547,77 +555,171 @@ export interface KpiPeriodLockStatus {
   left: KpiLockLeftItem[];
 }
 
-/** `POST /kpi/auto/refresh?year=` (mock shape). */
+/** `POST /kpi/auto/refresh?year=` (Manager and above; KPI-5 as built). Counts are of auto values; `formulas` are the calculated values recomputed after them. */
 export interface KpiAutoRefreshResult {
   year: number;
   refreshed: number;
+  unchanged: number;
+  removed: number;
+  /** Values in locked periods, left as they were. */
+  locked: number;
   values: KpiValue[];
+  formulas: KpiValue[];
 }
 
-/** One row of `GET /kpi/targets` (KPI-9): the target with its progress. Mock shape for `progress`. */
+/** KPI-9 `progress.ts`: on a linear path from baseline to target, or no approved value yet. */
+export const TARGET_STATUSES = ["on_track", "behind", "no_data"] as const;
+export type TargetStatus = (typeof TARGET_STATUSES)[number];
+
+/**
+ * One row of `GET /kpi/targets` (KPI-9): the target with its progress.
+ * Assumed (KPI-9 FE): the list comes wrapped as `{targets}`; `status`,
+ * `series` (approved annual values from the baseline year, for the sparkline)
+ * and the KPI's name and unit are optional and read when sent.
+ */
 export interface KpiTargetWithProgress extends KpiTarget {
   /** Latest approved value in the canonical unit, null when none yet. */
   current_value: number | null;
   current_year: number | null;
   /** 0–100 of the way from baseline to target; null without a current value. */
   progress_pct: number | null;
+  status?: TargetStatus | null;
+  series?: { year: number; value: number | null }[] | null;
+  kpi_name?: string | null;
+  kpi_code?: string | null;
+  unit?: string | null;
+  site_name?: string | null;
 }
-/** `PUT /kpi/targets` body: an upsert (with `id`) or a new target. */
+/** `PUT /kpi/targets` body: an upsert (with `id`) or a new target. Answers `{target}` (a bare row is read too). `DELETE /kpi/targets/:id` removes one. */
 export type PutKpiTargetBody = Omit<KpiTarget, "id" | "company_id" | "created_by"> & { id?: number };
 
-/** `GET /kpi/dashboard?year=&framework=` (KPI-10). Mock shape. */
+/**
+ * `GET /kpi/dashboard?year=&framework=&site=&topic=` (KPI-10 spec shape,
+ * assumed until the server confirms it). `src/services/kpiService.ts`
+ * `readDashboard` also reads the KPI-0 mock shape (`frameworks[]`, flat gaps).
+ * Every figure here is the server's; the page never adds them up.
+ */
 export interface KpiDashboard {
   year: number;
-  /** Values waiting for review: not counted yet. */
-  pending_count: number;
-  frameworks: {
-    framework: FrameworkCode;
-    version: string;
-    /** Share of required disclosures with approved values, 0–100 (server-calculated). */
-    percent: number;
-    gaps: number;
-    core?: { done: number; total: number } | null;
-  }[];
-  cards: {
-    kpi_definition_id: number;
-    code: string;
-    name: string;
-    topic: KpiTopic;
-    unit: string | null;
-    value: number | null;
-    previous: number | null;
-    change_pct: number | null;
-    monthly: (number | null)[];
-    target_progress_pct: number | null;
-  }[];
-  gaps: {
-    kpi_definition_id: number;
-    kpi_name: string;
-    site_id: number | null;
-    site_name: string | null;
-    missing_periods: string[];
-    owner_user_id: number | null;
-    owner_name: string | null;
-  }[];
+  coverage: KpiCoverage[];
+  gaps: KpiGap[];
+  cards: KpiDashboardCard[];
+  /** Values waiting for review that would change the figures (D14). */
+  pending_not_in: { count: number; value_ids?: number[]; emissions?: number };
 }
 
-/** `GET /kpi/reports/:framework?year=&format=json` (KPI-11). Mock shape; `xlsx` and `pdf` return a file. */
+/** One framework's readiness for the year. */
+export interface KpiCoverage {
+  framework: FrameworkCode;
+  version: string | null;
+  /** Disclosures the company has to report (excluded ones aren't counted). */
+  required: number;
+  approved: number;
+  pending: number;
+  missing: number;
+  /** 0–100, the server's. */
+  percent: number;
+  /** BRSR Core only. */
+  core: { done: number; total: number } | null;
+  /** Disclosures left out with a reason (not counted as missing). */
+  excluded?: number;
+  /** ESRS: how many topics are material. */
+  material_topics?: number | null;
+}
+
+/** What's missing, who owes it. */
+export interface KpiGap {
+  kpi_definition_id: number;
+  kpi_name: string;
+  site_id: number | null;
+  site_name: string | null;
+  /** YYYY-MM (or YYYY for annual KPIs). */
+  periods_missing: string[];
+  owner_user_id: number | null;
+  owner_name: string | null;
+  /** Where "Open" goes; the server's when it sends one. */
+  link: string | null;
+  /** Frameworks the KPI feeds, so a ring can filter the list. */
+  frameworks: FrameworkCode[];
+  /** The values aren't missing but waiting for review. */
+  pending?: boolean;
+}
+
+export interface KpiDashboardCard {
+  kpi_definition_id: number;
+  code: string;
+  name: string;
+  topic: KpiTopic;
+  source: KpiSource | null;
+  unit: string | null;
+  decimals: number | null;
+  /** The year's value, aggregated by the server. */
+  value: number | null;
+  previous: number | null;
+  change_pct: number | null;
+  /** 12 periods: label (YYYY-MM) and value, oldest first. */
+  series: { period: string; value: number | null }[];
+  target: { progress_pct: number | null; status: TargetStatus | null; label: string | null; target_id: number | null } | null;
+}
+
+/** `POST /kpi/dashboard/remind {kpi, site}` (Manager+). Assumed answer: `{reminded}`; false = already reminded today (at most once a day per item). */
+export interface KpiRemindResult {
+  reminded: boolean;
+  owner_name?: string | null;
+  message?: string | null;
+}
+
+/**
+ * `GET /kpi/reports/:framework?year=&sites=&format=json` (KPI-11 `reports/model.ts`,
+ * assumed until the server confirms it); `xlsx` and `pdf` return a file.
+ * Values are approved only, already in the framework's display unit. The page
+ * shows them as they come.
+ */
 export interface KpiFrameworkReport {
   framework: FrameworkCode;
   version: string;
   year: number;
+  /** Values for the year waiting for review: not in the report yet. */
   pending_count: number;
-  rows: {
-    disclosure_id: number;
-    code: string;
-    title: string;
-    section: string;
-    value: number | string | null;
-    unit: string | null;
-    where: "site" | "company" | null;
-    notes: string | null;
-  }[];
-  omissions: { disclosure_id: number; code: string; title: string; reason: string }[];
+  pending_ids?: number[];
+  rows: KpiReportRow[];
+  omissions: KpiReportOmission[];
+}
+
+export interface KpiReportRow {
+  disclosure_id: number;
+  code: string;
+  title: string;
+  /** e.g. `GRI 305`, `Principle 6 · Essential`, `E1 Climate change`. */
+  section: string;
+  /** In the framework's display unit; text for narrative items; null when nothing is approved. */
+  value: number | string | null;
+  unit: string | null;
+  /** The previous year (BRSR shows both). */
+  previous?: number | string | null;
+  where: "site" | "company" | null;
+  notes: string | null;
+  fit?: MappingFit | null;
+  requirement?: RequirementLevel | null;
+  /** KPIs and value ids behind the figure: every value links to its record. */
+  kpi_definition_ids?: number[];
+  value_ids?: number[];
+  evidence_count?: number;
+  /** Site names the figure covers. */
+  sites?: string[];
+}
+
+export const KPI_OMISSION_KINDS = ["not_material", "excluded", "missing", "not_tracked"] as const;
+export type KpiOmissionKind = (typeof KPI_OMISSION_KINDS)[number];
+
+export interface KpiReportOmission {
+  disclosure_id: number | null;
+  code: string;
+  title: string;
+  reason: string;
+  kind?: KpiOmissionKind;
+  /** ESRS topic of a not-material topic. */
+  esrs_topic?: EsrsTopic | null;
 }
 
 /** `POST /kpi/ai/suggest-values {document_id}` (KPI-12): suggestions only, a person confirms. */

@@ -24,6 +24,11 @@ import {
   type KpiAutoRefreshResult,
   type KpiCatalogue,
   type KpiDashboard,
+  type KpiDashboardCard,
+  type KpiGap,
+  type KpiRemindResult,
+  type KpiReportOmission,
+  type KpiReportRow,
   type KpiDefinition,
   type KpiDisclosure,
   type KpiDisclosureMap,
@@ -57,7 +62,9 @@ import {
   type SubmitKpiValuesResult,
   type SuggestMappingResult,
   type SuggestValuesResult,
+  type TargetStatus,
 } from "../../lib/kpi/contracts";
+import { ESRS_TOPIC_LABEL } from "../../lib/kpi/labels";
 import { formulaCodes } from "../../lib/kpi/formula";
 import { recommendKpis } from "../../lib/kpi/recommend";
 import { convertUnit } from "../../lib/kpi/units";
@@ -106,6 +113,8 @@ const initialState = () => ({
   locks: [] as KpiPeriodLock[],
   targets: copy(KPI_TARGETS_SEED),
   invites: 0,
+  /** `kpi:site` pairs reminded today (KPI-10 remind, once a day). */
+  reminded: new Set<string>(),
 });
 
 let state = initialState();
@@ -317,7 +326,10 @@ function upsert(raw: KpiValueInput, index: number): KpiValueUpsertResult {
   const existing = item.id
     ? state.values.find((v) => v.id === item.id)
     : state.values.find((v) => v.kpi_definition_id === def.id && v.site_id === item.site_id && v.period_start === item.period_start && v.frequency === item.frequency);
-  if (existing && existing.status !== "draft" && existing.status !== "rejected") return { index, ok: false, code: "KPI_NOT_DRAFT", message: "This value was already sent for review." };
+  // KPI-8: a reviewer edits a pending value by id, with a reason; it stays pending.
+  const reviewEdit = !!existing && existing.status === "pending" && !!item.id;
+  if (reviewEdit && !item.reason?.trim()) return { index, ok: false, code: "KPI_REASON_REQUIRED", message: "Say why you changed the value." };
+  if (existing && !reviewEdit && existing.status !== "draft" && existing.status !== "rejected") return { index, ok: false, code: "KPI_NOT_DRAFT", message: "This value was already sent for review." };
   const unit = item.unit ?? def.canonical_unit;
   const numeric = item.value_numeric ?? null;
   const canonical = numeric === null ? null : unit && def.canonical_unit && unit !== def.canonical_unit ? (convertUnit(numeric, unit, def.canonical_unit) ?? numeric) : numeric;
@@ -358,7 +370,7 @@ function upsert(raw: KpiValueInput, index: number): KpiValueUpsertResult {
     breakdown: item.breakdown ?? base.breakdown,
     is_estimate: item.is_estimate ?? base.is_estimate,
     comment: item.comment ?? base.comment,
-    status: "draft",
+    status: reviewEdit ? "pending" : "draft",
     updated_at: NOW,
   };
   state.values = existing ? state.values.map((v) => (v.id === saved.id ? saved : v)) : [...state.values, saved];
@@ -388,31 +400,157 @@ function lockStatus(year: number, period: number | null): KpiPeriodLockStatus {
   return { year, period, sites, left };
 }
 
-function report(framework: FrameworkCode, year: number): KpiFrameworkReport {
+const inYear = (v: KpiValue, year: number) => v.period_start.startsWith(String(year));
+const selectedKpi = (id: number) => state.setup.kpis.find((k) => k.kpi_definition_id === id);
+
+/** The approved total of one KPI for a year in a unit (the server's aggregation; the FE never adds values up). */
+function yearTotal(kpiId: number, year: number, unit: string | null, sites?: number[]): { value: number | null; ids: number[] } {
+  const def = kpiOf(kpiId) as KpiDefinition;
+  const rows = state.values.filter((v) => v.kpi_definition_id === kpiId && v.status === "approved" && inYear(v, year) && (!sites?.length || (v.site_id !== null && sites.includes(v.site_id))));
+  if (!rows.length) return { value: null, ids: [] };
+  const sum = rows.reduce((s, v) => s + (v.value_canonical ?? 0), 0);
+  const shown = unit && def.canonical_unit && unit !== def.canonical_unit ? (convertUnit(sum, def.canonical_unit, unit) ?? sum) : sum;
+  return { value: Math.round(shown * 100) / 100, ids: rows.map((r) => r.id) };
+}
+
+function report(framework: FrameworkCode, year: number, sites: number[]): KpiFrameworkReport {
   const fw = state.frameworks.find((f) => f.code === framework) as KpiFramework;
   const disclosures = state.disclosures.filter((d) => d.framework_id === fw.id).sort((a, b) => a.sort_key - b.sort_key);
-  const rows: KpiFrameworkReport["rows"] = [];
-  const omissions: KpiFrameworkReport["omissions"] = [];
+  const material = new Map(state.setup.material_topics.map((t) => [t.esrs_topic, t]));
+  const rows: KpiReportRow[] = [];
+  const omissions: KpiReportOmission[] = [];
+  const mappedKpis = new Set<number>();
+  if (framework === "ESRS") {
+    for (const t of state.setup.material_topics.filter((x) => !x.material)) {
+      omissions.push({ disclosure_id: null, code: t.esrs_topic, title: ESRS_TOPIC_LABEL[t.esrs_topic], reason: t.reason ?? "Not material.", kind: "not_material", esrs_topic: t.esrs_topic });
+    }
+  }
   for (const d of disclosures) {
+    if (d.esrs_topic && material.get(d.esrs_topic)?.material === false) continue;
     const maps = state.mappings.filter((m) => m.disclosure_id === d.id);
+    for (const m of maps) mappedKpis.add(m.kpi_definition_id);
     if (!maps.length) {
-      omissions.push({ disclosure_id: d.id, code: d.code, title: d.title, reason: "No KPI answers this disclosure yet." });
+      omissions.push({ disclosure_id: d.id, code: d.code, title: d.title, reason: "Not tracked in ESGLite.", kind: "not_tracked" });
       continue;
     }
-    const first = kpiOf(maps[0].kpi_definition_id) as KpiDefinition;
-    const approved = state.values.filter((v) => v.kpi_definition_id === first.id && v.status === "approved" && v.period_start.startsWith(String(year)));
+    const chosen = maps.filter((m) => selectedKpi(m.kpi_definition_id)?.selected);
+    if (!chosen.length) {
+      const why = selectedKpi(maps[0].kpi_definition_id)?.reason_excluded ?? "Left out in KPI setup.";
+      omissions.push({ disclosure_id: d.id, code: d.code, title: d.title, reason: why, kind: "excluded" });
+      continue;
+    }
+    const first = chosen[0];
+    const def = kpiOf(first.kpi_definition_id) as KpiDefinition;
+    const now = yearTotal(def.id, year, first.display_unit, sites);
+    if (now.value === null) {
+      omissions.push({ disclosure_id: d.id, code: d.code, title: d.title, reason: `No approved value for ${year} yet.`, kind: "missing" });
+      continue;
+    }
+    const before = yearTotal(def.id, year - 1, first.display_unit, sites);
+    const siteIds = [...new Set(state.values.filter((v) => now.ids.includes(v.id)).map((v) => v.site_id))];
     rows.push({
       disclosure_id: d.id,
       code: d.code,
       title: d.title,
       section: d.section,
-      value: approved.length ? approved.reduce((s, v) => s + (v.value_canonical ?? 0), 0) : null,
-      unit: maps[0].display_unit,
-      where: first.level,
-      notes: maps[0].note,
+      value: now.value,
+      unit: first.display_unit,
+      previous: before.value,
+      where: def.level,
+      notes: first.note ?? (def.source === "auto" ? "From approved emission and energy data" : def.source === "formula" ? "Calculated" : null),
+      fit: first.fit,
+      requirement: d.requirement,
+      kpi_definition_ids: chosen.map((m) => m.kpi_definition_id),
+      value_ids: now.ids,
+      evidence_count: state.evidence.filter((e) => now.ids.includes(e.kpi_value_id)).length,
+      sites: siteIds.map((id) => siteName(id) ?? "Company"),
     });
   }
-  return { framework, version: fw.version, year, pending_count: state.values.filter((v) => v.status === "pending").length, rows, omissions };
+  const pending = state.values.filter((v) => v.status === "pending" && inYear(v, year) && mappedKpis.has(v.kpi_definition_id) && (!sites.length || (v.site_id !== null && sites.includes(v.site_id))));
+  return { framework, version: fw.version, year, pending_count: pending.length, pending_ids: pending.map((v) => v.id), rows, omissions };
+}
+
+/** What a target's progress looks like as the server works it out (KPI-9 `progress.ts`). */
+function targetOut(t: KpiTargetWithProgress): KpiTargetWithProgress {
+  const def = kpiOf(t.kpi_definition_id);
+  let current = t.current_value;
+  let currentYear = t.current_year;
+  const series: { year: number; value: number | null }[] = [{ year: t.baseline_year, value: t.baseline_value }];
+  if (current === null || current === undefined) {
+    for (let y = t.baseline_year + 1; y <= 2026; y += 1) {
+      const v = yearTotal(t.kpi_definition_id, y, def?.canonical_unit ?? null, t.site_id ? [t.site_id] : undefined).value;
+      if (v !== null) {
+        current = v;
+        currentYear = y;
+      }
+    }
+  }
+  if (current !== null && current !== undefined && currentYear) for (let y = t.baseline_year + 1; y <= currentYear; y += 1) series.push({ year: y, value: y === currentYear ? current : null });
+  const span = t.target_value - t.baseline_value;
+  const pct = current === null || current === undefined ? null : t.direction === "maintain" ? (Math.abs(current - t.baseline_value) <= Math.abs(t.baseline_value) * 0.05 ? 100 : 0) : span === 0 ? 100 : Math.max(0, Math.round(((current - t.baseline_value) / span) * 1000) / 10);
+  const expected = currentYear ? ((currentYear - t.baseline_year) / (t.target_year - t.baseline_year)) * 100 : 0;
+  const status: TargetStatus = pct === null ? "no_data" : pct >= expected ? "on_track" : "behind";
+  return { ...t, current_value: current ?? null, current_year: currentYear ?? null, progress_pct: pct, status, series, kpi_name: def?.name ?? null, kpi_code: def?.code ?? null, unit: def?.canonical_unit ?? null, site_name: t.site_id ? siteName(t.site_id) : null };
+}
+
+/** "−40 % by 2030 from 2024": how the server words a target on a card. */
+function targetText(t: KpiTargetWithProgress): string {
+  const pct = t.baseline_value ? Math.round(((t.target_value - t.baseline_value) / t.baseline_value) * 100) : 0;
+  return t.direction === "maintain" ? `Keep level to ${t.target_year} from ${t.baseline_year}` : `${pct < 0 ? "−" : "+"}${Math.abs(pct)} % by ${t.target_year} from ${t.baseline_year}`;
+}
+
+/** Gaps of the sample company for the dashboard. */
+const DASHBOARD_GAPS: Omit<KpiGap, "frameworks">[] = [
+  { kpi_definition_id: 14, kpi_name: "Water discharged", site_id: 3, site_name: "Matola", periods_missing: ["2026-07", "2026-09"], owner_user_id: 15, owner_name: "João Mendes", link: null },
+  { kpi_definition_id: 15, kpi_name: "Waste generated", site_id: 1, site_name: "Bahrain plant", periods_missing: ["2026-09"], owner_user_id: 11, owner_name: "Ravi Kumar", link: null },
+  { kpi_definition_id: 24, kpi_name: "New hires", site_id: null, site_name: null, periods_missing: ["2026"], owner_user_id: 13, owner_name: "Omar Saleh", link: null },
+  { kpi_definition_id: 31, kpi_name: "Pay ratio, women to men", site_id: null, site_name: null, periods_missing: ["2026"], owner_user_id: 13, owner_name: "Omar Saleh", link: null },
+];
+
+const MONTHS_TO_SEP = ["2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
+const DASHBOARD_CARDS: [code: string, value: number, previous: number, series: number[]][] = [
+  ["GHG_SCOPE1", 4650.2, 4980.4, [540, 532, 528, 520, 515, 509, 498, 530, 541, 522, 506, 512.4]],
+  ["ENERGY_TOTAL", 37210, 39020, [4300, 4260, 4310, 4210, 4100, 4050, 3990, 4180, 4320, 4260, 3980, 4120]],
+  ["WATER_WITHDRAWAL", 31500, 33200, [3500, 3450, 3480, 3400, 3550, 3500, 3600, 3450, 3700, 3600, 3500, 3200]],
+  ["WASTE_GENERATED", 98.4, 103.6, [11.9, 12.1, 11.6, 11.2, 11.8, 11.4, 11.1, 11.6, 11.3, 11.0, 10.9, 9.8]],
+];
+
+function dashboard(year: number, framework: string | null, site: number | null, topic: string | null): KpiDashboard {
+  const frameworksOf = (kpiId: number) => [...new Set(usedIn(kpiId).map((u) => u.framework))];
+  const cards: KpiDashboardCard[] = DASHBOARD_CARDS.map(([code, value, previous, series]) => {
+    const d = kpiByCode(code);
+    const target = state.targets.find((t) => t.kpi_definition_id === d.id && t.site_id === null);
+    const t = target ? targetOut(target) : null;
+    return {
+      kpi_definition_id: d.id,
+      code,
+      name: d.name,
+      topic: d.topic,
+      source: d.source,
+      unit: d.canonical_unit,
+      decimals: d.decimals,
+      value,
+      previous,
+      change_pct: Math.round(((value - previous) / previous) * 1000) / 10,
+      series: series.map((v, i) => ({ period: MONTHS_TO_SEP[i], value: v })),
+      target: t ? { progress_pct: t.progress_pct, status: t.status ?? null, label: targetText(t), target_id: t.id } : null,
+    };
+  }).filter((c) => !topic || c.topic === topic);
+  const gaps: KpiGap[] = DASHBOARD_GAPS.map((g) => ({ ...g, frameworks: frameworksOf(g.kpi_definition_id) })).filter(
+    (g) => (!framework || g.frameworks.includes(framework.toUpperCase() as FrameworkCode)) && (!site || g.site_id === site) && (!topic || kpiOf(g.kpi_definition_id)?.topic === topic),
+  );
+  const pending = state.values.filter((v) => v.status === "pending" && inYear(v, year) && (!site || v.site_id === site));
+  return {
+    year,
+    coverage: [
+      { framework: "GRI", version: "GRI 2021+", required: 22, approved: 18, pending: 2, missing: 2, percent: 82, core: null, excluded: 1 },
+      { framework: "BRSR", version: "BRSR 2023", required: 14, approved: 10, pending: 2, missing: 2, percent: 74, core: { done: 7, total: 9 } },
+      { framework: "ESRS", version: "ESRS 2023", required: 13, approved: 9, pending: 1, missing: 3, percent: 68, core: null, material_topics: state.setup.material_topics.filter((t) => t.material).length },
+    ],
+    gaps,
+    cards,
+    pending_not_in: { count: pending.length, value_ids: pending.map((v) => v.id) },
+  };
 }
 
 const json = async <T>(request: Request): Promise<Partial<T>> => {
@@ -740,38 +878,48 @@ export const kpiHandlers = [
     gated(({ request }) => {
       const year = Number(new URL(request.url).searchParams.get("year") ?? 2026);
       const values = state.values.filter((v) => v.source === "auto" && v.period_start.startsWith(String(year)));
-      for (const v of values) v.auto_snapshot = { read_at: NOW, rows: v.auto_snapshot?.rows ?? 0, link: v.auto_snapshot?.link ?? null };
-      return HttpResponse.json<KpiAutoRefreshResult>({ year, refreshed: values.length, values: values.map(out) });
+      for (const v of values) {
+        v.auto_snapshot = { read_at: NOW, rows: v.auto_snapshot?.rows ?? 0, link: v.auto_snapshot?.link ?? null };
+        v.checks = v.checks?.filter((c) => c.id !== "KPI_AUTO_STALE") ?? null;
+      }
+      const stale = values.filter((v) => v.updated_at !== NOW);
+      for (const v of stale) v.updated_at = NOW;
+      return HttpResponse.json<KpiAutoRefreshResult>({ year, refreshed: stale.length, unchanged: values.length - stale.length, removed: 0, locked: 0, values: values.map(out), formulas: [] });
     }),
   ),
 
   // KPI-9: targets
-  http.get("*/kpi/targets", gated(() => HttpResponse.json<KpiTargetWithProgress[]>(state.targets))),
+  http.get("*/kpi/targets", gated(() => HttpResponse.json<{ targets: KpiTargetWithProgress[] }>({ targets: state.targets.map(targetOut) }))),
   http.put(
     "*/kpi/targets",
     gated(async ({ request }) => {
       const body = await json<PutKpiTargetBody>(request);
-      if (!body.kpi_definition_id || !kpiOf(body.kpi_definition_id)) return badRequest("Pick a KPI.");
-      if (!body.target_year || body.baseline_year == null || body.target_year <= body.baseline_year) return badRequest("The target year comes after the baseline year.");
-      const existing = body.id ? state.targets.find((t) => t.id === body.id) : undefined;
+      if (!body.kpi_definition_id || !kpiOf(body.kpi_definition_id)) return error("KPI_VALIDATION", "Pick a KPI.");
+      if (!body.target_year || body.baseline_year == null || body.target_year <= body.baseline_year) return error("KPI_VALIDATION", "The target year comes after the baseline year.");
+      const direction = body.direction ?? "reduce";
+      const b = body.baseline_value ?? 0;
+      const t = body.target_value ?? 0;
+      if ((direction === "reduce" && t >= b) || (direction === "increase" && t <= b)) return error("KPI_VALIDATION", "The target value doesn't match the direction.");
+      const existing = body.id ? state.targets.find((x) => x.id === body.id) : undefined;
+      if (body.id && !existing) return notFound("Target not found.");
       const row: KpiTargetWithProgress = {
         id: existing?.id ?? nextId(state.targets),
         company_id: ACME.company_id,
         created_by: 13,
-        current_value: existing?.current_value ?? null,
-        current_year: existing?.current_year ?? null,
-        progress_pct: existing?.progress_pct ?? null,
+        current_value: null,
+        current_year: null,
+        progress_pct: null,
         kpi_definition_id: body.kpi_definition_id,
         site_id: body.site_id ?? null,
         baseline_year: body.baseline_year,
-        baseline_value: body.baseline_value ?? 0,
+        baseline_value: b,
         target_year: body.target_year,
-        target_value: body.target_value ?? 0,
-        direction: body.direction ?? "reduce",
+        target_value: t,
+        direction,
         note: body.note ?? null,
       };
-      state.targets = existing ? state.targets.map((t) => (t.id === row.id ? row : t)) : [...state.targets, row];
-      return HttpResponse.json(row);
+      state.targets = existing ? state.targets.map((x) => (x.id === row.id ? row : x)) : [...state.targets, row];
+      return HttpResponse.json({ target: targetOut(row) }, { status: existing ? 200 : 201 });
     }),
   ),
   // data-loss-reviewed: mock handler only (no production data); removes one target from the in-memory sample.
@@ -781,7 +929,7 @@ export const kpiHandlers = [
       const id = Number(params.id ?? new URL(request.url).searchParams.get("id"));
       if (!state.targets.some((t) => t.id === id)) return notFound("Target not found.");
       state.targets = state.targets.filter((t) => t.id !== id);
-      return HttpResponse.json({ removed: Number(params.eid) });
+      return HttpResponse.json({ removed: id });
     }),
   ),
 
@@ -789,29 +937,20 @@ export const kpiHandlers = [
   http.get(
     "*/kpi/dashboard",
     gated(({ request }) => {
-      const year = Number(new URL(request.url).searchParams.get("year") ?? 2026);
-      const card = (code: string, v: number, prev: number, monthly: (number | null)[], target: number | null): KpiDashboard["cards"][number] => {
-        const d = kpiByCode(code);
-        return { kpi_definition_id: d.id, code, name: d.name, topic: d.topic, unit: d.canonical_unit, value: v, previous: prev, change_pct: Math.round(((v - prev) / prev) * 1000) / 10, monthly, target_progress_pct: target };
-      };
-      return HttpResponse.json<KpiDashboard>({
-        year,
-        pending_count: state.values.filter((v) => v.status === "pending").length,
-        frameworks: [
-          { framework: "GRI", version: "GRI 2021+", percent: 82, gaps: 6, core: null },
-          { framework: "BRSR", version: "BRSR 2023", percent: 74, gaps: 8, core: { done: 9, total: 9 } },
-          { framework: "ESRS", version: "ESRS 2023", percent: 68, gaps: 9, core: null },
-        ],
-        cards: [
-          card("GHG_SCOPE1", 4650.2, 4980.4, [520, 515, 509, 498, 530, 541, 522, 506, 512, null, null, null], 28.1),
-          card("ENERGY_TOTAL", 37210, 39020, [4210, 4100, 4050, 3990, 4180, 4320, 4260, 3980, 4120, null, null, null], null),
-          card("WATER_WITHDRAWAL", 31500, 33200, [3400, 3550, 3500, 3600, 3450, 3700, 3600, 3500, 3200, null, null, null], 64),
-        ],
-        gaps: [
-          { kpi_definition_id: 14, kpi_name: "Water discharged", site_id: 3, site_name: "Matola", missing_periods: ["2026-07", "2026-08", "2026-09"], owner_user_id: 15, owner_name: "João Mendes" },
-          { kpi_definition_id: 15, kpi_name: "Waste generated", site_id: 1, site_name: "Bahrain plant", missing_periods: ["2026-09"], owner_user_id: 11, owner_name: "Ravi Kumar" },
-        ],
-      });
+      const q = new URL(request.url).searchParams;
+      return HttpResponse.json<KpiDashboard>(dashboard(Number(q.get("year") ?? 2026), q.get("framework"), q.get("site") ? Number(q.get("site")) : null, q.get("topic")));
+    }),
+  ),
+  http.post(
+    "*/kpi/dashboard/remind",
+    gated(async ({ request }) => {
+      const body = await json<{ kpi: number; site: number | null }>(request);
+      if (!body.kpi) return error("KPI_VALIDATION", "kpi is required.");
+      const gap = DASHBOARD_GAPS.find((g) => g.kpi_definition_id === body.kpi && g.site_id === (body.site ?? null));
+      const key = `${body.kpi}:${body.site ?? "c"}`;
+      if (state.reminded.has(key)) return HttpResponse.json<KpiRemindResult>({ reminded: false, owner_name: gap?.owner_name ?? null, message: "Already reminded today." });
+      state.reminded.add(key);
+      return HttpResponse.json<KpiRemindResult>({ reminded: true, owner_name: gap?.owner_name ?? null });
     }),
   ),
 
@@ -829,7 +968,8 @@ export const kpiHandlers = [
         if (framework !== "GRI") return badRequest("PDF is for the GRI content index only.");
         return HttpResponse.arrayBuffer(new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer, { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename="GRI-${year}.pdf"` } });
       }
-      return HttpResponse.json<KpiFrameworkReport>(report(framework as FrameworkCode, year));
+      const sites = (q.get("sites") ?? "").split(",").map(Number).filter((n) => n > 0);
+      return HttpResponse.json<KpiFrameworkReport>(report(framework as FrameworkCode, year, sites));
     }),
   ),
 

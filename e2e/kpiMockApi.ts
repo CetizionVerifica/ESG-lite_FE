@@ -29,8 +29,44 @@ export const OMAR = {
   ],
 };
 
-export async function kpiApp(page: Page, opts: { role: string; user: object; enabled?: boolean; freshSetup?: boolean; other?: (url: URL) => unknown }) {
-  resetKpiMocks();
+const ACME_ON = { company_id: 1, name: "ACME", kpi_tracking_enabled: true };
+
+/** Mia Haddad, the Manager of all three plants (KPI-8 review, KPI-10 dashboard, KPI-11 reports). */
+export const MIA = {
+  user_id: 12,
+  name: "Mia Haddad",
+  email: "mia@acme.example",
+  company: ACME_ON,
+  sites: [
+    { site_id: 1, name: "Bahrain plant", company: ACME_ON, categories: [] },
+    { site_id: 2, name: "Dammam", company: ACME_ON, categories: [] },
+    { site_id: 3, name: "Matola", company: ACME_ON, categories: [] },
+  ],
+};
+
+/** One history entry for any KPI value (`/user/audit-logs?entity_type=kpi_value`). */
+const kpiAudit = (url: URL) =>
+  url.searchParams.get("entity_type") === "kpi_value"
+    ? [
+        {
+          id: 1,
+          entity_type: "kpi_value",
+          entity_id: Number(url.searchParams.get("entity_id")),
+          action: "submit",
+          changed_fields: { status: { old: "draft", new: "pending" } },
+          reason: null,
+          changed_by: { user_id: 14, name: "Sara Ali", email: "sara@acme.example", role: "User" },
+          changed_at: "2026-10-05T10:00:00.000Z",
+        },
+      ]
+    : [];
+
+/**
+ * `keepState` leaves the KPI mocks as an earlier page in the same test left
+ * them (a Manager rejects, then the contributor opens My KPIs).
+ */
+export async function kpiApp(page: Page, opts: { role: string; user: object; enabled?: boolean; freshSetup?: boolean; keepState?: boolean; other?: (url: URL) => unknown }) {
+  if (!opts.keepState) resetKpiMocks();
   if (opts.enabled === false) setKpiMockEnabled(false);
   if (opts.freshSetup) startKpiSetupFresh();
   const calls: Call[] = [];
@@ -66,6 +102,7 @@ export async function kpiApp(page: Page, opts: { role: string; user: object; ena
       if (path.endsWith("/brands/mine")) return json({});
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
+      if (path.endsWith("/user/audit-logs")) return json(kpiAudit(url));
       if (/\/kpi(\/|$)/.test(path)) {
         const headers = new Headers(req.headers());
         const body = method === "GET" || method === "HEAD" ? undefined : (req.postDataBuffer() ?? undefined);

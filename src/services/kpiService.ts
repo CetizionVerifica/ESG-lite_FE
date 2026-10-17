@@ -2,7 +2,27 @@ import api from "../api/axios";
 import { getCompanySites, getCompanyUsers } from "./companyAdminService";
 import {
   type CustomKpiBody,
+  FRAMEWORK_CODES,
+  type FrameworkCode,
   type KpiAutoRefreshResult,
+  type KpiCoverage,
+  type KpiDashboard,
+  type KpiDashboardCard,
+  type KpiFrameworkReport,
+  type KpiGap,
+  type KpiLockBody,
+  type KpiPeriodLock,
+  type KpiPeriodLockStatus,
+  type KpiRemindResult,
+  type KpiReportOmission,
+  type KpiReportRow,
+  type KpiTargetWithProgress,
+  type KpiUnlockBody,
+  type PutKpiTargetBody,
+  type ReportFormat,
+  type ReviewKpiValuesResult,
+  TARGET_STATUSES,
+  type TargetStatus,
   type KpiCatalogue,
   type KpiDefinition,
   type KpiDisclosure,
@@ -207,10 +227,230 @@ export const removeKpiEvidence = async (valueId: number, evidenceId: number, com
   (await api.delete(`/kpi/values/${valueId}/evidence/${evidenceId}`, { params: companyParams(companyId) })).data as { removed: number };
 
 // KPI-5: auto values
+/** `POST /kpi/auto/refresh?year=` (Manager and above): reads auto values again from the approved rows. */
 export async function refreshAutoKpis(year: number, companyId?: number | null): Promise<KpiAutoRefreshResult> {
   const data = obj((await api.post("/kpi/auto/refresh", {}, { params: { year, ...companyParams(companyId) } })).data);
-  return { year: Number(data.year ?? year), refreshed: Number(data.refreshed ?? 0), values: asList<KpiValue>(data, "values") };
+  const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  return {
+    year: Number(data.year ?? year),
+    refreshed: n(data.refreshed),
+    unchanged: n(data.unchanged),
+    removed: n(data.removed),
+    locked: n(data.locked),
+    values: asList<KpiValue>(data, "values"),
+    formulas: asList<KpiValue>(data, "formulas"),
+  };
 }
+
+// KPI-8: review and close
+const readReview = (data: unknown): ReviewKpiValuesResult => {
+  const d = obj(data);
+  return { updated: asList<number>(d, "updated").map(Number), refused: asList<ReviewKpiValuesResult["refused"][number]>(d, "refused") };
+};
+/** `PUT /kpi/values/approve {ids, only_ready?}` (Manager, Superadmin): `{updated, refused:[{id, code}]}`. */
+export const approveKpiValues = async (ids: number[], opts: { onlyReady?: boolean; keepalive?: boolean } = {}, companyId?: number | null) =>
+  readReview((await api.put("/kpi/values/approve", { ids, ...(opts.onlyReady ? { only_ready: true } : {}) }, { params: companyParams(companyId), ...(opts.keepalive ? { adapter: "fetch" as const, fetchOptions: { keepalive: true } } : {}) })).data);
+/** `PUT /kpi/values/reject {ids, reason}`: the reason is required (`KPI_REASON_REQUIRED`). */
+export const rejectKpiValues = async (ids: number[], reason: string, companyId?: number | null) =>
+  readReview((await api.put("/kpi/values/reject", { ids, reason }, { params: companyParams(companyId) })).data);
+
+/** `GET /kpi/periods/lock?year=&period=`: what's left per site and the locks. Missing parts read as empty. */
+export async function getKpiPeriodLock(year: number, period: number | null, companyId?: number | null): Promise<KpiPeriodLockStatus> {
+  const data = obj(asRow<unknown>((await api.get("/kpi/periods/lock", { params: { year, ...(period ? { period } : {}), ...companyParams(companyId) } })).data, "status"));
+  const sites = asList<Loose>(data, "sites").map((s) => ({
+    site_id: (s.site_id ?? null) as number | null,
+    name: String(s.name ?? s.site_name ?? (s.site_id ? `Site ${s.site_id}` : "Company")),
+    locked: !!s.locked,
+    lock: (s.lock ?? null) as KpiPeriodLock | null,
+    kpis: asList<KpiPeriodLockStatus["sites"][number]["kpis"][number]>(s, "kpis"),
+  }));
+  return { year: Number(data.year ?? year), period: (data.period ?? period ?? null) as number | null, sites, left: asList(data, "left") };
+}
+export const lockKpiPeriod = async (body: KpiLockBody, companyId?: number | null) =>
+  asRow<KpiPeriodLock>((await api.post("/kpi/periods/lock", body, { params: companyParams(companyId) })).data, "lock");
+export const unlockKpiPeriod = async (body: KpiUnlockBody, companyId?: number | null) =>
+  asRow<KpiPeriodLock>((await api.post("/kpi/periods/unlock", body, { params: companyParams(companyId) })).data, "lock");
+
+/** The `details.left` of a `KPI_PERIOD_INCOMPLETE` refusal, or an empty list. */
+export function incompleteLeft(e: unknown): KpiPeriodLockStatus["left"] {
+  const data = (e as { response?: { data?: { code?: unknown; details?: { left?: unknown } } } })?.response?.data;
+  return data?.code === "KPI_PERIOD_INCOMPLETE" && Array.isArray(data.details?.left) ? (data.details.left as KpiPeriodLockStatus["left"]) : [];
+}
+
+// KPI-9: targets
+const asStatus = (v: unknown): TargetStatus | null => ((TARGET_STATUSES as readonly unknown[]).includes(v) ? (v as TargetStatus) : null);
+/** `GET /kpi/targets` (any role of the company): `{targets}` or a bare list. */
+export const getKpiTargets = async (companyId?: number | null) =>
+  asList<KpiTargetWithProgress>((await api.get("/kpi/targets", { params: companyParams(companyId) })).data, "targets").map((t) => ({ ...t, status: asStatus(t.status) }));
+/** `PUT /kpi/targets` (Admin): an upsert; answers the saved target with its progress. */
+export const saveKpiTarget = async (body: PutKpiTargetBody, companyId?: number | null) =>
+  asRow<KpiTargetWithProgress>((await api.put("/kpi/targets", body, { params: companyParams(companyId) })).data, "target");
+export const deleteKpiTarget = async (id: number, companyId?: number | null) => (await api.delete(`/kpi/targets/${id}`, { params: companyParams(companyId) })).data as unknown;
+
+// KPI-10: dashboard
+export type DashboardQuery = { year: number; framework?: FrameworkCode | null; site?: number | null; topic?: string | null };
+export async function getKpiDashboard(q: DashboardQuery, companyId?: number | null): Promise<KpiDashboard> {
+  const params = { year: q.year, ...(q.framework ? { framework: q.framework } : {}), ...(q.site ? { site: q.site } : {}), ...(q.topic ? { topic: q.topic } : {}), ...companyParams(companyId) };
+  return readDashboard((await api.get("/kpi/dashboard", { params })).data, q.year);
+}
+
+const num = (v: unknown): number | null => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+const isFramework = (v: unknown): v is FrameworkCode => (FRAMEWORK_CODES as readonly unknown[]).includes(v);
+
+/** The dashboard as the KPI-10 spec words it (`coverage`, `gaps`, `cards`, `pending_not_in`), also reading the KPI-0 mock shape. */
+export function readDashboard(data: unknown, year: number): KpiDashboard {
+  const root = obj(asRow<unknown>(data, "dashboard"));
+  const coverageRaw = Array.isArray(root.coverage) ? root.coverage : Array.isArray(root.frameworks) ? root.frameworks : [];
+  const coverage: KpiCoverage[] = (coverageRaw as Loose[])
+    .map((c): Loose => ({ ...c, framework: String(c.framework ?? c.code ?? "").toUpperCase() }))
+    .filter((c) => isFramework(c.framework))
+    .map((c) => {
+      const core = obj(c.core);
+      const required = num(c.required) ?? 0;
+      const missing = num(c.missing) ?? num(c.gaps) ?? 0;
+      return {
+        framework: c.framework as FrameworkCode,
+        version: (c.version as string | null) ?? null,
+        required,
+        approved: num(c.approved) ?? 0,
+        pending: num(c.pending) ?? 0,
+        missing,
+        percent: num(c.percent) ?? 0,
+        core: c.core ? { done: num(core.done) ?? 0, total: num(core.total) ?? 0 } : null,
+        excluded: num(c.excluded) ?? undefined,
+        material_topics: num(c.material_topics),
+      };
+    });
+  const gaps: KpiGap[] = asList<Loose>(root, "gaps").map((g) => {
+    const kpi = obj(g.kpi);
+    const site = obj(g.site);
+    const owner = obj(g.owner);
+    const missing = g.periods_missing ?? g.missing_periods ?? [];
+    const fws = (Array.isArray(g.frameworks) ? g.frameworks : Array.isArray(kpi.frameworks) ? kpi.frameworks : []) as unknown[];
+    return {
+      kpi_definition_id: Number(pick(g.kpi_definition_id, kpi.id, kpi.kpi_definition_id, typeof g.kpi === "number" ? g.kpi : undefined)),
+      kpi_name: String(pick(g.kpi_name, kpi.name, "") ?? ""),
+      site_id: (pick(g.site_id, site.site_id, site.id, typeof g.site === "number" ? g.site : undefined) ?? null) as number | null,
+      site_name: (pick(g.site_name, site.name, typeof g.site === "string" ? g.site : undefined) ?? null) as string | null,
+      periods_missing: Array.isArray(missing) ? missing.map(String) : typeof missing === "number" ? [] : [],
+      owner_user_id: (pick(g.owner_user_id, owner.user_id, owner.id, typeof g.owner === "number" ? g.owner : undefined) ?? null) as number | null,
+      owner_name: (pick(g.owner_name, owner.name, typeof g.owner === "string" ? g.owner : undefined) ?? null) as string | null,
+      link: typeof g.link === "string" && g.link ? g.link : null,
+      frameworks: fws.map((f) => String(f).toUpperCase()).filter(isFramework),
+      pending: g.pending === true,
+    };
+  });
+  const cards: KpiDashboardCard[] = asList<Loose>(root, "cards").map((c) => {
+    const kpi = obj(c.kpi);
+    const target = c.target && typeof c.target === "object" ? obj(c.target) : null;
+    const rawSeries = (Array.isArray(c.series) ? c.series : Array.isArray(c.monthly) ? c.monthly : []) as unknown[];
+    const series = rawSeries.map((p, i) => (p && typeof p === "object" ? { period: String(obj(p).period ?? obj(p).label ?? i + 1), value: num(obj(p).value) } : { period: String(i + 1), value: num(p) }));
+    const progress = target ? num(target.progress_pct) : num(c.target_progress_pct);
+    return {
+      kpi_definition_id: Number(pick(c.kpi_definition_id, kpi.id)),
+      code: String(pick(c.code, kpi.code, "") ?? ""),
+      name: String(pick(c.name, kpi.name, "") ?? ""),
+      topic: pick(c.topic, kpi.topic, "governance"),
+      source: (pick(c.source, kpi.source, null) ?? null) as KpiDashboardCard["source"],
+      unit: (pick(c.unit, kpi.unit, kpi.canonical_unit, null) ?? null) as string | null,
+      decimals: num(pick(c.decimals, kpi.decimals)),
+      value: num(c.value),
+      previous: num(pick(c.previous, c.last_year)),
+      change_pct: num(c.change_pct),
+      series,
+      target:
+        target || progress !== null
+          ? { progress_pct: progress, status: asStatus(target?.status ?? c.target_status), label: (target?.label as string | undefined) ?? null, target_id: num(target?.id ?? target?.target_id) }
+          : null,
+    };
+  });
+  const pendingRaw = root.pending_not_in;
+  const pendingObj = obj(pendingRaw);
+  const pending_not_in =
+    typeof pendingRaw === "number"
+      ? { count: pendingRaw }
+      : pendingRaw && typeof pendingRaw === "object"
+        ? { count: num(pendingObj.count) ?? num(pendingObj.kpi) ?? (Array.isArray(pendingObj.value_ids) ? pendingObj.value_ids.length : 0), value_ids: Array.isArray(pendingObj.value_ids) ? pendingObj.value_ids.map(Number) : undefined, emissions: num(pendingObj.emissions) ?? undefined }
+        : { count: num(root.pending_count) ?? 0 };
+  return { year: num(root.year) ?? year, coverage, gaps, cards, pending_not_in };
+}
+
+/** `POST /kpi/dashboard/remind {kpi, site}` (Manager+): asks the owner for the missing values; at most once a day per item. */
+export async function remindKpiOwner(kpi: number, site: number | null, companyId?: number | null): Promise<KpiRemindResult> {
+  const d = obj((await api.post("/kpi/dashboard/remind", { kpi, site }, { params: companyParams(companyId) })).data);
+  return { reminded: d.reminded !== false && d.sent !== false, owner_name: (d.owner_name as string | undefined) ?? null, message: (d.message as string | undefined) ?? null };
+}
+
+// KPI-11: framework reports
+export type ReportQuery = { framework: FrameworkCode; year: number; sites?: number[] };
+const reportParams = (q: ReportQuery, format: ReportFormat, companyId?: number | null) => ({
+  year: q.year,
+  format,
+  ...(q.sites?.length ? { sites: q.sites.join(",") } : {}),
+  ...companyParams(companyId),
+});
+export async function getKpiReport(q: ReportQuery, companyId?: number | null): Promise<KpiFrameworkReport> {
+  return readReport((await api.get(`/kpi/reports/${q.framework}`, { params: reportParams(q, "json", companyId) })).data, q);
+}
+
+/** The report model, wrapped as `{report}` or not; rows may carry `kpis` and `values` as objects (the KPI-11 spec words) instead of id lists. */
+export function readReport(data: unknown, q: Pick<ReportQuery, "framework" | "year">): KpiFrameworkReport {
+  const root = obj(asRow<unknown>(data, "report"));
+  const ids = (v: unknown, key: string) => (Array.isArray(v) ? v.map((x) => Number(x && typeof x === "object" ? (x as Loose)[key] ?? (x as Loose).id : x)).filter((n) => Number.isFinite(n)) : undefined);
+  const rows: KpiReportRow[] = asList<Loose>(root, "rows").map((r) => {
+    const disclosure = obj(r.disclosure);
+    return {
+      ...(r as unknown as KpiReportRow),
+      disclosure_id: Number(pick(r.disclosure_id, disclosure.id)),
+      code: String(pick(r.code, disclosure.code, "") ?? ""),
+      title: String(pick(r.title, disclosure.title, "") ?? ""),
+      section: String(pick(r.section, disclosure.section, "") ?? ""),
+      value: (pick(r.value, null) ?? null) as KpiReportRow["value"],
+      unit: (pick(r.unit, r.display_unit, null) ?? null) as string | null,
+      previous: (pick(r.previous, r.previous_year, null) ?? null) as KpiReportRow["previous"],
+      where: (r.where === "site" || r.where === "company" ? r.where : null) as KpiReportRow["where"],
+      notes: (pick(r.notes, r.note, null) ?? null) as string | null,
+      kpi_definition_ids: ids(r.kpi_definition_ids ?? r.kpis, "kpi_definition_id"),
+      value_ids: ids(r.value_ids ?? r.values, "id"),
+      evidence_count: num(r.evidence_count) ?? undefined,
+    };
+  });
+  const omissions = asList<KpiReportOmission>(root, "omissions").map((o) => ({ ...o, disclosure_id: o.disclosure_id ?? null, reason: o.reason ?? "" }));
+  return {
+    framework: (isFramework(root.framework) ? root.framework : q.framework) as FrameworkCode,
+    version: String(root.version ?? ""),
+    year: num(root.year) ?? q.year,
+    pending_count: num(root.pending_count) ?? (Array.isArray(root.pending_ids) ? root.pending_ids.length : 0),
+    pending_ids: Array.isArray(root.pending_ids) ? root.pending_ids.map(Number) : undefined,
+    rows,
+    omissions,
+  };
+}
+
+/** Downloads the XLSX (all frameworks) or the PDF (GRI) with the auth header; answers the file and its name. */
+export async function downloadKpiReport(q: ReportQuery, format: Exclude<ReportFormat, "json">, companyId?: number | null): Promise<{ blob: Blob; fileName: string | null }> {
+  try {
+    const res = await api.get<Blob>(`/kpi/reports/${q.framework}`, { params: reportParams(q, format, companyId), responseType: "blob" });
+    const disposition = (res.headers as Record<string, unknown> | undefined)?.["content-disposition"];
+    return { blob: res.data, fileName: typeof disposition === "string" ? disposition : null };
+  } catch (e) {
+    throw await blobError(e);
+  }
+}
+
+/** A blob request's error body is JSON inside a Blob: read it so `kpiErrorMessage` shows the server's words. */
+async function blobError(e: unknown): Promise<unknown> {
+  const res = (e as { response?: { status?: number; data?: unknown } })?.response;
+  if (!res || typeof Blob === "undefined" || !(res.data instanceof Blob)) return e;
+  try {
+    return { response: { status: res.status, data: JSON.parse(await res.data.text()) as unknown } };
+  } catch {
+    return e;
+  }
+}
+
+/** A plain message for a per-item refusal code (`PUT /kpi/values` results); never the code itself. */
+export const codeMessage = (code: unknown, fallback: string) => (isKpiErrorCode(code) ? ERROR_MESSAGE[code] : fallback);
 
 /** The server's message, or a plain one for a KPI error code; never the raw code. */
 export function kpiErrorMessage(e: unknown, fallback: string): string {

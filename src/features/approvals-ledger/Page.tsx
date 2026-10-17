@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Layers, SearchX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -59,6 +59,10 @@ import { feraCategoryIds } from "../../lib/emissions/pendingCount";
 import { BatchesView } from "./components/BatchesView";
 import { CloseMonthView } from "./components/CloseMonthView";
 import { useReviewWorkflow } from "../../lib/reviewWorkflow";
+import { useKpiTracking } from "../../lib/kpi/switch";
+import { getKpiValues } from "../../services/kpiService";
+import { hasModuleSlot } from "../../routes/moduleSlots";
+import { ModuleSlot } from "../../routes/ModuleSlot";
 import { ReportMenu } from "./components/ReportMenu";
 import { RecordDrawer } from "./components/RecordDrawer";
 import { ledgerColumns } from "./components/columns";
@@ -112,8 +116,8 @@ const TAB_FILTERS: Record<Tab, FilterDef[]> = { approvals: [METHOD_FILTER, DQ_FI
 
 const describe = (r: LedgerRow) => `${r.category?.category_name ?? "Entry"} · ${r.site?.name ?? "—"} · ${rowPeriodLabel(r)}`;
 
-/** `close`: S3-15 Close month, only with the company's review workflow on. */
-type View = Tab | "batches" | "close";
+/** `close`: S3-15 Close month, only with the company's review workflow on. `kpi`: KPI-8, only with KPI tracking on. */
+type View = Tab | "batches" | "close" | "kpi";
 
 /** P07: `/data/approvals` (Approvals; `?view=batches` Upload batches, `?view=close` Close month) and `/data/ledger`. */
 export default function EmissionsPage({ tab }: { tab: Tab }) {
@@ -122,8 +126,11 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
   const sites = useManagerSites();
   const [ctx] = useContextParams();
   const workflow = useReviewWorkflow();
+  const kpiOn = useKpiTracking() && hasModuleSlot("approvals-kpi");
   const viewParam = tab === "approvals" ? params.get("view") : null;
-  const view: View = viewParam === "batches" ? "batches" : viewParam === "close" && workflow ? "close" : tab;
+  const view: View = viewParam === "batches" ? "batches" : viewParam === "close" && workflow ? "close" : viewParam === "kpi" && kpiOn ? "kpi" : tab;
+  // KPI-8: values waiting for review (the KPIs tab reads the same query).
+  const kpiPending = useQuery({ queryKey: ["kpi", "review", "pending", null], queryFn: () => getKpiValues({ status: "pending" }), enabled: kpiOn, staleTime: 15_000, retry: false });
 
   const categories = useMemo(() => {
     const inScope = ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)) : sites;
@@ -153,23 +160,29 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
       const v = params.get(k);
       if (v) keep.set(k, v);
     }
-    if (next === "batches" || next === "close") keep.set("view", next);
-    navigate({ pathname: TAB_PATH[next === "batches" || next === "close" ? "approvals" : next], search: keep.toString() });
+    if (next === "batches" || next === "close" || next === "kpi") keep.set("view", next);
+    if (next === "kpi") keep.delete("category"); // data-loss-reviewed: URL param, not a record
+    navigate({ pathname: TAB_PATH[next === "batches" || next === "close" || next === "kpi" ? "approvals" : next], search: keep.toString() });
   };
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Emissions"
+        title={view === "kpi" ? "Approvals" : "Emissions"}
+        description={view === "kpi" ? "KPI values from your sites, reviewed the same way as emissions." : undefined}
         context={
-          <ContextChips
-            chips={["site", "category", "period"]}
-            sites={sites.map((s) => ({ value: s.site_id, label: s.name }))}
-            categories={categories}
-            periodKinds={["month", "cy"]}
-            allowAnyPeriod
-            multiCategory
-          />
+          view === "kpi" ? (
+            <ContextChips chips={["site", "period"]} sites={sites.map((s) => ({ value: s.site_id, label: s.name }))} periodKinds={["month"]} allowAnyPeriod />
+          ) : (
+            <ContextChips
+              chips={["site", "category", "period"]}
+              sites={sites.map((s) => ({ value: s.site_id, label: s.name }))}
+              categories={categories}
+              periodKinds={["month", "cy"]}
+              allowAnyPeriod
+              multiCategory
+            />
+          )
         }
       />
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -182,11 +195,14 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
             { value: "ledger", label: "Ledger" },
             { value: "batches", label: "Upload batches", count: batches.data?.filter((b) => b.pending_count > 0).length },
             ...(workflow ? [{ value: "close" as const, label: "Close month" }] : []),
+            ...(kpiOn ? [{ value: "kpi" as const, label: "KPIs", count: kpiPending.data?.length }] : []),
           ]}
         />
-        <ReportMenu siteIds={ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)} categoryIds={ctx.categoryIds} period={ctx.period} />
+        {view !== "kpi" && <ReportMenu siteIds={ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)} categoryIds={ctx.categoryIds} period={ctx.period} />}
       </div>
-      {view === "batches" ? (
+      {view === "kpi" ? (
+        <ModuleSlot id="approvals-kpi" />
+      ) : view === "batches" ? (
         <BatchesView siteIds={scopeSites} categoryIds={ctx.categoryIds} />
       ) : view === "close" ? (
         <CloseMonthView siteIds={ctx.siteIds} />
