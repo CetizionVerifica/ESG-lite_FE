@@ -93,7 +93,7 @@ export default function AddDataPage() {
   const [methodErrors, setMethodErrors] = useState<Record<number, { method: string; message: string }>>({});
   // Per user: a draft survives a reload, so the next person signing in on this tab mustn't get it.
   const draftKey = contextReady ? entryDraftKey(userIdOf(user), site.site_id, category.category_id, formatEntryPeriodParam(period)) : null;
-  const { rows, sent, dispatch, clearDraft, markSent } = useEntryRows(model, draftKey);
+  const { rows, sent, dispatch, markSent, startAnother } = useEntryRows(model, draftKey);
   const evidence = useRowEvidence(draftKey);
 
   // S3-15 Fix: once the form and the saved entries are in, load the entry `?fix=` names, once.
@@ -258,7 +258,7 @@ export default function AddDataPage() {
       onFinished={markSent}
       workflow={workflow}
       onAnother={() => {
-        clearDraft();
+        startAnother();
         setContext({ category: null });
         setStep(0);
       }}
