@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom"; // S3-12
 import { useAuth } from "../../../context/AuthContext";
 import { useClientContext } from "../../../lib/clientContext";
 import { CONSOLIDATION_APPROACHES, CONSOLIDATION_LABEL, type ConsolidationApproach } from "../../../lib/scope3/boundary";
@@ -27,6 +28,7 @@ export default function Scope3BoundaryPage() {
   const ready = !isStaff || clientId !== null;
 
   const { toast } = useToast();
+  const navigate = useNavigate(); // S3-12
   const boundary = useBoundary(companyId, ready);
   const map = useCategoryMap(companyId, ready);
   const save = useSaveBoundary(companyId);
@@ -125,6 +127,7 @@ export default function Scope3BoundaryPage() {
     <PageHeader
       title="Scope 3 boundary"
       description="Every GHG Protocol Scope 3 category is included, excluded or not relevant, with the reason. Reports list exclusions with these reasons."
+      secondaryActions={[{ label: "Screening", onClick: () => navigate("/settings/scope3/screening") }]} // S3-12
     />
   );
 

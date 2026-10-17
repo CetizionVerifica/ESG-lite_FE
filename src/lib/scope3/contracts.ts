@@ -406,10 +406,22 @@ export interface Fx {
   source: string;
 }
 
+/** `emission.proxy` bases (S3-0 follow-up in ESG-lite #155): coverage, intensity or a survey sample. */
+export const PROXY_BASES = ["coverage", "intensity", "sample"] as const;
+export type ProxyBasis = (typeof PROXY_BASES)[number];
+
+/** Plain label per basis, as ESG-lite `PROXY_BASIS_LABELS` (never show the raw key). */
+export const PROXY_BASIS_LABELS: Record<ProxyBasis, string> = {
+  coverage: "Scaled up from the share of activity with data",
+  intensity: "Intensity per unit of output at sites with data",
+  sample: "Commuting survey scaled to all employees",
+};
+
+/** `emission.proxy` (S3-12): `coverage_pct` 1–99 is required for coverage only; `from` = the source row ids. */
 export interface Proxy {
-  basis: string;
-  coverage_pct: number;
-  from: string;
+  basis: ProxyBasis;
+  coverage_pct?: number;
+  from: number[];
 }
 
 export const GASES = ["CO2", "CH4", "N2O", "HFCs", "PFCs", "SF6", "NF3"] as const;
@@ -576,8 +588,10 @@ export interface ScreeningInput {
   note?: string | null;
 }
 
+/** `year_type` is part of the key (ESG-lite #169): CY 2026 and FY 2026 keep separate figures; the server assumes CY when it's left out. */
 export interface PutScreeningInputsBody {
   year: number;
+  year_type?: YearType;
   inputs: ScreeningInput[];
 }
 

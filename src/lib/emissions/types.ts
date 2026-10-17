@@ -78,6 +78,8 @@ export interface ModalRow {
 export interface EmissionCalculationResult {
   value: number | null;
   status: "ok" | "converted" | string;
+  /** Notes that never block, worded as the engine's warnings (S3-6: a hybrid line's factor from another year). */
+  notes?: string[];
 }
 
 export interface ColumnOptionsMap {

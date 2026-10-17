@@ -19,6 +19,8 @@
  */
 import { http, HttpResponse } from "msw";
 import { resetReviewMocks, reviewHandlers } from "./review";
+import type { Screening, ScreeningCategory } from "../../services/scope3ScreeningService";
+import type { FacilityData, SupplierFigure } from "../../services/scope3SuppliersService";
 import {
   BOUNDARY_STATUSES,
   type BulkApproveBody,
@@ -48,7 +50,6 @@ import {
   type Scope3ErrorBody,
   type Scope3ErrorCode,
   type Supplier,
-  type SupplierFactor,
 } from "../../lib/scope3/contracts";
 import { type Dq, type MethodOptions, autoDq, dataTypeFor, isMethod, methodLabel, parseDqMax } from "../../lib/scope3/dq";
 import type { EmissionData } from "../../services/emissionService";
@@ -63,14 +64,8 @@ export interface Scope3CategoryRow extends CompanyScope3Category {
   mapped_categories: { category_id: number; name: string }[];
 }
 
-/** `GET /scope3/screening?year=` row (mock shape, S3-12 confirms). */
-export interface ScreeningRow {
-  ghg_category: GhgCategoryNumber;
-  estimate_tco2e: number;
-  share_pct: number;
-  suggested_status: BoundaryStatus;
-  basis: string;
-}
+/** `GET /scope3/screening?year=&year_type=` (S3-12, ESG-lite src/scope3/screening/service.ts). */
+export type { Screening, ScreeningCategory } from "../../services/scope3ScreeningService";
 
 /** `GET /reports/ghg/scope3`: rows per §5 (`Scope3ReportRow`); the envelope is a mock shape S3-13 confirms. */
 export interface Scope3Report {
@@ -140,9 +135,24 @@ const initialSuppliers = (): Supplier[] => [
   { supplier_id: 2, company_id: COMPANY_ID, name: "Gulf Copper Rod LLC", country: "AE", email: null },
 ];
 
-const initialSupplierFactors = (): SupplierFactor[] => [
-  { id: 1, company_id: COMPANY_ID, supplier_id: 1, item: "Aluminium wire rod", unit: "kg", kgco2e_per_unit: 4.2, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6", evidence_document_id: 31, source: "supplier_request" },
-  { id: 2, company_id: COMPANY_ID, supplier_id: 2, item: "Copper rod 8 mm", unit: "kg", kgco2e_per_unit: 3.1, boundary: "cradle_to_gate", reference_year: 2024, gwp_set: "AR6", evidence_document_id: null, source: "manual" },
+const figure = (f: Pick<SupplierFigure, "id" | "supplier_id" | "item" | "unit" | "kgco2e_per_unit" | "reference_year" | "source"> & Partial<SupplierFigure>): SupplierFigure => ({
+  supplier_factor_id: f.id,
+  boundary: "cradle_to_gate",
+  gwp_set: "AR6",
+  evidence_document_id: null,
+  material_factor_id: null,
+  supplier_request_id: null,
+  has_evidence: false,
+  ...f,
+});
+
+const initialSupplierFactors = (): SupplierFigure[] => [
+  figure({ id: 1, supplier_id: 1, item: "Aluminium wire rod", unit: "kg", kgco2e_per_unit: 4.2, reference_year: 2025, source: "supplier_request", material_factor_id: 12, supplier_request_id: 3, has_evidence: true }),
+  figure({ id: 2, supplier_id: 2, item: "Copper rod 8 mm", unit: "kg", kgco2e_per_unit: 3.1, reference_year: 2024, source: "manual" }),
+];
+
+const initialFacilityData = (): FacilityData[] => [
+  { id: 1, supplier_facility_data_id: 1, supplier_id: 2, year: 2025, scope12_tco2e: 12500, output_qty: 4_000_000, output_unit: "kg", allocation_key: "mass" },
 ];
 
 const FX_RATES: FxRate[] = [
@@ -151,13 +161,85 @@ const FX_RATES: FxRate[] = [
   { currency: "INR", date: "2026-09-30", rate_to_usd: 0.0119, source: "ECB" },
 ];
 
-const SCREENING: ScreeningRow[] = [
-  { ghg_category: 1, estimate_tco2e: 18450, share_pct: 71.2, suggested_status: "included", basis: "Spend × EEIO, 2025 purchases" },
-  { ghg_category: 4, estimate_tco2e: 2310, share_pct: 8.9, suggested_status: "included", basis: "Spend × EEIO, freight invoices" },
-  { ghg_category: 9, estimate_tco2e: 1120, share_pct: 4.3, suggested_status: "included", basis: "Weight × distance, top 10 customers" },
-  { ghg_category: 12, estimate_tco2e: 640, share_pct: 2.5, suggested_status: "screening", basis: "Mass sold × landfill factor" },
-  { ghg_category: 10, estimate_tco2e: 85, share_pct: 0.3, suggested_status: "not_relevant", basis: "Customers' processing energy, estimate" },
-];
+/** The report mock's tCO₂e per category (as before S3-12 gave the screening its own shape). */
+const REPORT_TCO2E: Partial<Record<GhgCategoryNumber, number>> = { 1: 18450, 4: 2310, 9: 1120, 12: 640, 10: 85 };
+
+/** Screening sizes per category (tCO₂e): recorded rows and the spend or headcount estimate (never saved). */
+const SCREENING_SIZES: Partial<Record<GhgCategoryNumber, { recorded: number; estimate: number | null; basis: "spend" | "headcount" | null }>> = {
+  1: { recorded: 16200, estimate: 18450, basis: "spend" },
+  4: { recorded: 1890, estimate: 2310, basis: "spend" },
+  6: { recorded: 120, estimate: 145, basis: "spend" },
+  7: { recorded: 0, estimate: 230.9, basis: "headcount" },
+  9: { recorded: 1120, estimate: null, basis: null },
+  12: { recorded: 0, estimate: 640, basis: "spend" },
+  10: { recorded: 0, estimate: 85, basis: "spend" },
+};
+
+/** The screening answer as ESG-lite builds it: sizes, shares and suggestions (mock rules: top 95 %, below 1 %, nothing at all). */
+function screeningFor(year: number, yearType: "CY" | "FY"): Screening {
+  const size = (n: GhgCategoryNumber) => {
+    const s = SCREENING_SIZES[n];
+    return s ? Math.max(s.recorded, s.estimate ?? 0) : null;
+  };
+  const total = GHG_CATEGORIES.reduce((t, c) => t + (size(c.n) ?? 0), 0);
+  const rows: ScreeningCategory[] = categories.map((row) => {
+    const n = row.ghg_category;
+    const s = SCREENING_SIZES[n];
+    const sz = size(n);
+    const share = sz && total ? Math.round((sz / total) * 1000) / 10 : 0;
+    const ticks = Object.entries(row.relevance ?? {}).filter(([, v]) => v).map(([k]) => k);
+    const suggestion: ScreeningCategory["suggestion"] = ticks.length
+      ? { status: "included", reason: `Relevant: ${ticks.join(", ")}` }
+      : !sz
+        ? { status: "not_relevant", reason: `No activity in this category in ${year}` }
+        : share < 1
+          ? { status: "excluded", reason: `Estimated below 1 % of Scope 3 (≈ ${Math.round(sz)} tCO₂e by spend screening, ${year})` }
+          : { status: "included", reason: `Estimated at ${share} % of Scope 3` };
+    return {
+      n,
+      key: row.key,
+      name: row.name,
+      direction: row.direction,
+      status: row.status,
+      reason: row.reason ?? null,
+      relevance: row.relevance ?? {},
+      recorded_tco2e: s?.recorded ?? 0,
+      pending_tco2e: 0,
+      proxy_tco2e: 0,
+      estimate_tco2e: s?.estimate ?? null,
+      basis: s?.basis ?? null,
+      size_tco2e: sz,
+      size_basis: s ? (s.estimate !== null && s.estimate >= s.recorded ? s.basis : "recorded") : null,
+      share_pct: share,
+      suggestion,
+      inputs: screeningInputs
+        .filter((i) => i.ghg_category === n)
+        .map((i) => ({ ...i, updated_at: "2026-10-01T09:00:00.000Z", updated_by: null, estimate_tco2e: null, estimate_note: null, sector: null, fx: null, warnings: [] })),
+      mapped_categories: row.mapped_categories.map((m) => ({ category_id: m.category_id, category_name: m.name })),
+    };
+  });
+  return {
+    company_id: COMPANY_ID,
+    year,
+    year_type: yearType,
+    period: yearType === "FY" ? { start: `${year - 1}-04-01`, end: `${year}-03-31` } : { start: `${year}-01-01`, end: `${year}-12-31` },
+    sites: [
+      { site_id: 1, name: "Jebel Ali plant", ghg_categories: [1, 3, 4, 5, 6, 7] },
+      { site_id: 2, name: "Sharjah warehouse", ghg_categories: [4, 6] },
+    ],
+    totals: {
+      recorded_tco2e: rows.reduce((t, c) => t + c.recorded_tco2e, 0),
+      pending_tco2e: 0,
+      estimate_tco2e: rows.reduce((t, c) => t + (c.estimate_tco2e ?? 0), 0),
+      screened_tco2e: total,
+      included: rows.filter((c) => c.status === "included").length,
+      with_reason: rows.filter((c) => c.status === "included" || !!c.reason).length,
+    },
+    categories: rows,
+    can_edit: true,
+    can_extrapolate: true,
+  };
+}
 
 const initialBaseYear = (): CompanyBaseYear => ({
   company_id: COMPANY_ID,
@@ -188,6 +270,7 @@ let categories = initialCategories();
 let consolidation: ConsolidationApproach = "operational_control";
 let suppliers = initialSuppliers();
 let supplierFactors = initialSupplierFactors();
+let facilityData = initialFacilityData();
 let baseYear = initialBaseYear();
 let recalculations = initialRecalculations();
 let investments = initialInvestments();
@@ -257,6 +340,7 @@ export function resetScope3Mocks(): void {
   consolidation = "operational_control";
   suppliers = initialSuppliers();
   supplierFactors = initialSupplierFactors();
+  facilityData = initialFacilityData();
   baseYear = initialBaseYear();
   recalculations = initialRecalculations();
   investments = initialInvestments();
@@ -307,14 +391,55 @@ export const scope3Handlers = [
     return HttpResponse.json({ company_id: COMPANY_ID, consolidation_approach: consolidation });
   }),
 
-  // S3-6 suppliers
-  http.get("*/suppliers", () => HttpResponse.json(suppliers)),
+  // S3-6 suppliers (ESG-lite src/scope3/suppliers): the shapes the API returns.
+  http.get("*/suppliers", ({ request }) => {
+    const year = Number(new URL(request.url).searchParams.get("year")) || new Date().getFullYear();
+    return HttpResponse.json({
+      company_id: COMPANY_ID,
+      year,
+      year_type: "CY",
+      can_edit: true,
+      suppliers: suppliers.map((x) => {
+        const factors = supplierFactors.filter((f) => f.supplier_id === x.supplier_id);
+        return {
+          supplier_id: x.supplier_id,
+          name: x.name,
+          country: x.country ?? null,
+          email: x.email ?? null,
+          rows_this_year: 0,
+          tco2e: 0,
+          has_factor: factors.length > 0,
+          factor_count: factors.length,
+          has_facility_data: facilityData.some((f) => f.supplier_id === x.supplier_id),
+          last_request: null,
+        };
+      }),
+    });
+  }),
   http.post<never, Omit<Supplier, "supplier_id" | "company_id">>("*/suppliers", async ({ request }) => {
     const { name, country, email } = await request.json();
     if (!name?.trim()) return invalid("name", "A supplier needs a name.");
-    const supplier: Supplier = { supplier_id: Math.max(0, ...suppliers.map((x) => x.supplier_id)) + 1, company_id: COMPANY_ID, name, country: country ?? null, email: email ?? null, created_by: 4 };
+    const same = suppliers.find((x) => x.name.toLowerCase() === name.trim().toLowerCase());
+    if (same) return HttpResponse.json({ code: "SCOPE3_VALIDATION", message: "The request body is not valid.", details: { field: "name", message: "A supplier with this name already exists.", supplier_id: same.supplier_id } }, { status: 400 });
+    const supplier: Supplier = { supplier_id: Math.max(0, ...suppliers.map((x) => x.supplier_id)) + 1, company_id: COMPANY_ID, name: name.trim(), country: country ?? null, email: email ?? null, created_by: 4 };
     suppliers.push(supplier);
-    return HttpResponse.json(supplier, { status: 201 });
+    return HttpResponse.json({ supplier_id: supplier.supplier_id, name: supplier.name, country: supplier.country, email: supplier.email }, { status: 201 });
+  }),
+  http.get("*/suppliers/coverage", () =>
+    HttpResponse.json({ from: "2026-01-01", to: "2026-12-31", cat12_tco2e: 0, supplier_specific_tco2e: 0, hybrid_tco2e: 0, coverage_pct: null, top_suppliers: [] }),
+  ),
+  http.get("*/suppliers/name-matches", () => HttpResponse.json({ company_id: COMPANY_ID, matches: [] })),
+  http.post("*/suppliers/name-matches", () => HttpResponse.json({ decision: "not_same" })),
+  http.get<{ id: string }>("*/suppliers/:id", ({ params }) => {
+    const x = suppliers.find((s) => s.supplier_id === Number(params.id));
+    if (!x) return notFound("Supplier not found");
+    return HttpResponse.json({
+      supplier: { supplier_id: x.supplier_id, name: x.name, country: x.country ?? null, email: x.email ?? null },
+      factors: supplierFactors.filter((f) => f.supplier_id === x.supplier_id),
+      facility_data: facilityData.filter((f) => f.supplier_id === x.supplier_id),
+      requests: [],
+      can_edit: true,
+    });
   }),
   http.put<{ id: string }, Partial<Supplier>>("*/suppliers/:id", async ({ params, request }) => {
     const supplier = suppliers.find((s) => s.supplier_id === Number(params.id));
@@ -323,22 +448,58 @@ export const scope3Handlers = [
     if (name !== undefined) supplier.name = name;
     if (country !== undefined) supplier.country = country;
     if (email !== undefined) supplier.email = email;
-    return HttpResponse.json(supplier);
+    return HttpResponse.json({ supplier_id: supplier.supplier_id, name: supplier.name, country: supplier.country ?? null, email: supplier.email ?? null });
   }),
   http.get<{ id: string }>("*/suppliers/:id/factors", ({ params }) =>
     suppliers.some((x) => x.supplier_id === Number(params.id))
-      ? HttpResponse.json(supplierFactors.filter((f) => f.supplier_id === Number(params.id)))
+      ? HttpResponse.json({ supplier_id: Number(params.id), factors: supplierFactors.filter((f) => f.supplier_id === Number(params.id)) })
       : notFound("Supplier not found"),
   ),
-  http.post<{ id: string }, Omit<SupplierFactor, "id" | "company_id" | "supplier_id" | "source">>("*/suppliers/:id/factors", async ({ params, request }) => {
+  http.post<{ id: string }, Partial<SupplierFigure> & { confirm_boundary?: boolean }>("*/suppliers/:id/factors", async ({ params, request }) => {
     const supplierId = Number(params.id);
     if (!suppliers.some((x) => x.supplier_id === supplierId)) return notFound("Supplier not found");
     const body = await request.json();
-    if (body.boundary !== "cradle_to_gate") return error("SUPPLIER_FACTOR_BOUNDARY", 422, "A supplier's figure must be cradle-to-gate.");
+    const boundary = body.boundary ?? "cradle_to_gate";
+    if (boundary !== "cradle_to_gate" && body.confirm_boundary !== true) return error("SUPPLIER_FACTOR_BOUNDARY", 422, "A supplier's figure must be cradle-to-gate.");
+    const id = Math.max(0, ...supplierFactors.map((f) => f.id)) + 1;
     // Server-owned fields last, so a body can't set them.
-    const factor: SupplierFactor = { ...body, id: Math.max(0, ...supplierFactors.map((f) => f.id)) + 1, company_id: COMPANY_ID, supplier_id: supplierId, source: "manual" };
+    const factor: SupplierFigure = {
+      item: String(body.item ?? ""),
+      unit: String(body.unit ?? "kg"),
+      kgco2e_per_unit: Number(body.kgco2e_per_unit),
+      reference_year: Number(body.reference_year),
+      gwp_set: body.gwp_set ?? "AR6",
+      boundary,
+      evidence_document_id: null,
+      material_factor_id: null,
+      supplier_request_id: null,
+      has_evidence: false,
+      id,
+      supplier_factor_id: id,
+      supplier_id: supplierId,
+      source: "manual",
+    };
     supplierFactors.push(factor);
     return HttpResponse.json(factor, { status: 201 });
+  }),
+  http.get<{ id: string }>("*/suppliers/:id/facility-data", ({ params }) =>
+    suppliers.some((x) => x.supplier_id === Number(params.id))
+      ? HttpResponse.json({ supplier_id: Number(params.id), facility_data: facilityData.filter((f) => f.supplier_id === Number(params.id)) })
+      : notFound("Supplier not found"),
+  ),
+  http.post<{ id: string }, Omit<FacilityData, "id" | "supplier_facility_data_id" | "supplier_id">>("*/suppliers/:id/facility-data", async ({ params, request }) => {
+    const supplierId = Number(params.id);
+    if (!suppliers.some((x) => x.supplier_id === supplierId)) return notFound("Supplier not found");
+    const body = await request.json();
+    const existing = facilityData.find((f) => f.supplier_id === supplierId && f.year === body.year);
+    if (existing) {
+      Object.assign(existing, body);
+      return HttpResponse.json({ ...existing, replaced: true });
+    }
+    const id = Math.max(0, ...facilityData.map((f) => f.id)) + 1;
+    const row: FacilityData = { ...body, id, supplier_facility_data_id: id, supplier_id: supplierId };
+    facilityData.push(row);
+    return HttpResponse.json({ ...row, replaced: false }, { status: 201 });
   }),
 
   // S3-5 FX (read only)
@@ -349,20 +510,64 @@ export const scope3Handlers = [
   }),
 
   // S3-12 screening and extrapolation
-  http.get("*/scope3/screening", () => HttpResponse.json(SCREENING)),
+  http.get("*/scope3/screening", ({ request }) => {
+    const q = new URL(request.url).searchParams;
+    const year = Number(q.get("year"));
+    if (!Number.isInteger(year) || year < 1990) return invalid("year", "Give the screening year.");
+    return HttpResponse.json(screeningFor(year, q.get("year_type") === "FY" ? "FY" : "CY"));
+  }),
   http.put<never, Partial<PutScreeningInputsBody>>("*/scope3/screening/inputs", async ({ request }) => {
     const body = await request.json();
     if (!body.year || !Array.isArray(body.inputs)) return invalid("inputs", "Give the year and the inputs.");
-    screeningInputs = body.inputs;
-    return HttpResponse.json({ year: body.year, inputs: screeningInputs });
+    if (body.year_type !== undefined && body.year_type !== "CY" && body.year_type !== "FY") return invalid("year_type", "CY or FY.");
+    for (const i of body.inputs) {
+      if ((i.basis === "spend" || i.basis === "revenue") && i.amount > 0 && !i.currency) return invalid("currency", "An amount spent needs its currency.");
+      screeningInputs = [...screeningInputs.filter((x) => !(x.ghg_category === i.ghg_category && x.basis === i.basis)), i];
+    }
+    return HttpResponse.json({ year: body.year, year_type: body.year_type ?? "CY", inputs: screeningInputs });
+  }),
+  http.post<never, { description?: string }>("*/scope3/screening/sector-suggestions", async ({ request }) => {
+    const body = await request.json();
+    if (!body.description) return invalid("description", "Describe what was bought.");
+    return HttpResponse.json({
+      available: true,
+      confirm_below: 80,
+      suggestions: [
+        { code: "481000", name: "Air transportation (NAICS 481000)", confidence: 91, needs_confirmation: false },
+        { code: "561500", name: "Travel arrangement and reservation services (NAICS 561500)", confidence: 44, needs_confirmation: true },
+      ],
+    });
   }),
   http.post<never, Partial<ExtrapolateBody>>("*/scope3/extrapolate", async ({ request }) => {
     const body = await request.json();
+    const dryRun = new URL(request.url).searchParams.get("dry_run") === "1";
     const badCoverage = body.basis === "coverage" && !(body.coverage_pct !== undefined && body.coverage_pct >= 1 && body.coverage_pct <= 99);
     if ((body.basis !== "coverage" && body.basis !== "intensity") || badCoverage) {
-      return error("EXTRAPOLATION_BASIS_INVALID", 400, "The extrapolation basis isn't valid.");
+      return error("EXTRAPOLATION_BASIS_INVALID", 400, "Give the share of the activity the recorded rows cover, from 1 to 99 %.");
     }
-    return HttpResponse.json({ created: 3, status: "pending" }, { status: 201 });
+    // Mock sources: 850,000 kg approved (rows 501, 502); intensity 1,700 kg per t at the other site, 250 t here.
+    const coverage = body.basis === "coverage";
+    const kg = coverage ? (850_000 * (100 - body.coverage_pct!)) / body.coverage_pct! : 1700 * 250;
+    const answer = {
+      ...(dryRun ? { dry_run: true } : { id: 9001, status: "pending" }),
+      ghg_category: body.ghg_category,
+      site_id: body.site_id,
+      category_id: 8,
+      year: body.year,
+      year_type: body.year_type,
+      basis: body.basis,
+      basis_label: coverage ? "Scaled up from the share of activity with data" : "Intensity per unit of output at sites with data",
+      method: "distance_based",
+      formula: coverage
+        ? `850,000 kgCO₂e × (100 − ${body.coverage_pct}) ÷ ${body.coverage_pct} = ${kg.toLocaleString("en-US", { maximumFractionDigits: 2 })} kgCO₂e`
+        : `850,000 kgCO₂e ÷ 500 t × 250 t = ${kg.toLocaleString("en-US")} kgCO₂e`,
+      total_kgco2e: kg.toFixed(4),
+      total_tco2e: Math.round(kg / 10) / 100,
+      proxy: coverage ? { basis: "coverage", coverage_pct: body.coverage_pct, from: [501, 502] } : { basis: "intensity", coverage_pct: 66.67, from: [501, 502] },
+      sources: { rows: 2, kg: 850_000, site_ids: [1] },
+      ...(coverage ? {} : { production: { source: 500, missing: 250, unit: "t", output_site_ids: body.output_site_ids ?? [body.site_id] } }),
+    };
+    return HttpResponse.json(answer, { status: dryRun ? 200 : 201 });
   }),
   // python_AI_service: EEIO sector suggestions for spend lines (S3-12).
   http.post<never, { lines?: { description: string }[] }>("*/v1/scope3/eeio-sector", async ({ request }) => {
@@ -439,7 +644,7 @@ export const scope3Handlers = [
   http.get("*/reports/ghg/scope3", ({ request }) => {
     const year = Number(new URL(request.url).searchParams.get("year") ?? 2026);
     // Only included categories carry a total; the report total is their sum.
-    const tco2e = (c: Scope3CategoryRow) => (c.status === "included" ? (SCREENING.find((x) => x.ghg_category === c.ghg_category)?.estimate_tco2e ?? 0) : 0);
+    const tco2e = (c: Scope3CategoryRow) => (c.status === "included" ? (REPORT_TCO2E[c.ghg_category] ?? 0) : 0);
     const total = categories.reduce((sum, c) => sum + tco2e(c), 0);
     const rows: Scope3ReportRow[] = categories.map((c) => ({
       n: c.ghg_category,

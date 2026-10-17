@@ -30,6 +30,8 @@ type Action =
   /** A distance from the distance helper; `estimate` marks the column's value as estimated (saved as `is_estimate`, S3-3). */
   | { type: "distance"; model: FormModel; id: number; column: string; value: string; estimate: boolean }
   | { type: "extra"; id: number; key: string; value: string }
+  /** S3-6: the row's supplier fields (supplier, figure, hybrid lines), set together. */
+  | { type: "patch"; id: number; patch: Partial<ModalRow> }
   /** Rows read from a bill; dropped when `draftKey` is no longer the open context. */
   | { type: "append"; rows: ModalRow[]; draftKey: string | null }
   | { type: "confirmBill"; key: string }
@@ -99,6 +101,8 @@ export function rowsReducer(prev: State, action: Action): State {
       };
     case "extra":
       return { ...state, rows: state.rows.map((r) => (r.id === action.id ? setExtraField(r, action.key, action.value) : r)) };
+    case "patch":
+      return { ...state, rows: state.rows.map((r) => (r.id === action.id ? { ...r, ...action.patch } : r)) };
     case "append": {
       // Ids are renumbered from nextId so rows read earlier never collide.
       const added = action.rows.map((r, i) => ({ ...r, id: state.nextId + i }));

@@ -72,6 +72,10 @@ export const SHELL_ROUTES = [
   { id: "scope3-commuting", path: "/settings/scope3/commuting", title: "Commuting survey", crumb: ["Settings", "Scope 3 boundary", "Commuting survey"], roles: ["Manager", "Admin", "Superadmin"], spec: "S3-9", clientContext: true },
   // S3-10: sales per product and month → Category 10 / 11 / 12 import plans (Manager and above, own sites).
   { id: "scope3-sold-products", path: "/settings/scope3/sold-products", title: "Sold products", crumb: ["Settings", "Scope 3 boundary", "Sold products"], roles: ["Manager", "Admin", "Superadmin"], spec: "S3-10", clientContext: true },
+  // S3-12: screening (sizes, Table II ticks, suggestions) and extrapolation (Admin and Superadmin edit, Managers read and extrapolate own sites).
+  { id: "scope3-screening", path: "/settings/scope3/screening", title: "Scope 3 screening", crumb: ["Settings", "Scope 3 boundary", "Screening"], roles: ["Manager", "Admin", "Superadmin"], spec: "S3-12", clientContext: true },
+  // S3-6: suppliers, their own figures and facility data, and the name-match review (Manager and above).
+  { id: "scope3-suppliers", path: "/suppliers", title: "Suppliers", crumb: ["Data", "Suppliers"], roles: ["Manager", "Admin", "Superadmin"], spec: "S3-6", clientContext: true },
   // Connect Claude consent (MCP import plan IM10); ESG-lite /oauth/authorize lands here.
   // Superadmin only (Shyam, 2026-10-14): other roles get the 403 page, never the consent screen.
   { id: "oauth-consent", path: "/oauth/consent", title: "Connect Claude", crumb: ["Connect Claude"], roles: ["Superadmin"], spec: "IM10" },
