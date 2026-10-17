@@ -32,7 +32,12 @@ export default function TargetsPage() {
   const [editing, setEditing] = useState<KpiTargetWithProgress | "new" | null>(null);
   const [deleting, setDeleting] = useState<KpiTargetWithProgress | null>(null);
 
-  if (targets.error && isKpiTrackingOff(targets.error)) return <KpiNotAvailable />;
+  if (targets.error && isKpiTrackingOff(targets.error)) return (
+      <div className="space-y-6 py-6">
+        <PageHeader title="KPI targets" />
+        <KpiNotAvailable />
+      </div>
+    );
 
   const nameOf = (t: KpiTargetWithProgress) => t.kpi_name ?? lookup.definition(t.kpi_definition_id)?.name ?? `KPI ${t.kpi_definition_id}`;
   const unitOf = (t: KpiTargetWithProgress) => t.unit ?? lookup.definition(t.kpi_definition_id)?.canonical_unit ?? null;

@@ -46,7 +46,12 @@ export default function DashboardPage() {
       { replace: true },
     );
 
-  if (dash.error && isKpiTrackingOff(dash.error)) return <KpiNotAvailable />;
+  if (dash.error && isKpiTrackingOff(dash.error)) return (
+      <div className="space-y-6 py-6">
+        <PageHeader title="KPIs" />
+        <KpiNotAvailable />
+      </div>
+    );
 
   const data = dash.data;
   const siteLabel = site ? lookup.siteName(site) : lookup.sites.length ? `All ${lookup.sites.length} sites` : "All sites";
