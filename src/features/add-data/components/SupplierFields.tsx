@@ -110,7 +110,7 @@ export function SupplierFields(p: SupplierFieldsProps) {
         )}
       </div>
 
-      {method && !supplierId && <p className="text-sm text-muted">Choose the supplier to use its figures.</p>}
+      {method && !supplierId && <p className="text-sm text-muted">{p.showCalcDetail ? "Choose the supplier to use its figures." : "Choose the supplier."}</p>}
       {p.showCalcDetail && method && supplierId && !detail && <p className="text-sm text-muted">Loading the supplier's figures…</p>}
       {p.showCalcDetail && method === "supplier_specific" && detail && <OwnFigure row={row} detail={detail} name={name} reportingYear={p.reportingYear} onPatch={p.onPatch} />}
       {p.showCalcDetail && method === "hybrid" && detail && <Hybrid row={row} detail={detail} reportingYear={p.reportingYear} factorNames={p.factorNames} onPatch={p.onPatch} />}

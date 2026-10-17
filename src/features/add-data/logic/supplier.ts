@@ -98,7 +98,7 @@ export function withSuppliers(calc: EmissionCalculator, input: EmissionCalcInput
     if (problem) return { value: null, status: problem };
     const paid = row._purchased_value === undefined || row._purchased_value === "" ? null : Number(row._purchased_value);
     const r = hybridEmission(input, { activityValue: activity, unit: row.activity_data_unit, facility: pickFacility(detail.facility_data, reportingYear), lines: engineLines(lines), purchasedValue: paid });
-    return { value: r.value, status: r.status };
+    return { value: r.value, status: r.status, ...(r.notes.length ? { notes: r.notes } : {}) };
   };
   // A supplier-method row never takes S3-5's spend path, even when its activity's factor is a spend factor.
   return {

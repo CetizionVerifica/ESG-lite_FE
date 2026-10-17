@@ -271,8 +271,16 @@ test("a Superadmin picks the methods a Category 1 form offers", async ({ page })
   await expect(page.getByText(/Fix 1 thing before saving/)).toBeVisible();
   await offered.getByLabel("Units for Supplier's own figure").fill("kg");
   // The preview shows what contributors see: no choice, the form's first method as a line.
-  await expect(page.getByTestId("form-preview").getByRole("radio")).toHaveCount(0);
-  await expect(page.getByTestId("form-preview").getByTestId("method-line")).toContainText("Supplier's own figure");
+  const preview = page.getByTestId("form-preview");
+  const methodRadios = preview.getByRole("radio", { name: /supplier's own figure|amount spent/i });
+  await expect(methodRadios).toHaveCount(0);
+  await expect(preview.getByTestId("method-line")).toContainText("Supplier's own figure");
+  // Preview as a Manager: every offered method is a card to pick; back to Contributor shows the default line again.
+  await preview.getByRole("radio", { name: "Manager" }).click();
+  await expect(methodRadios).toHaveCount(2);
+  await preview.getByRole("radio", { name: "Contributor" }).click();
+  await expect(methodRadios).toHaveCount(0);
+  await expect(preview.getByTestId("method-line")).toContainText("Supplier's own figure");
   await page.getByRole("button", { name: "Save form" }).click();
   await expect.poll(() => puts.length).toBe(1);
   expect((puts[0] as { method_options: unknown }).method_options).toEqual([

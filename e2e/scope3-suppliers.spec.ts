@@ -21,7 +21,8 @@ const site = {
 const config = { pk_id: 5, config_name: "Goods", columns: [{ pk_id: 1, column_name: "quantity", column_type: "number" }] };
 const factors = [{ emission_factor_id: 8, emission_category_name: "Aluminium ingot", factor_value: 10, denominator_unit: "kg", year: 2024 }];
 
-function supplierApi(state: { suppliers: Sup[]; figures: Fig[]; calls: Array<{ method: string; path: string; body: Record<string, unknown> }> }) {
+/** `saved`: what GET /user/emissions lists once a row is sent (My entries). */
+function supplierApi(state: { suppliers: Sup[]; figures: Fig[]; calls: Array<{ method: string; path: string; body: Record<string, unknown> }>; saved?: Record<string, unknown>[] }) {
   return (route: Route, path: string, method: string, body: Record<string, unknown>) => {
     const json = (b: unknown, status = 200) => route.fulfill({ status, json: b });
     if (path.endsWith("/suppliers/coverage")) return json({ from: "2025-01-01", to: "2025-12-31", cat12_tco2e: 0, supplier_specific_tco2e: 0, hybrid_tco2e: 0, coverage_pct: null, top_suppliers: [] });
@@ -95,7 +96,13 @@ async function signIn(page: Page, role: "Manager" | "User", state: Parameters<ty
       if (path.includes("/user/thresholds/company/1")) return json({ threshold_percentage: 5 });
       if (path.endsWith("/user/emissions/period-total")) return json({ total_emission: 0 });
       if (path.endsWith("/user/emissions") && method === "POST") return json({ emission: { pk_id: 501 } }, 201);
-      if (path.endsWith("/user/emissions") && method === "GET") return json({ data: [], total: 0, summary: { total_emission: 0, pending_count: 0, approved_count: 0, rejected_count: 0 } });
+      if (path.endsWith("/user/emissions") && method === "GET") {
+        const data = state.calls.some((c) => c.method === "POST" && c.path.endsWith("/user/emissions")) ? (state.saved ?? []) : [];
+        return json({ data, total: data.length, summary: { total_emission: 0, pending_count: data.length, approved_count: 0, rejected_count: 0 } });
+      }
+      if (/\/user\/emissions\/\d+\/history$/.test(path)) return json({ emission_id: 501, months: [] });
+      if (path.includes("/user/documents/emission/")) return json([]);
+      if (path.endsWith("/user/audit-logs")) return json([]);
       return json({});
     },
   );
@@ -171,6 +178,28 @@ test("on a company set to full detail, a contributor enters Category 1 with the 
       { id: 1, supplier_factor_id: 1, supplier_id: 1, item: "P1020 ingot", unit: "kg", kgco2e_per_unit: 8.6, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6", source: "manual", evidence_document_id: null, material_factor_id: null, supplier_request_id: null, has_evidence: true },
     ] as Fig[],
     calls: [] as Array<{ method: string; path: string; body: Record<string, unknown> }>,
+    // What the server saves: 1,000 kg × 8.6 from the supplier's figure, with evidence on it, so every indicator is Good.
+    saved: [
+      {
+        pk_id: 501,
+        activity_data: { quantity: "1000", emission_category: "Aluminium ingot", "@method": "supplier_specific" },
+        activity_data_unit: "kg",
+        total_emission: 8.6,
+        unit: "tCO2e",
+        date_of_reporting: "2025-09-30",
+        reporting_period: "monthly",
+        status: "pending",
+        created_at: "2025-10-02T08:00:00.000Z",
+        updated_at: "2025-10-02T08:00:00.000Z",
+        site: { site_id: 4, name: "Bahrain plant" },
+        category: site.categories[0],
+        method: "supplier_specific",
+        dq: { technology: 1, geography: 1, time: 1, completeness: 1, reliability: 1, overall: 1, source: "auto" },
+        data_type: "primary",
+        is_estimate: false,
+        supplier: { supplier_id: 1, name: "Gulf Smelter Co." },
+      },
+    ] as Record<string, unknown>[],
   };
   await signIn(page, "User", state, true);
   await page.goto("/data/new?site=4&category=21&period=2025-09");
@@ -207,6 +236,15 @@ test("on a company set to full detail, a contributor enters Category 1 with the 
   await expect.poll(() => state.calls.find((c) => c.path.endsWith("/user/emissions"))?.body).toMatchObject({ method: "supplier_specific", supplier_id: 1, category_id: 21 });
   const sent = state.calls.find((c) => c.path.endsWith("/user/emissions"))?.body as { activity_data: Record<string, unknown> };
   expect(Object.keys(sent.activity_data)).not.toContain("_supplier_id");
+
+  // The spec's Playwright case ends in the entry drawer: the supplier and "Good".
+  await page.goto("/data/mine");
+  await page.getByRole("table", { name: "My entries" }).getByRole("row").filter({ hasText: "Purchased goods" }).click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer.getByTestId("entry-method")).toHaveText("Supplier's own figure");
+  await expect(drawer.getByText("Gulf Smelter Co.")).toBeVisible();
+  await expect(drawer.getByTestId("dq-badge")).toHaveText("Good");
+  await expect(drawer.getByText("Primary data")).toBeVisible();
 });
 
 for (const width of [1280, 1024, 768, 390]) {

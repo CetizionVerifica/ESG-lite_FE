@@ -10,6 +10,8 @@ import {
   formFromDeclaration,
   formFromReply,
   isBoundaryRefusal,
+  scope3AcceptNote,
+  scope3Boundary,
   submitProblem,
   studyLabel,
   validityText,
@@ -122,6 +124,26 @@ describe("review form", () => {
     expect(acceptProblem(base, { ...f, boundary: null, valid_from: "2025-01-01", valid_to: "2024-01-01" }, false)).toMatch(/Valid to/);
     expect(isBoundaryRefusal({ response: { status: 409, data: { boundary_mismatch: true } } })).toBe(true);
     expect(isBoundaryRefusal({ response: { status: 409, data: { message: "closed" } } })).toBe(false);
+  });
+});
+
+describe("S3-6: Scope 3 on accept", () => {
+  it("a figure that isn't cradle-to-gate needs the boundary confirmed to count for Scope 3", () => {
+    const f = formFromReply(base);
+    expect(scope3Boundary(base, { ...f, boundary: "cradle_to_gate" })).toEqual({ boundary: "cradle_to_gate", needsConfirm: false });
+    expect(scope3Boundary(base, { ...f, boundary: "cradle_to_grave" })).toEqual({ boundary: "cradle_to_grave", needsConfirm: true });
+    expect(scope3Boundary(base, { ...f, boundary: "gate_to_gate" }).needsConfirm).toBe(true);
+    // No boundary stated: the footprint's is the figure's.
+    const grave = { ...base, study: base.study ? { ...base.study, boundary: "cradle_to_grave" as const } : base.study };
+    expect(scope3Boundary(grave, { ...f, boundary: null })).toEqual({ boundary: "cradle_to_grave", needsConfirm: true });
+  });
+
+  it("says why no Scope 3 supplier figure was created, and nothing when it was", () => {
+    expect(scope3AcceptNote({ scope3_warning: null })).toBeNull();
+    expect(scope3AcceptNote(undefined)).toBeNull();
+    expect(scope3AcceptNote({ scope3_warning: { code: "SUPPLIER_FACTOR_BOUNDARY", boundary: "cradle_to_grave" } })).toBe(
+      "It is cradle-to-grave, so no Scope 3 supplier figure was created. To count it for Category 1, add it on the Suppliers page and confirm the boundary there.",
+    );
   });
 });
 

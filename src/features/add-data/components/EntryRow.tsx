@@ -327,6 +327,12 @@ export function EntryRow(p: Props) {
               {/* Exact to the 2 decimals the saved total keeps. */}
               = {formatNumber(result.value, 2)} tCO₂e
               {result.status === "converted" && <span className="block text-xs font-normal text-muted">unit converted</span>}
+              {p.showCalcDetail &&
+                result.notes?.map((n) => (
+                  <span key={n} className="block text-xs font-normal text-muted" data-testid="calc-note">
+                    {n}
+                  </span>
+                ))}
             </p>
           ) : (
             // No issue but no figure: a spend rate loading or that failed to load; a muted note, never an error.
