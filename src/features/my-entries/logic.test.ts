@@ -186,10 +186,22 @@ describe("What was entered (SE-1)", () => {
       activity_value: "1000",
       emission_category: "Fuel - Diesel (average biofuel blend) [litre]",
     };
-    const mapped = { emission_category_mapping: { "Road|HGV (all diesel)|Diesel used [litre]": "Fuel - Diesel (average biofuel blend) [litre]" } };
+    const mapped = {
+      emission_category_mapping: { "Road|HGV (all diesel)|Diesel used [litre]": "Fuel - Diesel (average biofuel blend) [litre]" },
+      calculation: { mode: "per_unit" },
+    };
     expect(activityFields(transport, mapped, { plain: true }).map((f) => f.key)).toEqual(["Travel Mode", "Fuel Type/Class", "Fuel used (litres)"]);
     expect(activityFields(transport, mapped).map((f) => f.key)).toEqual(["Travel Mode", "Fuel Type/Class", "Fuel used (litres)", "activity_value", "emission_category"]);
     // A form without a choices map: the activity is what the User picked, so it stays.
     expect(activityFields(transport, {}, { plain: true }).map((f) => f.key)).toContain("emission_category");
+  });
+
+  it("a quantity the User gave themselves stays (no calculation spec: bulk upload value, smart import, MCP)", () => {
+    const imported = { emission_category: "HSD", activity_value: "1250" };
+    expect(activityFields(imported, {}, { plain: true })).toEqual([
+      { key: "emission_category", value: "HSD" },
+      { key: "activity_value", value: "1250" },
+    ]);
+    expect(activityFields(imported, undefined, { plain: true }).map((f) => f.key)).toContain("activity_value");
   });
 });

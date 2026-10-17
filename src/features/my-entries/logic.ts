@@ -162,6 +162,8 @@ export type LabelConfig = {
   column_dependencies?: Record<string, string>;
   /** The form's choices → activity map; when set, the row's activity comes from the person's choices. */
   emission_category_mapping?: Record<string, string> | null;
+  /** The form's calculation spec; when set, the engine works `activity_value` out from the person's fields. */
+  calculation?: unknown;
 };
 
 const sameText = (a: unknown, b: unknown) => String(a).toLowerCase() === String(b).toLowerCase();
@@ -217,12 +219,14 @@ export const SHEET_CALC_KEYS = new Set(["emissionFactor", "emissionFactorUnit", 
 
 /**
  * What a User's own entry shows them (SE-1): not the old sheet's calculation,
- * not the quantity the engine worked out from their fields (`activity_value`),
+ * not the quantity the engine worked out from their fields (`activity_value` on a
+ * form with a calculation spec; without one, e.g. a bulk upload's value column, a
+ * smart import or MCP row, it is the quantity they gave and stays),
  * and, on a form whose choices pick the activity, not the factor's name the
  * choices led to (`emission_category`); their choices are listed instead.
  */
 const hiddenFromUser = (key: string, config: LabelConfig | undefined) =>
-  SHEET_CALC_KEYS.has(key) || key === "activity_value" || (key === "emission_category" && Object.keys(config?.emission_category_mapping ?? {}).length > 0);
+  SHEET_CALC_KEYS.has(key) || (key === "activity_value" && !!config?.calculation) || (key === "emission_category" && Object.keys(config?.emission_category_mapping ?? {}).length > 0);
 
 /** What the user entered, in entry order, with option labels; bookkeeping keys left out. `plain`: a User's view (SE-1). */
 export function activityFields(activityData: Record<string, unknown> | null | undefined, config?: LabelConfig, opts: { plain?: boolean } = {}): ActivityField[] {
