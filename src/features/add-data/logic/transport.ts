@@ -2,7 +2,7 @@
 // methods, the "Who paid?" hint, and the estimated-distance flag.
 // The forms themselves come from the backend config (src/scope3/transport/configs.ts).
 import { normalizeUnitKey } from "../hooks/emissionCalc";
-import type { CalculationSpec, ModalRow } from "../types";
+import type { CalculationSpec } from "../types";
 
 /** What each S3-8 unit key asks for (guidance formulas 4.1, 4.6, 4.8, 4.9). */
 export const TRANSPORT_UNIT_HELP: Record<string, string> = {
@@ -16,37 +16,38 @@ export const TRANSPORT_UNIT_HELP: Record<string, string> = {
   "teu.day": "Containers (TEU) stored × days stored.",
 };
 
+/** kWh and kg on a vehicle (electric van or train, refrigerated HGV) rather than a warehouse. */
+const VEHICLE_HELP: Record<string, string> = {
+  kwh: "Electricity the vehicle used for your goods × your share (100 = only your goods).",
+  kg: "Refrigerant leaked from the refrigerated vehicle × your share (100 = only your goods).",
+};
+const WAREHOUSE_HELP: Record<string, string> = {
+  kg: "Refrigerant leaked from the warehouse × your share of its volume (100 = used only by you).",
+};
+/** The form's mode column and the mode that means a warehouse (ESG-lite src/scope3/transport/configs.ts). */
+export const TRANSPORT_MODE_COLUMN = "Travel Mode";
+export const WAREHOUSE_MODE = "Warehouse";
+
 /** A transport or warehousing form: a per-unit spec that keeps the tonne.km method. */
 export const isTransportSpec = (spec: CalculationSpec | null | undefined): spec is CalculationSpec =>
   !!spec && spec.mode === "per_unit" && "tonne.km" in spec.methods;
 
-/** Help under the Unit select for a transport form, or undefined. */
-export function transportUnitHelp(spec: CalculationSpec | null | undefined, unit: unknown): string | undefined {
+/**
+ * Help under the Unit select for a transport form, or undefined. `mode` is the
+ * row's Travel Mode: kWh and kg mean a warehouse under "Warehouse" and a
+ * vehicle elsewhere; with no mode chosen yet the general copy shows.
+ */
+export function transportUnitHelp(spec: CalculationSpec | null | undefined, unit: unknown, mode?: unknown): string | undefined {
   if (!isTransportSpec(spec)) return undefined;
   const key = normalizeUnitKey(unit);
-  return key in spec.methods ? TRANSPORT_UNIT_HELP[key] : undefined;
+  if (!(key in spec.methods)) return undefined;
+  const m = String(mode ?? "").trim();
+  if (m === WAREHOUSE_MODE && WAREHOUSE_HELP[key]) return WAREHOUSE_HELP[key];
+  if (m && m !== WAREHOUSE_MODE && VEHICLE_HELP[key]) return VEHICLE_HELP[key];
+  return TRANSPORT_UNIT_HELP[key];
 }
 
 /** The extra field "Who paid for this transport?" (stored in extra_data.paid_by). */
 export const PAID_BY_KEY = "paid_by";
 export const PAID_BY_HELP = "If you paid for it, it belongs in Category 4. Category 9 is only transport after the sale that you didn't pay for.";
 
-/**
- * The distance drawer marks the value it put in a field as estimated (rail,
- * or sea when the route service didn't answer). The row sends
- * `is_estimate: true` only while that field still holds that value: typing
- * over it makes the row a measured distance again.
- */
-export type DistanceEstimate = { column: string; value: string };
-
-export const markEstimate = (row: ModalRow, column: string, value: string, estimate: boolean): ModalRow => {
-  if (estimate) return { ...row, _estimate: { column, value } satisfies DistanceEstimate };
-  const next = { ...row };
-  delete next._estimate;
-  return next;
-};
-
-export const isEstimatedRow = (row: ModalRow): boolean => {
-  const e = row._estimate as DistanceEstimate | undefined;
-  return !!e && typeof e.column === "string" && String(row[e.column] ?? "") === e.value;
-};

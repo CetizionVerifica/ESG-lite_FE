@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createEmissionCalculator, normalizeUnitKey } from "../hooks/emissionCalc";
 import type { CalculationSpec, ModalRow } from "../types";
 import { buildPayload } from "./entry";
-import { PAID_BY_HELP, isEstimatedRow, isTransportSpec, markEstimate, transportUnitHelp } from "./transport";
+import { PAID_BY_HELP, isTransportSpec, transportUnitHelp } from "./transport";
+import { isEstimated, withEstimate } from "../hooks/useEntryRows";
 
 // The S3-8 standard transport spec (ESG-lite src/scope3/transport/configs.ts).
 const spec: CalculationSpec = {
@@ -67,6 +68,12 @@ describe("S3-8 helper copy", () => {
     expect(transportUnitHelp(spec, "m³.day")).toBe("Volume stored × days stored.");
     expect(transportUnitHelp(spec, "gallon")).toBeUndefined();
     expect(transportUnitHelp(null, "litre")).toBeUndefined();
+    // kWh and kg read as the warehouse's under "Warehouse", as the vehicle's on any other mode.
+    expect(transportUnitHelp(spec, "kWh", "Warehouse")).toMatch(/^Energy of the warehouse/);
+    expect(transportUnitHelp(spec, "kWh", "Rail")).toMatch(/^Electricity the vehicle used for your goods/);
+    expect(transportUnitHelp(spec, "kg", "Road")).toMatch(/^Refrigerant leaked from the refrigerated vehicle × your share/);
+    expect(transportUnitHelp(spec, "kg", "Warehouse")).toMatch(/^Refrigerant leaked from the warehouse/);
+    expect(transportUnitHelp(spec, "litre", "Road")).toMatch(/^Litres your carrier used for your goods/);
     const useOfSoldProducts: CalculationSpec = { mode: "per_method", method_column: "Method", methods: { Fuel: { multiply: ["Units Sold"] } } };
     expect(transportUnitHelp(useOfSoldProducts, "litre")).toBeUndefined();
     expect(PAID_BY_HELP).toMatch(/^If you paid for it, it belongs in Category 4/);
@@ -78,19 +85,17 @@ describe("S3-8 estimated distance", () => {
   const base: ModalRow = { id: 1, emission_category: "Road - Rail", activity_data_unit: "tonne.km", "Weight (tonne)": "20", "Distance travelled": "147.91" } as ModalRow;
 
   it("an estimated distance is sent as is_estimate while the field keeps it", () => {
-    const row = markEstimate(base, "Distance travelled", "147.91", true);
-    expect(isEstimatedRow(row)).toBe(true);
+    const row = withEstimate(base, "Distance travelled", true);
+    expect(isEstimated(row)).toBe(true);
     const payload = buildPayload(row, ctx);
     expect(payload.is_estimate).toBe(true);
-    expect(payload.activity_data).not.toHaveProperty("_estimate");
+    expect(payload.activity_data).not.toHaveProperty("_estimates");
   });
 
-  it("typing over it, or a measured route, makes it a measured distance again", () => {
-    const typed = { ...markEstimate(base, "Distance travelled", "147.91", true), "Distance travelled": "150" };
-    expect(isEstimatedRow(typed)).toBe(false);
-    expect(buildPayload(typed, ctx)).not.toHaveProperty("is_estimate");
-    const road = markEstimate(markEstimate(base, "Distance travelled", "147.91", true), "Distance travelled", "147.91", false);
-    expect(isEstimatedRow(road)).toBe(false);
-    expect(road).not.toHaveProperty("_estimate");
+  it("a measured route makes it a measured distance again", () => {
+    const road = withEstimate(withEstimate(base, "Distance travelled", true), "Distance travelled", false);
+    expect(isEstimated(road)).toBe(false);
+    expect(road).not.toHaveProperty("_estimates");
+    expect(buildPayload(road, ctx)).not.toHaveProperty("is_estimate");
   });
 });

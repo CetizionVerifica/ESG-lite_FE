@@ -7,6 +7,7 @@ import {
   Button,
   CHECK_ICONS,
   ChartFrame,
+  DataQualityBadge,
   DocumentViewer,
   Drawer,
   EntityAuditTimeline,
@@ -26,8 +27,10 @@ import {
 import type { EmissionStatus } from "../../../services/emissionService";
 import { type LedgerDocument, useColumnConfig, useDocuments, useEntryHistory, useFactor } from "../api";
 import { EditForm } from "./EditForm";
+import { deflatorLine, drawerRateTerm, fxLine } from "../../../lib/scope3/spend";
 import { type FactorSnapshot, type LedgerRow, activityFields, formatFactorValue, importProvenance, matchedByText, quantityOf, rowMonth, rowPeriodLabel } from "../logic";
 import { feraSubLabel } from "../../../lib/scope3/fera";
+import { rowQuality } from "../../../lib/scope3/dq";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -193,6 +196,7 @@ function Body({ row, fera, status, checkContext }: { row: LedgerRow; fera: Ledge
 
       <Section title="Calculation">
         <Calculation row={row} quantity={quantityOf(fields)} />
+        <Quality row={row} />
       </Section>
 
       <MonthHistory row={row} />
@@ -231,12 +235,29 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
   const fallback = useFactor(snapshot ? null : row.pk_id);
   const factor: FactorSnapshot | null = snapshot ?? fallback.data ?? null;
   if (!snapshot && fallback.isPending) return <SkeletonText lines={2} />;
+  // S3-5: a spend row shows the amount spent and the stored rate (× deflator) before the factor;
+  // a same-currency row without a deflator has no conversion term and no exchange-rate line.
+  const fx = row.fx ?? null;
+  const deflator = snapshot?.deflator ?? null;
+  const fxText = fx ? fxLine(fx) : null;
+  const rateTerm = fx ? drawerRateTerm(fx, deflator) : null;
+  const spent = fx ? Number(String(row.activity_data?.spent_value ?? "").replace(/,/g, "")) : NaN;
+  const amount = fx && Number.isFinite(spent) && spent > 0 ? spent : quantity;
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 font-num text-sm tabular-nums" data-testid="calculation">
-        <span>{quantity === null ? "—" : formatNumber(quantity, 2)} {row.activity_data_unit ?? ""}</span>
+        <span>{amount === null ? "—" : formatNumber(amount, 2)} {fx ? fx.currency : (row.activity_data_unit ?? "")}</span>
         <span aria-hidden className="text-muted">×</span>
         <span className="sr-only">times</span>
+        {rateTerm && (
+          <>
+            <span>
+              {formatFactorValue({ factor_value: rateTerm.value })} {rateTerm.label}
+            </span>
+            <span aria-hidden className="text-muted">×</span>
+            <span className="sr-only">times</span>
+          </>
+        )}
         <span>{factor ? `${formatFactorValue(factor)} per ${factor.denominator_unit}` : "factor unknown"}</span>
         <span aria-hidden className="text-muted">=</span>
         <span className="sr-only">equals</span>
@@ -250,7 +271,37 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
       ) : (
         <p className="text-sm text-muted">{fallback.isError ? "Couldn't load the factor." : "No factor matched this entry."}</p>
       )}
+      {fx && (fxText || deflator) && (
+        <p className="text-sm text-muted" data-testid="drawer-fx">
+          {fxText && <>Exchange rate: {fxText}</>}
+          {deflator && <span className={fxText ? "block" : undefined}>{deflatorLine(deflator)}</span>}
+        </p>
+      )}
     </div>
+  );
+}
+
+/** S3-3: how the row was calculated and how good its data is; nothing for a Scope 1 or 2 row without them. */
+function Quality({ row }: { row: LedgerRow }) {
+  const q = rowQuality(row);
+  if (!q.show) return null;
+  return (
+    <dl className="mt-2" data-testid="drawer-quality">
+      <Row label="How it was calculated">
+        <span data-testid="drawer-method">{q.method}</span>
+        {q.estimate && (
+          <Badge tone="warn" className="ml-1.5">
+            Estimate
+          </Badge>
+        )}
+      </Row>
+      <Row label="Data quality">
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          <DataQualityBadge dq={q.dq} />
+          {q.dataType && <span className="text-xs text-muted">{q.dataType} data</span>}
+        </span>
+      </Row>
+    </dl>
   );
 }
 

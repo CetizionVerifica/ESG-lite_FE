@@ -304,6 +304,26 @@ test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends w
   expect(created[0].body).not.toHaveProperty("is_estimate");
 });
 
+test("the engine's notes on a saved row show on the result (S3-4)", async ({ page }) => {
+  await signIn(page, []);
+  const note = 'No 2024 FERA factor for "Diesel (avg biofuel blend)", so no fuel- and energy-related (Category 3) row was added.';
+  await page.route(/\/user\/emissions(\?|$)/, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 201, json: { emission: { pk_id: 301 }, warnings: [{ code: "FERA_FACTOR_MISSING", message: note }] } })
+      : route.fallback(),
+  );
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  // The warn callout is role="status", so the note is announced.
+  await expect(page.getByRole("status").filter({ hasText: "Sent, with notes" })).toContainText(note);
+});
+
 test("with no factor in the factor year, the preview uses the newest factor from another year, as the save does", async ({ page }) => {
   await signIn(page, []);
   // Only 2022 and 2023 factors exist; Sep 2025 data looks for 2024 first.
@@ -477,7 +497,8 @@ test("a passenger.km row works the distance out in the drawer", async ({ page })
 
   // Rail is an estimate on the road corridor.
   await drawer.getByRole("radio", { name: "Rail" }).click();
-  await expect(drawer.getByText("Estimate")).toBeVisible();
+  await expect(drawer.getByText("Estimate", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("The entry is saved as an estimate.")).toBeVisible();
   await drawer.getByRole("radio", { name: "Road" }).click();
   await drawer.getByRole("button", { name: "Use this distance" }).click();
 
@@ -490,6 +511,34 @@ test("a passenger.km row works the distance out in the drawer", async ({ page })
   await expect(page.getByText("1 row sent for approval")).toBeVisible();
   expect(created[0].body).toMatchObject({ activity_data: { "Activity Data": "43", emission_category: "Car (petrol)" }, activity_data_unit: "passenger.km" });
   expect(Object.keys(created[0].body.activity_data as object)).not.toContain("Activity Data__distance");
+  // A road route is not an estimate (S3-3 is_estimate).
+  expect(created[0].body).not.toHaveProperty("is_estimate");
+});
+
+test("a rail estimate from the distance drawer is saved as an estimate (S3-3)", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  await page.goto("/data/new?site=4&category=11&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Emission category").selectOption({ label: "Car (petrol)" });
+  await row.getByLabel("Unit").selectOption("passenger.km");
+  await row.getByLabel("Passenger").fill("1");
+  await row.getByRole("button", { name: "Calculate distance" }).click();
+  const drawer = page.getByRole("dialog", { name: "Calculate distance" });
+  await drawer.getByRole("textbox", { name: "From" }).fill("Manama");
+  await drawer.getByRole("textbox", { name: "From" }).press("Enter");
+  await drawer.getByRole("textbox", { name: "To" }).fill("Riffa");
+  await drawer.getByRole("textbox", { name: "To" }).press("Enter");
+  await drawer.getByRole("radio", { name: "Rail" }).click();
+  await expect(drawer.getByText("The entry is saved as an estimate.")).toBeVisible();
+  await drawer.getByRole("button", { name: "Use this distance" }).click();
+  await expect(row.getByLabel("Distance (km)")).toHaveValue("21.5");
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0].body).toMatchObject({ is_estimate: true, activity_data_unit: "passenger.km" });
+  expect(created[0].body.activity_data).not.toHaveProperty("_estimates");
 });
 
 test("typed rows ask before leaving the page", async ({ page }) => {

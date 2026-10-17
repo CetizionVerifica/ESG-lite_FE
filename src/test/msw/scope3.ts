@@ -11,6 +11,11 @@
  * (categories list, screening, the report envelope, plan and survey
  * answers), the shape here is a mock the owning module confirms or changes in
  * its own PR. Report rows follow `Scope3ReportRow` (§5).
+ *
+ * S3-3 adds the emission rows' method and data quality: `GET /user/emissions`
+ * with `method=` / `dq_max=`, `POST /user/emissions` with `method`,
+ * `is_estimate` and `METHOD_NOT_ALLOWED`, and the sample Category 1 form's
+ * `method_options` (`GET /user/column-configs/site/1/category/11`).
  */
 import { http, HttpResponse } from "msw";
 import {
@@ -49,6 +54,8 @@ import {
   type SupplierFactor,
   type UnlockPeriodBody,
 } from "../../lib/scope3/contracts";
+import { type Dq, type MethodOptions, autoDq, dataTypeFor, isMethod, methodLabel, parseDqMax } from "../../lib/scope3/dq";
+import type { EmissionData } from "../../services/emissionService";
 
 const COMPANY_ID = 1;
 
@@ -193,6 +200,63 @@ let recalculations = initialRecalculations();
 let locks = initialLocks();
 let investments = initialInvestments();
 let productSales = initialProductSales();
+
+/** S3-3: the sample Category 1 form (site 1 × "Purchased materials", category 11) and what it offers. */
+export const CAT1_FORM_METHODS: MethodOptions = [
+  { method: "supplier_specific", units: ["kg"] },
+  { method: "average_data", units: ["kg", "tonne"] },
+  { method: "spend_based", units: ["USD", "EUR"] },
+];
+const CAT1_FORM = {
+  pk_id: 31,
+  config_name: "Purchased materials",
+  columns: [
+    { pk_id: 1, column_name: "material", column_type: "select" },
+    { pk_id: 2, column_name: "amount", column_type: "number" },
+  ],
+  column_options: { "1": [{ id: "aluminium", label: "Aluminium wire rod" }] },
+  method_options: CAT1_FORM_METHODS,
+};
+const CAT1_CATEGORY = { category_id: 11, category_name: "Purchased materials", scope: "Scope 3", ghg_category: 1 };
+const SITE_1 = { site_id: 1, name: "Hidd plant" };
+
+/** A row as `GET /user/emissions` returns it, with the S3-3 fields. */
+export type MockEmission = EmissionData & { method: string | null; dq: Dq | null; data_type: "primary" | "secondary" | null; is_estimate: boolean };
+
+const factorFor = (method: string) =>
+  method === "spend_based" ? { geography: "GLO", year: 2019, factor_type: "eeio_spend" } : method === "supplier_specific" ? { geography: "NO", year: 2025, factor_type: "supplier" } : { geography: "RER", year: 2025, factor_type: "life_cycle" };
+
+const emissionRow = (pk_id: number, method: string | null, amount: number, extra: Partial<MockEmission> = {}): MockEmission => {
+  const dq = method && isMethod(method) ? autoDq({ method, factor: factorFor(method), siteCountry: "BH", reportingYear: 2026, hasEvidence: method === "supplier_specific" }) : null;
+  return {
+    pk_id,
+    activity_data: { material: "aluminium", amount: String(amount) },
+    total_emission: Math.round(amount * 4.2) / 1000,
+    unit: "tCO2e",
+    date_of_reporting: "2026-09-30",
+    reporting_period: "monthly",
+    activity_data_unit: method === "spend_based" ? "USD" : "kg",
+    status: "pending",
+    created_at: "2026-10-01T09:00:00.000Z",
+    updated_at: "2026-10-01T09:00:00.000Z",
+    site: SITE_1,
+    category: CAT1_CATEGORY,
+    method,
+    dq,
+    data_type: method && isMethod(method) ? dataTypeFor({ method, hasEvidence: method === "supplier_specific" }) : null,
+    is_estimate: false,
+    ...extra,
+  };
+};
+
+const initialEmissions = (): MockEmission[] => [
+  emissionRow(501, "supplier_specific", 1200),
+  emissionRow(502, "average_data", 800),
+  emissionRow(503, "spend_based", 25000),
+  // A Scope 3 row saved before S3-3, not backfilled yet: no method, no score.
+  emissionRow(504, null, 300),
+];
+let emissions = initialEmissions();
 let screeningInputs: ScreeningInput[] = [];
 let nothing: NothingThisMonthBody[] = [];
 
@@ -209,6 +273,7 @@ export function resetScope3Mocks(): void {
   productSales = initialProductSales();
   screeningInputs = [];
   nothing = [];
+  emissions = initialEmissions();
 }
 
 const needsReason = (status: BoundaryStatus, reason?: string | null) => status !== "included" && !reason?.trim();
@@ -492,4 +557,43 @@ export const scope3Handlers = [
     nothing = nothing.filter((n) => !(n.site_id === body.site_id && n.category_id === body.category_id && n.month === body.month));
     return new HttpResponse(null, { status: 204 });
   }),
+
+  // S3-3 method and data quality on every row
+  http.get("*/user/column-configs/site/1/category/11", () => HttpResponse.json([CAT1_FORM])),
+  http.get("*/user/emissions", ({ request }) => {
+    const q = new URL(request.url).searchParams;
+    const method = q.get("method");
+    const dqMax = q.get("dq_max");
+    // As the backend: an unknown method or a dq_max outside 1-3 is a 400, not an empty list.
+    if (method && !isMethod(method)) return HttpResponse.json({ message: "method must be a known calculation method" }, { status: 400 });
+    if (dqMax !== null && parseDqMax(dqMax) === null) return HttpResponse.json({ message: "dq_max must be 1, 2 or 3" }, { status: 400 });
+    const max = parseDqMax(dqMax);
+    // A row with no score has none to meet, so dq_max leaves it out.
+    const data = emissions.filter((e) => (!method || e.method === method) && (max === null || (e.dq !== null && e.dq.overall <= max)));
+    const sum = (status: string) => data.filter((e) => e.status === status).length;
+    return HttpResponse.json({
+      data,
+      total: data.length,
+      summary: { total_emission: data.reduce((t, e) => t + e.total_emission, 0), pending_count: sum("pending"), approved_count: sum("approved"), rejected_count: sum("rejected") },
+    });
+  }),
+  http.post<never, { site_id?: number; category_id?: number; activity_data?: Record<string, unknown>; activity_data_unit?: string; method?: string; is_estimate?: boolean }>(
+    "*/user/emissions",
+    async ({ request }) => {
+      const body = await request.json();
+      if (body.method !== undefined && !isMethod(body.method)) {
+        return HttpResponse.json({ message: "This calculation method isn't one ESGLite knows.", code: "FIELD_INVALID", field: "method" }, { status: 400 });
+      }
+      const sampleForm = body.site_id === 1 && body.category_id === 11;
+      if (sampleForm && body.method && !CAT1_FORM_METHODS.some((o) => o.method === body.method)) {
+        const offered = CAT1_FORM_METHODS.map((o) => methodLabel(o.method)).join(", ");
+        return error("METHOD_NOT_ALLOWED", 400, `This calculation method isn't offered for this category. This form offers: ${offered}.`);
+      }
+      // The engine's method chain: the row's, else the form's first, else average data.
+      const method = body.method ?? (sampleForm ? CAT1_FORM_METHODS[0].method : "average_data");
+      const row = emissionRow(600 + emissions.length, method, Number(body.activity_data?.amount ?? 0), { is_estimate: body.is_estimate ?? false });
+      emissions.push(row);
+      return HttpResponse.json({ message: "Emission created", emission: row, warnings: [] }, { status: 201 });
+    },
+  ),
 ];

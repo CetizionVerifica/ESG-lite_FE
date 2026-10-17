@@ -7,6 +7,7 @@ import { getMappingsByCompany, type CategoryMapping } from "../../services/categ
 export type { CategoryMapping };
 import { createEmission, getEmissionsPaginated, getPeriodTotal, updateEmission } from "../../services/emissionService";
 import { getThresholdByCompany } from "../../services/thresholdService";
+import { getSiteById } from "../../services/siteService";
 import { linkInvoiceDocuments, uploadMultipleDocuments } from "../../services/documentService";
 import { calculateRoadDistance, calculateSeaDistance } from "../../services/distanceService";
 import { resolveLocationFromBackend, type ResolvedLocation } from "../../services/locationService";
@@ -123,23 +124,31 @@ export function usePeriodTotals(args: { siteId: number | null; categoryId: numbe
 }
 
 export type SaveOutcome =
-  | { kind: "saved"; emissionId: number | null }
+  /** `warnings`: the engine's notes that never block (an older factor year, no FERA factor), shown on the result line (S3-4). */
+  | { kind: "saved"; emissionId: number | null; warnings?: string[] }
   | { kind: "duplicate"; message: string; existing: { tco2e: number | null; status: string | null } | null }
-  | { kind: "error"; message: string; modeLock: boolean };
+  /** `methodNotAllowed`: the form doesn't offer the row's method (S3-3 METHOD_NOT_ALLOWED); the message names the ones it does. */
+  | { kind: "error"; message: string; modeLock: boolean; methodNotAllowed?: boolean };
 
 interface ApiError {
   response?: {
     status?: number;
-    data?: { message?: string; duplicate?: boolean; mode_lock?: boolean; existing_emission?: { total_emission?: number | string; status?: string } };
+    data?: { message?: string; code?: string; duplicate?: boolean; mode_lock?: boolean; existing_emission?: { total_emission?: number | string; status?: string } };
   };
   message?: string;
 }
 
+type SavedBody = { emission?: { pk_id?: number }; warnings?: Array<{ code?: string; message?: string }> } | undefined;
+
+/** The engine's warning messages from a save answer (S3-4: FACTOR_FALLBACK_YEAR, FERA_FACTOR_MISSING). */
+export const warningsOf = (body: SavedBody): string[] =>
+  (body?.warnings ?? []).map((w) => w?.message ?? "").filter((m): m is string => m.length > 0);
+
 /** Save one row. A 409 duplicate or mode-lock conflict comes back as an outcome, not a throw. */
 export async function saveRow(payload: EmissionPayload, replace = false): Promise<SaveOutcome> {
   try {
-    const result = (await createEmission(payload, replace)) as { emission?: { pk_id?: number } } | undefined;
-    return { kind: "saved", emissionId: result?.emission?.pk_id ?? null };
+    const result = (await createEmission(payload, replace)) as SavedBody;
+    return { kind: "saved", emissionId: result?.emission?.pk_id ?? null, warnings: warningsOf(result) };
   } catch (err) {
     const e = err as ApiError;
     const data = e.response?.data;
@@ -154,9 +163,28 @@ export async function saveRow(payload: EmissionPayload, replace = false): Promis
     return {
       kind: "error",
       modeLock: !!data?.mode_lock,
+      ...(data?.code === "METHOD_NOT_ALLOWED" ? { methodNotAllowed: true } : {}),
       message: data?.message ?? e.message ?? "Couldn't save this row. Try again.",
     };
   }
+}
+
+/**
+ * The site's country (ISO alpha-2) for the data quality preview (S3-3: a factor
+ * for the site's own country scores best). Null when unknown; the preview then
+ * scores geography as the engine would without one.
+ */
+export function useSiteCountry(siteId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["add-data", "site-country", siteId],
+    enabled: enabled && siteId !== null,
+    staleTime: 60 * 60_000,
+    queryFn: async (): Promise<string | null> => {
+      const site = (await getSiteById(siteId as number).catch(() => null)) as { country?: { code?: unknown } | null } | null;
+      const code = site?.country?.code;
+      return typeof code === "string" && code.trim() ? code.trim().toUpperCase() : null;
+    },
+  });
 }
 
 /** Attach files picked on a typed row to its saved entry. True when they were all stored. */
@@ -177,8 +205,8 @@ export async function updateRow(id: number, payload: EmissionPayload): Promise<S
       extra_data: payload.extra_data,
       date_of_reporting: payload.date_of_reporting,
       activity_data_unit: payload.activity_data_unit,
-    })) as { emission?: { pk_id?: number } } | undefined;
-    return { kind: "saved", emissionId: result?.emission?.pk_id ?? id };
+    })) as SavedBody;
+    return { kind: "saved", emissionId: result?.emission?.pk_id ?? id, warnings: warningsOf(result) };
   } catch (err) {
     const e = err as ApiError;
     return { kind: "error", modeLock: false, message: e.response?.data?.message ?? e.message ?? "Couldn't save this row. Try again." };

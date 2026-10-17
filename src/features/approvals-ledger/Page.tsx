@@ -53,6 +53,7 @@ import {
   useThreshold,
 } from "./api";
 import { type ReviewGroup, parseGroup } from "../../lib/scope3/checks";
+import { DQ_FILTER_OPTIONS, METHOD_FILTER_OPTIONS, parseDqMax, parseMethodFilter } from "../../lib/scope3/dq";
 import { useApproveAllReady } from "./hooks/useApproveAllReady";
 import { feraCategoryIds } from "../../lib/emissions/pendingCount";
 import { BatchesView } from "./components/BatchesView";
@@ -99,8 +100,13 @@ function useManagerSites(): SiteOption[] {
   }, [user]);
 }
 
+/** S3-3: how rows were calculated (`method=`) and how good their data is (`dq_max=`). */
+const METHOD_FILTER: FilterDef = { key: "method", label: "Method", multiple: false, options: METHOD_FILTER_OPTIONS };
+const DQ_FILTER: FilterDef = { key: "dq", label: "Data quality", multiple: false, options: DQ_FILTER_OPTIONS };
+
 /** FilterBar keys kept in the URL per tab; Approvals is always pending, so it has no status chip. */
-const FILTER_KEYS: Record<Tab, string[]> = { approvals: [], ledger: ["status"] };
+const FILTER_KEYS: Record<Tab, string[]> = { approvals: ["method", "dq"], ledger: ["status", "method", "dq"] };
+const TAB_FILTERS: Record<Tab, FilterDef[]> = { approvals: [METHOD_FILTER, DQ_FILTER], ledger: [STATUS_FILTER, METHOD_FILTER, DQ_FILTER] };
 
 const describe = (r: LedgerRow) => `${r.category?.category_name ?? "Entry"} · ${r.site?.name ?? "—"} · ${rowPeriodLabel(r)}`;
 
@@ -128,7 +134,9 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
   const search = params.get("q")?.trim() || null;
   // On the list tabs `?batch=` narrows the list to one upload batch; on the batches tab it marks that batch's row.
   const batchId = view === "batches" ? null : params.get("batch")?.trim() || null;
-  const counts = useStatusCounts(ctx.siteIds, feraIds, { categoryId: ctx.categoryIds, ...periodQuery(ctx.period), search, batchId });
+  const method = parseMethodFilter(params.get("method"));
+  const dqMax = parseDqMax(params.get("dq"));
+  const counts = useStatusCounts(ctx.siteIds, feraIds, { categoryId: ctx.categoryIds, ...periodQuery(ctx.period), search, batchId, method, dqMax });
   // No site chip = all of the manager's sites; batches must always be scoped (the endpoint isn't).
   const scopeSites = useMemo(() => (ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)), [ctx.siteIds, sites]);
   const batches = useBatches(scopeSites, ctx.categoryIds);
@@ -204,7 +212,20 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   // XI5: a batch's pending rows the smart import was least sure about come first, as a filter chip
   // that is on while there are any. The count uses the list's own filters (pending only), so the
   // chip never opens on approved rows.
-  const base = { tab, siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period: ctx.period, search: filters.q, status, batchId, sort, page, pageSize };
+  const base = {
+    tab,
+    siteIds: ctx.siteIds,
+    categoryIds: ctx.categoryIds,
+    period: ctx.period,
+    search: filters.q,
+    status,
+    batchId,
+    method: parseMethodFilter(filters.filters.method?.[0]),
+    dqMax: parseDqMax(filters.filters.dq?.[0]),
+    sort,
+    page,
+    pageSize,
+  };
   const attentionParam = params.get("attention");
   const attentionCountQ = useListAttention(tab === "approvals" && batchId ? listParams({ ...base, attention: false }) : null);
   const attentionCount = attentionCountQ.data;
@@ -434,7 +455,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const showChecks = tab === "approvals" && rows.some((r) => r.checks !== undefined);
   const columns = ledgerColumns({ configOf, feraOf: merged.feraOf, statusOf, actions, checks: showChecks ? checkCtx : undefined });
 
-  const filtered = !!filters.q.trim() || !!status || !!batchId || !!group || ctx.categoryIds.length > 0 || ctx.period !== null;
+  const filtered = !!filters.q.trim() || !!status || !!base.method || !!base.dqMax || !!batchId || !!group || ctx.categoryIds.length > 0 || ctx.period !== null;
   // One URL write: two functional setSearchParams calls in one tick both start from the
   // same params, so the second would undo the first.
   const clearFilters = () =>
@@ -568,7 +589,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
           toolbar={
             <>
               <FilterBar
-                filters={tab === "ledger" ? [STATUS_FILTER] : []}
+                filters={TAB_FILTERS[tab]}
                 value={filters}
                 onChange={setFilters}
                 searchPlaceholder="Search category, value or submitter"

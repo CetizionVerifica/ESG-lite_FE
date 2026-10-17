@@ -13,6 +13,7 @@ import {
   serverMessage,
   findings,
   recommendedActions,
+  dominantScope,
   scopeDetails,
   scopeDistribution,
   clientSites,
@@ -487,6 +488,19 @@ describe("findings", () => {
       "Set a validated, science-based reduction target aligned to a 1.5 °C pathway.",
       "Begin capturing renewable-energy consumption to quantify avoided emissions.",
     ]);
+  });
+
+  it("names Scope 3 when it is the largest, and asks to engage suppliers (S3-4)", () => {
+    const s3 = { ...f, selected: { ...f.selected, "Scope 1": 10, "Scope 2": 20, "Scope 3": 70, total: 100 } };
+    expect(dominantScope(s3)).toEqual({ scope: "Scope 3", value: 70 });
+    expect(findings(s3, [], "CY 2025", "CY 2024")).toContain(
+      "Scope 3 (value chain) dominates the footprint at 70.0%, indicating the highest-leverage reduction pathway.",
+    );
+    expect(recommendedActions(s3)).toContain("Engage the largest suppliers for their own emissions data.");
+    expect(recommendedActions(f)).not.toContain("Engage the largest suppliers for their own emissions data.");
+    // Ties keep the old order: Scope 2 over Scope 1; Scope 3 only when strictly largest.
+    expect(dominantScope({ ...f, selected: { ...f.selected, "Scope 1": 40, "Scope 2": 40, "Scope 3": 40 } }).scope).toBe("Scope 2");
+    expect(dominantScope({ ...f, selected: { ...f.selected, "Scope 1": 50, "Scope 2": 20, "Scope 3": 30 } }).scope).toBe("Scope 1");
   });
 });
 

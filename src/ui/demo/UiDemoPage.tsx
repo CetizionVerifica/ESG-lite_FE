@@ -12,7 +12,7 @@ import {
 } from "./CoreDemos";
 import { DataTableDemo, PageHeaderDemo } from "./TableDemos";
 import { FlowsDemo } from "./FlowDemos";
-import { ChartDemo, FeedbackDemo, FilterBarDemo, GlossaryDemo, KpiDemo, PrimitivesDemo } from "./DisplayDemos";
+import { ChartDemo, FeedbackDemo, FilterBarDemo, GlossaryDemo, KpiDemo, PrimitivesDemo, ScopeThreeRowDemo } from "./DisplayDemos";
 import { DemoThemeScope } from "./demoTheme";
 import { DEMO_THEMES, DEMO_THEME_LABEL, type DemoTheme } from "./demoThemes";
 
@@ -69,6 +69,7 @@ export default function UiDemoPage() {
           <ChartDemo />
           <FeedbackDemo />
           <PrimitivesDemo />
+          <ScopeThreeRowDemo />
           <GlossaryDemo />
           <FlowsDemo />
           <FormatDemo />

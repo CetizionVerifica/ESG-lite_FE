@@ -2,8 +2,10 @@
 import { canConvert, unitsMatchExact } from "../../../ui/unitMatch";
 import { factorYearForDate, yearlyPeriodEndDate, type PeriodMode, type YearType } from "../hooks/reportingPeriod";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
+import { isSupportedCurrency } from "../../../lib/scope3/spend";
 import type { ModalRow } from "../types";
-import { isEstimatedRow } from "./transport";
+import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
+import { isRowMethod } from "../../../lib/scope3/dq";
 
 /** What is being reported: a month, or a CY/FY year (yearly batches). */
 export type EntryPeriod =
@@ -60,7 +62,8 @@ export function periodTotalQuery(p: EntryPeriod) {
   } as const;
 }
 
-export type RowIssue = { field: "emission_category" | "activity_data_unit" | "values"; message: string };
+/** The field an issue shows under; "values" is the quantity (or, on the spend form, the amount spent). */
+export type RowIssue = { field: "emission_category" | "activity_data_unit" | "currency" | "values"; message: string };
 
 /**
  * Why a row can't be saved yet, or null when it can. Same checks and order as
@@ -68,6 +71,18 @@ export type RowIssue = { field: "emission_category" | "activity_data_unit" | "va
  */
 export function rowIssue(row: ModalRow, calc: EmissionCalculator): RowIssue | null {
   if (!row.emission_category) return { field: "emission_category", message: "Choose what this row is" };
+  // S3-5: a spend row needs its amount and currency; the server looks the rate up, so a rate still loading doesn't block.
+  const spend = calc.spendDetail(row);
+  if (spend) {
+    if (spend.outcome.ok || spend.outcome.pending) return null;
+    // Same order as spendOutcome: the currency first, then the amount.
+    const currencyIssue = !isSupportedCurrency(spend.spend.currency);
+    // On the spend form the currency has its own field; a quantity row's currency is its unit.
+    const field = !currencyIssue ? "values" : spend.spend.amount_from === "spent_value" ? "currency" : "activity_data_unit";
+    return { field, message: spend.outcome.status };
+  }
+  // The spend form hides the unit, so a spend row with nothing entered yet asks for the amount, not a unit.
+  if (calc.usesSpendForm(row)) return { field: "values", message: "Enter the amount spent" };
   if (!row.activity_data_unit) return { field: "activity_data_unit", message: "Choose a unit" };
   const expected = calc.getExpectedUnit(row.emission_category);
   if (expected && !unitsMatchExact(expected, row.activity_data_unit) && !canConvert(row.activity_data_unit, expected)) {
@@ -94,8 +109,10 @@ export interface EmissionPayload {
   activity_data_unit?: string;
   reporting_period: PeriodMode;
   year_type?: YearType;
-  /** A distance from the route helper that was estimated (S3-8; stored by S3-3's emission.is_estimate). */
-  is_estimate?: true;
+  /** S3-3: how the row was calculated (the row's method), when it has one. */
+  method?: string;
+  /** S3-3: sent (true) only when a value came from an estimate, such as the distance helper's rail or sea estimate. */
+  is_estimate?: boolean;
 }
 
 /**
@@ -104,16 +121,25 @@ export interface EmissionPayload {
  * stay out of activity_data. Yearly rows are always filed on the period end;
  * a monthly row keeps its own date_of_reporting when it has one.
  */
-export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: number; period: EntryPeriod }): EmissionPayload {
-  const { activity_data_unit, date_of_reporting: rowDate, _extra_data, ...rest } = row;
+export function buildPayload(
+  row: ModalRow,
+  ctx: {
+    siteId: number;
+    categoryId: number;
+    period: EntryPeriod;
+  },
+): EmissionPayload {
+  const { activity_data_unit, date_of_reporting: rowDate, _extra_data, _estimates, ...rest } = row;
   const activity: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(rest)) {
     if (key === "id") continue;
     if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
     // Private row state: FERA flag, mapping key, the bill a row came from, the saved entry it edits.
-    if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf" || key === "_editSaved" || key === "_estimate") continue;
+    if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf" || key === "_editSaved") continue;
     activity[key] = value;
   }
+  const method = row[ROW_METHOD_COLUMN];
+  const estimated = Array.isArray(_estimates) && _estimates.length > 0;
   const date = entryDate(ctx.period);
   return {
     site_id: ctx.siteId,
@@ -126,7 +152,8 @@ export function buildPayload(row: ModalRow, ctx: { siteId: number; categoryId: n
     activity_data_unit: activity_data_unit || undefined,
     reporting_period: ctx.period.mode,
     year_type: ctx.period.mode === "yearly" ? ctx.period.yearType : undefined,
-    ...(isEstimatedRow(row) ? { is_estimate: true as const } : {}),
+    ...(isRowMethod(method) ? { method } : {}),
+    ...(estimated ? { is_estimate: true } : {}),
   };
 }
 

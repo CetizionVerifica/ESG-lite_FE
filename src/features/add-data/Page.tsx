@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
-import { useEntrySetup, usePeriodTotals, useThreshold } from "./api";
+import { useEntrySetup, usePeriodTotals, useSiteCountry, useThreshold } from "./api";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
+import { useSpendRates } from "../../lib/scope3/useSpendRates";
+import type { EmissionFactor } from "./types";
 import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
 import { useRowEvidence } from "./hooks/useRowEvidence";
 import { billGroups, billOf } from "./logic/bill";
@@ -27,6 +30,7 @@ const STEPS = [
 ];
 
 const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : null);
+const NO_FACTORS: EmissionFactor[] = [];
 
 /** P03 Add data: choose the context, type the rows, review and send for approval. */
 export default function AddDataPage() {
@@ -35,6 +39,8 @@ export default function AddDataPage() {
   const [params, setParams] = useSearchParams();
   const siteId = num(params.get("site")) ?? (sites.length === 1 ? sites[0].site_id : null);
   const categoryId = num(params.get("category"));
+  // SE-1 · simple-entry §8: a contributor never picks a method or reads data quality; the form decides.
+  const calcDetail = useCalcDetailForSite(siteId);
   const period = parseEntryPeriod(params.get("period"));
   const site = sites.find((s) => s.site_id === siteId);
   const categories = entryCategories(site);
@@ -70,6 +76,10 @@ export default function AddDataPage() {
   });
   const threshold = useThreshold(site?.company_id ?? null);
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
+  // S3-3: the data quality preview scores a factor for the site's own country best; Scope 3 only.
+  const siteCountry = useSiteCountry(site?.site_id ?? null, contextReady && category?.ghg_category != null);
+  // Rows the server refused for their method (METHOD_NOT_ALLOWED), shown on the row's method cards.
+  const [methodErrors, setMethodErrors] = useState<Record<number, { method: string; message: string }>>({});
   // Per user: a draft survives a reload, so the next person signing in on this tab mustn't get it.
   const draftKey = contextReady ? entryDraftKey(userIdOf(user), site.site_id, category.category_id, formatEntryPeriodParam(period)) : null;
   const { rows, sent, dispatch, clearDraft, markSent } = useEntryRows(model, draftKey);
@@ -80,11 +90,25 @@ export default function AddDataPage() {
   // The draft survives in-app navigation, but evidence files don't, and a half-entered form is easy to forget.
   const blocker = useUnsavedGuard(unsaved);
 
-  const calcInput = {
-    targetYear: factorYear ?? undefined,
-    columns: model?.columns,
-  };
-  const calc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec });
+  const calcInput = useMemo(() => ({ targetYear: factorYear ?? undefined, columns: model?.columns }), [factorYear, model?.columns]);
+  const reportingDate = period ? entryDate(period) : null;
+  const factors = setup.data?.factors ?? NO_FACTORS;
+  const reportingPeriod = period?.mode;
+  // S3-5: exchange rates for rows calculated from the amount spent; a failed lookup shows a note, not a spinner.
+  const spendLookup = useMemo(
+    () => ({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec, reportingPeriod }),
+    [calcInput, factors, model?.spec, reportingPeriod],
+  );
+  const spend = useSpendRates(rows, spendLookup, reportingDate);
+  const calc = useEmissionCalc({
+    ...calcInput,
+    emissionFactors: factors,
+    calculationSpec: model?.spec,
+    spendRates: spend.rates,
+    spendRateErrors: spend.failed,
+    reportingDate,
+    reportingPeriod,
+  });
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.
   // S3-7: td_loss factors make a second, T&D-loss row for Scope 2 categories only.
   // Only the factor year's FERA factors count: the backend never falls back to another year for a twin.
@@ -131,11 +155,18 @@ export default function AddDataPage() {
   const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
     <Review
       rows={activeRows}
+      // The row's method stays in activity_data["@method"] too: S3-5 and S3-9 read it there on edits and recalculations.
       payloads={activeRows.map((r) => buildPayload(r, { siteId: s.site_id, categoryId: c.category_id, period: p }))}
       calc={calc}
       evidenceFiles={evidence.filesOf}
       periodLabel={periodLabel}
       onBack={() => setStep(1)}
+      onFixMethod={(refused, sentIds) => {
+        // Rows already sent leave the form, so going back can't send them twice.
+        for (const id of sentIds) dispatch({ type: "remove", id });
+        setMethodErrors(Object.fromEntries(refused.map((r) => [r.rowId, { method: r.method, message: r.message }])));
+        setStep(1);
+      }}
       onFinished={markSent}
       onAnother={() => {
         clearDraft();
@@ -205,6 +236,9 @@ export default function AddDataPage() {
         reportingYear={(factorYear as number) + 1}
         bulkUploadHref={bulkUploadHref}
         evidence={evidence}
+        siteCountry={siteCountry.data ?? null}
+        methodErrors={methodErrors}
+        showCalcDetail={calcDetail}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
       />

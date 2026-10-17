@@ -13,6 +13,8 @@ export interface HistoricalPlanRow {
   totalFrom: "calculated" | "file" | null;
   status: "import" | "skip";
   reason: string | null;
+  /** The engine's notes on a row that imports (S3-4): an older factor year, no FERA row and why. */
+  warnings?: string[];
 }
 
 export interface HistoricalSummary {
