@@ -642,3 +642,125 @@ test("forms: a form whose check finds problems is marked on the list (SE-4)", as
   await expect(marked).toHaveAttribute("title", 'Diesel points to "Diesel", which has no emission factor.');
   await expect(table.getByRole("row", { name: /Dallas power/ }).getByTestId("form-check-mark")).toHaveCount(0);
 });
+
+// SE-6 · templates and copy. Midal has a third fuel site; Dallas (Acme) never appears for Midal's form.
+const hiddFuel = { pk_id: 7, config_name: "Hidd fuel", site: { site_id: 1, name: "Hidd" }, category: fuel, columns: [amount, fuelType], emission_category_mapping: { diesel: "Diesel" }, extra_fields: [], calculation: null };
+const MORE_SITES = [...SITES, { site_id: 4, name: "Muharraq", company: midal, categories: [fuel] }];
+
+test("form builder: save as a template, then copy the form to two sites; the one that fails its check isn't written (SE-6)", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.route(/\/admin\/sites$/, (route) => route.fulfill({ json: MORE_SITES }));
+  await page.route(/\/admin\/column-configs\/7$/, (route) => route.fulfill({ json: hiddFuel }));
+  await page.route(/\/admin\/form-templates$/, (route) => {
+    calls.push({ method: route.request().method(), path: "/admin/form-templates", body: route.request().postDataJSON() });
+    return route.fulfill({ status: 201, json: { message: 'Template "Fuel for Midal" saved.', template: { id: 31, name: "Fuel for Midal", company_id: 1, category_id: 10, category_name: "Stationary combustion" } } });
+  });
+  const okCheck = { ok: true, errors: [], warnings: [], form_id: null, year: 2025, version: null };
+  const badCheck = { ok: false, errors: [{ code: "NO_FACTOR_FOR_YEAR", field: "emission_category_mapping.diesel", message: 'diesel points to "Diesel", which has no emission factor.' }], warnings: [], form_id: null, year: 2025, version: null };
+  await page.route(/\/admin\/form-templates\/apply\/preview/, (route) => {
+    calls.push({ method: "POST", path: "/admin/form-templates/apply/preview", body: route.request().postDataJSON() });
+    return route.fulfill({
+      json: {
+        source: { kind: "form", id: 7, name: "Hidd fuel" },
+        targets: [
+          { site_id: 2, site_name: "Sitra", action: "update", form_id: 12, saved_rows: 40, check: okCheck },
+          { site_id: 4, site_name: "Muharraq", action: "create", form_id: null, saved_rows: 0, check: badCheck },
+        ],
+      },
+    });
+  });
+  await page.route(/\/admin\/form-templates\/apply$/, (route) => {
+    calls.push({ method: "POST", path: "/admin/form-templates/apply", body: route.request().postDataJSON() });
+    return route.fulfill({
+      json: { message: "Applied to 1 of 1 site.", source: { kind: "form", id: 7, name: "Hidd fuel" }, targets: [{ site_id: 2, site_name: "Sitra", action: "update", form_id: 12, saved_rows: 40, check: okCheck, status: "applied", version: 3 }] },
+    });
+  });
+
+  await page.goto("/capture/forms/7");
+  await expect(page.getByRole("heading", { name: "Hidd fuel", level: 1 })).toBeVisible();
+
+  // Save as template, for Midal only.
+  await page.getByRole("button", { name: "Save as template" }).click();
+  const modal = page.getByRole("dialog", { name: "Save as template" });
+  await expect(modal.getByRole("radio", { name: "Midal Cables only" })).toBeChecked();
+  await modal.getByLabel("Template name").fill("Fuel for Midal");
+  await modal.getByRole("button", { name: "Save template" }).click();
+  await expect(page.getByText('Template "Fuel for Midal" saved.')).toBeVisible();
+  expect(calls.find((c) => c.path === "/admin/form-templates")?.body).toEqual({ form_id: 7, name: "Fuel for Midal" });
+
+  // Copy to sites: Midal's sites only; the form's own site and one that doesn't report fuel can't be picked.
+  await page.getByRole("button", { name: "Copy to sites" }).click();
+  const drawer = page.getByTestId("apply-drawer");
+  await expect(drawer.getByRole("checkbox", { name: "Hidd" })).toBeDisabled();
+  await expect(drawer).toContainText("The form's own site");
+  await expect(drawer.getByRole("checkbox", { name: "Dallas" })).toHaveCount(0);
+  await drawer.getByRole("checkbox", { name: "Sitra" }).check();
+  await drawer.getByRole("checkbox", { name: "Muharraq" }).check();
+  await page.getByRole("button", { name: "Check 2 sites" }).click();
+  const targets = page.getByTestId("apply-targets");
+  await expect(targets.locator('[data-site="Sitra"]')).toContainText("Updates its form; 40 saved rows keep their values. Passes the check.");
+  await expect(targets.locator('[data-site="Muharraq"]')).toContainText("1 problem: not applied");
+  await expect(targets.locator('[data-site="Muharraq"]')).toContainText('diesel points to "Diesel", which has no emission factor.');
+  expect(calls.find((c) => c.path.endsWith("/apply/preview"))?.body).toEqual({ form_id: 7, site_ids: [2, 4] });
+
+  // Only the site that passes is applied, with the note.
+  await page.getByLabel("Note for the new versions (optional)").fill("Same fuel form as Hidd");
+  await page.getByRole("button", { name: "Apply to 1 site" }).click();
+  await expect(targets.locator('[data-site="Sitra"]')).toContainText("Form updated, version 3 live");
+  await expect(page.getByText("Applied to 1 of 1 site.")).toBeVisible();
+  expect(calls.find((c) => c.path.endsWith("/apply") && c.method === "POST")?.body).toEqual({ form_id: 7, site_ids: [2], note: "Same fuel form as Hidd" });
+});
+
+test("forms: the templates drawer renames, deletes and fills a client's missing forms from the every-client templates (SE-6)", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.route(/\/admin\/sites$/, (route) => route.fulfill({ json: MORE_SITES }));
+  await page.route(/\/admin\/form-templates(\/\d+)?$/, (route) => {
+    const method = route.request().method();
+    const path = new URL(route.request().url()).pathname;
+    if (method !== "GET") calls.push({ method, path, body: route.request().postDataJSON() });
+    if (method === "PUT") return route.fulfill({ json: { message: "renamed" } });
+    if (method === "DELETE") return route.fulfill({ json: { message: "deleted" } });
+    return route.fulfill({
+      json: {
+        templates: [
+          { id: 31, name: "Fuel for Midal", company_id: 1, company_name: "Midal Cables", category_id: 10, category_name: "Stationary combustion", fields: 2, created_by: { user_id: 5, name: "Sam Staff" }, created_at: "2026-10-17T10:00:00Z" },
+          { id: 32, name: "Fuel", company_id: null, company_name: null, category_id: 10, category_name: "Stationary combustion", fields: 2, created_by: null, created_at: "2026-10-16T10:00:00Z" },
+        ],
+      },
+    });
+  });
+  await page.route(/\/admin\/form-templates\/seed/, (route) => {
+    const body = route.request().postDataJSON();
+    calls.push({ method: "POST", path: "/admin/form-templates/seed", body });
+    const t = { site_id: 4, site_name: "Muharraq", template_id: 32, template_name: "Fuel", action: "create", form_id: null, saved_rows: 0, check: { ok: true, errors: [], warnings: [], form_id: null, year: 2025, version: null } };
+    return route.fulfill({ json: { targets: [body.dry_run ? t : { ...t, status: "applied", version: 1 }] } });
+  });
+
+  await page.goto("/capture/forms");
+  await page.getByRole("button", { name: "Templates" }).click();
+  const list = page.getByTestId("template-list");
+  await expect(list.locator('[data-template="Fuel for Midal"]')).toContainText("Midal Cables");
+  await expect(list.locator('[data-template="Fuel"]')).toContainText("Every client");
+
+  await list.locator('[data-template="Fuel for Midal"]').getByRole("button", { name: "Rename" }).click();
+  await page.getByRole("dialog", { name: "Rename template" }).getByLabel("Template name").fill("Fuel (Midal)");
+  await page.getByRole("dialog", { name: "Rename template" }).getByRole("button", { name: "Rename" }).click();
+  await expect(page.getByText('Renamed to "Fuel (Midal)"')).toBeVisible();
+  expect(calls.find((c) => c.method === "PUT")).toEqual({ method: "PUT", path: "/admin/form-templates/31", body: { name: "Fuel (Midal)" } });
+
+  await list.getByRole("button", { name: "Delete Fuel", exact: true }).click();
+  const confirm = page.getByRole("alertdialog", { name: 'Delete "Fuel"?' });
+  await expect(confirm).toContainText("Forms made from it stay as they are.");
+  await confirm.getByRole("button", { name: "Delete template" }).click();
+  expect(calls.filter((c) => c.method === "DELETE").map((c) => c.path)).toEqual(["/admin/form-templates/32"]);
+
+  await page.getByRole("button", { name: "Fill a client's missing forms" }).click();
+  const seed = page.getByRole("dialog", { name: "Fill a client's missing forms" });
+  await seed.getByLabel("Client").selectOption({ label: "Midal Cables" });
+  await seed.getByRole("button", { name: "Check" }).click();
+  await expect(seed.getByTestId("seed-targets")).toContainText("Muharraq · Fuel");
+  await expect(seed.getByTestId("seed-targets")).toContainText("Creates its form. Passes the check.");
+  await seed.getByRole("button", { name: "Create 1 form" }).click();
+  await expect(seed.getByTestId("seed-targets")).toContainText("Form created, version 1 live");
+  expect(calls.filter((c) => c.path.endsWith("/seed")).map((c) => c.body)).toEqual([{ company_id: 1, dry_run: true }, { company_id: 1, dry_run: false }]);
+});

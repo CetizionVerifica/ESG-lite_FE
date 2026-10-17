@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { FileQuestion, History, Save } from "lucide-react";
+import { Copy, FileQuestion, History, LayoutTemplate, Save } from "lucide-react";
 import { Button, Callout, EmptyState, Modal, PageHeader, SkeletonText, TabPanel, Tabs, TextField, cn, panel, useToast, useUnsavedGuard } from "../../ui";
-import { type SaveResult, useAddLibraryColumns, useDraftCheck, useFactorNames, useForm, useFormCheck, useLibrary, useSaveForm, useTestSetup } from "./api";
+import { type SaveResult, useAddLibraryColumns, useDraftCheck, useFactorNames, useForm, useFormCheck, useLibrary, useSaveForm, useSites, useTestSetup } from "./api";
 import { type CheckIssue, type FormCheck, fixCount, newErrors, tabForIssue } from "./check";
 import { applyRecipe, formSettingsIssues, missingRecipeColumns, setChoiceColumn, setFieldSetting } from "./formSettings";
 import { recipeFor } from "../../lib/forms/recipes";
@@ -12,6 +12,8 @@ import { type BuilderDraft, type BuilderTab, type SourceConfig, draftFromConfig,
 import { CalcTab } from "./components/builder/CalcTab";
 import { CheckTab } from "./components/builder/CheckTab";
 import { HistoryDrawer } from "./components/HistoryDrawer";
+import { ApplyDrawer } from "./components/ApplyDrawer";
+import { SaveTemplateModal } from "./components/SaveTemplateModal";
 import { ChoicesTab } from "./components/builder/ChoicesTab";
 import { ExtraTab } from "./components/builder/ExtraTab";
 import { FieldsTab } from "./components/builder/FieldsTab";
@@ -98,6 +100,11 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
   const [pendingCheck, setPendingCheck] = useState<FormCheck | null>(null);
   const [note, setNote] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
+  // SE-6: save the form as a template, or copy it to other sites of its client.
+  const [templating, setTemplating] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const sites = useSites();
+  const company = sites.data?.find((s) => s.site_id === source.site?.site_id)?.company ?? null;
   const testSetup = useTestSetup(tab === "test" ? source.site?.site_id : null, source.category?.category_id);
 
   const dirty = isDirty(draft, initial);
@@ -223,6 +230,12 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
         primaryAction={{ label: dirty ? "Save form" : "Saved", onClick: () => void onSave(), icon: <Save aria-hidden className="size-4" />, disabled: !dirty, loading: save.isPending || draftCheck.isPending }}
         secondaryActions={[
           { label: "History", onClick: () => setHistoryOpen(true), icon: <History aria-hidden className="size-4" /> },
+          ...(dirty
+            ? []
+            : [
+                { label: "Save as template", onClick: () => setTemplating(true), icon: <LayoutTemplate aria-hidden className="size-4" /> },
+                { label: "Copy to sites", onClick: () => setCopying(true), icon: <Copy aria-hidden className="size-4" /> },
+              ]),
           ...(dirty
             ? [
                 {
@@ -371,6 +384,13 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
         />
       )}
       <HistoryDrawer formId={id} open={historyOpen} onClose={() => setHistoryOpen(false)} />
+      {templating && <SaveTemplateModal formId={id} formName={source.config_name} clientName={company?.name ?? null} onClose={() => setTemplating(false)} />}
+      {copying && source.category && (
+        <ApplyDrawer
+          source={{ kind: "form", id, name: source.config_name, company_id: company?.company_id ?? null, category_id: source.category.category_id, category_name: source.category.category_name, site_id: source.site?.site_id }}
+          onClose={() => setCopying(false)}
+        />
+      )}
       <Modal
         open={blocker.state === "blocked"}
         onClose={() => blocker.reset?.()}

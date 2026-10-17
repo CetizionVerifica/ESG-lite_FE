@@ -24,6 +24,17 @@ import type { ColumnDraft, FormConfig, LibraryColumn, Site } from "./logic";
 import { toPayload } from "./logic";
 import type { SourceConfig, UpdatePayload } from "./builder";
 import { type CheckSummary, type FormCheck, type FormVersions, type PublishResult, readCheck } from "./check";
+import {
+  type ApplySource,
+  applyFormTemplate,
+  createFormTemplate,
+  deleteFormTemplate,
+  getFormTemplates,
+  previewFormTemplateApply,
+  renameFormTemplate,
+  seedFormTemplates,
+} from "../../services/formTemplateService";
+import type { ApplyResponse, FormTemplate, TargetResult } from "./templates";
 
 export const keys = {
   all: ["capture-setup"] as const,
@@ -222,5 +233,63 @@ export function useAddLibraryColumns() {
       return created;
     },
     onSettled: () => qc.invalidateQueries({ queryKey: keys.columns() }),
+  });
+}
+
+// SE-6 · form templates and copy ----------------------------------------------
+
+export const templatesKey = () => [...keys.all, "templates"] as const;
+
+export const useFormTemplates = (enabled = true) =>
+  useQuery<FormTemplate[]>({
+    queryKey: templatesKey(),
+    queryFn: async () => asList<FormTemplate>(await getFormTemplates(), "templates"),
+    enabled,
+  });
+
+export function useSaveTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { form_id: number; name: string; company_id?: number | null }) => createFormTemplate(body) as Promise<{ message: string; template: { id: number; name: string } }>,
+    onSuccess: () => qc.invalidateQueries({ queryKey: templatesKey() }),
+  });
+}
+
+export function useRenameTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => renameFormTemplate(id, name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: templatesKey() }),
+  });
+}
+
+export function useDeleteTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    // data-loss-reviewed: deletes one template after a destructive confirm naming it; forms made from it stay
+    mutationFn: (id: number) => deleteFormTemplate(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: templatesKey() }),
+  });
+}
+
+/** Each site's action and SE-4 check for a template or a form; writes nothing. */
+export const usePreviewApply = () => useMutation({ mutationFn: (body: ApplySource & { site_ids: number[] }) => previewFormTemplateApply(body) as Promise<ApplyResponse> });
+
+export function useApplyTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ApplySource & { site_ids: number[]; note?: string | null }) => applyFormTemplate(body) as Promise<ApplyResponse>,
+    // New and updated forms, their checks and the list's marks.
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
+}
+
+export function useSeedTemplates() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { company_id: number; dry_run?: boolean }) => seedFormTemplates(body) as Promise<{ targets: Array<TargetResult & { template_id: number; template_name: string }> }>,
+    onSuccess: (_r, body) => {
+      if (!body.dry_run) void qc.invalidateQueries({ queryKey: keys.all });
+    },
   });
 }
