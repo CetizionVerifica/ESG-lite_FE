@@ -4,6 +4,8 @@ import { useAuth } from "../../context/AuthContext";
 import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
 import { useEntrySetup, usePeriodTotals, useThreshold } from "./api";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
+import { useSpendRates } from "../../lib/scope3/useSpendRates";
+import type { EmissionFactor } from "./types";
 import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
 import { useRowEvidence } from "./hooks/useRowEvidence";
 import { billGroups, billOf } from "./logic/bill";
@@ -27,6 +29,7 @@ const STEPS = [
 ];
 
 const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : null);
+const NO_FACTORS: EmissionFactor[] = [];
 
 /** P03 Add data: choose the context, type the rows, review and send for approval. */
 export default function AddDataPage() {
@@ -80,11 +83,25 @@ export default function AddDataPage() {
   // The draft survives in-app navigation, but evidence files don't, and a half-entered form is easy to forget.
   const blocker = useUnsavedGuard(unsaved);
 
-  const calcInput = {
-    targetYear: factorYear ?? undefined,
-    columns: model?.columns,
-  };
-  const calc = useEmissionCalc({ ...calcInput, emissionFactors: setup.data?.factors ?? [], calculationSpec: model?.spec });
+  const calcInput = useMemo(() => ({ targetYear: factorYear ?? undefined, columns: model?.columns }), [factorYear, model?.columns]);
+  const reportingDate = period ? entryDate(period) : null;
+  const factors = setup.data?.factors ?? NO_FACTORS;
+  const reportingPeriod = period?.mode;
+  // S3-5: exchange rates for rows calculated from the amount spent; a failed lookup shows a note, not a spinner.
+  const spendLookup = useMemo(
+    () => ({ ...calcInput, emissionFactors: factors, calculationSpec: model?.spec, reportingPeriod }),
+    [calcInput, factors, model?.spec, reportingPeriod],
+  );
+  const spend = useSpendRates(rows, spendLookup, reportingDate);
+  const calc = useEmissionCalc({
+    ...calcInput,
+    emissionFactors: factors,
+    calculationSpec: model?.spec,
+    spendRates: spend.rates,
+    spendRateErrors: spend.failed,
+    reportingDate,
+    reportingPeriod,
+  });
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.
   // S3-7: td_loss factors make a second, T&D-loss row for Scope 2 categories only.
   // Only the factor year's FERA factors count: the backend never falls back to another year for a twin.

@@ -370,11 +370,12 @@ export const scope3Handlers = [
   http.put<never, Partial<PutScreeningInputsBody>>("*/scope3/screening/inputs", async ({ request }) => {
     const body = await request.json();
     if (!body.year || !Array.isArray(body.inputs)) return invalid("inputs", "Give the year and the inputs.");
+    if (body.year_type !== undefined && body.year_type !== "CY" && body.year_type !== "FY") return invalid("year_type", "CY or FY.");
     for (const i of body.inputs) {
       if ((i.basis === "spend" || i.basis === "revenue") && i.amount > 0 && !i.currency) return invalid("currency", "An amount spent needs its currency.");
       screeningInputs = [...screeningInputs.filter((x) => !(x.ghg_category === i.ghg_category && x.basis === i.basis)), i];
     }
-    return HttpResponse.json({ year: body.year, inputs: screeningInputs });
+    return HttpResponse.json({ year: body.year, year_type: body.year_type ?? "CY", inputs: screeningInputs });
   }),
   http.post<never, { description?: string }>("*/scope3/screening/sector-suggestions", async ({ request }) => {
     const body = await request.json();

@@ -1,3 +1,11 @@
+import {
+  type ApprovedRecalculation,
+  type BaseYearResponse,
+  type CompanyBaseYear,
+  RECALC_REASON_LABEL,
+  beforeAfterRows,
+  totalLabel,
+} from "../../lib/scope3/baseYear"; // S3-14
 import { BOUNDARY_STATUS_LABEL, CONSOLIDATION_LABEL, isConsolidationApproach } from "../../lib/scope3/boundary";
 import {
   NOT_RECORDED,
@@ -531,6 +539,8 @@ export function exportSheets(args: {
   selLabel: string;
   /** S3-13: adds "Scope 3 by category" and "Scope 3 methodology". */
   scope3?: Scope3Report | null;
+  /** S3-14: the company base year; the methodology sheet lists it when set. "error" = it couldn't load. */
+  baseYear?: BaseYearResponse | null | "error";
 }): { name: string; rows: Cell[][] }[] {
   const {
     figures: f,
@@ -621,7 +631,7 @@ export function exportSheets(args: {
           ]),
         ],
       });
-  if (args.scope3 && hasScope3(args.scope3)) sheets.push(...scope3Sheets(args.scope3));
+  if (args.scope3 && hasScope3(args.scope3)) sheets.push(...scope3Sheets(args.scope3, args.baseYear)); // S3-14 base year
   sheets.push({
     name: "Findings",
     rows: [
@@ -636,7 +646,9 @@ export function exportSheets(args: {
 }
 
 /** The Scope 3 sheets (S3-13): one row per GHG category plus Unmapped, then the methodology. */
-export function scope3Sheets(r: Scope3Report): { name: string; rows: Cell[][] }[] {
+export function scope3Sheets(r: Scope3Report, baseYear?: BaseYearResponse | null | "error"): { name: string; rows: Cell[][] }[] {
+  const loaded = baseYear === "error" ? null : baseYear;
+  const by = loaded?.base_year?.snapshot ? loaded.base_year : null;
   const shown = r.rows.filter((x) => x.n !== null || x.tco2e > 0 || x.mapped_categories.length > 0);
   const t = r.tracked;
   const approach = isConsolidationApproach(r.consolidation_approach)
@@ -683,7 +695,14 @@ export function scope3Sheets(r: Scope3Report): { name: string; rows: Cell[][] }[
         ["Organisational boundary", `${approach} approach`],
         ["GWP values", gwpText(r.gwp_sets) ? `IPCC ${gwpText(r.gwp_sets)}, 100-year` : "Not recorded on the factors used"],
         ["Biogenic CO2 and gases", t.biogenic ? "Reported separately per category" : NOT_TRACKED],
-        ["Base year", "No Scope 3 base year set"],
+        [
+          "Base year",
+          by
+            ? `${by.year_type === "FY" ? "FY" : ""}${by.base_year}`
+            : baseYear === "error"
+              ? "Couldn't load the base year; export again to include it"
+              : "No Scope 3 base year set",
+        ],
         [],
         ["Category", "Methods", "Data and factors", "Proxy data %", "Proxy basis", "Radiative forcing", "EEIO boundary", "GWP", "Allocation and assumptions"],
         ...r.rows
@@ -699,7 +718,29 @@ export function scope3Sheets(r: Scope3Report): { name: string; rows: Cell[][] }[
             x.gwp_sets.join(", ") || NOT_RECORDED,
             x.method_note ?? "",
           ]),
+        ...(by ? baseYearRows(by, loaded?.approved_recalculations ?? [], r) : []),
       ],
     },
+  ];
+}
+
+/** S3-14: the base-year block of the methodology sheet, as the Methodology tab and the PDF show it. */
+function baseYearRows(by: CompanyBaseYear, events: ApprovedRecalculation[], r: Scope3Report): Cell[][] {
+  const snap = by.snapshot!;
+  const year = `${by.year_type === "FY" ? "FY" : ""}${by.base_year}`;
+  const current = r.rows.map((x) => ({ n: x.n, tco2e: x.tco2e }));
+  return [
+    [],
+    ["Scope 3 base year", year],
+    ["Rationale", by.rationale ?? ""],
+    ["Recalculation policy", `Recalculated when changes move it by ${by.significance_pct} % or more${by.policy_note ? `. ${by.policy_note}` : ""}`],
+    ["Frozen", `${snap.frozen_at.slice(0, 10)}, version ${snap.version}`],
+    [],
+    ["Category", `${year} tCO2e`, `${r.period.label} tCO2e`],
+    ...beforeAfterRows(snap.categories, current).map((c) => [totalLabel(c.n), r3(c.before), r3(c.after)]),
+    ["Scope 3 total", r3(snap.total_tco2e), r3(r.total_tco2e)],
+    ...(events.length
+      ? [[], ["Recalculations", "Reason", "Change tCO2e", "Note"], ...events.map((e) => [e.created_at.slice(0, 10), RECALC_REASON_LABEL[e.reason] ?? e.reason, r3(e.delta_tco2e), e.note ?? ""])]
+      : []),
   ];
 }

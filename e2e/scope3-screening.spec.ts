@@ -186,6 +186,7 @@ test("an admin enters Category 6 spend, sees the estimate, ticks Stakeholders an
   await expect(page.getByText("Amount spent saved for Category 6 · Business travel")).toBeVisible();
   expect(calls.find((c) => c.path.endsWith("/scope3/screening/inputs"))?.body).toEqual({
     year: 2025,
+    year_type: "CY",
     inputs: [{ ghg_category: 6, basis: "spend", amount: 1200, currency: "USD", eeio_sector: "481000", note: null }],
   });
   // The page sends no total: the estimate is the server's.

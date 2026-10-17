@@ -17,7 +17,11 @@ import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
 import { methodLabel } from "../../../lib/scope3/labels";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
+import { SPEND_FIELDS, spendPreviewLine } from "../../../lib/scope3/spend";
 import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
+import { SpendFields } from "./SpendFields";
+
+const SPEND_EXTRA_KEYS = new Set<string>(Object.values(SPEND_FIELDS));
 
 /**
  * The Category 3 (FERA) rows an entry adds on save (S3-7): the upstream twin
@@ -75,7 +79,7 @@ export function EntryRow(p: Props) {
     (row.emission_category && calc.getExpectedUnit(row.emission_category)) ||
     (model.spec?.mode === "per_method" ? resolveSpecMethod(model.spec, row)?.method.activity_unit : null) ||
     null;
-  const extras = visibleExtraFields(model, row);
+  const allExtras = visibleExtraFields(model, row);
   const fieldError = (f: RowIssue["field"]) => (p.showIssue && p.issue?.field === f ? p.issue.message : undefined);
   const categoryOptions =
     p.mappings.length > 0
@@ -90,7 +94,13 @@ export function EntryRow(p: Props) {
   const rowMethods = model.spec?.mode === "per_method" && model.spec.method_column === ROW_METHOD_COLUMN ? Object.keys(model.spec.methods) : null;
   const rowMethod = String(row[ROW_METHOD_COLUMN] ?? "");
   const tripField = ghg === 7 && rowMethod === "distance_based" ? distanceFieldOf(model.spec?.methods[rowMethod]) : null;
-  const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row));
+  // S3-5: a row calculated from the amount spent takes Amount, Currency and Invoice date instead of
+  // the quantity fields, unless its method multiplies fields into the amount (Category 15).
+  const spend = calc.spendDetail(row);
+  const spendForm = calc.usesSpendForm(row);
+  const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row) && (!spendForm || c.column_type === "select"));
+  // The spend form's own fields replace the form's older "Spent value" / "Currency" extras.
+  const extras = spendForm ? allExtras.filter((f) => !SPEND_EXTRA_KEYS.has(f.key)) : allExtras;
   const firstSelect = visible.find((c) => c.column_type === "select")?.column_name;
   const unitOptions = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
 
@@ -181,15 +191,19 @@ export function EntryRow(p: Props) {
               />
             );
           })}
-        <Select<string>
-          label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
-          value={row.activity_data_unit || null}
-          onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
-          options={unitOptions.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
-          placeholder="Choose a unit"
-          help={expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined}
-          error={fieldError("activity_data_unit")}
-        />
+        {spendForm ? (
+          <SpendFields row={row} onChange={p.onChange} amountError={fieldError("values")} currencyError={fieldError("currency")} />
+        ) : (
+          <Select<string>
+            label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
+            value={row.activity_data_unit || null}
+            onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
+            options={unitOptions.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
+            placeholder="Choose a unit"
+            help={expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined}
+            error={fieldError("activity_data_unit")}
+          />
+        )}
       </div>
 
       {tripField && <TripCalculator field={tripField} onUse={(km) => p.onChange(tripField, String(km))} />}
@@ -229,7 +243,11 @@ export function EntryRow(p: Props) {
 
       <footer className="flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="text-xs text-muted">
-          {factor ? (
+          {spend?.outcome.ok ? (
+            <span className="font-num" data-testid="spend-preview">
+              {spendPreviewLine(spend.spend, spend.outcome, spend.factor)}
+            </span>
+          ) : factor ? (
             <>
               Factor {factor.factor_value} kgCO₂e per {factor.denominator_unit}, {factor.year}
               {factor.year === p.factorYear ? (
@@ -258,7 +276,8 @@ export function EntryRow(p: Props) {
               {result.status === "converted" && <span className="block text-xs font-normal text-muted">unit converted</span>}
             </p>
           ) : (
-            <p className={cn("text-sm", p.showIssue ? "text-bad" : "text-muted")}>{p.issue?.message ?? result.status}</p>
+            // No issue but no figure: a spend rate loading or that failed to load; a muted note, never an error.
+            <p className={cn("text-sm", p.showIssue && p.issue ? "text-bad" : "text-muted")}>{p.issue?.message ?? result.status}</p>
           )}
           {cat3 && (
             <p className="font-num text-xs text-muted">

@@ -165,10 +165,11 @@ export default function Scope3ScreeningPage() {
 
       {open && (
         <CategoryDrawer
-          key={`${open.n}-${year}`}
+          key={`${open.n}-${year}-${yearType}`}
           category={open}
           companyId={companyId}
           year={year}
+          yearType={yearType}
           editable={editable}
           canExtrapolate={!!data?.can_extrapolate}
           onClose={() => setOpenN(null)}

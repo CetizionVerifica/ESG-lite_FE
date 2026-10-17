@@ -390,6 +390,7 @@ export const SCOPE3_WARNING_CODES = [
   "WTT_ALREADY_IN_FACTOR",
   "FX_RATE_FALLBACK",
   "NO_DEFLATOR",
+  "DEFLATOR_FALLBACK_YEAR",
   "ESTIMATED_DISTANCE",
   "TRANSPORT_PAID_BY_MISMATCH",
 ] as const;
@@ -494,8 +495,10 @@ export interface ScreeningInput {
   note?: string | null;
 }
 
+/** `year_type` is part of the key (ESG-lite #169): CY 2026 and FY 2026 keep separate figures; the server assumes CY when it's left out. */
 export interface PutScreeningInputsBody {
   year: number;
+  year_type?: YearType;
   inputs: ScreeningInput[];
 }
 
