@@ -86,19 +86,31 @@ export function methodForAnswer(mbc: MethodByChoice | null, answer: unknown): st
  * A new row with the form's defaults filled in where it is empty: columns on
  * the row, extra fields in `_extra_data`. Hidden fields get theirs too, so the
  * preview total matches what the server stores (it fills them the same way).
+ * What was filled is remembered in `_defaults` (see ModalRow).
  */
 export function withDefaults(row: ModalRow, settings: FieldSettings, extraKeys: readonly string[]): ModalRow {
   const next: ModalRow = { ...row, _extra_data: { ...(row._extra_data ?? {}) } };
+  const filled: Record<string, string> = { ...(row._defaults ?? {}) };
   for (const [key, s] of Object.entries(settings)) {
     if (s.default === undefined) continue;
     const value = String(s.default);
     if (extraKeys.includes(key)) {
       const extra = next._extra_data as Record<string, unknown>;
-      if (!String(extra[key] ?? "").trim()) extra[key] = value;
+      if (!String(extra[key] ?? "").trim()) {
+        extra[key] = value;
+        filled[`_extra_data.${key}`] = value;
+      }
     } else {
       const k = Object.keys(next).find((name) => name.toLowerCase() === key.toLowerCase()) ?? key;
-      if (!String(next[k] ?? "").trim()) next[k] = value;
+      if (!String(next[k] ?? "").trim()) {
+        next[k] = value;
+        filled[k] = value;
+      }
     }
   }
+  if (Object.keys(filled).length) next._defaults = filled;
   return next;
 }
+
+/** True when the row's value for `key` is only what the form filled in. */
+export const isDefaultValue = (row: ModalRow, key: string, value: unknown): boolean => row._defaults?.[key] !== undefined && row._defaults[key] === String(value);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fieldLabelFor, methodForAnswer, readFormSettings, settingFor, withDefaults } from "./settings";
+import { fieldLabelFor, isDefaultValue, methodForAnswer, readFormSettings, settingFor, withDefaults } from "./settings";
 
 describe("readFormSettings (SE-2 fields on a form)", () => {
   it("reads what fits and leaves out what doesn't", () => {
@@ -34,6 +34,10 @@ describe("readFormSettings (SE-2 fields on a form)", () => {
 
   it("a new row gets the defaults where it is empty, hidden ones too, extras in _extra_data", () => {
     const row = withDefaults({ id: 1, Vehicle: "", Share: "50", _extra_data: { paid_by: "" } }, { vehicle: { default: "hgv", hidden: true }, Share: { default: 100 }, paid_by: { default: "We paid" } }, ["paid_by"]);
-    expect(row).toEqual({ id: 1, Vehicle: "hgv", Share: "50", _extra_data: { paid_by: "We paid" } });
+    // What was filled is remembered, so it doesn't count as typed input (Add data's rowHasInput).
+    expect(row).toEqual({ id: 1, Vehicle: "hgv", Share: "50", _extra_data: { paid_by: "We paid" }, _defaults: { Vehicle: "hgv", "_extra_data.paid_by": "We paid" } });
+    expect(isDefaultValue(row, "Vehicle", "hgv")).toBe(true);
+    expect(isDefaultValue(row, "Vehicle", "van")).toBe(false);
+    expect(isDefaultValue(row, "Share", "50")).toBe(false);
   });
 });

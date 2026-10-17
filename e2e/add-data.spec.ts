@@ -919,3 +919,90 @@ test("a Scope 2 row previews its Category 3 rows: upstream of electricity and T&
   // The Cat 3 explainer is a button, so keyboard users reach it too.
   await expect(cat3.getByRole("button", { name: "What is Cat 3?" })).toBeVisible();
 });
+
+test("SE-3: a User fills the form in the client's words; hidden details and the fixed unit are filled for them", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  await page.route(/\/user\/column-configs\/site\/4\/category\/9(\?|$)/, (route) =>
+    route.fulfill({
+      json: [
+        {
+          ...config,
+          field_settings: { fuel_type: { label: "Which fuel did you burn?", help: "As on the delivery note" }, po_number: { hidden: true, default: "PO-2025" } },
+          units: { fixed: "litre" },
+        },
+      ],
+    }),
+  );
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await expect(row.getByLabel("Which fuel did you burn?")).toBeVisible();
+  await expect(row.getByText("As on the delivery note")).toBeVisible();
+  await expect(row.getByTestId("fixed-unit")).toHaveText(/litre/);
+  await expect(row.getByLabel("Unit")).toHaveCount(0);
+  // What the form filled in isn't something the User typed: leaving the untouched form doesn't ask.
+  await page.getByRole("link", { name: "Current Month" }).first().click();
+  await page.waitForURL(/\/my-month/);
+  await expect(page.getByRole("dialog", { name: "Leave with rows not sent?" })).toHaveCount(0);
+
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await row.getByLabel("Which fuel did you burn?").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
+  // The hidden PO number isn't offered.
+  await expect(row.getByText("More details")).toHaveCount(0);
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0].body).toMatchObject({ activity_data_unit: "litre", activity_data: { fuel_type: "diesel", quantity: "1600" }, extra_data: { po_number: "PO-2025" } });
+  expect(created[0].body.activity_data).not.toHaveProperty("_defaults");
+});
+
+test("SE-3: a User answers the form's question; the answer picks the method, with no method words", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  // A freight form whose question "What does your record show?" picks the method (SE-2 method_by_choice).
+  await routeTransport(page, {
+    pk_id: 21,
+    config_name: "Freight",
+    columns: [
+      { pk_id: 1, column_name: "record_type", column_type: "select" },
+      { pk_id: 2, column_name: "Fuel used (litres)", column_type: "number" },
+      { pk_id: 3, column_name: "Weight (tonne)", column_type: "number" },
+      { pk_id: 4, column_name: "Distance travelled", column_type: "number" },
+    ],
+    column_options: { "1": [{ id: "fuel_bill", label: "Fuel bill" }, { id: "trip", label: "Trip distance" }] },
+    calculation: {
+      mode: "per_method",
+      method_column: "record_type",
+      methods: {
+        fuel_bill: { multiply: ["Fuel used (litres)"], activity_unit: "litre" },
+        trip: { multiply: ["Weight (tonne)", "Distance travelled"], activity_unit: "tonne.km" },
+      },
+    },
+    method_options: [
+      { method: "fuel_based", units: ["litre"] },
+      { method: "distance_based", units: ["tonne.km"] },
+    ],
+    method_by_choice: { column: "record_type", map: { fuel_bill: "fuel_based", trip: "distance_based" } },
+    field_settings: { record_type: { label: "What does your record show?" } },
+  });
+  await page.goto("/data/new?site=4&category=13&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("What does your record show?").selectOption({ label: "Trip distance" });
+  await row.getByLabel("Emission category").selectOption({ label: "Road - HGV (all diesel) - All rigids [tonne.km]" });
+  await row.getByLabel("Weight (Tonne)", { exact: true }).fill("10");
+  await row.getByLabel("Distance Travelled", { exact: true }).fill("500");
+  // The answer's method offers its own units only.
+  await expect(row.getByLabel("Unit").locator("option")).toHaveText(["Choose a unit", "tonne.km"]);
+  await expect(row.getByLabel("Unit")).toHaveValue("tonne.km");
+  // 10 t × 500 km × 0.2408 kg/tonne.km = 1.20 t
+  await expect(row.getByText("= 1.20 tCO₂e")).toBeVisible();
+  for (const text of ["Calculation method", "Type of record", "Weight × distance", "From fuel used", "Distance-based"]) {
+    await expect(row.getByText(text, { exact: false })).toHaveCount(0);
+  }
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0].body).toMatchObject({ activity_data_unit: "tonne.km", activity_data: { record_type: "trip", "@method": "distance_based" } });
+});

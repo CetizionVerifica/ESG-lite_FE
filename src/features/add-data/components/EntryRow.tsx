@@ -23,6 +23,9 @@ import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 import { SPEND_FIELDS, spendPreviewLine } from "../../../lib/scope3/spend";
 import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
 import { allMethodUnits, methodForUnit, plainProblem } from "../../../lib/entryDetail";
+import { methodForAnswer, settingFor } from "../../../lib/forms/settings";
+import { columnTitle, rowValue } from "../../../lib/emissions/form";
+import { normalizeUnitKey } from "../../../lib/emissions/emissionCalc";
 import { supplierMethodOf } from "../logic/supplier";
 import { SpendFields } from "./SpendFields";
 
@@ -62,6 +65,10 @@ type Props = {
    * percentages and clears nothing, and the method alone isn't input (rowHasInput).
    */
   onRowMethod?: (method: string) => void;
+  /** SE-3: sets values the form fills in (its currency), as is and remembered in `_defaults`. */
+  onPatch?: (patch: Partial<ModalRow>) => void;
+  /** SE-2/SE-3: the client's default currency, for a spend row on a form that fixes none. */
+  defaultCurrency?: string | null;
   onExtraChange: (key: string, value: string) => void;
   onDuplicate: () => void;
   onRemove: () => void;
@@ -134,15 +141,20 @@ export function EntryRow(p: Props) {
   // (spend keeps its own Amount and Currency fields), and the unit says which method the row is, as the
   // engine records it (methodForUnit). Before, the units of the form's first method were the only ones.
   const methodPicksFields = model.spec?.mode === "per_method" && model.spec.method_column === ROW_METHOD_COLUMN;
-  const byUnit = !p.showCalcDetail && model.methodOptions.length > 1 && !methodPicksFields;
+  // SE-3: the form's question in the client's words: the answer picks the method (SE-2 method_by_choice).
+  // An answer the map doesn't name falls back to the unit, as on a form with no question.
+  const settings = model.settings;
+  const fieldSetting = (key: string) => settingFor(settings.fieldSettings, key);
+  const answered = settings.methodByChoice ? methodForAnswer(settings.methodByChoice, rowValue(row, settings.methodByChoice.column)) : null;
+  const byUnit = !p.showCalcDetail && model.methodOptions.length > 1 && !methodPicksFields && !answered;
   const unitMethods = model.methodOptions.filter((o) => o.method !== "spend_based");
-  const unitMethod = byUnit ? methodForUnit(unitMethods, row.activity_data_unit) : null;
+  const unitMethod = answered ?? (byUnit ? methodForUnit(unitMethods, row.activity_data_unit) : null);
   const setRowMethod = useRef(p.onRowMethod);
   setRowMethod.current = p.onRowMethod;
   useEffect(() => {
     if (unitMethod && rowMethod !== unitMethod) setRowMethod.current?.(unitMethod);
   }, [unitMethod, rowMethod]);
-  const methodUnits = byUnit ? allMethodUnits(unitMethods) : unitsForMethod(model.methodOptions, rowMethod);
+  const methodUnits = answered ? unitsForMethod(model.methodOptions, answered) : byUnit ? allMethodUnits(unitMethods) : unitsForMethod(model.methodOptions, rowMethod);
   const tripField = ghg === 7 && rowMethod === "distance_based" ? distanceFieldOf(model.spec?.methods[rowMethod]) : null;
   // S3-5: a row calculated from the amount spent takes Amount, Currency and Invoice date instead of
   // the quantity fields, unless its method multiplies fields into the amount (Category 15).
@@ -153,9 +165,26 @@ export function EntryRow(p: Props) {
   const dqMethod: Method | null = spend ? "spend_based" : isMethod(rowMethod) ? rowMethod : (model.methodOptions[0]?.method ?? (ghg !== null ? "average_data" : null));
   const hasEvidence = !!bill || (p.evidence?.items.length ?? 0) > 0;
   const dq = dqMethod && factor && ghg !== null ? autoDq({ method: dqMethod, factor, siteCountry: p.siteCountry, reportingYear: p.reportingYear, hasEvidence }) : null;
-  const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row) && (!spendForm || c.column_type === "select"));
+  // SE-3: a hidden field isn't shown (the server fills its default).
+  const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row) && !fieldSetting(c.column_name)?.hidden && (!spendForm || c.column_type === "select"));
+  // SE-3: the currency the form fixes, else the client's default; a spend row starts in it.
+  const fixedCurrency = settings.fixedCurrency ?? p.defaultCurrency ?? null;
+  const currencyNow = String(row[SPEND_FIELDS.currency] ?? "");
+  const patchRow = useRef(p.onPatch);
+  patchRow.current = p.onPatch;
+  useEffect(() => {
+    if (!spendForm || !fixedCurrency || currencyNow) return;
+    patchRow.current?.({
+      [SPEND_FIELDS.currency]: fixedCurrency,
+      activity_data_unit: fixedCurrency,
+      _defaults: { ...(row._defaults ?? {}), [SPEND_FIELDS.currency]: fixedCurrency, activity_data_unit: fixedCurrency },
+    });
+  }, [spendForm, fixedCurrency, currencyNow, row._defaults]);
+  // SE-3: a fixed unit shows as text (a bill's other unit keeps the select, and the server refuses it).
+  const fixedUnitText = !!settings.fixedUnit && (!row.activity_data_unit || normalizeUnitKey(row.activity_data_unit) === normalizeUnitKey(settings.fixedUnit));
   // The spend form's own fields replace the form's older "Spent value" / "Currency" extras.
-  const extras = spendForm ? allExtras.filter((f) => !SPEND_EXTRA_KEYS.has(f.key)) : allExtras;
+  // SE-3: a hidden detail isn't offered either (the server fills its default).
+  const extras = (spendForm ? allExtras.filter((f) => !SPEND_EXTRA_KEYS.has(f.key)) : allExtras).filter((f) => !fieldSetting(f.key)?.hidden);
   const firstSelect = visible.find((c) => c.column_type === "select")?.column_name;
   // A method that names its units (S3-3 method_options) offers only those.
   const unitOptions = [
@@ -258,12 +287,19 @@ export function EntryRow(p: Props) {
                 row={row}
                 onChange={p.onChange}
                 labelExtra={labelExtra}
-                help={p.showCalcDetail && ghg === 6 && c.column_name === firstSelect ? TRAVEL_MODE_NOTE : undefined}
+                labelText={fieldSetting(c.column_name)?.label ?? columnTitle(c.column_name)}
+                readOnly={!!fieldSetting(c.column_name)?.readonly}
+                help={fieldSetting(c.column_name)?.help ?? (p.showCalcDetail && ghg === 6 && c.column_name === firstSelect ? TRAVEL_MODE_NOTE : undefined)}
               />
             );
           })}
         {spendForm ? (
-          <SpendFields row={row} onChange={p.onChange} amountError={fieldError("values")} currencyError={fieldError("currency")} showCalcDetail={p.showCalcDetail} />
+          <SpendFields row={row} onChange={p.onChange} amountError={fieldError("values")} currencyError={fieldError("currency")} showCalcDetail={p.showCalcDetail} fixedCurrency={fixedCurrency} />
+        ) : fixedUnitText ? (
+          <div className="text-sm" data-testid="fixed-unit">
+            <span className="block text-xs font-medium text-muted">Unit</span>
+            <span className="mt-1 block font-num text-ink">{settings.fixedUnit}</span>
+          </div>
         ) : (
           <Select<string>
             label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
@@ -289,7 +325,7 @@ export function EntryRow(p: Props) {
             More details
           </summary>
           <div className="pt-3">
-            <ExtraFields fields={extras} row={row} onChange={p.onExtraChange} />
+            <ExtraFields fields={extras} row={row} onChange={p.onExtraChange} settings={settings.fieldSettings} />
           </div>
         </details>
       )}

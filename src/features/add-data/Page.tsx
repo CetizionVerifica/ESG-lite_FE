@@ -29,6 +29,7 @@ import { ExistingEntries } from "./components/ExistingEntries";
 import { editOf, fixTarget, rowFromEntry, savedExcludingEdits } from "./logic/existing";
 import { isScope2, splitFeraFactors, upstreamSubFor } from "../../lib/scope3/fera";
 import type { Cat3Calc } from "./components/EntryRow";
+import { companyOfUserSite } from "../../lib/entryDetail";
 
 const STEPS = [
   { id: "context", label: "What are you reporting?" },
@@ -48,6 +49,8 @@ export default function AddDataPage() {
   const categoryId = num(params.get("category"));
   // SE-1 · simple-entry §8: a contributor never picks a method or reads data quality; the form decides.
   const calcDetail = useCalcDetailForSite(siteId);
+  // SE-2/SE-3: the client's default currency (a spend row on a form that fixes none starts in it).
+  const defaultCurrency = (companyOfUserSite(user, siteId) as { default_currency?: string | null } | null)?.default_currency ?? null;
   const period = parseEntryPeriod(params.get("period"));
   const site = sites.find((s) => s.site_id === siteId);
   const categories = entryCategories(site);
@@ -343,6 +346,7 @@ export default function AddDataPage() {
         siteCountry={siteCountry.data ?? null}
         methodErrors={methodErrors}
         showCalcDetail={calcDetail}
+        defaultCurrency={defaultCurrency}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
       />

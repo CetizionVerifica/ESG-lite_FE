@@ -144,7 +144,7 @@ export function buildPayload(
     if (key === "id") continue;
     if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
     // Private row state: FERA flag, mapping key, the bill a row came from, the saved entry it edits.
-    if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf" || key === "_editSaved") continue;
+    if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf" || key === "_editSaved" || key === "_defaults") continue;
     if ((SUPPLIER_ROW_KEYS as readonly string[]).includes(key)) continue;
     // The supplier methods go in `method`; "@method" only matters to a spec that reads it (S3-9).
     if (key === ROW_METHOD_COLUMN && supplierMethodOf(row)) continue;

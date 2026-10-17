@@ -837,3 +837,45 @@ exports[`Context 4 · Bahrain × FERA (fallbackToRaw) · monthly 2025-09 > match
   },
 ]
 `;
+
+exports[`Context 5 · Bahrain × Upstream transport · a form's hidden default and fixed unit (SE-3) > matches the golden outputs 1`] = `
+[
+  {
+    "activity": 1000,
+    "expectedUnit": "litre",
+    "factorId": 16,
+    "result": {
+      "status": "ok",
+      "value": 3.12,
+    },
+    "row": {
+      "Fuel used (litres)": "1000",
+      "Your share of the load (%)": "100",
+      "_defaults": {
+        "Your share of the load (%)": "100",
+      },
+      "_extra_data": {},
+      "activity_data_unit": "litre",
+      "emission_category": "Fuel - Diesel (average biofuel blend) [litre]",
+      "id": 1,
+    },
+  },
+  {
+    "activity": 1000,
+    "expectedUnit": "litre",
+    "factorId": 16,
+    "result": {
+      "status": "ok",
+      "value": 1.56,
+    },
+    "row": {
+      "Fuel used (litres)": "1000",
+      "Your share of the load (%)": "50",
+      "_extra_data": {},
+      "activity_data_unit": "litre",
+      "emission_category": "Fuel - Diesel (average biofuel blend) [litre]",
+      "id": 2,
+    },
+  },
+]
+`;

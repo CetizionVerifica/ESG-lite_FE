@@ -8,7 +8,7 @@
 // on the legacy page.
 import { ROW_METHOD_COLUMN, resolveSpecMethod, specNumericColumns } from "./emissionCalc";
 import { type MethodOptions, readMethodOptions, unitsForMethod } from "../scope3/dq";
-import { type FormSettings, readFormSettings } from "../forms/settings";
+import { type FormSettings, readFormSettings, withDefaults } from "../forms/settings";
 import type {
   CalculationSpec,
   ColumnConfig,
@@ -276,7 +276,21 @@ export function newRow(m: FormModel, id: number): ModalRow {
     const only = rowMethodChoices(m);
     if (only.length === 1) row[ROW_METHOD_COLUMN] = only[0];
   }
-  return row;
+  // SE-3: the form's defaults (hidden ones too, as the server fills them) and its fixed unit, with
+  // the emission category they map to. `_defaults` keeps them from counting as typed input.
+  const out = withDefaults(row, m.settings.fieldSettings, m.extraFields.map((f) => f.key));
+  if (m.settings.fixedUnit) {
+    out.activity_data_unit = m.settings.fixedUnit;
+    out._defaults = { ...(out._defaults ?? {}), activity_data_unit: m.settings.fixedUnit };
+  }
+  const auto = out._defaults ? autoEmissionCategory(m, out) : null;
+  if (auto) {
+    out.emission_category = auto.category;
+    out._ecmKey = auto.key;
+    out._defaults = { ...out._defaults, emission_category: auto.category };
+  }
+  // A form with no defaults keeps the row exactly as before.
+  return out._defaults ? out : row;
 }
 
 /**
