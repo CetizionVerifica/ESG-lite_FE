@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Sparkles } from "lucide-react";
 import { Button, Callout, TabPanel, Tabs, formatNumber } from "../../../ui";
@@ -16,6 +16,7 @@ import { FromBill } from "./FromBill";
 import type { RowEvidence } from "../hooks/useRowEvidence";
 import { DistanceDrawer } from "../components/distance/DistanceDrawer";
 import { distanceTarget, type DistanceField } from "../logic/distance";
+import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 
 type Props = {
   rows: ModalRow[];
@@ -41,6 +42,14 @@ type Props = {
   /** Bulk upload (P27) for this site, category and period. */
   bulkUploadHref: string;
   evidence: RowEvidence;
+  /** S3-6: the Supplier field for a row (Category 1 and 2 only). */
+  renderSupplier?: (row: ModalRow) => ReactNode;
+  /** The site's country (ISO alpha-2) for the data quality preview (S3-3). */
+  siteCountry?: string | null;
+  /** Rows the server refused for their method (METHOD_NOT_ALLOWED): the method and the server's words. */
+  methodErrors?: Record<number, { method: string; message: string }>;
+  /** SE-1: Managers and above (or a company set to full detail) see the method and data quality. */
+  showCalcDetail?: boolean;
   onBack: () => void;
   onNext: () => void;
 };
@@ -81,11 +90,16 @@ export function EnterRows(p: Props) {
         comparison={p.comparisons[i]}
         canRemove={canRemove}
         ghgCategory={p.ghgCategory}
+        siteCountry={p.siteCountry}
+        showCalcDetail={p.showCalcDetail}
+        // Shown while the row still has the refused method; picking another clears it.
+        methodError={p.methodErrors?.[row.id]?.method === row[ROW_METHOD_COLUMN] ? p.methodErrors?.[row.id]?.message : undefined}
         onChange={(column, value) => p.dispatch({ type: "change", model: p.model, id: row.id, column, value })}
         onExtraChange={(key, value) => p.dispatch({ type: "extra", id: row.id, key, value })}
         onDuplicate={() => p.dispatch({ type: "duplicate", id: row.id })}
         onRemove={() => p.dispatch({ type: "remove", id: row.id })}
         onCalculateDistance={(column, field) => setDistanceFor({ rowId: row.id, column, field })}
+        supplierSlot={p.renderSupplier?.(row)}
         evidence={
           billOf(row)
             ? undefined
@@ -187,9 +201,10 @@ export function EnterRows(p: Props) {
         open={!!distanceFor && !!distanceRow}
         onClose={() => setDistanceFor(null)}
         unit={String(distanceRow?.activity_data_unit ?? "km")}
-        onUse={(distance) => {
+        onUse={(distance, estimate) => {
           if (distanceFor) {
-            p.dispatch({ type: "change", model: p.model, id: distanceFor.rowId, column: distanceTarget(distanceFor.field, distanceFor.column), value: String(distance) });
+            const column = distanceTarget(distanceFor.field, distanceFor.column);
+            p.dispatch({ type: "distance", model: p.model, id: distanceFor.rowId, column, value: String(distance), estimate });
           }
           setDistanceFor(null);
         }}

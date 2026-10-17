@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { setupServer } from "msw/node";
 import type { Scope3ErrorBody } from "../../lib/scope3/contracts";
-import { type Scope3CategoryRow, type Scope3Report, resetScope3Mocks, scope3Handlers } from "./scope3";
+import { CAT1_FORM_METHODS, type MockEmission, type Scope3CategoryRow, type Scope3Report, resetScope3Mocks, scope3Handlers } from "./scope3";
+import { readMethodOptions } from "../../lib/scope3/dq";
 
 const server = setupServer(...scope3Handlers);
 const API = "http://api.test";
@@ -38,9 +39,11 @@ describe("Scope 3 mock handlers", () => {
     expect(rows.find((r) => r.ghg_category === 2)?.status).toBe("included");
   });
 
-  it("only takes cradle-to-gate supplier figures", async () => {
+  it("only takes cradle-to-gate supplier figures, unless the boundary is confirmed", async () => {
     const bad = await post("/suppliers/1/factors", { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_grave", reference_year: 2025, gwp_set: "AR6" });
     expect(((await bad.json()) as Scope3ErrorBody).code).toBe("SUPPLIER_FACTOR_BOUNDARY");
+    const confirmed = await post("/suppliers/1/factors", { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_grave", reference_year: 2025, gwp_set: "AR6", confirm_boundary: true });
+    expect(confirmed.status).toBe(201);
     const ok = await post("/suppliers/1/factors", { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6" });
     expect(ok.status).toBe(201);
   });
@@ -84,8 +87,8 @@ describe("Scope 3 mock handlers", () => {
 
   it("keeps server-owned supplier factor fields and 404s an unknown supplier", async () => {
     const body = { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6", source: "supplier_request", company_id: 2, id: 99 };
-    const made = (await (await post("/suppliers/1/factors", body)).json()) as { id: number; company_id: number; source: string };
-    expect(made).toMatchObject({ company_id: 1, source: "manual" });
+    const made = (await (await post("/suppliers/1/factors", body)).json()) as { id: number; supplier_id: number; source: string };
+    expect(made).toMatchObject({ supplier_id: 1, source: "manual" });
     expect(made.id).not.toBe(99);
     expect((await post("/suppliers/999/factors", body)).status).toBe(404);
   });
@@ -142,5 +145,52 @@ describe("Scope 3 mock handlers", () => {
     expect((await post("/user/my-month/nothing", { site_id: 1, category_id: 2, month: "2026-09-01" })).status).toBe(201);
     const del = await fetch(`${API}/user/my-month/nothing`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ site_id: 1, category_id: 2, month: "2026-09-01" }) });
     expect(del.status).toBe(204);
+  });
+});
+
+describe("S3-3 method and data quality mocks", () => {
+  type List = { data: MockEmission[]; total: number };
+  const list = async (query = "") => (await (await fetch(`${API}/user/emissions${query}`)).json()) as List;
+
+  it("returns method, dq, data_type and is_estimate on every row", async () => {
+    const { data } = await list();
+    expect(data.map((e) => e.method)).toEqual(["supplier_specific", "average_data", "spend_based", null]);
+    expect(data[0].dq).toMatchObject({ overall: 1, source: "auto" });
+    expect(data[2].dq).toMatchObject({ overall: 3, reliability: 3 });
+    expect(data[0].data_type).toBe("primary");
+    expect(data[3].dq).toBeNull();
+  });
+
+  it("filters by method= and dq_max=, leaving unscored rows out of dq_max, and refuses bad values", async () => {
+    expect((await list("?method=spend_based")).data.map((e) => e.pk_id)).toEqual([503]);
+    expect((await list("?dq_max=2")).data.map((e) => e.pk_id)).toEqual([501, 502]);
+    expect((await list("?dq_max=1")).data.map((e) => e.pk_id)).toEqual([501]);
+    expect((await fetch(`${API}/user/emissions?method=spend`)).status).toBe(400);
+    expect((await fetch(`${API}/user/emissions?dq_max=4`)).status).toBe(400);
+  });
+
+  it("serves the Category 1 form's method_options in the contract shape", async () => {
+    const [form] = (await (await fetch(`${API}/user/column-configs/site/1/category/11`)).json()) as { method_options: unknown }[];
+    expect(readMethodOptions(form.method_options)).toEqual(CAT1_FORM_METHODS);
+  });
+
+  it("saves a method the form offers with its score, and refuses one it doesn't with METHOD_NOT_ALLOWED", async () => {
+    const ok = await post("/user/emissions", { site_id: 1, category_id: 11, activity_data: { amount: "1000" }, method: "spend_based", is_estimate: true });
+    expect(ok.status).toBe(201);
+    const saved = ((await ok.json()) as { emission: MockEmission }).emission;
+    expect(saved).toMatchObject({ method: "spend_based", is_estimate: true, data_type: "secondary" });
+    expect(saved.dq?.overall).toBe(3);
+
+    const refused = await post("/user/emissions", { site_id: 1, category_id: 11, activity_data: { amount: "1" }, method: "hybrid" });
+    expect(refused.status).toBe(400);
+    const body = (await refused.json()) as Scope3ErrorBody;
+    expect(body.code).toBe("METHOD_NOT_ALLOWED");
+    expect(body.message).toMatch(/This form offers: Supplier's own figure, Average data, From the amount spent/);
+
+    const unknown = await post("/user/emissions", { site_id: 1, category_id: 11, activity_data: { amount: "1" }, method: "guess" });
+    expect(unknown.status).toBe(400);
+    // No method: the form's first, most specific one.
+    const fallback = await post("/user/emissions", { site_id: 1, category_id: 11, activity_data: { amount: "1" } });
+    expect(((await fallback.json()) as { emission: MockEmission }).emission.method).toBe("supplier_specific");
   });
 });

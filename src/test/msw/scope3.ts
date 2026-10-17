@@ -11,9 +11,15 @@
  * (categories list, screening, the report envelope, plan and survey
  * answers), the shape here is a mock the owning module confirms or changes in
  * its own PR. Report rows follow `Scope3ReportRow` (§5).
+ *
+ * S3-3 adds the emission rows' method and data quality: `GET /user/emissions`
+ * with `method=` / `dq_max=`, `POST /user/emissions` with `method`,
+ * `is_estimate` and `METHOD_NOT_ALLOWED`, and the sample Category 1 form's
+ * `method_options` (`GET /user/column-configs/site/1/category/11`).
  */
 import { http, HttpResponse } from "msw";
 import type { Screening, ScreeningCategory } from "../../services/scope3ScreeningService";
+import type { FacilityData, SupplierFigure } from "../../services/scope3SuppliersService";
 import {
   BOUNDARY_STATUSES,
   type BulkApproveBody,
@@ -47,9 +53,10 @@ import {
   type Scope3ErrorCode,
   type SubmitEmissionsBody,
   type Supplier,
-  type SupplierFactor,
   type UnlockPeriodBody,
 } from "../../lib/scope3/contracts";
+import { type Dq, type MethodOptions, autoDq, dataTypeFor, isMethod, methodLabel, parseDqMax } from "../../lib/scope3/dq";
+import type { EmissionData } from "../../services/emissionService";
 
 const COMPANY_ID = 1;
 
@@ -132,9 +139,24 @@ const initialSuppliers = (): Supplier[] => [
   { supplier_id: 2, company_id: COMPANY_ID, name: "Gulf Copper Rod LLC", country: "AE", email: null },
 ];
 
-const initialSupplierFactors = (): SupplierFactor[] => [
-  { id: 1, company_id: COMPANY_ID, supplier_id: 1, item: "Aluminium wire rod", unit: "kg", kgco2e_per_unit: 4.2, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6", evidence_document_id: 31, source: "supplier_request" },
-  { id: 2, company_id: COMPANY_ID, supplier_id: 2, item: "Copper rod 8 mm", unit: "kg", kgco2e_per_unit: 3.1, boundary: "cradle_to_gate", reference_year: 2024, gwp_set: "AR6", evidence_document_id: null, source: "manual" },
+const figure = (f: Pick<SupplierFigure, "id" | "supplier_id" | "item" | "unit" | "kgco2e_per_unit" | "reference_year" | "source"> & Partial<SupplierFigure>): SupplierFigure => ({
+  supplier_factor_id: f.id,
+  boundary: "cradle_to_gate",
+  gwp_set: "AR6",
+  evidence_document_id: null,
+  material_factor_id: null,
+  supplier_request_id: null,
+  has_evidence: false,
+  ...f,
+});
+
+const initialSupplierFactors = (): SupplierFigure[] => [
+  figure({ id: 1, supplier_id: 1, item: "Aluminium wire rod", unit: "kg", kgco2e_per_unit: 4.2, reference_year: 2025, source: "supplier_request", material_factor_id: 12, supplier_request_id: 3, has_evidence: true }),
+  figure({ id: 2, supplier_id: 2, item: "Copper rod 8 mm", unit: "kg", kgco2e_per_unit: 3.1, reference_year: 2024, source: "manual" }),
+];
+
+const initialFacilityData = (): FacilityData[] => [
+  { id: 1, supplier_facility_data_id: 1, supplier_id: 2, year: 2025, scope12_tco2e: 12500, output_qty: 4_000_000, output_unit: "kg", allocation_key: "mass" },
 ];
 
 const FX_RATES: FxRate[] = [
@@ -255,11 +277,69 @@ let categories = initialCategories();
 let consolidation: ConsolidationApproach = "operational_control";
 let suppliers = initialSuppliers();
 let supplierFactors = initialSupplierFactors();
+let facilityData = initialFacilityData();
 let baseYear = initialBaseYear();
 let recalculations = initialRecalculations();
 let locks = initialLocks();
 let investments = initialInvestments();
 let productSales = initialProductSales();
+
+/** S3-3: the sample Category 1 form (site 1 × "Purchased materials", category 11) and what it offers. */
+export const CAT1_FORM_METHODS: MethodOptions = [
+  { method: "supplier_specific", units: ["kg"] },
+  { method: "average_data", units: ["kg", "tonne"] },
+  { method: "spend_based", units: ["USD", "EUR"] },
+];
+const CAT1_FORM = {
+  pk_id: 31,
+  config_name: "Purchased materials",
+  columns: [
+    { pk_id: 1, column_name: "material", column_type: "select" },
+    { pk_id: 2, column_name: "amount", column_type: "number" },
+  ],
+  column_options: { "1": [{ id: "aluminium", label: "Aluminium wire rod" }] },
+  method_options: CAT1_FORM_METHODS,
+};
+const CAT1_CATEGORY = { category_id: 11, category_name: "Purchased materials", scope: "Scope 3", ghg_category: 1 };
+const SITE_1 = { site_id: 1, name: "Hidd plant" };
+
+/** A row as `GET /user/emissions` returns it, with the S3-3 fields. */
+export type MockEmission = EmissionData & { method: string | null; dq: Dq | null; data_type: "primary" | "secondary" | null; is_estimate: boolean };
+
+const factorFor = (method: string) =>
+  method === "spend_based" ? { geography: "GLO", year: 2019, factor_type: "eeio_spend" } : method === "supplier_specific" ? { geography: "NO", year: 2025, factor_type: "supplier" } : { geography: "RER", year: 2025, factor_type: "life_cycle" };
+
+const emissionRow = (pk_id: number, method: string | null, amount: number, extra: Partial<MockEmission> = {}): MockEmission => {
+  const dq = method && isMethod(method) ? autoDq({ method, factor: factorFor(method), siteCountry: "BH", reportingYear: 2026, hasEvidence: method === "supplier_specific" }) : null;
+  return {
+    pk_id,
+    activity_data: { material: "aluminium", amount: String(amount) },
+    total_emission: Math.round(amount * 4.2) / 1000,
+    unit: "tCO2e",
+    date_of_reporting: "2026-09-30",
+    reporting_period: "monthly",
+    activity_data_unit: method === "spend_based" ? "USD" : "kg",
+    status: "pending",
+    created_at: "2026-10-01T09:00:00.000Z",
+    updated_at: "2026-10-01T09:00:00.000Z",
+    site: SITE_1,
+    category: CAT1_CATEGORY,
+    method,
+    dq,
+    data_type: method && isMethod(method) ? dataTypeFor({ method, hasEvidence: method === "supplier_specific" }) : null,
+    is_estimate: false,
+    ...extra,
+  };
+};
+
+const initialEmissions = (): MockEmission[] => [
+  emissionRow(501, "supplier_specific", 1200),
+  emissionRow(502, "average_data", 800),
+  emissionRow(503, "spend_based", 25000),
+  // A Scope 3 row saved before S3-3, not backfilled yet: no method, no score.
+  emissionRow(504, null, 300),
+];
+let emissions = initialEmissions();
 let screeningInputs: ScreeningInput[] = [];
 let nothing: NothingThisMonthBody[] = [];
 
@@ -269,6 +349,7 @@ export function resetScope3Mocks(): void {
   consolidation = "operational_control";
   suppliers = initialSuppliers();
   supplierFactors = initialSupplierFactors();
+  facilityData = initialFacilityData();
   baseYear = initialBaseYear();
   recalculations = initialRecalculations();
   locks = initialLocks();
@@ -276,6 +357,7 @@ export function resetScope3Mocks(): void {
   productSales = initialProductSales();
   screeningInputs = [];
   nothing = [];
+  emissions = initialEmissions();
 }
 
 const needsReason = (status: BoundaryStatus, reason?: string | null) => status !== "included" && !reason?.trim();
@@ -319,14 +401,55 @@ export const scope3Handlers = [
     return HttpResponse.json({ company_id: COMPANY_ID, consolidation_approach: consolidation });
   }),
 
-  // S3-6 suppliers
-  http.get("*/suppliers", () => HttpResponse.json(suppliers)),
+  // S3-6 suppliers (ESG-lite src/scope3/suppliers): the shapes the API returns.
+  http.get("*/suppliers", ({ request }) => {
+    const year = Number(new URL(request.url).searchParams.get("year")) || new Date().getFullYear();
+    return HttpResponse.json({
+      company_id: COMPANY_ID,
+      year,
+      year_type: "CY",
+      can_edit: true,
+      suppliers: suppliers.map((x) => {
+        const factors = supplierFactors.filter((f) => f.supplier_id === x.supplier_id);
+        return {
+          supplier_id: x.supplier_id,
+          name: x.name,
+          country: x.country ?? null,
+          email: x.email ?? null,
+          rows_this_year: 0,
+          tco2e: 0,
+          has_factor: factors.length > 0,
+          factor_count: factors.length,
+          has_facility_data: facilityData.some((f) => f.supplier_id === x.supplier_id),
+          last_request: null,
+        };
+      }),
+    });
+  }),
   http.post<never, Omit<Supplier, "supplier_id" | "company_id">>("*/suppliers", async ({ request }) => {
     const { name, country, email } = await request.json();
     if (!name?.trim()) return invalid("name", "A supplier needs a name.");
-    const supplier: Supplier = { supplier_id: Math.max(0, ...suppliers.map((x) => x.supplier_id)) + 1, company_id: COMPANY_ID, name, country: country ?? null, email: email ?? null, created_by: 4 };
+    const same = suppliers.find((x) => x.name.toLowerCase() === name.trim().toLowerCase());
+    if (same) return HttpResponse.json({ code: "SCOPE3_VALIDATION", message: "The request body is not valid.", details: { field: "name", message: "A supplier with this name already exists.", supplier_id: same.supplier_id } }, { status: 400 });
+    const supplier: Supplier = { supplier_id: Math.max(0, ...suppliers.map((x) => x.supplier_id)) + 1, company_id: COMPANY_ID, name: name.trim(), country: country ?? null, email: email ?? null, created_by: 4 };
     suppliers.push(supplier);
-    return HttpResponse.json(supplier, { status: 201 });
+    return HttpResponse.json({ supplier_id: supplier.supplier_id, name: supplier.name, country: supplier.country, email: supplier.email }, { status: 201 });
+  }),
+  http.get("*/suppliers/coverage", () =>
+    HttpResponse.json({ from: "2026-01-01", to: "2026-12-31", cat12_tco2e: 0, supplier_specific_tco2e: 0, hybrid_tco2e: 0, coverage_pct: null, top_suppliers: [] }),
+  ),
+  http.get("*/suppliers/name-matches", () => HttpResponse.json({ company_id: COMPANY_ID, matches: [] })),
+  http.post("*/suppliers/name-matches", () => HttpResponse.json({ decision: "not_same" })),
+  http.get<{ id: string }>("*/suppliers/:id", ({ params }) => {
+    const x = suppliers.find((s) => s.supplier_id === Number(params.id));
+    if (!x) return notFound("Supplier not found");
+    return HttpResponse.json({
+      supplier: { supplier_id: x.supplier_id, name: x.name, country: x.country ?? null, email: x.email ?? null },
+      factors: supplierFactors.filter((f) => f.supplier_id === x.supplier_id),
+      facility_data: facilityData.filter((f) => f.supplier_id === x.supplier_id),
+      requests: [],
+      can_edit: true,
+    });
   }),
   http.put<{ id: string }, Partial<Supplier>>("*/suppliers/:id", async ({ params, request }) => {
     const supplier = suppliers.find((s) => s.supplier_id === Number(params.id));
@@ -335,22 +458,58 @@ export const scope3Handlers = [
     if (name !== undefined) supplier.name = name;
     if (country !== undefined) supplier.country = country;
     if (email !== undefined) supplier.email = email;
-    return HttpResponse.json(supplier);
+    return HttpResponse.json({ supplier_id: supplier.supplier_id, name: supplier.name, country: supplier.country ?? null, email: supplier.email ?? null });
   }),
   http.get<{ id: string }>("*/suppliers/:id/factors", ({ params }) =>
     suppliers.some((x) => x.supplier_id === Number(params.id))
-      ? HttpResponse.json(supplierFactors.filter((f) => f.supplier_id === Number(params.id)))
+      ? HttpResponse.json({ supplier_id: Number(params.id), factors: supplierFactors.filter((f) => f.supplier_id === Number(params.id)) })
       : notFound("Supplier not found"),
   ),
-  http.post<{ id: string }, Omit<SupplierFactor, "id" | "company_id" | "supplier_id" | "source">>("*/suppliers/:id/factors", async ({ params, request }) => {
+  http.post<{ id: string }, Partial<SupplierFigure> & { confirm_boundary?: boolean }>("*/suppliers/:id/factors", async ({ params, request }) => {
     const supplierId = Number(params.id);
     if (!suppliers.some((x) => x.supplier_id === supplierId)) return notFound("Supplier not found");
     const body = await request.json();
-    if (body.boundary !== "cradle_to_gate") return error("SUPPLIER_FACTOR_BOUNDARY", 422, "A supplier's figure must be cradle-to-gate.");
+    const boundary = body.boundary ?? "cradle_to_gate";
+    if (boundary !== "cradle_to_gate" && body.confirm_boundary !== true) return error("SUPPLIER_FACTOR_BOUNDARY", 422, "A supplier's figure must be cradle-to-gate.");
+    const id = Math.max(0, ...supplierFactors.map((f) => f.id)) + 1;
     // Server-owned fields last, so a body can't set them.
-    const factor: SupplierFactor = { ...body, id: Math.max(0, ...supplierFactors.map((f) => f.id)) + 1, company_id: COMPANY_ID, supplier_id: supplierId, source: "manual" };
+    const factor: SupplierFigure = {
+      item: String(body.item ?? ""),
+      unit: String(body.unit ?? "kg"),
+      kgco2e_per_unit: Number(body.kgco2e_per_unit),
+      reference_year: Number(body.reference_year),
+      gwp_set: body.gwp_set ?? "AR6",
+      boundary,
+      evidence_document_id: null,
+      material_factor_id: null,
+      supplier_request_id: null,
+      has_evidence: false,
+      id,
+      supplier_factor_id: id,
+      supplier_id: supplierId,
+      source: "manual",
+    };
     supplierFactors.push(factor);
     return HttpResponse.json(factor, { status: 201 });
+  }),
+  http.get<{ id: string }>("*/suppliers/:id/facility-data", ({ params }) =>
+    suppliers.some((x) => x.supplier_id === Number(params.id))
+      ? HttpResponse.json({ supplier_id: Number(params.id), facility_data: facilityData.filter((f) => f.supplier_id === Number(params.id)) })
+      : notFound("Supplier not found"),
+  ),
+  http.post<{ id: string }, Omit<FacilityData, "id" | "supplier_facility_data_id" | "supplier_id">>("*/suppliers/:id/facility-data", async ({ params, request }) => {
+    const supplierId = Number(params.id);
+    if (!suppliers.some((x) => x.supplier_id === supplierId)) return notFound("Supplier not found");
+    const body = await request.json();
+    const existing = facilityData.find((f) => f.supplier_id === supplierId && f.year === body.year);
+    if (existing) {
+      Object.assign(existing, body);
+      return HttpResponse.json({ ...existing, replaced: true });
+    }
+    const id = Math.max(0, ...facilityData.map((f) => f.id)) + 1;
+    const row: FacilityData = { ...body, id, supplier_facility_data_id: id, supplier_id: supplierId };
+    facilityData.push(row);
+    return HttpResponse.json({ ...row, replaced: false }, { status: 201 });
   }),
 
   // S3-5 FX (read only)
@@ -603,4 +762,43 @@ export const scope3Handlers = [
     nothing = nothing.filter((n) => !(n.site_id === body.site_id && n.category_id === body.category_id && n.month === body.month));
     return new HttpResponse(null, { status: 204 });
   }),
+
+  // S3-3 method and data quality on every row
+  http.get("*/user/column-configs/site/1/category/11", () => HttpResponse.json([CAT1_FORM])),
+  http.get("*/user/emissions", ({ request }) => {
+    const q = new URL(request.url).searchParams;
+    const method = q.get("method");
+    const dqMax = q.get("dq_max");
+    // As the backend: an unknown method or a dq_max outside 1-3 is a 400, not an empty list.
+    if (method && !isMethod(method)) return HttpResponse.json({ message: "method must be a known calculation method" }, { status: 400 });
+    if (dqMax !== null && parseDqMax(dqMax) === null) return HttpResponse.json({ message: "dq_max must be 1, 2 or 3" }, { status: 400 });
+    const max = parseDqMax(dqMax);
+    // A row with no score has none to meet, so dq_max leaves it out.
+    const data = emissions.filter((e) => (!method || e.method === method) && (max === null || (e.dq !== null && e.dq.overall <= max)));
+    const sum = (status: string) => data.filter((e) => e.status === status).length;
+    return HttpResponse.json({
+      data,
+      total: data.length,
+      summary: { total_emission: data.reduce((t, e) => t + e.total_emission, 0), pending_count: sum("pending"), approved_count: sum("approved"), rejected_count: sum("rejected") },
+    });
+  }),
+  http.post<never, { site_id?: number; category_id?: number; activity_data?: Record<string, unknown>; activity_data_unit?: string; method?: string; is_estimate?: boolean }>(
+    "*/user/emissions",
+    async ({ request }) => {
+      const body = await request.json();
+      if (body.method !== undefined && !isMethod(body.method)) {
+        return HttpResponse.json({ message: "This calculation method isn't one ESGLite knows.", code: "FIELD_INVALID", field: "method" }, { status: 400 });
+      }
+      const sampleForm = body.site_id === 1 && body.category_id === 11;
+      if (sampleForm && body.method && !CAT1_FORM_METHODS.some((o) => o.method === body.method)) {
+        const offered = CAT1_FORM_METHODS.map((o) => methodLabel(o.method)).join(", ");
+        return error("METHOD_NOT_ALLOWED", 400, `This calculation method isn't offered for this category. This form offers: ${offered}.`);
+      }
+      // The engine's method chain: the row's, else the form's first, else average data.
+      const method = body.method ?? (sampleForm ? CAT1_FORM_METHODS[0].method : "average_data");
+      const row = emissionRow(600 + emissions.length, method, Number(body.activity_data?.amount ?? 0), { is_estimate: body.is_estimate ?? false });
+      emissions.push(row);
+      return HttpResponse.json({ message: "Emission created", emission: row, warnings: [] }, { status: 201 });
+    },
+  ),
 ];

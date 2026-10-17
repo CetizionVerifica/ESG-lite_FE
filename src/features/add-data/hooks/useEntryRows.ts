@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { billOf, markEdited } from "../logic/bill";
 import { withCompositeProduct } from "../logic/distance";
 import { applyChange, newRow, setExtraField, type FormModel } from "../logic/form";
+import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import type { ModalRow } from "../types";
 
 // One reducer for the rows being entered (replaces the legacy page's modal
@@ -26,7 +27,11 @@ type Action =
   | { type: "duplicate"; id: number }
   | { type: "remove"; id: number }
   | { type: "change"; model: FormModel; id: number; column: string; value: string }
+  /** A distance from the distance helper; `estimate` marks the column's value as estimated (saved as `is_estimate`, S3-3). */
+  | { type: "distance"; model: FormModel; id: number; column: string; value: string; estimate: boolean }
   | { type: "extra"; id: number; key: string; value: string }
+  /** S3-6: the row's supplier fields (supplier, figure, hybrid lines), set together. */
+  | { type: "patch"; id: number; patch: Partial<ModalRow> }
   /** Rows read from a bill; dropped when `draftKey` is no longer the open context. */
   | { type: "append"; rows: ModalRow[]; draftKey: string | null }
   | { type: "confirmBill"; key: string }
@@ -40,10 +45,24 @@ const nextIdOf = (rows: ModalRow[]) => rows.reduce((max, r) => Math.max(max, r.i
 export function editRow(model: FormModel, row: ModalRow, column: string, value: string): ModalRow {
   // A count or distance of a composite unit (passenger × km) also sets the column to their product.
   let next = withCompositeProduct(applyChange(model, markEdited(row, column), column, value), column);
+  // A value typed over an estimated distance is the person's own figure, not an estimate any more.
+  next = withEstimate(next, column, false);
   // Values the edit changed too (cleared children, a re-derived category) aren't the AI's any more.
   for (const field of billOf(next)?.ai ?? []) if (next[field] !== row[field]) next = markEdited(next, field);
   return next;
 }
+
+/** Columns whose value came from an estimate (S3-3 `is_estimate`); kept in the private `_estimates`. */
+export function withEstimate(row: ModalRow, column: string, estimate: boolean): ModalRow {
+  const list: string[] = Array.isArray(row._estimates) ? row._estimates : [];
+  if (estimate === list.includes(column)) return row;
+  const next = { ...row, _estimates: estimate ? [...list, column] : list.filter((c) => c !== column) };
+  if (next._estimates.length === 0) delete (next as Partial<ModalRow>)._estimates;
+  return next;
+}
+
+/** True when any value on the row is an estimate (saved as `is_estimate`). */
+export const isEstimated = (row: ModalRow) => Array.isArray(row._estimates) && row._estimates.length > 0;
 
 export function rowsReducer(prev: State, action: Action): State {
   // Rows already sent never come back into editing: a later change starts from an
@@ -75,8 +94,15 @@ export function rowsReducer(prev: State, action: Action): State {
         ...state,
         rows: state.rows.map((r) => (r.id === action.id ? editRow(action.model, r, action.column, action.value) : r)),
       };
+    case "distance":
+      return {
+        ...state,
+        rows: state.rows.map((r) => (r.id === action.id ? withEstimate(editRow(action.model, r, action.column, action.value), action.column, action.estimate) : r)),
+      };
     case "extra":
       return { ...state, rows: state.rows.map((r) => (r.id === action.id ? setExtraField(r, action.key, action.value) : r)) };
+    case "patch":
+      return { ...state, rows: state.rows.map((r) => (r.id === action.id ? { ...r, ...action.patch } : r)) };
     case "append": {
       // Ids are renumbered from nextId so rows read earlier never collide.
       const added = action.rows.map((r, i) => ({ ...r, id: state.nextId + i }));
@@ -109,9 +135,14 @@ function readDraft(key: string): ModalRow[] | null {
   }
 }
 
-/** True when a row holds anything the user typed. */
+/**
+ * True when a row holds anything the user typed. The row's method alone isn't
+ * input: a new row starts on the form's default method (S3-3).
+ */
 export const rowHasInput = (row: ModalRow) =>
-  Object.entries(row).some(([k, v]) => (k === "_extra_data" ? Object.values(v ?? {}).some(Boolean) : k !== "id" && !k.startsWith("_") && !!v));
+  Object.entries(row).some(([k, v]) =>
+    k === "_extra_data" ? Object.values(v ?? {}).some(Boolean) : k !== "id" && k !== ROW_METHOD_COLUMN && !k.startsWith("_") && !!v,
+  );
 
 export function useEntryRows(model: FormModel | null, draftKey: string | null) {
   const [state, dispatch] = useReducer(rowsReducer, { rows: [], nextId: 1, key: null, sent: false });

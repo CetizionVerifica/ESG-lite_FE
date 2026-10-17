@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { FileText } from "lucide-react";
 import {
+  Badge,
   Button,
   Callout,
+  DataQualityBadge,
   DocumentViewer,
   Drawer,
   EmptyState,
@@ -21,10 +23,12 @@ import {
   useToast,
 } from "../../../ui";
 import { useEntryDocuments, useLabelConfig, useUpdateEntry } from "../api";
+import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
 import { type EntryUpdate, canEdit, saveErrorMessage } from "../edit";
 import { EDIT_FORM_ID, EditEntryForm } from "./EditEntryForm";
 import { type EntryRow, activityFields, keyActivity, periodText, quantityOf } from "../logic";
 import { feraSubLabel } from "../../../lib/scope3/fera";
+import { rowQuality } from "../../../lib/scope3/dq";
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -103,6 +107,9 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
   const files = (docs.data ?? []).map(fromEmissionDocument);
   const quantity = entry ? quantityOf(entry.activity_data) : null;
   const fields = entry ? activityFields(entry.activity_data, config.data ?? undefined) : [];
+  // SE-1: the method and data quality lines are for Managers and above (or a company set to full detail).
+  const calcDetail = useCalcDetailForSite(entry?.site?.site_id ?? null);
+  const quality = entry && calcDetail ? rowQuality(entry) : null;
 
   return (
     <>
@@ -147,7 +154,26 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
                     <Row label="Emissions">
                       <span className="font-num font-semibold tabular-nums">{formatEmissions(Number(entry.total_emission))}</span>
                     </Row>
+                    {quality?.show && (
+                      <>
+                        <Row label="How it was calculated">
+                          <span data-testid="entry-method">{quality.method}</span>
+                          {quality.estimate && (
+                            <Badge tone="warn" className="ml-1.5">
+                              Estimate
+                            </Badge>
+                          )}
+                        </Row>
+                        <Row label="Data quality">
+                          <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                            <DataQualityBadge dq={quality.dq} />
+                            {quality.dataType && <span className="text-xs text-muted">{quality.dataType} data</span>}
+                          </span>
+                        </Row>
+                      </>
+                    )}
                     {entry.scope3_sub && <Row label="Part of">{feraSubLabel(entry.scope3_sub)}</Row>}
+                    {entry.supplier && <Row label="Supplier">{entry.supplier.name}</Row>}
                     {entry.fera?.map((f) => (
                       <Row key={f.pk_id} label={feraSubLabel(f.scope3_sub)}>
                         <span className="font-num tabular-nums">{formatEmissions(Number(f.total_emission))}</span>

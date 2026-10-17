@@ -1,5 +1,6 @@
 import type { EmissionStatus } from "../../../services/emissionService";
-import { type Column, CheckChip, ReadyChip, StatusPill, UncheckedChip, cn, formatDate, formatEmissions, formatNumber } from "../../../ui";
+import { type Column, CheckChip, DataQualityBadge, ReadyChip, StatusPill, UncheckedChip, cn, formatDate, formatEmissions, formatNumber } from "../../../ui";
+import { dqLabel, readDq } from "../../../lib/scope3/dq";
 import { type CheckContext, factorYearFor, heldChip, isReady, readChecks } from "../../../lib/scope3/checks";
 import { type RowActions, RowMenu } from "./RowMenu";
 import { feraSubLabel, feraSubShort, twinsTotal } from "../../../lib/scope3/fera";
@@ -101,6 +102,18 @@ export function ledgerColumns({
       },
     },
     { id: "period", header: "Period", value: (r) => rowPeriodLabel(r), sortable: true },
+    {
+      // S3-3: hidden by default; the column picker shows it.
+      id: "dq",
+      header: "Data quality",
+      defaultHidden: true,
+      addedLater: true,
+      value: (r) => {
+        const dq = readDq(r.dq);
+        return dq ? dqLabel(dq.overall) : "";
+      },
+      cell: (r) => <DataQualityBadge dq={r.dq} />,
+    },
     {
       id: "status",
       header: "Status",

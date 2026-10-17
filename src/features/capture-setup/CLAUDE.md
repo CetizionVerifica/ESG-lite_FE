@@ -32,3 +32,8 @@ DataTable: Column | Type | Options count | Used by N forms. Drawer: name, type, 
 
 ## Acceptance
 Every form edit is visible in the preview instantly; no `alert()`; delete confirm; dark mode consistent.
+
+## S3-3 as built (Methods offered, 2026-10-16; spec `src/lib/scope3/CLAUDE.md`)
+- Calculation tab, Scope 3 forms only (the category's `ghg_category`): "Methods offered" chips, the category's methods (contracts §1) in their order, most specific first; whatever order they're ticked in, the saved list stays most specific first and the first is Add data's default. "Offer all N methods" prefills the category's list.
+- Each offered method takes its units (comma-separated; contracts §6 needs at least one); an "@method" formula's result unit or a per-unit spec's units are suggested. An offered method an "@method" formula lacks blocks saving.
+- Saved as `method_options: [{method, units}]` (null when none is ticked); the live preview shows the method cards. Logic in `methodOptions.ts`, UI in `components/builder/MethodsOffered.tsx`.

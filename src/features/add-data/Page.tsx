@@ -1,8 +1,12 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
-import { useEntrySetup, usePeriodTotals, useThreshold } from "./api";
+import { useCreateSupplier, useEntrySetup, usePeriodTotals, useSiteCountry, useSupplierDetails, useSupplierOptions, useThreshold } from "./api";
+import { SupplierFields } from "./components/SupplierFields";
+import { hasSupplierField, supplierIdOf, withSuppliers } from "./logic/supplier";
+import { errorMessage as supplierError } from "../../services/scope3SuppliersService";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
 import { useSpendRates } from "../../lib/scope3/useSpendRates";
 import type { EmissionFactor } from "./types";
@@ -10,7 +14,7 @@ import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
 import { useRowEvidence } from "./hooks/useRowEvidence";
 import { billGroups, billOf } from "./logic/bill";
 import { buildPayload, comparison, entryDate, entryFactorYear, entryPeriodLabel, formatEntryPeriodParam, parseEntryPeriod, previousPeriod, rowIssue, type EntryPeriod } from "./logic/entry";
-import { formColumns, toFormModel } from "./logic/form";
+import { formColumns, rowMethodChoices, toFormModel } from "./logic/form";
 import { entryCategories, feraCategoryOf, sitesOf, userIdOf } from "./logic/sites";
 import { entryDraftKey } from "../../lib/entryDrafts";
 import { ChooseContext } from "./steps/ChooseContext";
@@ -38,6 +42,8 @@ export default function AddDataPage() {
   const [params, setParams] = useSearchParams();
   const siteId = num(params.get("site")) ?? (sites.length === 1 ? sites[0].site_id : null);
   const categoryId = num(params.get("category"));
+  // SE-1 · simple-entry §8: a contributor never picks a method or reads data quality; the form decides.
+  const calcDetail = useCalcDetailForSite(siteId);
   const period = parseEntryPeriod(params.get("period"));
   const site = sites.find((s) => s.site_id === siteId);
   const categories = entryCategories(site);
@@ -73,6 +79,10 @@ export default function AddDataPage() {
   });
   const threshold = useThreshold(site?.company_id ?? null);
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
+  // S3-3: the data quality preview scores a factor for the site's own country best; Scope 3 only.
+  const siteCountry = useSiteCountry(site?.site_id ?? null, contextReady && category?.ghg_category != null);
+  // Rows the server refused for their method (METHOD_NOT_ALLOWED), shown on the row's method cards.
+  const [methodErrors, setMethodErrors] = useState<Record<number, { method: string; message: string }>>({});
   // Per user: a draft survives a reload, so the next person signing in on this tab mustn't get it.
   const draftKey = contextReady ? entryDraftKey(userIdOf(user), site.site_id, category.category_id, formatEntryPeriodParam(period)) : null;
   const { rows, sent, dispatch, clearDraft, markSent } = useEntryRows(model, draftKey);
@@ -93,7 +103,7 @@ export default function AddDataPage() {
     [calcInput, factors, model?.spec, reportingPeriod],
   );
   const spend = useSpendRates(rows, spendLookup, reportingDate);
-  const calc = useEmissionCalc({
+  const baseCalc = useEmissionCalc({
     ...calcInput,
     emissionFactors: factors,
     calculationSpec: model?.spec,
@@ -102,6 +112,38 @@ export default function AddDataPage() {
     reportingDate,
     reportingPeriod,
   });
+  // S3-6: Category 1 and 2 rows can name a supplier and be calculated from its own figures.
+  const supplierRows = contextReady && hasSupplierField(category.ghg_category);
+  const reportingYear = factorYear === null ? new Date().getFullYear() : factorYear + 1;
+  const supplierOptions = useSupplierOptions(reportingYear, supplierRows);
+  const supplierDetails = useSupplierDetails(supplierRows ? rows.map(supplierIdOf).filter((id): id is number => id !== null) : []);
+  const createSupplier = useCreateSupplier(reportingYear);
+  const calc = supplierRows ? withSuppliers(baseCalc, spendLookup, supplierDetails, reportingYear) : baseCalc;
+  const factorNames = useMemo(() => [...new Set(factors.map((f) => f.emission_category_name))].sort(), [factors]);
+  const renderSupplier = supplierRows
+    ? (row: (typeof rows)[number]) => {
+        const id = supplierIdOf(row);
+        return (
+          <SupplierFields
+            row={row}
+            ghg={category.ghg_category as number}
+            suppliers={supplierOptions.data?.suppliers ?? []}
+            loadingSuppliers={supplierOptions.isLoading}
+            detail={id ? supplierDetails.get(id) : undefined}
+            // Anyone entering data may add a supplier by name (ESG-lite POST /suppliers); its figures stay with managers.
+            canCreate
+            showCalcDetail={calcDetail}
+            // One method picker per row: S3-3's cards when the form offers methods, else this select.
+            showMethodChoice={calcDetail && (model ? rowMethodChoices(model).length : 0) < 2}
+            onCreate={async (name) => (await createSupplier.mutateAsync(name)).supplier_id}
+            createError={createSupplier.isError ? supplierError(createSupplier.error, "The supplier wasn't added.") : null}
+            reportingYear={reportingYear}
+            factorNames={factorNames}
+            onPatch={(patch) => dispatch({ type: "patch", id: row.id, patch })}
+          />
+        );
+      }
+    : undefined;
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.
   // S3-7: td_loss factors make a second, T&D-loss row for Scope 2 categories only.
   // Only the factor year's FERA factors count: the backend never falls back to another year for a twin.
@@ -148,11 +190,18 @@ export default function AddDataPage() {
   const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
     <Review
       rows={activeRows}
+      // The row's method stays in activity_data["@method"] too: S3-5 and S3-9 read it there on edits and recalculations.
       payloads={activeRows.map((r) => buildPayload(r, { siteId: s.site_id, categoryId: c.category_id, period: p }))}
       calc={calc}
       evidenceFiles={evidence.filesOf}
       periodLabel={periodLabel}
       onBack={() => setStep(1)}
+      onFixMethod={(refused, sentIds) => {
+        // Rows already sent leave the form, so going back can't send them twice.
+        for (const id of sentIds) dispatch({ type: "remove", id });
+        setMethodErrors(Object.fromEntries(refused.map((r) => [r.rowId, { method: r.method, message: r.message }])));
+        setStep(1);
+      }}
       onFinished={markSent}
       onAnother={() => {
         clearDraft();
@@ -222,6 +271,10 @@ export default function AddDataPage() {
         reportingYear={(factorYear as number) + 1}
         bulkUploadHref={bulkUploadHref}
         evidence={evidence}
+        renderSupplier={renderSupplier}
+        siteCountry={siteCountry.data ?? null}
+        methodErrors={methodErrors}
+        showCalcDetail={calcDetail}
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
       />
