@@ -90,7 +90,19 @@ export type AcceptBody = {
   comment?: string | null;
 };
 
-export type AcceptResponse = { request: SupplierRequest; material_factor_id: number; applied_to_input: boolean; note: string | null };
+/** S3-6: why an accepted figure wasn't added as the supplier's Scope 3 figure (its boundary isn't cradle-to-gate and wasn't confirmed). */
+export type Scope3AcceptWarning = { code: "SUPPLIER_FACTOR_BOUNDARY"; message: string; boundary: string; expected: "cradle_to_gate"; confirm_with: "confirm_boundary" };
+
+export type AcceptResponse = {
+  request: SupplierRequest;
+  material_factor_id: number;
+  applied_to_input: boolean;
+  note: string | null;
+  /** S3-6: where the figure landed for Scope 3; null when it wasn't written. */
+  supplier_id?: number | null;
+  supplier_factor_id?: number | null;
+  scope3_warning?: Scope3AcceptWarning | null;
+};
 
 export const getSupplierRequests = async (params?: { study?: number; product?: number; status?: SupplierRequestStatus }): Promise<ListResponse> => {
   const res = await api.get("/pcf/supplier-requests", { params });

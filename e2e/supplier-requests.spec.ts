@@ -57,9 +57,15 @@ function request(id: number, status: string, extra: Req = {}): Req {
 
 const field = (value: unknown, confidence: number, reason: string, by = "ai") => ({ value, confidence, reason, by });
 
-async function signIn(page: Page) {
+/** `graveStudy`: request 2 is for a cradle-to-grave footprint and its answer matches it (S3-6). */
+async function signIn(page: Page, opts: { graveStudy?: boolean } = {}) {
   const calls: { method: string; path: string; body: unknown }[] = [];
-  const state = { requests: [request(1, "sent"), request(2, "received")] as Req[], nextId: 3 };
+  const second = request(2, "received");
+  if (opts.graveStudy && second.study && second.reply) {
+    second.study = { ...second.study, boundary: "cradle_to_grave" };
+    second.reply = { ...second.reply, boundary_mismatch: false };
+  }
+  const state = { requests: [request(1, "sent"), second] as Req[], nextId: 3 };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Manager");
@@ -115,10 +121,18 @@ async function signIn(page: Page) {
       if (m) {
         const body = route.request().postDataJSON();
         calls.push({ method, path, body });
-        if (body.boundary && body.boundary !== "cradle_to_gate" && body.confirm_boundary !== true) return json({ message: "Confirm the boundary", boundary_mismatch: true }, 409);
-        const r = request(Number(m[1]), "accepted", { decided_at: "2025-05-04T10:00:00.000Z", decided_by: { user_id: 2, name: "Maya Manager" }, accepted: { material_factor_id: 77, value_kgco2e: body.value_kgco2e, boundary: body.boundary ?? "cradle_to_gate" } });
+        const studyBoundary = state.requests.find((x) => x.supplier_request_id === Number(m![1]))?.study?.boundary ?? "cradle_to_gate";
+        if (body.boundary && body.boundary !== studyBoundary && body.confirm_boundary !== true) return json({ message: "Confirm the boundary", boundary_mismatch: true }, 409);
+        const prev = state.requests.find((x) => x.supplier_request_id === Number(m![1]))!;
+        const r = { ...prev, status: "accepted" as const, decided_at: "2025-05-04T10:00:00.000Z", decided_by: { user_id: 2, name: "Maya Manager" }, accepted: { material_factor_id: 77, value_kgco2e: body.value_kgco2e, boundary: body.boundary ?? studyBoundary } };
         state.requests = state.requests.map((x) => (x.supplier_request_id === r.supplier_request_id ? r : x));
-        return json({ request: r, material_factor_id: 77, applied_to_input: true, note: null });
+        // S3-6: Scope 3 takes a figure that isn't cradle-to-gate only with the boundary confirmed.
+        const figureBoundary = body.boundary ?? studyBoundary;
+        const scope3_warning =
+          figureBoundary !== "cradle_to_gate" && body.confirm_boundary !== true
+            ? { code: "SUPPLIER_FACTOR_BOUNDARY", message: "Not added for Scope 3", boundary: figureBoundary, expected: "cradle_to_gate", confirm_with: "confirm_boundary" }
+            : null;
+        return json({ request: r, material_factor_id: 77, applied_to_input: true, note: null, supplier_id: scope3_warning ? null : 4, supplier_factor_id: scope3_warning ? null : 12, scope3_warning });
       }
       m = /\/pcf\/supplier-requests\/(\d+)$/.exec(path);
       if (m && method === "GET") {
@@ -249,4 +263,30 @@ test("a confirmed boundary mismatch is sent as such; the page works at phone wid
   await drawer.getByRole("button", { name: "Accept figure" }).click();
   await expect(page.getByText("Supplier figure accepted")).toBeVisible();
   expect(calls.find((c) => c.path.endsWith("/accept"))?.body).toMatchObject({ value_kgco2e: 7.9, boundary: "cradle_to_grave", confirm_boundary: true });
+});
+
+test("S3-6: a cradle-to-grave figure on a cradle-to-grave footprint says it wasn't added for Scope 3", async ({ page }) => {
+  const { calls } = await signIn(page, { graveStudy: true });
+  await page.goto("/products/suppliers?request=2");
+  const drawer = page.getByRole("dialog");
+  await expect(drawer.getByText("Different system boundary")).toHaveCount(0);
+  await expect(drawer.getByText("Scope 3 takes cradle-to-gate figures")).toBeVisible();
+  await drawer.getByRole("button", { name: "Accept figure" }).click();
+  await expect(page.getByText("Supplier figure accepted")).toBeVisible();
+  expect(calls.find((c) => c.path.endsWith("/accept"))?.body).toMatchObject({ boundary: "cradle_to_grave", confirm_boundary: false });
+  await expect(drawer.getByTestId("scope3-accept-note")).toHaveText(
+    "It is cradle-to-grave, so no Scope 3 supplier figure was created. To count it for Category 1, add it on the Suppliers page and confirm the boundary there.",
+  );
+  await expect(drawer.getByRole("link", { name: "Open Suppliers" })).toHaveAttribute("href", "/suppliers");
+});
+
+test("S3-6: confirming the boundary adds it as the supplier's Scope 3 figure", async ({ page }) => {
+  const { calls } = await signIn(page, { graveStudy: true });
+  await page.goto("/products/suppliers?request=2");
+  const drawer = page.getByRole("dialog");
+  await drawer.getByTestId("confirm-scope3-boundary").check();
+  await drawer.getByRole("button", { name: "Accept figure" }).click();
+  await expect(page.getByText("Supplier figure accepted")).toBeVisible();
+  expect(calls.find((c) => c.path.endsWith("/accept"))?.body).toMatchObject({ boundary: "cradle_to_grave", confirm_boundary: true });
+  await expect(drawer.getByTestId("scope3-accept-note")).toHaveCount(0);
 });

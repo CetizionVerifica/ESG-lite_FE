@@ -1,4 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type SupplierDetail, createSupplier, getSupplier, getSuppliers } from "../../services/scope3SuppliersService";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
@@ -324,5 +325,37 @@ export function useRoute(mode: "road" | "sea" | null, from: ResolvedLocation | n
       const r = await calculateRoadDistance({ ...body, mode: "road" });
       return { meters: r.distanceMeters, durationText: r.durationText, polyline: r.encodedPolyline, seaPath: null };
     },
+  });
+}
+
+// S3-6: suppliers for the Supplier field on Category 1 and 2 rows. Reads are
+// open to everyone with access to the company; adding one is Manager and above.
+const supplierKeys = {
+  list: (year: number) => ["add-data", "suppliers", year] as const,
+  detail: (id: number) => ["add-data", "supplier", id] as const,
+};
+
+export function useSupplierOptions(year: number, enabled: boolean) {
+  return useQuery({ queryKey: supplierKeys.list(year), queryFn: () => getSuppliers(null, year), enabled, staleTime: 60_000 });
+}
+
+/** The figures and facility data of every supplier the rows name, loaded once each. */
+export function useSupplierDetails(ids: number[]): Map<number, SupplierDetail> {
+  const unique = [...new Set(ids)].sort((a, b) => a - b);
+  const results = useQueries({
+    queries: unique.map((id) => ({ queryKey: supplierKeys.detail(id), queryFn: () => getSupplier(null, id), staleTime: 60_000 })),
+  });
+  const map = new Map<number, SupplierDetail>();
+  results.forEach((r, i) => {
+    if (r.data) map.set(unique[i], r.data);
+  });
+  return map;
+}
+
+export function useCreateSupplier(year: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => createSupplier(null, { name }),
+    onSettled: () => qc.invalidateQueries({ queryKey: supplierKeys.list(year) }),
   });
 }

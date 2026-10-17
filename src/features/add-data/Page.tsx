@@ -3,7 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
-import { useEntrySetup, usePeriodTotals, useSiteCountry, useThreshold } from "./api";
+import { useCreateSupplier, useEntrySetup, usePeriodTotals, useSiteCountry, useSupplierDetails, useSupplierOptions, useThreshold } from "./api";
+import { SupplierFields } from "./components/SupplierFields";
+import { hasSupplierField, supplierIdOf, withSuppliers } from "./logic/supplier";
+import { errorMessage as supplierError } from "../../services/scope3SuppliersService";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
 import { useSpendRates } from "../../lib/scope3/useSpendRates";
 import type { EmissionFactor } from "./types";
@@ -11,7 +14,7 @@ import { rowHasInput, useEntryRows } from "./hooks/useEntryRows";
 import { useRowEvidence } from "./hooks/useRowEvidence";
 import { billGroups, billOf } from "./logic/bill";
 import { buildPayload, comparison, entryDate, entryFactorYear, entryPeriodLabel, formatEntryPeriodParam, parseEntryPeriod, previousPeriod, rowIssue, type EntryPeriod } from "./logic/entry";
-import { formColumns, toFormModel } from "./logic/form";
+import { formColumns, rowMethodChoices, toFormModel } from "./logic/form";
 import { entryCategories, feraCategoryOf, sitesOf, userIdOf } from "./logic/sites";
 import { entryDraftKey } from "../../lib/entryDrafts";
 import { ChooseContext } from "./steps/ChooseContext";
@@ -100,7 +103,7 @@ export default function AddDataPage() {
     [calcInput, factors, model?.spec, reportingPeriod],
   );
   const spend = useSpendRates(rows, spendLookup, reportingDate);
-  const calc = useEmissionCalc({
+  const baseCalc = useEmissionCalc({
     ...calcInput,
     emissionFactors: factors,
     calculationSpec: model?.spec,
@@ -109,6 +112,38 @@ export default function AddDataPage() {
     reportingDate,
     reportingPeriod,
   });
+  // S3-6: Category 1 and 2 rows can name a supplier and be calculated from its own figures.
+  const supplierRows = contextReady && hasSupplierField(category.ghg_category);
+  const reportingYear = factorYear === null ? new Date().getFullYear() : factorYear + 1;
+  const supplierOptions = useSupplierOptions(reportingYear, supplierRows);
+  const supplierDetails = useSupplierDetails(supplierRows ? rows.map(supplierIdOf).filter((id): id is number => id !== null) : []);
+  const createSupplier = useCreateSupplier(reportingYear);
+  const calc = supplierRows ? withSuppliers(baseCalc, spendLookup, supplierDetails, reportingYear) : baseCalc;
+  const factorNames = useMemo(() => [...new Set(factors.map((f) => f.emission_category_name))].sort(), [factors]);
+  const renderSupplier = supplierRows
+    ? (row: (typeof rows)[number]) => {
+        const id = supplierIdOf(row);
+        return (
+          <SupplierFields
+            row={row}
+            ghg={category.ghg_category as number}
+            suppliers={supplierOptions.data?.suppliers ?? []}
+            loadingSuppliers={supplierOptions.isLoading}
+            detail={id ? supplierDetails.get(id) : undefined}
+            // Anyone entering data may add a supplier by name (ESG-lite POST /suppliers); its figures stay with managers.
+            canCreate
+            showCalcDetail={calcDetail}
+            // One method picker per row: S3-3's cards when the form offers methods, else this select.
+            showMethodChoice={calcDetail && (model ? rowMethodChoices(model).length : 0) < 2}
+            onCreate={async (name) => (await createSupplier.mutateAsync(name)).supplier_id}
+            createError={createSupplier.isError ? supplierError(createSupplier.error, "The supplier wasn't added.") : null}
+            reportingYear={reportingYear}
+            factorNames={factorNames}
+            onPatch={(patch) => dispatch({ type: "patch", id: row.id, patch })}
+          />
+        );
+      }
+    : undefined;
   // FERA preview: same row against the FERA factors, raw value when no conversion exists.
   // S3-7: td_loss factors make a second, T&D-loss row for Scope 2 categories only.
   // Only the factor year's FERA factors count: the backend never falls back to another year for a twin.
@@ -236,6 +271,7 @@ export default function AddDataPage() {
         reportingYear={(factorYear as number) + 1}
         bulkUploadHref={bulkUploadHref}
         evidence={evidence}
+        renderSupplier={renderSupplier}
         siteCountry={siteCountry.data ?? null}
         methodErrors={methodErrors}
         showCalcDetail={calcDetail}
