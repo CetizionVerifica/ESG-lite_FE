@@ -1,9 +1,11 @@
 import { Calculator } from "lucide-react";
-import type { MyKpiItem } from "../../../../lib/kpi/contracts";
+import type { KpiTargetWithProgress, MyKpiItem } from "../../../../lib/kpi/contracts";
+import { targetText } from "../../../../lib/kpi/targets";
 import { formatWithUnit } from "../../../../lib/kpi/units";
 import { Badge, Button, StatusPill, cn } from "../../../../ui";
 import { FormulaExplainer } from "../../components/FormulaExplainer";
 import { FromYourDataChip } from "../../components/FromYourDataChip";
+import { TargetProgress } from "../../components/TargetProgress";
 import { dueLine, hasAnswer, isReadOnlySource } from "../logic";
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -19,7 +21,7 @@ const lastShort = (i: MyKpiItem) => {
  * due date, with its status and one action. Auto and calculated items are
  * read-only: "From your data" or "Calculated", never a card.
  */
-export function KpiRow({ item, today, showSite, onOpen }: { item: MyKpiItem; today: string; showSite: boolean; onOpen: () => void }) {
+export function KpiRow({ item, today, showSite, onOpen, target }: { item: MyKpiItem; today: string; showSite: boolean; onOpen: () => void; target?: KpiTargetWithProgress | null }) {
   const v = item.value;
   const site = showSite ? (item.site_name ?? "Company") : null;
 
@@ -33,6 +35,15 @@ export function KpiRow({ item, today, showSite, onOpen }: { item: MyKpiItem; tod
             <FormulaExplainer name={item.name} formula={item.formula} inputs={item.inputs ?? []} unit={item.canonical_unit} decimals={item.decimals} serverValue={value} className="text-muted" />
           ) : (
             <p className="text-sm text-muted">{[site, "Filled in from approved data. Nothing to enter."].filter(Boolean).join(" · ")}</p>
+          )}
+          {target && (
+            <TargetProgress
+              compact
+              className="max-w-xs"
+              label={`${target.site_id === null && item.site_id !== null ? "company, " : ""}${targetText(target)}`}
+              pct={target.progress_pct}
+              status={target.status ?? null}
+            />
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">

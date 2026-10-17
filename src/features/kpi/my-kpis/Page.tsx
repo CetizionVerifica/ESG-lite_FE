@@ -24,7 +24,7 @@ import {
   useContextParams,
   useToast,
 } from "../../../ui";
-import { keys, kpiErrorMessage, useMyKpis, useSubmitValues } from "./api";
+import { keys, kpiErrorMessage, useMyKpis, useSubmitValues, useTargetsFor } from "./api";
 import { EntryDrawer } from "./components/EntryDrawer";
 import { KpiRow } from "./components/KpiRow";
 import { defaultPeriod, groupItems, itemKey, nextDueDate, progressOf, readyToSubmit, submitQuestion, workOrder } from "./logic";
@@ -73,6 +73,7 @@ export default function MyKpisPage() {
   const my = useMyKpis(periodKey, siteId);
   const listKey = keys.list(companyId, periodKey, siteId);
   const submit = useSubmitValues();
+  const targetFor = useTargetsFor();
   const [confirming, setConfirming] = useState(false);
   const [refused, setRefused] = useState<{ item: MyKpiItem | null; message: string }[]>([]);
   // The order "Save and next" walks, fixed when an entry opens (a fixed sent-back value becomes a draft and would move).
@@ -130,7 +131,7 @@ export default function MyKpisPage() {
   const list = (rows: MyKpiItem[], extra?: MyKpiItem[]) => (
     <ul className="divide-y divide-line">
       {[...rows, ...(extra ?? [])].map((i) => (
-        <KpiRow key={itemKey(i)} item={i} today={today} showSite={multiSite} onOpen={() => openEntry(itemKey(i))} />
+        <KpiRow key={itemKey(i)} item={i} today={today} showSite={multiSite} onOpen={() => openEntry(itemKey(i))} target={i.source === "manual" ? null : targetFor(i)} />
       ))}
     </ul>
   );

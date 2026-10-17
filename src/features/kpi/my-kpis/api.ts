@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { KpiValueInput, MyKpis } from "../../../lib/kpi/contracts";
+import type { KpiTargetWithProgress, KpiValueInput, MyKpiItem, MyKpis } from "../../../lib/kpi/contracts";
 import { ERROR_MESSAGE } from "../../../lib/kpi/labels";
 import { isKpiErrorCode } from "../../../lib/kpi/contracts";
 import { useKpiCompanyId } from "../../../lib/kpi/switch";
-import { getMyKpis, removeKpiEvidence, saveKpiValues, submitKpiValues, uploadKpiEvidence } from "../../../services/kpiService";
+import { getKpiTargets, getMyKpis, removeKpiEvidence, saveKpiValues, submitKpiValues, uploadKpiEvidence } from "../../../services/kpiService";
 import { withValue } from "./logic";
 
 export { kpiErrorMessage } from "../../../services/kpiService";
@@ -58,5 +58,18 @@ export function useEvidence() {
   return {
     upload: useMutation({ mutationFn: ({ valueId, file }: { valueId: number; file: File }) => uploadKpiEvidence(valueId, file, companyId), onSuccess: refresh }),
     remove: useMutation({ mutationFn: ({ valueId, evidenceId }: { valueId: number; evidenceId: number }) => removeKpiEvidence(valueId, evidenceId, companyId), onSuccess: refresh }),
+  };
+}
+
+/**
+ * KPI-9: a read-only row's target, if any: the site's own, else the
+ * company's. Targets are optional here; a failed load just shows none.
+ */
+export function useTargetsFor(): (item: Pick<MyKpiItem, "kpi_definition_id" | "site_id">) => KpiTargetWithProgress | null {
+  const companyId = useKpiCompanyId();
+  const q = useQuery({ queryKey: ["kpi", "targets", companyId], queryFn: () => getKpiTargets(companyId), staleTime: 60_000, retry: false });
+  return (item) => {
+    const mine = (q.data ?? []).filter((t) => t.kpi_definition_id === item.kpi_definition_id);
+    return mine.find((t) => t.site_id === item.site_id) ?? mine.find((t) => t.site_id === null) ?? null;
   };
 }

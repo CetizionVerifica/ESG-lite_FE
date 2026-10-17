@@ -477,12 +477,11 @@ function targetOut(t: KpiTargetWithProgress): KpiTargetWithProgress {
   let currentYear = t.current_year;
   const series: { year: number; value: number | null }[] = [{ year: t.baseline_year, value: t.baseline_value }];
   if (current === null || current === undefined) {
-    for (let y = t.baseline_year + 1; y <= 2026; y += 1) {
-      const v = yearTotal(t.kpi_definition_id, y, def?.canonical_unit ?? null, t.site_id ? [t.site_id] : undefined).value;
-      if (v !== null) {
-        current = v;
-        currentYear = y;
-      }
+    // The latest approved year figure, as the dashboard aggregates it (the sample has one for 2026 per card KPI).
+    const card = DASHBOARD_CARDS.find(([code]) => kpiByCode(code).id === t.kpi_definition_id);
+    if (card && !t.site_id) {
+      current = card[1];
+      currentYear = 2026;
     }
   }
   if (current !== null && current !== undefined && currentYear) for (let y = t.baseline_year + 1; y <= currentYear; y += 1) series.push({ year: y, value: y === currentYear ? current : null });
@@ -517,7 +516,10 @@ const DASHBOARD_CARDS: [code: string, value: number, previous: number, series: n
 
 function dashboard(year: number, framework: string | null, site: number | null, topic: string | null): KpiDashboard {
   const frameworksOf = (kpiId: number) => [...new Set(usedIn(kpiId).map((u) => u.framework))];
-  const cards: KpiDashboardCard[] = DASHBOARD_CARDS.map(([code, value, previous, series]) => {
+  // The sample's figures are for 2026; 2025's are each card's "previous". Other years have none.
+  const cards: KpiDashboardCard[] = DASHBOARD_CARDS.map(([code, thisYear, lastYear, series]): KpiDashboardCard => {
+    const value = year === 2026 ? thisYear : year === 2025 ? lastYear : null;
+    const previous = year === 2026 ? lastYear : null;
     const d = kpiByCode(code);
     const target = state.targets.find((t) => t.kpi_definition_id === d.id && t.site_id === null);
     const t = target ? targetOut(target) : null;
@@ -531,8 +533,8 @@ function dashboard(year: number, framework: string | null, site: number | null, 
       decimals: d.decimals,
       value,
       previous,
-      change_pct: Math.round(((value - previous) / previous) * 1000) / 10,
-      series: series.map((v, i) => ({ period: MONTHS_TO_SEP[i], value: v })),
+      change_pct: value !== null && previous ? Math.round(((value - previous) / previous) * 1000) / 10 : null,
+      series: year === 2026 ? series.map((v, i) => ({ period: MONTHS_TO_SEP[i], value: v })) : [],
       target: t ? { progress_pct: t.progress_pct, status: t.status ?? null, label: targetText(t), target_id: t.id } : null,
     };
   }).filter((c) => !topic || c.topic === topic);
