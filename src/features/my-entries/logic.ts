@@ -217,7 +217,8 @@ export const SHEET_CALC_KEYS = new Set(["emissionFactor", "emissionFactorUnit", 
 export function activityFields(activityData: Record<string, unknown> | null | undefined, config?: LabelConfig, opts: { plain?: boolean } = {}): ActivityField[] {
   const data = activityData ?? {};
   return Object.entries(data)
-    // `@method` and `_private` keys are internal (SE-1): never shown as something the user entered.
+    // `@method` and `_private` keys are internal (SE-1): never shown as something the user entered; the
+    // row's method has its own "How it was calculated" line (S3-3).
     .filter(([key]) => !(opts.plain && SHEET_CALC_KEYS.has(key)))
     .filter(([key, value]) => !META_KEYS.has(key) && !key.startsWith("@") && !key.startsWith("_") && value !== null && value !== undefined && value !== "")
     .map(([key, value]) => ({

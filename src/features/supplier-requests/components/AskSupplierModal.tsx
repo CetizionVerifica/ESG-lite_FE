@@ -10,16 +10,19 @@ type Props = {
   /** From `?study=&input=`: the line "Ask supplier" was pressed on. */
   studyId: number | null;
   inputId: number | null;
+  /** From `?supplier=&email=` (the Suppliers page's "Request data", S3-6). */
+  supplierName?: string;
+  supplierEmail?: string;
   onSent: (sent: SendResponse) => void;
 };
 
-const blank = (studyId: number | null, inputId: number | null): AskForm => ({
+const blank = (studyId: number | null, inputId: number | null, supplierName = "", supplierEmail = ""): AskForm => ({
   study_id: studyId,
   input_id: inputId,
   material: "",
   unit: "kg",
-  supplier_name: "",
-  supplier_email: "",
+  supplier_name: supplierName,
+  supplier_email: supplierEmail,
   due_date: "",
   note: "",
 });
@@ -33,17 +36,17 @@ const UNIT_OPTIONS = PCF_UNITS.map((u) => ({ value: u, label: unitLabel(u) }));
  * outward action, so the message is shown in full and only an explicit Send
  * sends it.
  */
-export function AskSupplierModal({ open, onClose, studyId, inputId, onSent }: Props) {
-  const [form, setForm] = useState<AskForm>(() => blank(studyId, inputId));
+export function AskSupplierModal({ open, onClose, studyId, inputId, supplierName = "", supplierEmail = "", onSent }: Props) {
+  const [form, setForm] = useState<AskForm>(() => blank(studyId, inputId, supplierName, supplierEmail));
   const [touched, setTouched] = useState(false);
   const set = (patch: Partial<AskForm>) => setForm((f) => ({ ...f, ...patch }));
 
   useEffect(() => {
     if (open) {
-      setForm(blank(studyId, inputId));
+      setForm(blank(studyId, inputId, supplierName, supplierEmail));
       setTouched(false);
     }
-  }, [open, studyId, inputId]);
+  }, [open, studyId, inputId, supplierName, supplierEmail]);
 
   const studies = useStudyOptions(open);
   const study = useStudyInputs(open ? form.study_id : null);

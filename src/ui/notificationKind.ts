@@ -18,5 +18,6 @@ export function notificationKind(type: string): NotificationKind {
   if (t.includes("ESCALATION")) return "escalation";
   if (t.includes("REMINDER") || t.includes("DEADLINE")) return "reminder";
   if (t.includes("UPLOAD")) return "upload"; // IM4: an import batch waiting for review
+  if (t.includes("DRAFT_SUBMITTED")) return "upload"; // S3-15: a contributor submitted their drafts
   return "other";
 }

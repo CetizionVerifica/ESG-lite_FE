@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { Eye, RotateCcw } from "lucide-react";
-import { applyChange, formColumns, isColumnVisible, newRow, setExtraField, toFormModel, visibleExtraFields } from "../../../../lib/emissions/form";
-import { resolveSpecMethod } from "../../../../lib/emissions/emissionCalc";
+import { applyChange, formColumns, isColumnVisible, newRow, rowMethodChoices, setExtraField, toFormModel, visibleExtraFields } from "../../../../lib/emissions/form";
+import { ROW_METHOD_COLUMN, resolveSpecMethod } from "../../../../lib/emissions/emissionCalc";
 import type { ModalRow } from "../../../../lib/emissions/types";
-import { Badge, Button, DynamicField, NumberField, Select, TextField, Textarea, cn, panel } from "../../../../ui";
+import { Badge, Button, DynamicField, MethodCards, NumberField, SegmentedControl, Select, TextField, Textarea, cn, panel } from "../../../../ui";
 import { type BuilderDraft, toPreviewConfig } from "../../builder";
 
 export type PreviewProps = {
@@ -11,6 +11,8 @@ export type PreviewProps = {
   formId: number;
   siteName?: string;
   categoryName?: string;
+  /** GHG Protocol category: methods are worded the category's way (S3-3). */
+  ghgCategory?: number | null;
 };
 
 /**
@@ -18,12 +20,17 @@ export type PreviewProps = {
  * with the same form rules, so every edit shows here at once. Values typed
  * here are never saved.
  */
-export function Preview({ draft, formId, siteName, categoryName }: PreviewProps) {
+export function Preview({ draft, formId, siteName, categoryName, ghgCategory }: PreviewProps) {
   const model = useMemo(() => toFormModel(toPreviewConfig(draft, formId)), [draft, formId]);
   const [row, setRow] = useState<ModalRow>(() => newRow(model, 1));
+  // Contributors only see the form's default method; a Manager picks between them (simple-entry §8).
+  const [viewAs, setViewAs] = useState<"contributor" | "manager">("contributor");
   const columns = formColumns(model).filter((c) => isColumnVisible(model, c, row));
   const extras = visibleExtraFields(model, row);
   const mapped = Object.keys(model.mapping).length > 0;
+  const methods = rowMethodChoices(model);
+  // A method the draft no longer offers falls back to its first, as a new row in Add data would start.
+  const method = methods.includes(String(row[ROW_METHOD_COLUMN] ?? "")) ? String(row[ROW_METHOD_COLUMN]) : (model.methodOptions[0]?.method ?? null);
   const unit = row.activity_data_unit || (model.spec ? resolveSpecMethod(model.spec, row)?.method.activity_unit : undefined);
 
   return (
@@ -34,13 +41,34 @@ export function Preview({ draft, formId, siteName, categoryName }: PreviewProps)
             <Eye aria-hidden className="size-4 text-muted" /> Live preview
           </h2>
           <p className="text-xs text-muted">
-            What contributors see{siteName && categoryName ? ` at ${siteName} for ${categoryName}` : ""}. Nothing typed here is saved.
+            What {viewAs === "manager" ? "Managers" : "contributors"} see{siteName && categoryName ? ` at ${siteName} for ${categoryName}` : ""}. Nothing typed here is saved.
           </p>
         </div>
         <Button size="sm" variant="ghost" icon={<RotateCcw aria-hidden className="size-4" />} onClick={() => setRow(newRow(model, 1))}>
           Clear
         </Button>
       </div>
+
+      {methods.length > 1 && (
+        <SegmentedControl
+          label="Preview as"
+          size="sm"
+          options={[
+            { value: "contributor", label: "Contributor" },
+            { value: "manager", label: "Manager" },
+          ]}
+          value={viewAs}
+          onChange={(v) => {
+            setViewAs(v);
+            // Back to the contributor's view: the row starts on the form's default method again.
+            const first = model.methodOptions[0]?.method;
+            if (v === "contributor" && first) setRow((r) => applyChange(model, r, ROW_METHOD_COLUMN, first));
+          }}
+        />
+      )}
+
+      {/* Contributors don't pick a method (simple-entry §8): the form's first is shown as the line they'd be calculated by. */}
+      <MethodCards methods={viewAs === "manager" ? methods : method ? [method] : []} value={method} onChange={(v) => setRow((r) => applyChange(model, r, ROW_METHOD_COLUMN, v))} ghgCategory={ghgCategory} />
 
       {columns.length === 0 ? (
         <p className="rounded-control border border-dashed border-line px-3 py-3 text-sm text-muted">No fields yet.</p>

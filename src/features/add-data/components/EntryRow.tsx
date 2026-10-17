@@ -1,9 +1,9 @@
-import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
-import { Badge, Button, FileDrop, InfoTerm, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
+import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
-import { formColumns, isColumnVisible, visibleExtraFields, type FormModel } from "../logic/form";
+import { formColumns, isColumnVisible, rowMethodChoices, visibleExtraFields, type FormModel } from "../logic/form";
 import type { RowIssue } from "../logic/entry";
 import type { CategoryMapping } from "../api";
 import type { EmissionFactor, ModalRow } from "../types";
@@ -13,13 +13,20 @@ import { DynamicField } from "./DynamicField";
 import { DistanceInput } from "./DistanceInput";
 import { distanceFieldFor, type DistanceField } from "../logic/distance";
 import { ExtraFields } from "./ExtraFields";
+import { TRANSPORT_MODE_COLUMN, transportUnitHelp } from "../logic/transport";
 import { TripCalculator } from "./TripCalculator";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isGhgCategoryNumber } from "../../../lib/scope3/contracts";
 import { methodLabel } from "../../../lib/scope3/labels";
+import { DATA_TYPE_LABELS, autoDq, dataTypeFor, isMethod, unitsForMethod, type Method } from "../../../lib/scope3/dq";
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
+import { SPEND_FIELDS, spendPreviewLine } from "../../../lib/scope3/spend";
 import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
 import { plainProblem } from "../../../lib/entryDetail";
+import { supplierMethodOf } from "../logic/supplier";
+import { SpendFields } from "./SpendFields";
+
+const SPEND_EXTRA_KEYS = new Set<string>(Object.values(SPEND_FIELDS));
 
 /**
  * The Category 3 (FERA) rows an entry adds on save (S3-7): the upstream twin
@@ -36,11 +43,6 @@ type Props = {
   model: FormModel;
   calc: EmissionCalculator;
   feraCalc: Cat3Calc | null;
-  /**
-   * SE-1: the calculation detail (factor line, "(factor unit)", Global chip,
-   * Category 3 line, method words). False for a User: fields and the total only.
-   */
-  detail: boolean;
   factors: EmissionFactor[];
   mappings: CategoryMapping[];
   units: string[];
@@ -48,6 +50,8 @@ type Props = {
   reportingYear: number;
   issue: RowIssue | null;
   showIssue: boolean;
+  /** S3-15 live checks: what the save would refuse; shown on its field when the form has nothing to say there. */
+  serverIssue?: RowIssue | null;
   comparison: RowComparison;
   canRemove: boolean;
   /** The category's GHG Protocol number (Scope 3 only); picks method labels and travel copy. */
@@ -60,13 +64,28 @@ type Props = {
   onCalculateDistance: (column: string, field: DistanceField) => void;
   /** Evidence files for a typed row; bill rows have their bill. */
   evidence?: { items: FileDropItem[]; onAdd: (files: File[]) => void; onRemove: (id: string) => void };
+  /** S3-6: the Supplier field of a Category 1 or 2 row. */
+  supplierSlot?: ReactNode;
+  /** The site's country (ISO alpha-2), for the data quality preview (S3-3). */
+  siteCountry?: string | null;
+  /** The server refused the row's method (METHOD_NOT_ALLOWED): its words, shown on the method cards. */
+  methodError?: string;
+  /**
+   * SE-1: the calculation detail is for Managers and above (or a company set to full detail): method
+   * cards, data quality, the factor line and spend/FX preview, "(factor unit)", the Global chip and the
+   * Category 3 line. A contributor sees their fields and the total; their row keeps the form's first
+   * method (simple-entry §8 decision 2).
+   */
+  showCalcDetail?: boolean;
 };
 
 /** One entry as a card: what it is, its values, more details, and the live result. */
 export function EntryRow(p: Props) {
   const { row, model, calc } = p;
   const mapped = Object.keys(model.mapping).length > 0;
-  const factor = row.emission_category ? calc.getEmissionFactor(row.emission_category) : undefined;
+  // S3-6: a supplier-method row is calculated from the supplier's figures, not the activity's factor.
+  const supplierMethod = supplierMethodOf(row);
+  const factor = row.emission_category && !supplierMethod ? calc.getEmissionFactor(row.emission_category) : undefined;
   const result = calc.calculateEmission(row);
   const twin = (c: EmissionCalculator | null | undefined) => (c && row.emission_category && c.getEmissionFactor(row.emission_category) ? c.calculateEmission(row).value : null);
   const cat3 = p.feraCalc
@@ -82,9 +101,14 @@ export function EntryRow(p: Props) {
     (row.emission_category && calc.getExpectedUnit(row.emission_category)) ||
     (model.spec?.mode === "per_method" ? resolveSpecMethod(model.spec, row)?.method.activity_unit : null) ||
     null;
-  const extras = visibleExtraFields(model, row);
+  const allExtras = visibleExtraFields(model, row);
+  const localShown = p.showIssue && !!p.issue;
+  // SE-1: a User reads the local problem in plain words; server issues already are (serverIssueOf).
+  const localMessage = (m: string) => (p.showCalcDetail ? m : plainProblem(m));
   const fieldError = (f: RowIssue["field"]) =>
-    p.showIssue && p.issue?.field === f ? (p.detail ? p.issue.message : plainProblem(p.issue.message)) : undefined;
+    localShown && p.issue?.field === f ? localMessage(p.issue.message) : !localShown && p.serverIssue?.field === f ? p.serverIssue.message : undefined;
+  // A server problem on the values (no factor, a field it refuses) shows under the result.
+  const serverValues = !localShown && p.serverIssue?.field === "values" ? p.serverIssue.message : null;
   const categoryOptions =
     p.mappings.length > 0
       ? p.mappings.map((m) => ({ value: m.global_category_name, label: m.company_category_name }))
@@ -94,22 +118,31 @@ export function EntryRow(p: Props) {
   const confidence = aiCategory ? (bill?.confidence ?? null) : null;
   const unsure = confidence !== null && confidence < LOW_CONFIDENCE;
   const ghg = isGhgCategoryNumber(p.ghgCategory) ? p.ghgCategory : null;
-  // S3-9: a spec whose method_column is "@method" lets the row pick its method.
-  const rowMethods = model.spec?.mode === "per_method" && model.spec.method_column === ROW_METHOD_COLUMN ? Object.keys(model.spec.methods) : null;
+  // S3-3: the form's method_options, or (S3-9) a spec whose method_column is "@method", let the row pick its method.
+  // A contributor gets no S3-3 method choice. A form whose own fields depend on the row's method
+  // (an S3-9 "@method" spec with no method_options) keeps the plain select it has on production.
+  const rowMethods = p.showCalcDetail || !model.methodOptions.length ? rowMethodChoices(model) : [];
+  const legacyMethodSelect = !p.showCalcDetail && rowMethods.length > 1;
   const rowMethod = String(row[ROW_METHOD_COLUMN] ?? "");
-  // SE-1: a User never picks a method the form has only one of: it's chosen for them, out of sight.
-  // With several, the question stays (until SE-3/SE-5 give it the client's words) as "Type of record".
-  const onlyMethod = rowMethods?.length === 1 ? rowMethods[0] : null;
-  const autoMethod = !p.detail && !!onlyMethod;
-  const onChange = useRef(p.onChange);
-  onChange.current = p.onChange;
-  useEffect(() => {
-    if (autoMethod && onlyMethod && rowMethod !== onlyMethod) onChange.current(ROW_METHOD_COLUMN, onlyMethod);
-  }, [autoMethod, onlyMethod, rowMethod]);
+  const methodUnits = unitsForMethod(model.methodOptions, rowMethod);
   const tripField = ghg === 7 && rowMethod === "distance_based" ? distanceFieldOf(model.spec?.methods[rowMethod]) : null;
-  const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row));
+  // S3-5: a row calculated from the amount spent takes Amount, Currency and Invoice date instead of
+  // the quantity fields, unless its method multiplies fields into the amount (Category 15).
+  const spend = calc.spendDetail(row);
+  const spendForm = calc.usesSpendForm(row);
+  // The live data quality line mirrors the engine: a row priced from spend is spend_based (S3-5's file
+  // says so); else the row's method, else the form's first, else average data (Scope 3 only).
+  const dqMethod: Method | null = spend ? "spend_based" : isMethod(rowMethod) ? rowMethod : (model.methodOptions[0]?.method ?? (ghg !== null ? "average_data" : null));
+  const hasEvidence = !!bill || (p.evidence?.items.length ?? 0) > 0;
+  const dq = dqMethod && factor && ghg !== null ? autoDq({ method: dqMethod, factor, siteCountry: p.siteCountry, reportingYear: p.reportingYear, hasEvidence }) : null;
+  const visible = formColumns(model).filter((c) => isColumnVisible(model, c, row) && (!spendForm || c.column_type === "select"));
+  // The spend form's own fields replace the form's older "Spent value" / "Currency" extras.
+  const extras = spendForm ? allExtras.filter((f) => !SPEND_EXTRA_KEYS.has(f.key)) : allExtras;
   const firstSelect = visible.find((c) => c.column_type === "select")?.column_name;
-  const unitOptions = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
+  // A method that names its units (S3-3 method_options) offers only those.
+  const unitOptions = [
+    ...new Set([...(methodUnits ?? [...(expectedUnit ? [expectedUnit] : []), ...p.units]), ...(row.activity_data_unit ? [row.activity_data_unit] : [])]),
+  ];
 
   return (
     <section aria-label={`Row ${p.index + 1}`} className={cn(panel, "space-y-4 p-4")}>
@@ -134,7 +167,7 @@ export function EntryRow(p: Props) {
           {row.emission_category ? (
             <span className="mt-1 inline-flex flex-wrap items-center gap-1 rounded-chip bg-tint px-2 py-1 text-ink">
               {row._ecmKey || row.emission_category}
-              {p.detail && row._ecmKey && row._ecmKey !== row.emission_category && <span className="text-muted">· Global: {row.emission_category}</span>}
+              {p.showCalcDetail && row._ecmKey && row._ecmKey !== row.emission_category && <span className="text-muted">· Global: {row.emission_category}</span>}
             </span>
           ) : (
             <span className={cn("mt-1 block", fieldError("emission_category") ? "text-bad" : "text-muted")}>
@@ -160,16 +193,29 @@ export function EntryRow(p: Props) {
       )}
       </div>
 
-      {rowMethods && !autoMethod && (
+      {legacyMethodSelect ? (
         <Select<string>
-          label={p.detail ? "Calculation method" : "Type of record"}
+          label={p.showCalcDetail ? "Calculation method" : "Type of record"}
           value={rowMethod || null}
           onChange={(v) => p.onChange(ROW_METHOD_COLUMN, v ?? "")}
           options={rowMethods.map((k) => ({ value: k, label: methodLabel(k, ghg) }))}
-          placeholder={p.detail ? "Choose how this row is calculated" : "Choose one"}
+          placeholder={p.showCalcDetail ? "Choose how this row is calculated" : "Choose one"}
           className="sm:max-w-sm"
         />
-      )}
+      ) : p.showCalcDetail ? (
+        <MethodCards
+          methods={rowMethods}
+          value={rowMethod || null}
+          onChange={(v) => p.onChange(ROW_METHOD_COLUMN, v)}
+          ghgCategory={ghg}
+          label={`How is row ${p.index + 1} calculated?`}
+          error={p.methodError}
+        />
+      ) : p.methodError ? (
+        <p className="text-xs text-bad">{p.methodError}</p>
+      ) : null}
+
+      {p.supplierSlot}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((c) => {
@@ -194,19 +240,26 @@ export function EntryRow(p: Props) {
                 row={row}
                 onChange={p.onChange}
                 labelExtra={labelExtra}
-                help={p.detail && ghg === 6 && c.column_name === firstSelect ? TRAVEL_MODE_NOTE : undefined}
+                help={p.showCalcDetail && ghg === 6 && c.column_name === firstSelect ? TRAVEL_MODE_NOTE : undefined}
               />
             );
           })}
-        <Select<string>
-          label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
-          value={row.activity_data_unit || null}
-          onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
-          options={unitOptions.map((u) => ({ value: u, label: p.detail && u === expectedUnit ? `${u} (factor unit)` : u }))}
-          placeholder="Choose a unit"
-          help={p.detail && expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined}
-          error={fieldError("activity_data_unit")}
-        />
+        {spendForm ? (
+          <SpendFields row={row} onChange={p.onChange} amountError={fieldError("values")} currencyError={fieldError("currency")} />
+        ) : (
+          <Select<string>
+            label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
+            value={row.activity_data_unit || null}
+            onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
+            options={unitOptions.map((u) => ({ value: u, label: p.showCalcDetail && u === expectedUnit ? `${u} (factor unit)` : u }))}
+            placeholder="Choose a unit"
+            help={
+              transportUnitHelp(model.spec, row.activity_data_unit, row[TRANSPORT_MODE_COLUMN]) ??
+              (p.showCalcDetail && expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined)
+            }
+            error={fieldError("activity_data_unit")}
+          />
+        )}
       </div>
 
       {tripField && <TripCalculator field={tripField} onUse={(km) => p.onChange(tripField, String(km))} />}
@@ -246,7 +299,12 @@ export function EntryRow(p: Props) {
 
       <footer className="flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="text-xs text-muted">
-          {!p.detail ? null : factor ? (
+          {/* SE-1: the factor line and the spend/FX preview are calculation detail. */}
+          {!p.showCalcDetail ? null : spend?.outcome.ok ? (
+            <span className="font-num" data-testid="spend-preview">
+              {spendPreviewLine(spend.spend, spend.outcome, spend.factor)}
+            </span>
+          ) : factor ? (
             <>
               Factor {factor.factor_value} kgCO₂e per {factor.denominator_unit}, {factor.year}
               {factor.year === p.factorYear ? (
@@ -255,9 +313,21 @@ export function EntryRow(p: Props) {
                 <> · no {p.factorYear} factor; {factor.year} used for {p.reportingYear} data</>
               )}
             </>
+          ) : supplierMethod ? (
+            p.showCalcDetail ? <>From the supplier's figures · {methodLabel(supplierMethod, ghg)}</> : null
           ) : row.emission_category ? (
             <span className="text-bad">No factor for this category</span>
           ) : null}
+          {p.showCalcDetail && dq && dqMethod && (
+            <span className="mt-1 flex flex-wrap items-center gap-1.5" data-testid="row-dq">
+              Data quality <DataQualityBadge dq={dq} />
+              <span>
+                {DATA_TYPE_LABELS[dataTypeFor({ method: dqMethod, hasEvidence })]} data
+                {row._estimates?.length ? " · estimated distance" : ""}
+                {p.evidence && !hasEvidence && dataTypeFor({ method: dqMethod }) === "secondary" ? " · evidence makes it primary" : ""}
+              </span>
+            </span>
+          )}
           {p.comparison && (
             <span className="mt-1 block">
               <Badge tone={p.comparison.overThreshold ? "warn" : "neutral"}>
@@ -273,11 +343,19 @@ export function EntryRow(p: Props) {
               {/* Exact to the 2 decimals the saved total keeps. */}
               = {formatNumber(result.value, 2)} tCO₂e
               {result.status === "converted" && <span className="block text-xs font-normal text-muted">unit converted</span>}
+              {p.showCalcDetail &&
+                result.notes?.map((n) => (
+                  <span key={n} className="block text-xs font-normal text-muted" data-testid="calc-note">
+                    {n}
+                  </span>
+                ))}
             </p>
           ) : (
-            <p className={cn("text-sm", p.showIssue ? "text-bad" : "text-muted")}>{p.detail ? (p.issue?.message ?? result.status) : plainProblem(p.issue?.message ?? result.status)}</p>
+            // No issue but no figure: a spend rate loading or that failed to load; a muted note, never an error.
+            <p className={cn("text-sm", localShown || serverValues ? "text-bad" : "text-muted")}>{p.issue ? localMessage(p.issue.message) : (serverValues ?? (p.showCalcDetail ? result.status : plainProblem(result.status)))}</p>
           )}
-          {p.detail && cat3 && (
+          {result.value !== null && serverValues && <p className="text-xs text-bad">{serverValues}</p>}
+          {p.showCalcDetail && cat3 && (
             <p className="font-num text-xs text-muted">
               + <InfoTerm id="fera">Cat 3</InfoTerm> {cat3.slice(CAT3_PREVIEW_PREFIX.length)}
             </p>

@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { MyMonthCategory, MyMonthResponse } from "../../services/myMonthService";
+import type { EmissionData } from "../../services/emissionService";
+import { readMyMonth } from "../../services/myMonthService";
 import {
   addDataLink,
+  allLocked,
+  canMarkNothing,
+  draftRows,
+  firstDay,
+  fixLink,
+  keepSelected,
+  lockedSiteIds,
+  rowWord,
+  selectableIds,
+  selectionState,
+  submitMessage,
+  submitSelection,
   dueState,
   entriesLink,
   entriesSummary,
@@ -160,5 +174,114 @@ describe("page helpers", () => {
   it("detects a contributor with nothing assigned", () => {
     expect(hasNoAssignments(month([]))).toBe(true);
     expect(hasNoAssignments(month([cat()]))).toBe(false);
+  });
+});
+
+describe("S3-15 part 2: status words with the review workflow", () => {
+  const on = { workflow: true, today: "2025-10-05", dueDate: "2025-10-10" };
+  const off = { workflow: false, today: "2025-10-20", dueDate: "2025-10-10" };
+
+  it("keeps today's words with the switch off", () => {
+    expect(rowWord(cat(), off)).toBe("todo");
+    expect(rowWord(cat({ status: "draft" }), off)).toBe("todo");
+    expect(rowWord(cat({ status: "pending" }), off)).toBe("pending");
+    expect(rowWord(cat({ nothing_this_month: true }), off)).toBe("todo");
+  });
+
+  it("reads Draft for a category with only drafts, Missing for a to-do past the due date", () => {
+    expect(rowWord(cat({ entries: { total: 0, pending: 0, approved: 0, rejected: 0, draft: 2 } }), on)).toBe("draft");
+    expect(rowWord(cat({ status: "draft" }), on)).toBe("draft");
+    expect(rowWord(cat(), on)).toBe("todo");
+    expect(rowWord(cat(), { ...on, today: "2025-10-11" })).toBe("missing");
+    expect(rowWord(cat({ nothing_this_month: true }), on)).toBe("nothing");
+    // Rejected always wins: it needs action.
+    expect(rowWord(cat({ status: "rejected", entries: { total: 1, pending: 0, approved: 0, rejected: 1, draft: 1 } }), on)).toBe("rejected");
+  });
+
+  it("counts Nothing this month as filed and drafts as not filed", () => {
+    const p = progress(month([cat({ nothing_this_month: true }), cat({ status: "draft" }), cat({ status: "pending" })]));
+    expect(p).toEqual({ filed: 2, total: 3, allIn: false });
+    expect(rowMark(cat({ nothing_this_month: true }))).toBe("full");
+    expect(rowMark(cat({ entries: { total: 0, pending: 0, approved: 0, rejected: 0, draft: 1 } }))).toBe("half");
+  });
+
+  it("offers Nothing this month only on an empty monthly to-do in an open month", () => {
+    expect(canMarkNothing(cat(), false)).toBe(true);
+    expect(canMarkNothing(cat(), true)).toBe(false);
+    expect(canMarkNothing(cat({ entries: { total: 0, pending: 0, approved: 0, rejected: 0, draft: 1 } }), false)).toBe(false);
+    expect(canMarkNothing(cat({ status: "pending", entries: { total: 1, pending: 1, approved: 0, rejected: 0 } }), false)).toBe(false);
+    expect(canMarkNothing(cat({ filing: "yearly" }), false)).toBe(false);
+    expect(canMarkNothing(cat({ nothing_this_month: true }), false)).toBe(false);
+    expect(firstDay("2025-09")).toBe("2025-09-01");
+  });
+
+  it("finds locked sites", () => {
+    const data = month([cat()], { sites: [{ site_id: 1, name: "A", categories: [], locked: true }, { site_id: 2, name: "B", categories: [] }] });
+    expect(lockedSiteIds(data)).toEqual([1]);
+    expect(allLocked(data)).toBe(false);
+    expect(allLocked({ ...data, sites: [data.sites[0]] })).toBe(true);
+  });
+
+  it("links Fix to the saved row in Add data", () => {
+    expect(fixLink(7, 4, "2025-09", 91)).toBe("/data/new?site=7&category=4&period=2025-09&fix=91");
+  });
+});
+
+describe("S3-15 part 2: drafts and submit selection", () => {
+  const emission = (pk_id: number, status: string, siteId = 1, name = "Diesel"): EmissionData =>
+    ({
+      pk_id,
+      status,
+      total_emission: 1.5,
+      activity_data: { emission_category: name },
+      site: { site_id: siteId, name: siteId === 1 ? "Hidd" : "Sitra" },
+      category: { category_id: 1, category_name: "Diesel" },
+    }) as unknown as EmissionData;
+
+  const drafts = draftRows([emission(3, "draft"), emission(1, "draft"), emission(2, "pending"), emission(4, "draft", 2)], [2]);
+
+  it("keeps only drafts, in a stable order, and marks those in a locked month", () => {
+    expect(drafts.map((d) => [d.pk_id, d.locked])).toEqual([
+      [1, false],
+      [3, false],
+      [4, true],
+    ]);
+    expect(drafts[0]).toMatchObject({ siteName: "Hidd", categoryName: "Diesel", label: "Diesel", tco2e: 1.5 });
+  });
+
+  it("submits only selected drafts outside locked months", () => {
+    expect(submitSelection(new Set([1, 3, 4, 99]), drafts)).toEqual([1, 3]);
+    expect(selectableIds(drafts)).toEqual([1, 3]);
+  });
+
+  it("tracks the select-all state over the drafts that can be picked", () => {
+    expect(selectionState(new Set(), drafts)).toBe("none");
+    expect(selectionState(new Set([1]), drafts)).toBe("some");
+    expect(selectionState(new Set([1, 3, 4]), drafts)).toBe("all");
+    expect([...keepSelected(new Set([1, 99, 4]), drafts)]).toEqual([1]);
+  });
+
+  it("says how many went and why any didn't", () => {
+    expect(submitMessage({ submitted: [1, 2, 3], refused: [] })).toEqual({ title: "3 rows sent for approval", tone: "good" });
+    expect(submitMessage({ submitted: [1], refused: [{ id: 2, code: "PERIOD_LOCKED" }] })).toEqual({
+      title: "1 row sent for approval",
+      description: "1 row not sent: the month is locked.",
+      tone: "neutral",
+    });
+    expect(submitMessage({ submitted: [], refused: [{ id: 2, code: "NOT_DRAFT" }, { id: 3, code: "NOT_DRAFT" }] })).toMatchObject({ title: "2 rows not sent", tone: "bad" });
+  });
+});
+
+describe("readMyMonth (ESG-lite's S3-15 fields)", () => {
+  it("turns `nothing` / status nothing into a marked to-do, and leaves today's answer alone", () => {
+    const raw = month([cat({ category_id: 1, status: "nothing" as MyMonthCategory["status"] }), cat({ category_id: 2, ...({ nothing: true } as object) }), cat({ category_id: 3, status: "pending" })]);
+    const read = readMyMonth(raw).sites[0].categories;
+    expect(read.map((c) => [c.status, c.nothing_this_month ?? false])).toEqual([
+      ["todo", true],
+      ["todo", true],
+      ["pending", false],
+    ]);
+    const plain = month([cat()]);
+    expect(readMyMonth(plain).sites[0].categories[0]).toBe(plain.sites[0].categories[0]);
   });
 });

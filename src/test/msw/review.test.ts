@@ -1,0 +1,123 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { setupServer } from "msw/node";
+import type { PeriodLockStatus, Scope3ErrorBody, SubmitEmissionsResult } from "../../lib/scope3/contracts";
+import { readPeriodLockStatus } from "../../lib/scope3/lock";
+import { resetScope3Mocks, scope3Handlers } from "./scope3";
+import { addDraft, completeMonth } from "./review";
+
+const server = setupServer(...scope3Handlers);
+const API = "http://api.test";
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeEach(() => resetScope3Mocks());
+afterAll(() => server.close());
+
+const post = (path: string, body: unknown) => fetch(`${API}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const get = async <T>(path: string) => (await (await fetch(`${API}${path}`)).json()) as T;
+const lockStatus = async (q = "year=2026&month=9") => readPeriodLockStatus(await get<unknown>(`/periods/lock?${q}`), { year: 2026, month: 9 });
+
+describe("S3-15 part 2 mocks: drafts and submit", () => {
+  it("lists only the caller's own drafts for the month", async () => {
+    const { data } = await get<{ data: { pk_id: number; status: string }[] }>("/user/emissions?status=draft&year=2026&month=9&siteIds=1");
+    expect(data.map((r) => r.pk_id)).toEqual([701, 702, 703]);
+    expect(data.every((r) => r.status === "draft")).toBe(true);
+  });
+
+  it("submits own drafts and refuses the rest per id with a contract code", async () => {
+    const res = (await (await post("/user/emissions/submit", { ids: [701, 702, 704, 707] })).json()) as SubmitEmissionsResult;
+    expect(res.submitted).toEqual([701, 702]);
+    expect(res.refused).toEqual([
+      { id: 704, code: "NOT_DRAFT" },
+      { id: 707, code: "NOT_DRAFT" },
+    ]);
+    const { data } = await get<{ data: { pk_id: number }[] }>("/user/emissions?status=draft&year=2026&month=9&siteIds=1");
+    expect(data.map((r) => r.pk_id)).toEqual([703]);
+  });
+
+  it("refuses a draft in a locked month with PERIOD_LOCKED", async () => {
+    // August is locked on Hidd plant; a draft dated in it can't go for approval.
+    addDraft(801, 1, 1, "2026-08-31");
+    const res = (await (await post("/user/emissions/submit", { ids: [801, 703] })).json()) as SubmitEmissionsResult;
+    expect(res).toEqual({ submitted: [703], refused: [{ id: 801, code: "PERIOD_LOCKED" }] });
+  });
+
+  it("checks unsaved rows live: a duplicate of a saved row is held, evidence clears Evidence, an edit isn't its own duplicate", async () => {
+    const base = { site_id: 1, category_id: 1, activity_data: { emission_category: "Diesel (avg biofuel blend)", quantity: "1600" }, date_of_reporting: "2026-09-30" };
+    const res = (await (
+      await post("/user/emissions/check", {
+        rows: [
+          { ref: "a", ...base },
+          { ref: "b", ...base, has_evidence: true, activity_data: { emission_category: "Diesel (avg biofuel blend)", quantity: "1700" } },
+          { ref: "c", ...base, id: 701, has_evidence: true },
+          { ref: "d", ...base, activity_data: { emission_category: "Diesel", quantity: "" } },
+        ],
+      })
+    ).json()) as { results: { ref: string; checks: { held: string[] }; issue?: { code: string } }[] };
+    // Row a has draft 701's values; row c is 701 itself (an edit), so it isn't its own duplicate.
+    expect(res.results.map((r) => [r.ref, r.checks.held, r.issue?.code ?? null])).toEqual([
+      ["a", ["EVIDENCE_ATTACHED", "NO_DUPLICATE"], null],
+      ["b", [], null],
+      ["c", [], null],
+      ["d", [], "FIELD_REQUIRED"],
+    ]);
+    expect((await post("/user/emissions/check", { rows: [] })).status).toBe(400);
+  });
+
+  it("checks saved rows as if submitted now, per id", async () => {
+    expect(await (await post("/user/emissions/check", { ids: [705, 701] })).json()).toEqual({
+      results: [
+        { id: 705, status: "rejected", checks: { ready: true, held: [] } },
+        { id: 701, status: "draft", checks: { ready: false, held: ["EVIDENCE_ATTACHED"] } },
+      ],
+    });
+    expect((await post("/user/emissions/check", { ids: [] })).status).toBe(400);
+  });
+});
+
+describe("S3-15 part 2 mocks: close month", () => {
+  it("returns per-site completeness, a 15-cell Scope 3 grid and what's left", async () => {
+    const s = await lockStatus();
+    expect(s.sites.map((x) => x.name)).toEqual(["Hidd plant", "Sitra yard"]);
+    expect(s.scope3).toHaveLength(15);
+    expect(s.sites[0].categories.find((c) => c.category_id === 3)?.counts).toEqual({ draft: 1, pending: 1, approved: 0, rejected: 0 });
+    const reasons = s.left.map((l) => `${l.site_id}:${l.category_id ?? `S3-${l.ghg_category}`}:${l.reason}`);
+    // One reason per category: its state (rejected, then draft, then pending, else missing).
+    expect(reasons).toEqual(["1:1:draft", "1:2:rejected", "1:3:draft", "1:11:draft"]);
+    // One grid per site in the answer; the reader shows data when any site has some.
+    expect(s.scope3.find((c) => c.n === 7)).toEqual({ n: 7, status: "included", has_data: true });
+  });
+
+  it("marks and unmarks Nothing this month, which the lock view reads", async () => {
+    // Sitra yard has nothing owed left; mark Hidd LPG and see it counted.
+    expect(await (await post("/user/my-month/nothing", { site_id: 1, category_id: 2, month: "2026-09-01" })).json()).toEqual({ site_id: 1, category_id: 2, month: "2026-09-01", nothing: true });
+    expect((await lockStatus()).sites[0].categories.find((c) => c.category_id === 2)?.nothing_this_month).toBe(true);
+    await fetch(`${API}/user/my-month/nothing`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ site_id: 1, category_id: 2, month: "2026-09-01" }) });
+    expect((await lockStatus()).sites[0].categories.find((c) => c.category_id === 2)?.nothing_this_month).toBe(false);
+  });
+
+  it("refuses a lock with items left (PERIOD_INCOMPLETE), then locks once complete", async () => {
+    const early = await post("/periods/lock", { site_id: 1, year: 2026, month: 9 });
+    expect(early.status).toBe(422);
+    expect(((await early.json()) as Scope3ErrorBody).code).toBe("PERIOD_INCOMPLETE");
+    completeMonth(2026, 9);
+    expect((await lockStatus()).left).toEqual([]);
+    expect((await post("/periods/lock", { site_id: null, year: 2026, month: 9 })).status).toBe(200);
+    const s = await lockStatus();
+    expect(s.sites.every((x) => x.locked)).toBe(true);
+    // One lock row per site: each site reopens on its own.
+    expect(s.sites[1].lock).toMatchObject({ site_id: 2, year: 2026, month: 9 });
+  });
+
+  it("reopens only with a reason of 5 characters or more", async () => {
+    const short = await post("/periods/unlock", { site_id: 1, year: 2026, month: 8, reason: "late" });
+    expect(((await short.json()) as Scope3ErrorBody).code).toBe("UNLOCK_REASON_REQUIRED");
+    expect((await post("/periods/unlock", { site_id: 1, year: 2026, month: 8, reason: "Late diesel invoice" })).status).toBe(200);
+    const s = (await get<PeriodLockStatus>("/periods/lock?year=2026&month=8&site_id=1")).sites[0];
+    expect(s.locked).toBe(false);
+  });
+
+  it("refuses a Nothing this month mark in a locked month", async () => {
+    const res = await post("/user/my-month/nothing", { site_id: 1, category_id: 2, month: "2026-08-01" });
+    expect(((await res.json()) as Scope3ErrorBody).code).toBe("PERIOD_LOCKED");
+  });
+});

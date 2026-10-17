@@ -25,6 +25,8 @@ import {
 } from "../../services/emissionService";
 import type { ColumnConfig, LedgerRow, listParams } from "./logic";
 import { attentionOf, historyMonths, isFoldedFeraTwin, monthlyHistory, reviewCounts, rowMonth } from "./logic";
+import { getPeriodLock, lockPeriod, unlockPeriod } from "../../services/reviewService";
+import type { LockPeriodBody, UnlockPeriodBody } from "../../lib/scope3/contracts";
 
 export const keys = {
   all: ["approvals-ledger"] as const,
@@ -351,4 +353,36 @@ export function useEntryHistory(row: LedgerRow | null) {
       return monthlyHistory(row as LedgerRow, pages.flatMap((p) => p.data));
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// S3-15 part 2 · Close month (`?view=close`): completeness, lock and reopen.
+// ---------------------------------------------------------------------------
+
+export const lockKey = (year: number, month: number, siteIds: number[]) => [...keys.all, "period-lock", year, month, siteIds] as const;
+
+/** `GET /periods/lock` for the month over `siteIds` (all the caller's sites when empty). */
+export function usePeriodLock(year: number | null, month: number | null, siteIds: number[]) {
+  return useQuery({
+    queryKey: lockKey(year ?? 0, month ?? 0, siteIds),
+    enabled: year !== null && month !== null,
+    queryFn: () => getPeriodLock(year as number, month as number, siteIds),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Lock (each site, or the whole company with `site_id: null`) and reopen; both refresh the view and every emission list. */
+export function useLockMutations() {
+  const client = useQueryClient();
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: [...keys.all, "period-lock"] });
+    void invalidateEmissionQueries(client);
+  };
+  return {
+    lock: useMutation({
+      mutationFn: (bodies: LockPeriodBody[]) => Promise.all(bodies.map((b) => lockPeriod(b))),
+      onSettled: refresh,
+    }),
+    unlock: useMutation({ mutationFn: (body: UnlockPeriodBody) => unlockPeriod(body), onSettled: refresh }),
+  };
 }

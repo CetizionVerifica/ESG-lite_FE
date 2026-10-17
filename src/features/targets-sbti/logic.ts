@@ -1,4 +1,5 @@
 import type { LongTermChartResponse, NearTermTargetResponse } from "../../services/sbtiService";
+import { SBTI_HINT_LEAD } from "../../lib/scope3/sbti"; // S3-14
 
 /**
  * P12 Targets (SBTi): URL setup, one model for near-term and net-zero
@@ -33,19 +34,21 @@ export function baseYearOptions(now: Date): number[] {
   return out;
 }
 
-export function defaultBaseYear(now: Date): number {
+/** S3-14: the company's Scope 3 base year when it has one (and SBTi allows it), else last year. */
+export function defaultBaseYear(now: Date, companyBaseYear?: number | null): number {
+  if (companyBaseYear && Number.isInteger(companyBaseYear) && companyBaseYear >= MIN_BASE_YEAR && companyBaseYear <= now.getFullYear()) return companyBaseYear;
   return Math.max(MIN_BASE_YEAR, now.getFullYear() - 1);
 }
 
-/** Reads the setup from the URL; anything missing or out of range falls back to the defaults. */
-export function readSetup(params: URLSearchParams, now: Date): Setup {
+/** Reads the setup from the URL; anything missing or out of range falls back to the defaults. The URL value wins. */
+export function readSetup(params: URLSearchParams, now: Date, companyBaseYear?: number | null): Setup {
   const base = Number(params.get(URL_KEYS.base));
   const validBase = Number.isInteger(base) && base >= MIN_BASE_YEAR && base <= now.getFullYear();
   const horizon = Number(params.get(URL_KEYS.horizon));
   const pathway = params.get(URL_KEYS.pathway);
   const tab = params.get(URL_KEYS.tab);
   return {
-    baseYear: validBase ? base : defaultBaseYear(now),
+    baseYear: validBase ? base : defaultBaseYear(now, companyBaseYear),
     kind: params.get(URL_KEYS.target) === "netzero" ? "netzero" : "near",
     horizon: horizon === 5 ? 5 : 10,
     pathway: pathway === "wb2c" ? "wb2c" : "15c",
@@ -272,7 +275,7 @@ export function rulesCheck(input: { model: TargetModel; pathway: Pathway; chosen
           id: "scope3",
           state: "warn",
           title: `Scope 3 is ${formatPct(m.scope3SharePct)}, so a Scope 3 target is required`,
-          detail: `At ${SCOPE3_THRESHOLD_PCT}% or more of base emissions, Scope 3 needs its own target. It is included in this pathway.`,
+          detail: `At ${SCOPE3_THRESHOLD_PCT}% or more of base emissions, Scope 3 needs its own target. It is included in this pathway. ${SBTI_HINT_LEAD}`, // S3-14: 67 % coverage hint
         }
       : {
           id: "scope3",

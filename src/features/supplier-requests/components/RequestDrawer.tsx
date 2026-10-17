@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Copy, Download, FileText, Sparkles } from "lucide-react";
 import { Badge, Button, Callout, DateField, Drawer, Modal, NumberField, Select, TextField, Textarea, Tooltip, cn, fileNameFrom, focusRing, panel, saveBlob, useToast } from "../../../ui";
 import { type DeclarationResponse, getSupplierRequestFile, useAccept, useDeleteRequest, useReadDeclaration, useReject, useResend } from "../api";
@@ -18,6 +19,8 @@ import {
   formFromDeclaration,
   formFromReply,
   isBoundaryRefusal,
+  scope3AcceptNote,
+  scope3Boundary,
   studyLabel,
   unitLabel,
 } from "../logic";
@@ -65,6 +68,8 @@ export function RequestDrawer({ request: r, link, mailNote, aiAvailable, onClose
   const { toast } = useToast();
   const [form, setForm] = useState<AcceptForm>(() => (r ? formFromReply(r) : formFromReply({} as SupplierRequest)));
   const [confirmBoundary, setConfirmBoundary] = useState(false);
+  // S3-6: set when an accept added no Scope 3 supplier figure (its boundary wasn't confirmed).
+  const [scope3Note, setScope3Note] = useState<{ id: number; text: string } | null>(null);
   const [read, setRead] = useState<DeclarationResponse | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [rejectComment, setRejectComment] = useState("");
@@ -93,6 +98,7 @@ export function RequestDrawer({ request: r, link, mailNote, aiAvailable, onClose
   if (!r) return <Drawer open={false} onClose={onClose} title="" />;
 
   const mismatch = !!form.boundary && !!r.study && form.boundary !== r.study.boundary;
+  const s3 = scope3Boundary(r, form);
   const problem = acceptProblem(r, form, confirmBoundary);
   const canDecide = r.status === "received";
   const canResend = r.status !== "accepted" && r.status !== "rejected";
@@ -156,6 +162,9 @@ export function RequestDrawer({ request: r, link, mailNote, aiAvailable, onClose
       {
         onSuccess: (res) => {
           toast({ title: "Supplier figure accepted", description: res.applied_to_input ? "It now replaces the factor on the line." : (res.note ?? undefined), tone: "good" });
+          const note = scope3AcceptNote(res);
+          setScope3Note(note ? { id: r.supplier_request_id, text: note } : null);
+          if (note) toast({ title: "Not added for Scope 3", description: note });
         },
       },
     );
@@ -329,6 +338,15 @@ export function RequestDrawer({ request: r, link, mailNote, aiAvailable, onClose
             </section>
           )}
 
+          {scope3Note?.id === r.supplier_request_id && (
+            <Callout tone="warn" title="Not added for Scope 3">
+              <p data-testid="scope3-accept-note">{scope3Note.text}</p>
+              <Link to="/suppliers" className={cn("mt-2 inline-block text-sm font-medium text-accent underline", focusRing)}>
+                Open Suppliers
+              </Link>
+            </Callout>
+          )}
+
           {canDecide && (
             <section className="space-y-4" aria-label="Review and accept">
               <h3 className="text-sm font-semibold text-ink">Accept as a supplier factor</h3>
@@ -353,6 +371,18 @@ export function RequestDrawer({ request: r, link, mailNote, aiAvailable, onClose
                   <label className="mt-2 flex items-start gap-2 text-sm text-ink">
                     <input type="checkbox" className="mt-0.5" checked={confirmBoundary} onChange={(e) => setConfirmBoundary(e.target.checked)} data-testid="confirm-boundary" />
                     Accept it anyway and record the boundary on the factor
+                  </label>
+                  {s3.needsConfirm && <p className="mt-2 text-sm">Confirming also adds it as the supplier's Scope 3 figure, with its boundary recorded.</p>}
+                </Callout>
+              )}
+              {!mismatch && s3.needsConfirm && (
+                <Callout tone="info" title="Scope 3 takes cradle-to-gate figures">
+                  <p>
+                    This figure is {boundaryLabel(s3.boundary).toLowerCase()}. The footprint takes it as it is, but it is only added as the supplier's Scope 3 figure (Category 1) if you confirm the boundary.
+                  </p>
+                  <label className="mt-2 flex items-start gap-2 text-sm text-ink">
+                    <input type="checkbox" className="mt-0.5" checked={confirmBoundary} onChange={(e) => setConfirmBoundary(e.target.checked)} data-testid="confirm-scope3-boundary" />
+                    Also add it as the supplier's Scope 3 figure and record the boundary
                   </label>
                 </Callout>
               )}

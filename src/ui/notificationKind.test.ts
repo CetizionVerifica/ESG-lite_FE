@@ -8,6 +8,7 @@ describe("notificationKind", () => {
     expect(notificationKind("DEADLINE_REMINDER")).toBe("reminder");
     expect(notificationKind("ESCALATION")).toBe("escalation");
     expect(notificationKind("UPLOAD_PENDING")).toBe("upload");
+    expect(notificationKind("draft_submitted")).toBe("upload");
     expect(notificationKind("SYSTEM")).toBe("other");
   });
 

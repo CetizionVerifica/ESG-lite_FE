@@ -50,6 +50,8 @@ export default function SupplierRequestsPage() {
         p.delete("new"); // data-loss-reviewed: URL param, not data
         p.delete("input"); // data-loss-reviewed: URL param, not data
         p.delete("study"); // data-loss-reviewed: URL param, not data
+        p.delete("supplier"); // data-loss-reviewed: URL param, not data (S3-6 prefill)
+        p.delete("email"); // data-loss-reviewed: URL param, not data (S3-6 prefill)
         return p;
       },
       { replace: true },
@@ -64,6 +66,8 @@ export default function SupplierRequestsPage() {
         p.delete("new"); // data-loss-reviewed: URL param, not data
         p.delete("input"); // data-loss-reviewed: URL param, not data
         p.delete("study"); // data-loss-reviewed: URL param, not data
+        p.delete("supplier"); // data-loss-reviewed: URL param, not data (S3-6 prefill)
+        p.delete("email"); // data-loss-reviewed: URL param, not data (S3-6 prefill)
         p.set("request", String(sent.request.supplier_request_id));
         return p;
       },
@@ -123,7 +127,15 @@ export default function SupplierRequestsPage() {
         storageKey="supplier-requests"
         pagination={{ mode: "client", pageSize: 25 }}
       />
-      <AskSupplierModal open={ask.open} onClose={closeAsk} studyId={ask.study_id ?? study ?? null} inputId={ask.input_id} onSent={onSent} />
+      <AskSupplierModal
+        open={ask.open}
+        onClose={closeAsk}
+        studyId={ask.study_id ?? study ?? null}
+        inputId={ask.input_id}
+        supplierName={ask.supplier_name}
+        supplierEmail={ask.supplier_email}
+        onSent={onSent}
+      />
       {current && (
         <RequestDrawer
           request={current}

@@ -1,4 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type SupplierDetail, createSupplier, getSupplier, getSuppliers } from "../../services/scope3SuppliersService";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
@@ -7,6 +8,7 @@ import { getMappingsByCompany, type CategoryMapping } from "../../services/categ
 export type { CategoryMapping };
 import { createEmission, getEmissionsPaginated, getPeriodTotal, updateEmission } from "../../services/emissionService";
 import { getThresholdByCompany } from "../../services/thresholdService";
+import { getSiteById } from "../../services/siteService";
 import { linkInvoiceDocuments, uploadMultipleDocuments } from "../../services/documentService";
 import { calculateRoadDistance, calculateSeaDistance } from "../../services/distanceService";
 import { resolveLocationFromBackend, type ResolvedLocation } from "../../services/locationService";
@@ -124,19 +126,21 @@ export function usePeriodTotals(args: { siteId: number | null; categoryId: numbe
 
 export type SaveOutcome =
   /** `warnings`: the engine's notes that never block (an older factor year, no FERA factor), shown on the result line (S3-4). */
-  | { kind: "saved"; emissionId: number | null; warnings?: string[] }
+  /** `status`: what the row was saved as; `draft` with the review workflow on (S3-15), otherwise `pending`. */
+  | { kind: "saved"; emissionId: number | null; warnings?: string[]; status?: string | null }
   | { kind: "duplicate"; message: string; existing: { tco2e: number | null; status: string | null } | null }
-  | { kind: "error"; message: string; modeLock: boolean };
+  /** `methodNotAllowed`: the form doesn't offer the row's method (S3-3 METHOD_NOT_ALLOWED); the message names the ones it does. */
+  | { kind: "error"; message: string; modeLock: boolean; methodNotAllowed?: boolean };
 
 interface ApiError {
   response?: {
     status?: number;
-    data?: { message?: string; duplicate?: boolean; mode_lock?: boolean; existing_emission?: { total_emission?: number | string; status?: string } };
+    data?: { message?: string; code?: string; duplicate?: boolean; mode_lock?: boolean; existing_emission?: { total_emission?: number | string; status?: string } };
   };
   message?: string;
 }
 
-type SavedBody = { emission?: { pk_id?: number }; warnings?: Array<{ code?: string; message?: string }> } | undefined;
+type SavedBody = { emission?: { pk_id?: number; status?: string }; warnings?: Array<{ code?: string; message?: string }> } | undefined;
 
 /** The engine's warning messages from a save answer (S3-4: FACTOR_FALLBACK_YEAR, FERA_FACTOR_MISSING). */
 export const warningsOf = (body: SavedBody): string[] =>
@@ -146,7 +150,7 @@ export const warningsOf = (body: SavedBody): string[] =>
 export async function saveRow(payload: EmissionPayload, replace = false): Promise<SaveOutcome> {
   try {
     const result = (await createEmission(payload, replace)) as SavedBody;
-    return { kind: "saved", emissionId: result?.emission?.pk_id ?? null, warnings: warningsOf(result) };
+    return { kind: "saved", emissionId: result?.emission?.pk_id ?? null, warnings: warningsOf(result), status: result?.emission?.status ?? null };
   } catch (err) {
     const e = err as ApiError;
     const data = e.response?.data;
@@ -161,9 +165,28 @@ export async function saveRow(payload: EmissionPayload, replace = false): Promis
     return {
       kind: "error",
       modeLock: !!data?.mode_lock,
+      ...(data?.code === "METHOD_NOT_ALLOWED" ? { methodNotAllowed: true } : {}),
       message: data?.message ?? e.message ?? "Couldn't save this row. Try again.",
     };
   }
+}
+
+/**
+ * The site's country (ISO alpha-2) for the data quality preview (S3-3: a factor
+ * for the site's own country scores best). Null when unknown; the preview then
+ * scores geography as the engine would without one.
+ */
+export function useSiteCountry(siteId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["add-data", "site-country", siteId],
+    enabled: enabled && siteId !== null,
+    staleTime: 60 * 60_000,
+    queryFn: async (): Promise<string | null> => {
+      const site = (await getSiteById(siteId as number).catch(() => null)) as { country?: { code?: unknown } | null } | null;
+      const code = site?.country?.code;
+      return typeof code === "string" && code.trim() ? code.trim().toUpperCase() : null;
+    },
+  });
 }
 
 /** Attach files picked on a typed row to its saved entry. True when they were all stored. */
@@ -176,7 +199,11 @@ export async function uploadRowEvidence(emissionId: number, files: File[]): Prom
   }
 }
 
-/** Save changes to an entry loaded from "Already entered" (pending or rejected); the backend sets it back to pending. */
+/**
+ * Save changes to an entry loaded from "Already entered" (pending, rejected,
+ * or a draft); the backend sets it back to pending, or to draft with the
+ * review workflow on (S3-15).
+ */
 export async function updateRow(id: number, payload: EmissionPayload): Promise<SaveOutcome> {
   try {
     const result = (await updateEmission(id, {
@@ -185,7 +212,7 @@ export async function updateRow(id: number, payload: EmissionPayload): Promise<S
       date_of_reporting: payload.date_of_reporting,
       activity_data_unit: payload.activity_data_unit,
     })) as SavedBody;
-    return { kind: "saved", emissionId: result?.emission?.pk_id ?? id, warnings: warningsOf(result) };
+    return { kind: "saved", emissionId: result?.emission?.pk_id ?? id, warnings: warningsOf(result), status: result?.emission?.status ?? null };
   } catch (err) {
     const e = err as ApiError;
     return { kind: "error", modeLock: false, message: e.response?.data?.message ?? e.message ?? "Couldn't save this row. Try again." };
@@ -303,5 +330,37 @@ export function useRoute(mode: "road" | "sea" | null, from: ResolvedLocation | n
       const r = await calculateRoadDistance({ ...body, mode: "road" });
       return { meters: r.distanceMeters, durationText: r.durationText, polyline: r.encodedPolyline, seaPath: null };
     },
+  });
+}
+
+// S3-6: suppliers for the Supplier field on Category 1 and 2 rows. Reads are
+// open to everyone with access to the company; adding one is Manager and above.
+const supplierKeys = {
+  list: (year: number) => ["add-data", "suppliers", year] as const,
+  detail: (id: number) => ["add-data", "supplier", id] as const,
+};
+
+export function useSupplierOptions(year: number, enabled: boolean) {
+  return useQuery({ queryKey: supplierKeys.list(year), queryFn: () => getSuppliers(null, year), enabled, staleTime: 60_000 });
+}
+
+/** The figures and facility data of every supplier the rows name, loaded once each. */
+export function useSupplierDetails(ids: number[]): Map<number, SupplierDetail> {
+  const unique = [...new Set(ids)].sort((a, b) => a - b);
+  const results = useQueries({
+    queries: unique.map((id) => ({ queryKey: supplierKeys.detail(id), queryFn: () => getSupplier(null, id), staleTime: 60_000 })),
+  });
+  const map = new Map<number, SupplierDetail>();
+  results.forEach((r, i) => {
+    if (r.data) map.set(unique[i], r.data);
+  });
+  return map;
+}
+
+export function useCreateSupplier(year: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => createSupplier(null, { name }),
+    onSettled: () => qc.invalidateQueries({ queryKey: supplierKeys.list(year) }),
   });
 }

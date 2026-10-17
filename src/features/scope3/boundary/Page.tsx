@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom"; // S3-12
 import { useAuth } from "../../../context/AuthContext";
 import { useClientContext } from "../../../lib/clientContext";
 import { CONSOLIDATION_APPROACHES, CONSOLIDATION_LABEL, type ConsolidationApproach } from "../../../lib/scope3/boundary";
@@ -9,6 +10,7 @@ import { UnmappedPanel } from "./components/UnmappedPanel";
 import { type RowDraft, countStatuses, draftFrom, isRowDirty, rowError, summaryLine } from "./logic";
 import { LEASE_ROLE_LABEL } from "../../../lib/scope3/assets"; // S3-11
 import { categoryLabel } from "../../../lib/scope3/contracts"; // S3-11
+import { BaseYearSection } from "../baseYear/BaseYearSection"; // S3-14
 
 const APPROACH_OPTIONS = CONSOLIDATION_APPROACHES.map((a) => ({ value: a, label: CONSOLIDATION_LABEL[a] }));
 
@@ -26,6 +28,7 @@ export default function Scope3BoundaryPage() {
   const ready = !isStaff || clientId !== null;
 
   const { toast } = useToast();
+  const navigate = useNavigate(); // S3-12
   const boundary = useBoundary(companyId, ready);
   const map = useCategoryMap(companyId, ready);
   const save = useSaveBoundary(companyId);
@@ -124,6 +127,7 @@ export default function Scope3BoundaryPage() {
     <PageHeader
       title="Scope 3 boundary"
       description="Every GHG Protocol Scope 3 category is included, excluded or not relevant, with the reason. Reports list exclusions with these reasons."
+      secondaryActions={[{ label: "Screening", onClick: () => navigate("/settings/scope3/screening") }]} // S3-12
     />
   );
 
@@ -227,6 +231,9 @@ export default function Scope3BoundaryPage() {
           </ul>
         </section>
       )}
+
+      {/* S3-14: base year and recalculations (#base-year). */}
+      <BaseYearSection companyId={companyId} ready={ready} />
 
       {editable && dirty.length > 0 && (
         <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-page px-4 py-3">

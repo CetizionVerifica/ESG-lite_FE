@@ -9,7 +9,17 @@ export function feraCategoryIds(sites: CategorySite[]): number[] {
   return [...ids].sort((a, b) => a - b);
 }
 
-export type PendingFilter = { categoryId?: CategoryFilter; year?: number | null; month?: number | null; search?: string | null; batchId?: string | null; attention?: boolean | null };
+export type PendingFilter = {
+  categoryId?: CategoryFilter;
+  year?: number | null;
+  month?: number | null;
+  search?: string | null;
+  batchId?: string | null;
+  attention?: boolean | null;
+  /** S3-3 `method=` and `dq_max=`. */
+  method?: string | null;
+  dqMax?: 1 | 2 | 3 | null;
+};
 
 /**
  * Pending entries as the approvals list shows them: a FERA twin of a pending

@@ -155,3 +155,17 @@ export function heldChip(id: CheckId, c: CheckContext = {}): { label: string; hi
   const copy = CHECK_COPY[id];
   return { label: copy.held(c), hint: copy.hint(c), icon: copy.icon };
 }
+
+/**
+ * The checks a contributor (User) sees in the live panel when fixing a row:
+ * only the ones they can act on. Factor, unit, import, method and data
+ * quality checks are calculation detail (SE-1 `showCalcDetail`); reviewers
+ * see them.
+ */
+export const USER_CHECK_IDS: readonly CheckId[] = ["EVIDENCE_ATTACHED", "WITHIN_THRESHOLD", "NO_DUPLICATE"];
+
+/** `checkLines` narrowed to what this person may see. */
+export function visibleCheckLines(checks: RowChecks, c: CheckContext = {}, showCalcDetail = false): CheckLine[] {
+  const lines = checkLines(checks, c);
+  return showCalcDetail ? lines : lines.filter((l) => USER_CHECK_IDS.includes(l.id));
+}

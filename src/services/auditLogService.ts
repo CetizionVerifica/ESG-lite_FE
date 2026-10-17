@@ -2,7 +2,7 @@ import api from "../api/axios";
 
 export interface AuditLogEntry {
   id: number;
-  entity_type: "emission" | "production_data" | "pcf_study";
+  entity_type: "emission" | "production_data" | "pcf_study" | `scope3_${string}`; // S3-14: base-year history
   entity_id: number;
   action: string;
   changed_fields: Record<string, { old: any; new: any }>;

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { toFormModel } from "../../../lib/emissions/form";
 import type { ColumnConfig, ColumnEntity } from "../../../lib/emissions/types";
 import { billOf } from "../logic/bill";
-import { editRow, rowsReducer } from "./useEntryRows";
+import { editRow, isEstimated, rowsReducer } from "./useEntryRows";
 
 const col = (pk_id: number, column_name: string, column_type = "select"): ColumnEntity => ({ pk_id, column_name, column_type });
 const waste: ColumnConfig = {
@@ -42,5 +42,17 @@ describe("duplicating a row loaded with Edit", () => {
     expect(state.rows[1]).toMatchObject({ id: 2, quantity: "43", emission_category: "Diesel" });
     expect(state.rows[1]).not.toHaveProperty("_editOf");
     expect(state.rows[1]).not.toHaveProperty("_editSaved");
+  });
+});
+
+describe("an estimated distance (S3-3 is_estimate, S3-8)", () => {
+  it("stays an estimate until the user types over it", () => {
+    const m = toFormModel(waste);
+    const start = { rows: [{ id: 1, quantity: "" }], nextId: 2, key: null, sent: false };
+    const estimated = rowsReducer(start, { type: "distance", model: m, id: 1, column: "quantity", value: "147.91", estimate: true });
+    expect(isEstimated(estimated.rows[0])).toBe(true);
+    const typed = rowsReducer(estimated, { type: "change", model: m, id: 1, column: "quantity", value: "150" });
+    expect(typed.rows[0].quantity).toBe("150");
+    expect(isEstimated(typed.rows[0])).toBe(false);
   });
 });

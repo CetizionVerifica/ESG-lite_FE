@@ -17,7 +17,8 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | Number, delta and date text | `format.ts` | `formatEmissions` (t → kg below 1 t), `emissionsParts`, `formatIntensity`, `formatDelta` (arrow + tone), `formatMonth`, `formatDate`, `formatReportingYear` |
 | Reporting periods | `period.ts` | `?period=` values `2025-09`, `2025-Q3`, `CY2025`, `FY2025` (start year), `2025-01-01_2025-06-30`; `periodLabel`, `periodRange(p, fyStartMonth)` |
 | `Button` | `Button.tsx` | primary / secondary / ghost / danger, `loading` |
-| `StatusPill` | `StatusPill.tsx` | pending / approved / rejected / missing / draft: icon + label, fixed status colours |
+| `StatusPill` | `StatusPill.tsx` | pending / approved / rejected / missing / draft / locked: icon + label, fixed status colours |
+| `CheckList` | `CheckList.tsx` | S3-15 review checks as a list (held first with hint, then passed; icon + word + Pass/Held): approvals "Why held" and the Fix screen's live checks |
 | `EmptyState` | `EmptyState.tsx` | one sentence, one action; `variant="error"` for failures |
 | `Skeleton` | `Skeleton.tsx` | `SkeletonText`, `SkeletonTableRows`, `SkeletonKpi`, `SkeletonChart` |
 | `Modal` | `Modal.tsx` | confirmations and short forms; focus trap, Esc, `tone="destructive"`, `error` |
@@ -39,6 +40,8 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | `Tooltip` | `Tooltip.tsx` | hover + focus (+ tap with `toggleOnClick`), Esc hides; portal, stays in the viewport; short hints only |
 | `InfoTip`, `InfoTerm`, `GLOSSARY` | `InfoTerm.tsx`, `glossary.ts` | `<InfoTip id="scope1" />`; ids are shared with the i18n termbase. Highlighted info icon with a plain-language definition. KpiStrip labels, DataTable headers (or `info:` on a column), ChartFrame title/unit, Field labels, ScopeBar and PageHeader titles that match a glossary term get it automatically; add new terms to `glossary.ts` and their Arabic/Spanish text to `glossaryTranslations.ts` (tsc enforces it). The info-icon language (English/العربية/Español, account menu, `esglite.infoLanguage`) changes only these definitions; it is hidden and everything stays English unless `VITE_INFO_LANGUAGE=1` (ar/es await a native-speaker check) |
 | `Menu` | `Menu.tsx` | action menu: arrows, Enter, Esc returns focus; `danger`, radio (`checked`) and `current` items, separators and headings |
+| `DataQualityBadge` | `DataQualityBadge.tsx` | S3-3: a row's `dq` as Good / Fair / Poor with a signal glyph (never colour alone); the five indicators and auto/by-hand in the tooltip (tap on touch); "Not scored" for anything else. Words from `src/lib/scope3/dq.ts` |
+| `MethodCards` | `MethodCards.tsx` | S3-3: how a row is calculated, one radio card per offered method (most specific first, plain label and one-line hint, category wording with `ghgCategory`); one method shows as a read-only "Calculated:" line; `error` for METHOD_NOT_ALLOWED |
 | `Avatar`, `Badge` | `Avatar.tsx`, `Badge.tsx` | initials fallback; neutral/brand/info/good/warn/bad badges |
 | `Stepper` | `Stepper.tsx` | steps, `current`, `completed`, `canJump` rule (default: done steps + the next open one); "Step 2 of 3" on phones |
 | `UnitInput` | `UnitInput.tsx`, `unitMatch.ts` | number + unit; same rules as UserDataEntry's `UnitSelector` (`utils/unitConversions`): mismatch error, or "Convert to kWh" when a factor exists |
