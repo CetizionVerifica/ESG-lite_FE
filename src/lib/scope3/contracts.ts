@@ -284,6 +284,45 @@ export interface SubmitEmissionsBody {
   ids: number[];
 }
 
+/** Why `POST /user/emissions/submit` left an id out. */
+export type SubmitRefusalCode = "NOT_DRAFT" | "PERIOD_LOCKED";
+
+/** `POST /user/emissions/submit` result: per id, sent for approval or refused with a code. */
+export interface SubmitEmissionsResult {
+  submitted: number[];
+  refused: { id: number; code: SubmitRefusalCode | string }[];
+}
+
+/**
+ * One unsaved row for `POST /user/emissions/check {rows}` (S3-15 live checks):
+ * the row as Add data would save it. `ref` names it in the answer; `id` makes
+ * it an edit of that saved row (not compared with itself).
+ */
+export interface CheckRowBody {
+  ref: string;
+  id?: number;
+  site_id: number;
+  category_id: number;
+  activity_data: Record<string, unknown>;
+  activity_data_unit?: string | null;
+  /** YYYY-MM-DD */
+  date_of_reporting: string;
+  reporting_period?: "monthly" | "yearly";
+  year_type?: YearType | null;
+  method?: string | null;
+  has_evidence?: boolean;
+}
+
+/** Most rows one live check takes. */
+export const CHECK_ROWS_MAX = 50;
+
+/** One answer of `POST /user/emissions/check {rows}`: the checks, and a problem the save would refuse the row for. */
+export interface CheckRowResult {
+  ref: string;
+  checks: RowChecks;
+  issue?: { code: string; message: string; field?: string };
+}
+
 /** `POST /periods/lock`; unlock adds a reason. */
 export interface LockPeriodBody {
   site_id?: number | null;
@@ -292,6 +331,58 @@ export interface LockPeriodBody {
 }
 export interface UnlockPeriodBody extends LockPeriodBody {
   reason: string;
+}
+
+/** Reopening a locked month needs at least this many characters of reason (`UNLOCK_REASON_REQUIRED`). */
+export const UNLOCK_REASON_MIN = 5;
+
+/** Why a site-month can't be locked yet: one `left` item of `GET /periods/lock`. */
+export const LOCK_LEFT_REASONS = ["missing", "draft", "pending", "rejected", "scope3_no_data"] as const;
+export type LockLeftReason = (typeof LOCK_LEFT_REASONS)[number];
+
+/** `GET /periods/lock`: a category a site owes for the month, with its rows counted by status. */
+export interface PeriodLockCategory {
+  category_id: number;
+  category_name: string;
+  scope: string | null;
+  ghg_category?: number | null;
+  counts: { draft: number; pending: number; approved: number; rejected: number };
+  nothing_this_month: boolean;
+}
+
+/** `GET /periods/lock`: one site's month. `lock` is the active lock (its own or a company-wide one). */
+export interface PeriodLockSite {
+  site_id: number;
+  name: string;
+  locked: boolean;
+  lock: PeriodLock | null;
+  categories: PeriodLockCategory[];
+}
+
+/** One Scope 3 grid cell: the S3-1 boundary status and whether the month has data for it. */
+export interface Scope3GridCell {
+  n: GhgCategoryNumber;
+  status: BoundaryStatus | null;
+  has_data: boolean;
+}
+
+/** One thing left before the month can be locked. `category_id` null = a Scope 3 grid cell (`ghg_category`). */
+export interface LockLeftItem {
+  site_id: number;
+  site_name: string;
+  category_id: number | null;
+  category_name: string | null;
+  ghg_category?: number | null;
+  reason: LockLeftReason | string;
+}
+
+/** `GET /periods/lock?year&month` (S3-15): completeness of a month over the caller's sites. */
+export interface PeriodLockStatus {
+  year: number;
+  month: number;
+  sites: PeriodLockSite[];
+  scope3: Scope3GridCell[];
+  left: LockLeftItem[];
 }
 
 /** `POST /scope3/category-map`: an ESGLite category proposed for a GHG category (S3-1). */
@@ -373,6 +464,8 @@ export const SCOPE3_ERROR_CODES = [
   "PERIOD_INCOMPLETE",
   "BASE_YEAR_NO_DATA",
   "RECALCULATION_REASON_REQUIRED",
+  // S3-15 part 2 (ESG-lite [S3-15 3/4]): lock or "Nothing this month" for a client without review workflow v2.
+  "REVIEW_WORKFLOW_OFF",
 ] as const;
 export type Scope3ErrorCode = (typeof SCOPE3_ERROR_CODES)[number];
 

@@ -87,10 +87,18 @@ const extraction = {
   ],
 };
 
-type Extra = { existing?: unknown[]; updated?: unknown[]; uploads?: string[] };
+type Extra = {
+  existing?: unknown[];
+  updated?: unknown[];
+  uploads?: string[];
+  /** S3-15: the company's review workflow switch is on; edits come back as drafts. */
+  workflow?: boolean;
+  submitted?: number[][];
+  checked?: unknown[][];
+};
 
 async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>, extra: Extra = {}) {
-  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [site] };
+  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [extra.workflow ? { ...site, company: { ...site.company, review_workflow_v2: true } } : site] };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "User");
@@ -140,7 +148,29 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       }
       if (/\/user\/emissions\/\d+$/.test(path) && request.method() === "PUT") {
         extra.updated?.push({ id: Number(path.split("/").pop()), body: request.postDataJSON() });
-        return json({ emission: { pk_id: Number(path.split("/").pop()) } });
+        return json({ emission: { pk_id: Number(path.split("/").pop()), ...(extra.workflow && { status: "draft" }) } });
+      }
+      if (path.endsWith("/user/emissions/check")) {
+        // Live checks (S3-15): unsaved rows as they'd be saved. A saved entry with the same quantity is a
+        // duplicate (an edit isn't compared with itself); evidence comes from the row; the factor check is
+        // always held so the test sees a User doesn't get it.
+        type CheckRow = { ref: string; id?: number; activity_data: Record<string, unknown>; has_evidence?: boolean };
+        const rows = (request.postDataJSON() as { rows: CheckRow[] }).rows;
+        extra.checked?.push(rows);
+        const saved = (extra.existing ?? []) as { pk_id: number; activity_data: Record<string, unknown> }[];
+        const results = rows.map((r) => {
+          const held = ["FACTOR_FOUND"];
+          // has_evidence left out on an edit: the saved row's evidence counts (the rejected sample has none).
+          if (!r.has_evidence) held.push("EVIDENCE_ATTACHED");
+          if (saved.some((x) => x.pk_id !== r.id && x.activity_data.quantity === r.activity_data.quantity)) held.push("NO_DUPLICATE");
+          return { ref: r.ref, checks: { ready: false, held } };
+        });
+        return json({ results });
+      }
+      if (path.endsWith("/user/emissions/submit")) {
+        const ids = (request.postDataJSON() as { ids: number[] }).ids;
+        extra.submitted?.push(ids);
+        return json({ submitted: ids, refused: [] });
       }
       if (path.endsWith("/user/documents/multiple")) {
         extra.uploads?.push(request.postData() ?? "");
@@ -473,6 +503,67 @@ test("a rejected entry can be fixed from the entries already saved", async ({ pa
   expect(created).toHaveLength(0);
   expect(updated).toHaveLength(1);
   expect(updated[0]).toMatchObject({ id: 55, body: { activity_data: { fuel_type: "diesel", quantity: "1600" }, activity_data_unit: "litre" } });
+});
+
+test("Fix and resubmit (S3-15): a Fix link opens the rejected row with live checks, then Save and submit sends it", async ({ page }) => {
+  const created: unknown[] = [];
+  const updated: { id: number; body: Record<string, unknown> }[] = [];
+  const submitted: number[][] = [];
+  const checked: { ref: string; id?: number; activity_data: Record<string, unknown> }[][] = [];
+  await signIn(page, created, false, [], undefined, { existing: [rejected], updated, workflow: true, submitted, checked });
+  await page.goto("/data/new?site=4&category=9&period=2025-09&fix=55");
+
+  // The row is loaded straight away, with the manager's reason above it.
+  await expect(page.getByText("Sent back to you")).toBeVisible();
+  await expect(page.getByText("Quantity is missing a zero").first()).toBeVisible();
+  const row = page.getByRole("region", { name: "Row 1" });
+  await expect(row.getByLabel("Quantity")).toHaveValue("160");
+  await expect(page).not.toHaveURL(/fix=/);
+
+  // Live checks: a User sees the checks they can act on, not the factor one; an edit isn't its own duplicate.
+  const checks = page.getByRole("region", { name: "Checks before you send" });
+  await expect(checks.getByText("No evidence")).toBeVisible();
+  await expect(checks.getByText("No duplicate")).toBeVisible();
+  await expect(checks.getByText(/factor/i)).toHaveCount(0);
+  await row.getByLabel("Quantity").fill("1600");
+  // The unsaved row is checked as the save would send it, as an edit of entry 55.
+  await expect.poll(() => checked.at(-1)?.[0]?.activity_data.quantity).toBe("1600");
+  expect(checked.at(-1)?.[0]).toMatchObject({ id: 55, activity_data: { fuel_type: "diesel", quantity: "1600" } });
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByRole("button", { name: "Save as draft" })).toBeVisible();
+  await page.getByRole("button", { name: "Save and submit" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(updated).toHaveLength(1);
+  expect(submitted).toEqual([[55]]);
+});
+
+test("live checks (S3-15): typing a duplicate value holds Duplicate before saving; attaching evidence clears Evidence", async ({ page }) => {
+  const created: unknown[] = [];
+  const checked: { ref: string; has_evidence?: boolean }[][] = [];
+  await signIn(page, created, false, [], undefined, { existing: [rejected], workflow: true, checked });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Unit").selectOption("litre");
+  await row.getByLabel("Quantity").fill("500");
+
+  const checks = page.getByRole("region", { name: "Checks before you send" });
+  await expect(checks.getByText("No duplicate")).toBeVisible();
+  await expect(checks.getByText("No evidence")).toBeVisible();
+
+  // The saved, rejected entry has 160 litres: the same value is held as a possible duplicate, before any save.
+  await row.getByLabel("Quantity").fill("160");
+  await expect(checks.getByText("Possible duplicate")).toBeVisible();
+  expect(created).toHaveLength(0);
+
+  await row.getByText("Evidence", { exact: true }).click();
+  await row.locator('input[type="file"]').setInputFiles({ name: "meter-sep.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
+  await expect(checks.getByText("Evidence attached")).toBeVisible();
+  await expect(checks.getByText("No evidence")).toHaveCount(0);
+  expect(checked.at(-1)?.[0]).toMatchObject({ has_evidence: true });
+  // A check never blocks sending.
+  await expect(page.getByRole("button", { name: "Review" })).toBeEnabled();
 });
 
 test("a passenger.km row works the distance out in the drawer", async ({ page }) => {

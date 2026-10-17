@@ -57,6 +57,8 @@ import { DQ_FILTER_OPTIONS, METHOD_FILTER_OPTIONS, parseDqMax, parseMethodFilter
 import { useApproveAllReady } from "./hooks/useApproveAllReady";
 import { feraCategoryIds } from "../../lib/emissions/pendingCount";
 import { BatchesView } from "./components/BatchesView";
+import { CloseMonthView } from "./components/CloseMonthView";
+import { useReviewWorkflow } from "../../lib/reviewWorkflow";
 import { ReportMenu } from "./components/ReportMenu";
 import { RecordDrawer } from "./components/RecordDrawer";
 import { ledgerColumns } from "./components/columns";
@@ -110,15 +112,18 @@ const TAB_FILTERS: Record<Tab, FilterDef[]> = { approvals: [METHOD_FILTER, DQ_FI
 
 const describe = (r: LedgerRow) => `${r.category?.category_name ?? "Entry"} · ${r.site?.name ?? "—"} · ${rowPeriodLabel(r)}`;
 
-type View = Tab | "batches";
+/** `close`: S3-15 Close month, only with the company's review workflow on. */
+type View = Tab | "batches" | "close";
 
-/** P07: `/data/approvals` (Approvals; `?view=batches` Upload batches) and `/data/ledger`. */
+/** P07: `/data/approvals` (Approvals; `?view=batches` Upload batches, `?view=close` Close month) and `/data/ledger`. */
 export default function EmissionsPage({ tab }: { tab: Tab }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const sites = useManagerSites();
   const [ctx] = useContextParams();
-  const view: View = tab === "approvals" && params.get("view") === "batches" ? "batches" : tab;
+  const workflow = useReviewWorkflow();
+  const viewParam = tab === "approvals" ? params.get("view") : null;
+  const view: View = viewParam === "batches" ? "batches" : viewParam === "close" && workflow ? "close" : tab;
 
   const categories = useMemo(() => {
     const inScope = ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)) : sites;
@@ -148,8 +153,8 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
       const v = params.get(k);
       if (v) keep.set(k, v);
     }
-    if (next === "batches") keep.set("view", "batches");
-    navigate({ pathname: TAB_PATH[next === "batches" ? "approvals" : next], search: keep.toString() });
+    if (next === "batches" || next === "close") keep.set("view", next);
+    navigate({ pathname: TAB_PATH[next === "batches" || next === "close" ? "approvals" : next], search: keep.toString() });
   };
 
   return (
@@ -176,12 +181,15 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
             { value: "approvals", label: "Approvals", count: counts.data?.pending_count },
             { value: "ledger", label: "Ledger" },
             { value: "batches", label: "Upload batches", count: batches.data?.filter((b) => b.pending_count > 0).length },
+            ...(workflow ? [{ value: "close" as const, label: "Close month" }] : []),
           ]}
         />
         <ReportMenu siteIds={ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)} categoryIds={ctx.categoryIds} period={ctx.period} />
       </div>
       {view === "batches" ? (
         <BatchesView siteIds={scopeSites} categoryIds={ctx.categoryIds} />
+      ) : view === "close" ? (
+        <CloseMonthView siteIds={ctx.siteIds} />
       ) : (
         <ListView key={view} tab={view} showFera={ctx.categoryIds.some((id) => feraIds.includes(id))} />
       )}

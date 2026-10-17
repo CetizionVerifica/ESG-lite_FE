@@ -5,6 +5,8 @@ import { Button, Callout, EmptyState, cn, formatNumber, panel } from "../../../u
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateEmissionQueries } from "../../../lib/emissionQueries";
 import { linkBillEvidence, saveRow, updateRow, uploadRowEvidence, type SaveOutcome } from "../api";
+import { submitEmissions } from "../../../services/reviewService";
+import { type SubmitTally, draftIdsToSubmit, finishCopy, mergeSubmit } from "../logic/submit";
 import { editOf } from "../logic/existing";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { billOf } from "../logic/bill";
@@ -32,6 +34,12 @@ type Props = {
   /** Every row is sent or skipped. */
   onFinished: () => void;
   onAnother: () => void;
+  /**
+   * S3-15, with the company's review workflow on: the server saves a User's
+   * rows as drafts, so the send button becomes "Save and submit" (drafts are
+   * submitted right after the save) next to "Save as draft".
+   */
+  workflow?: boolean;
 };
 
 const label = (row: ModalRow) => (row._ecmKey as string) || row.emission_category || "—";
@@ -42,11 +50,16 @@ export function Review(p: Props) {
   const [sending, setSending] = useState(false);
   const [evidence, setEvidence] = useState<Record<number, Evidence>>({});
   const [askDuplicates, setAskDuplicates] = useState(false);
+  // S3-15: whether this send also submits the saved drafts, and what the submits did.
+  const [submitAfter, setSubmitAfter] = useState(true);
+  const [tally, setTally] = useState<SubmitTally>({ submitted: [], refused: [], failed: false });
   const client = useQueryClient();
   const total = p.rows.reduce((sum, r) => sum + (p.calc.calculateEmission(r).value ?? 0), 0);
 
-  const send = async (indexes: number[], replace: boolean) => {
+  const send = async (indexes: number[], replace: boolean, submit = submitAfter) => {
     setSending(true);
+    setSubmitAfter(submit);
+    const savedNow: SaveOutcome[] = [];
     // Saved rows per bill, so each bill is attached once as their evidence (B8).
     const fromBills = new Map<number, { rowIds: number[]; emissionIds: number[] }>();
     let conflicts = 0;
@@ -56,6 +69,7 @@ export function Review(p: Props) {
       const editing = editOf(row);
       const outcome = editing !== null ? await updateRow(editing, p.payloads[i]) : await saveRow(p.payloads[i], replace);
       setOutcomes((o) => ({ ...o, [row.id]: outcome }));
+      savedNow.push(outcome);
       if (outcome.kind === "duplicate") conflicts++;
       const files = p.evidenceFiles(row.id);
       if (outcome.kind === "saved" && outcome.emissionId != null && files.length > 0 && !billOf(row)) {
@@ -74,6 +88,16 @@ export function Review(p: Props) {
       const ok = g.emissionIds.length === g.rowIds.length && (await linkBillEvidence(invoiceId, g.emissionIds));
       setEvidence((e) => ({ ...e, ...Object.fromEntries(g.rowIds.map((id) => [id, ok ? "attached" : "failed"])) }));
     }
+    // S3-15: drafts saved by this send go for approval in one submit, after their evidence is attached.
+    const ids = p.workflow && submit ? draftIdsToSubmit(savedNow) : [];
+    if (ids.length > 0) {
+      try {
+        const result = await submitEmissions(ids);
+        setTally((t) => mergeSubmit(t, result));
+      } catch {
+        setTally((t) => ({ ...t, failed: true }));
+      }
+    }
     setSending(false);
     void invalidateEmissionQueries(client);
     // All conflicts from this send are decided together.
@@ -86,6 +110,7 @@ export function Review(p: Props) {
     await send(
       duplicates.filter((i) => choices[String(p.rows[i].id)] === "replace"),
       true,
+      submitAfter,
     );
   };
 
@@ -141,17 +166,24 @@ export function Review(p: Props) {
   }, [done, onFinished]);
 
   if (done) {
+    const savedStatuses = p.rows.flatMap((r) => {
+      const o = outcomes[r.id];
+      return o?.kind === "saved" ? [o.status ?? null] : [];
+    });
+    const copy = p.workflow ? finishCopy(savedStatuses, tally, p.periodLabel) : null;
     return (
       <div className={cn(panel, "p-6")}>
         <EmptyState
           icon={CheckCircle2}
-          title={savedCount > 0 ? `${savedCount} row${savedCount === 1 ? "" : "s"} sent for approval` : "Nothing was sent"}
+          title={copy ? copy.title : savedCount > 0 ? `${savedCount} row${savedCount === 1 ? "" : "s"} sent for approval` : "Nothing was sent"}
           description={
             savedCount === 0
               ? "Every row was skipped."
               : unattached > 0
-                ? `Your manager reviews ${p.periodLabel} next. Evidence couldn't be attached to ${unattached} row${unattached === 1 ? "" : "s"}; attach it from My entries.`
-                : `Your manager reviews ${p.periodLabel} next.`
+                ? `${copy ? copy.description : `Your manager reviews ${p.periodLabel} next.`} Evidence couldn't be attached to ${unattached} row${unattached === 1 ? "" : "s"}; attach it from My entries.`
+                : copy
+                  ? copy.description
+                  : `Your manager reviews ${p.periodLabel} next.`
           }
           action={
             <div className="flex flex-wrap justify-center gap-2">
@@ -261,8 +293,13 @@ export function Review(p: Props) {
           <Button variant="ghost" onClick={p.onBack} disabled={sending || savedCount > 0}>
             Back
           </Button>
-          <Button variant="primary" onClick={() => void send(pending, false)} loading={sending} disabled={pending.length === 0}>
-            {Object.keys(outcomes).length > 0 ? "Send the rest" : "Submit for approval"}
+          {p.workflow && (
+            <Button onClick={() => void send(pending, false, false)} loading={sending && !submitAfter} disabled={pending.length === 0 || sending}>
+              Save as draft
+            </Button>
+          )}
+          <Button variant="primary" onClick={() => void send(pending, false, true)} loading={sending && (!p.workflow || submitAfter)} disabled={pending.length === 0 || sending}>
+            {Object.keys(outcomes).length > 0 ? "Send the rest" : p.workflow ? "Save and submit" : "Submit for approval"}
           </Button>
         </div>
       </div>

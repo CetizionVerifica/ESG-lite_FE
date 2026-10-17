@@ -1,12 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useCalcDetailForSite } from "../../lib/useCalcDetail";
-import { Button, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
-import { useCreateSupplier, useEntrySetup, usePeriodTotals, useSiteCountry, useSupplierDetails, useSupplierOptions, useThreshold } from "./api";
+import { Button, Callout, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
+import { useCreateSupplier, useEntrySetup, useExistingEntries, usePeriodTotals, useSiteCountry, useSupplierDetails, useSupplierOptions, useThreshold } from "./api";
 import { SupplierFields } from "./components/SupplierFields";
 import { hasSupplierField, supplierIdOf, withSuppliers } from "./logic/supplier";
 import { errorMessage as supplierError } from "../../services/scope3SuppliersService";
+import { useReviewWorkflow } from "../../lib/reviewWorkflow";
+import { LiveChecks, type LiveCheckRow } from "./components/LiveChecks";
+import { useLiveChecks } from "./hooks/useLiveChecks";
+import { type LiveCheckCandidate, checkRowBodies, serverIssueOf } from "./logic/liveChecks";
 import { useEmissionCalc } from "./hooks/useEmissionCalc";
 import { useSpendRates } from "../../lib/scope3/useSpendRates";
 import type { EmissionFactor } from "./types";
@@ -22,7 +26,7 @@ import { EnterRows } from "./steps/EnterRows";
 import { Review } from "./steps/Review";
 import type { RowComparison } from "./components/EntryRow";
 import { ExistingEntries } from "./components/ExistingEntries";
-import { rowFromEntry, savedExcludingEdits } from "./logic/existing";
+import { editOf, fixTarget, rowFromEntry, savedExcludingEdits } from "./logic/existing";
 import { isScope2, splitFeraFactors, upstreamSubFor } from "../../lib/scope3/fera";
 import type { Cat3Calc } from "./components/EntryRow";
 
@@ -51,6 +55,10 @@ export default function AddDataPage() {
   const contextReady = !!site && !!category && !!period;
   // A deep link with the full context (from My month) starts at step 2.
   const [step, setStep] = useState(contextReady ? 1 : 0);
+  // S3-15 part 2, with the company's review workflow on: rows are saved as drafts,
+  // "Save and submit" sends them, and a Fix link (`?fix=<id>`) opens that saved row.
+  const workflow = useReviewWorkflow(null, siteId);
+  const fixId = workflow ? num(params.get("fix")) : null;
 
   const setContext = (patch: { site?: number | null; category?: number | null; period?: EntryPeriod | null }) =>
     setParams(
@@ -87,6 +95,28 @@ export default function AddDataPage() {
   const draftKey = contextReady ? entryDraftKey(userIdOf(user), site.site_id, category.category_id, formatEntryPeriodParam(period)) : null;
   const { rows, sent, dispatch, clearDraft, markSent } = useEntryRows(model, draftKey);
   const evidence = useRowEvidence(draftKey);
+
+  // S3-15 Fix: once the form and the saved entries are in, load the entry `?fix=` names, once.
+  const existing = useExistingEntries(fixId !== null && contextReady ? site.site_id : null, category?.category_id ?? null, period);
+  const target = fixTarget(existing.data?.entries ?? [], fixId);
+  const [fixing, setFixing] = useState<{ id: number; reason: string | null } | null>(null);
+  // `period` and `model` are rebuilt on renders; load each fix id once.
+  const loadedFix = useRef<number | null>(null);
+  useEffect(() => {
+    if (!target || !model || !period || loadedFix.current === target.pk_id) return;
+    loadedFix.current = target.pk_id;
+    dispatch({ type: "load", row: rowFromEntry(target, model, 0, period) });
+    setFixing({ id: target.pk_id, reason: target.status === "rejected" ? (target.review_comment ?? null) : null });
+    setStep(1);
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("fix"); // data-loss-reviewed: URL param, not data; the row is in the form now
+        return next;
+      },
+      { replace: true },
+    );
+  }, [target, model, period, dispatch, setParams]);
   // Rows sent: nothing is left to lose (the draft is cleared). New rows for the
   // same context after "Add another category" are unsent again.
   const unsaved = !!draftKey && !sent && rows.some(rowHasInput);
@@ -166,6 +196,29 @@ export default function AddDataPage() {
   const activeRows = rows.filter(sendable);
   const issues = rows.map((r) => (billOf(r) || sendable(r) ? rowIssue(r, calc) : null));
   const unconfirmedBills = billGroups(rows).filter((g) => !g.bill.confirmed).length;
+
+  // S3-15 live checks, with the review workflow on: complete rows as Save would send them.
+  const candidates: LiveCheckCandidate[] =
+    workflow && contextReady && period
+      ? rows.flatMap((r, i) =>
+          sendable(r) && rowHasInput(r) && !issues[i]
+            ? [
+                {
+                  rowId: r.id,
+                  payload: buildPayload(r, { siteId: site.site_id, categoryId: category.category_id, period }),
+                  editOf: editOf(r),
+                  hasEvidence: evidence.filesOf(r.id).length > 0 || billOf(r)?.invoiceId != null,
+                },
+              ]
+            : [],
+        )
+      : [];
+  const live = useLiveChecks(checkRowBodies(candidates), workflow && step === 1);
+  const liveRows: LiveCheckRow[] = candidates.map((c) => {
+    const i = rows.findIndex((r) => r.id === c.rowId);
+    return { ref: String(c.rowId), label: `Row ${i + 1} · ${rows[i]?.emission_category || category?.category_name || ""}` };
+  });
+  const serverIssues = rows.map((r) => (workflow ? serverIssueOf(live.results?.get(String(r.id)), calcDetail) : null));
   const emissionCategories = [...new Set(rows.map((r) => r.emission_category).filter(Boolean) as string[])];
   const totals = usePeriodTotals({ siteId: site?.site_id ?? null, categoryId, period, emissionCategories });
   const comparisons: RowComparison[] = rows.map((row, i) => {
@@ -203,6 +256,7 @@ export default function AddDataPage() {
         setStep(1);
       }}
       onFinished={markSent}
+      workflow={workflow}
       onAnother={() => {
         clearDraft();
         setContext({ category: null });
@@ -251,6 +305,18 @@ export default function AddDataPage() {
     body = <EmptyState title="This category isn't set up for data entry yet" description="Ask your admin to set up its form." />;
   } else if (step === 1) {
     body = (
+      <>
+      {fixing && (
+        <Callout tone={fixing.reason ? "warn" : "info"} title={fixing.reason ? "Sent back to you" : "Changing a saved entry"} onDismiss={() => setFixing(null)}>
+          {fixing.reason ? (
+            <>
+              <q className="text-ink">{fixing.reason}</q> Fix the row below, then save and submit it again.
+            </>
+          ) : (
+            "Change the row below, then save it again."
+          )}
+        </Callout>
+      )}
       <EnterRows
         rows={rows}
         dispatch={dispatch}
@@ -259,6 +325,7 @@ export default function AddDataPage() {
         calc={calc}
         feraCalc={feraCalc}
         issues={issues}
+        serverIssues={serverIssues}
         unconfirmedBills={unconfirmedBills}
         siteId={site.site_id}
         categoryId={category.category_id}
@@ -278,6 +345,16 @@ export default function AddDataPage() {
         onBack={() => setStep(0)}
         onNext={() => setStep(2)}
       />
+      <LiveChecks
+        rows={liveRows}
+        results={live.results}
+        checking={live.checking}
+        error={live.error}
+        showCalcDetail={calcDetail}
+        factorYear={factorYear}
+        thresholdPct={threshold.data ?? null}
+      />
+      </>
     );
   } else {
     body = renderReview(site, category, period);

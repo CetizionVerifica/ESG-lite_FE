@@ -78,11 +78,13 @@ describe("Scope 3 mock handlers", () => {
   });
 
   it("locks a month once; reopening it leaves no active lock", async () => {
-    expect(((await (await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).json()) as Scope3ErrorBody).code).toBe("PERIOD_LOCKED");
+    // Locking an already locked site again changes nothing (one lock row per site).
+    expect(((await (await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).json()) as { locked: boolean }).locked).toBe(true);
     await post("/periods/unlock", { site_id: 1, year: 2026, month: 8, reason: "Late invoice" });
-    const locks = (await (await fetch(`${API}/periods/lock`)).json()) as { reopened_at?: string | null }[];
-    expect(locks.every((l) => l.reopened_at)).toBe(true);
-    expect((await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).status).toBe(201);
+    const after = (await (await fetch(`${API}/periods/lock?year=2026&month=8&site_id=1`)).json()) as { sites: { locked: boolean }[] };
+    expect(after.sites[0].locked).toBe(false);
+    // August has nothing entered, so it can't be locked again until it's complete.
+    expect(((await (await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).json()) as Scope3ErrorBody).code).toBe("PERIOD_INCOMPLETE");
   });
 
   it("keeps server-owned supplier factor fields and 404s an unknown supplier", async () => {
@@ -140,11 +142,11 @@ describe("Scope 3 mock handlers", () => {
 
     const approve = (await (await put("/user/emissions/bulk-approve", { ids: [2, 3], only_ready: true })).json()) as { approved: number[]; skipped: number[] };
     expect(approve).toEqual({ approved: [2], skipped: [3] });
-    expect((await post("/user/emissions/check", {})).status).toBe(200);
+    expect((await post("/user/emissions/check", { ids: [701] })).status).toBe(200);
     expect(((await (await fetch(`${API}/user/emissions/7/history?months=6`)).json()) as { months: unknown[] }).months).toHaveLength(6);
-    expect((await post("/user/my-month/nothing", { site_id: 1, category_id: 2, month: "2026-09-01" })).status).toBe(201);
+    expect((await post("/user/my-month/nothing", { site_id: 1, category_id: 2, month: "2026-09-01" })).status).toBe(200);
     const del = await fetch(`${API}/user/my-month/nothing`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ site_id: 1, category_id: 2, month: "2026-09-01" }) });
-    expect(del.status).toBe(204);
+    expect(del.status).toBe(200);
   });
 });
 

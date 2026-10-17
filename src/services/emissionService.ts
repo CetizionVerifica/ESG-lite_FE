@@ -1,7 +1,8 @@
 import api from "../api/axios";
 import type { CheckId, RowChecks } from "../lib/scope3/checks";
 
-export type EmissionStatus = "pending" | "approved" | "rejected";
+/** `draft` only with the company's review workflow switched on (S3-15 part 2). */
+export type EmissionStatus = "draft" | "pending" | "approved" | "rejected";
 
 export interface EmissionData {
   pk_id: number;

@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDashed, Clock, PencilLine, XCircle, type LucideIcon } from "lucide-react";
+import { CheckCircle2, CircleDashed, Clock, Lock, PencilLine, XCircle, type LucideIcon } from "lucide-react";
 import { cn } from "./cn";
 
 import type { Status } from "./status";
@@ -9,6 +9,7 @@ const STATUS: Record<Status, { label: string; icon: LucideIcon; className: strin
   rejected: { label: "Rejected", icon: XCircle, className: "bg-bad-soft text-bad" },
   missing: { label: "Missing", icon: CircleDashed, className: "border border-dashed border-bad text-bad" },
   draft: { label: "Draft", icon: PencilLine, className: "bg-tint text-muted" },
+  locked: { label: "Locked", icon: Lock, className: "border border-line bg-panel text-ink" },
 };
 
 export type StatusPillProps = {

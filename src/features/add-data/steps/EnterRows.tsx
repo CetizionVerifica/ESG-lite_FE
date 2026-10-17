@@ -27,6 +27,8 @@ type Props = {
   feraCalc: Cat3Calc | null;
   /** Per row of `rows`; null when the row is fine or won't be sent (an empty typed row next to bill rows). */
   issues: (RowIssue | null)[];
+  /** S3-15 live checks: what the server would refuse each row for; shown on the field, never blocks Review. */
+  serverIssues?: (RowIssue | null)[];
   /** Bills whose rows the user hasn't checked yet. */
   unconfirmedBills: number;
   siteId: number;
@@ -86,6 +88,7 @@ export function EnterRows(p: Props) {
         factorYear={p.factorYear}
         reportingYear={p.reportingYear}
         issue={p.issues[i]}
+        serverIssue={p.serverIssues?.[i] ?? null}
         showIssue={showIssues}
         comparison={p.comparisons[i]}
         canRemove={canRemove}

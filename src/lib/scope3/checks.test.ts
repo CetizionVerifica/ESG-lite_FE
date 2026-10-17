@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHECK_COPY, CHECK_IDS, checkLines, factorYearFor, groupRows, heldChip, isReady, parseGroup, readChecks } from "./checks";
+import { CHECK_COPY, CHECK_IDS, USER_CHECK_IDS, checkLines, factorYearFor, groupRows, heldChip, isReady, parseGroup, readChecks, visibleCheckLines } from "./checks";
 
 describe("review checks (S3-15)", () => {
   it("has fixed copy and an icon for every check id", () => {
@@ -76,5 +76,16 @@ describe("review checks (S3-15)", () => {
     expect(parseGroup("attention")).toBe("attention");
     expect(parseGroup("all")).toBeNull();
     expect(parseGroup(null)).toBeNull();
+  });
+});
+
+describe("visibleCheckLines (Fix and resubmit)", () => {
+  it("shows a User only the checks they can act on; reviewers see all eight", () => {
+    const checks = { ready: false, held: ["FACTOR_FOUND", "EVIDENCE_ATTACHED"] as ("FACTOR_FOUND" | "EVIDENCE_ATTACHED")[] };
+    const user = visibleCheckLines(checks, {}, false);
+    expect(user.map((l) => l.id)).toEqual([...USER_CHECK_IDS]);
+    expect(user.find((l) => l.id === "EVIDENCE_ATTACHED")?.passed).toBe(false);
+    expect(user.some((l) => /factor/i.test(l.label))).toBe(false);
+    expect(visibleCheckLines(checks, {}, true)).toHaveLength(8);
   });
 });

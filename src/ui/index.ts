@@ -20,6 +20,7 @@ export * from "./table";
 export { Badge, type BadgeTone } from "./Badge";
 export { Scope3CategoryChip, type Scope3CategoryChipProps } from "./Scope3CategoryChip";
 export { CheckChip, ReadyChip, UncheckedChip } from "./CheckChip";
+export { CheckList } from "./CheckList";
 export { DataQualityBadge, type DataQualityBadgeProps } from "./DataQualityBadge";
 export { MethodCards, type MethodCardsProps } from "./MethodCards";
 export { CHECK_ICONS } from "./checkIcons";

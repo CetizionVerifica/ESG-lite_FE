@@ -18,6 +18,7 @@
  * `method_options` (`GET /user/column-configs/site/1/category/11`).
  */
 import { http, HttpResponse } from "msw";
+import { resetReviewMocks, reviewHandlers } from "./review";
 import type { Screening, ScreeningCategory } from "../../services/scope3ScreeningService";
 import type { FacilityData, SupplierFigure } from "../../services/scope3SuppliersService";
 import {
@@ -27,7 +28,6 @@ import {
   type ExtrapolateBody,
   type Investment,
   type InvestmentsPlanBody,
-  type NothingThisMonthBody,
   type ProductSale,
   type PutScreeningInputsBody,
   type Scope3ReportRow,
@@ -43,17 +43,13 @@ import {
   type FxRate,
   GHG_CATEGORIES,
   type GhgCategoryNumber,
-  type LockPeriodBody,
-  type PeriodLock,
   type PostRecalculationBody,
   type PutScope3CategoryBody,
   RECALCULATION_REASONS,
   type RecalculationEvent,
   type Scope3ErrorBody,
   type Scope3ErrorCode,
-  type SubmitEmissionsBody,
   type Supplier,
-  type UnlockPeriodBody,
 } from "../../lib/scope3/contracts";
 import { type Dq, type MethodOptions, autoDq, dataTypeFor, isMethod, methodLabel, parseDqMax } from "../../lib/scope3/dq";
 import type { EmissionData } from "../../services/emissionService";
@@ -259,9 +255,6 @@ const initialRecalculations = (): RecalculationEvent[] => [
   { id: 1, company_id: COMPANY_ID, reason: "error", affected_years: [2023], delta_tco2e: -412.6, approved_by: 4, created_at: "2026-03-14T10:12:00.000Z", status: "approved", note: "Copper rod factor was per tonne, not per kg." },
 ];
 
-const initialLocks = (): PeriodLock[] => [
-  { company_id: COMPANY_ID, site_id: 1, year: 2026, month: 8, locked_by: 4, locked_at: "2026-09-10T08:00:00.000Z" },
-];
 
 const initialInvestments = (): Investment[] => [
   { id: 1, company_id: COMPANY_ID, investee: "Gulf Cable Services WLL", type: "equity", share_pct: 25, investee_scope12_tco2e: 1840, year: 2025, source: "Investee sustainability report 2025" },
@@ -280,7 +273,6 @@ let supplierFactors = initialSupplierFactors();
 let facilityData = initialFacilityData();
 let baseYear = initialBaseYear();
 let recalculations = initialRecalculations();
-let locks = initialLocks();
 let investments = initialInvestments();
 let productSales = initialProductSales();
 
@@ -341,7 +333,6 @@ const initialEmissions = (): MockEmission[] => [
 ];
 let emissions = initialEmissions();
 let screeningInputs: ScreeningInput[] = [];
-let nothing: NothingThisMonthBody[] = [];
 
 /** Restore the sample data (call in beforeEach). */
 export function resetScope3Mocks(): void {
@@ -352,11 +343,10 @@ export function resetScope3Mocks(): void {
   facilityData = initialFacilityData();
   baseYear = initialBaseYear();
   recalculations = initialRecalculations();
-  locks = initialLocks();
   investments = initialInvestments();
   productSales = initialProductSales();
   screeningInputs = [];
-  nothing = [];
+  resetReviewMocks();
   emissions = initialEmissions();
 }
 
@@ -705,31 +695,8 @@ export const scope3Handlers = [
     return HttpResponse.json(event, { status: 201 });
   }),
 
-  // S3-15 review: submit drafts, month locks
-  http.post<never, Partial<SubmitEmissionsBody>>("*/user/emissions/submit", async ({ request }) => {
-    const ids = (await request.json()).ids ?? [];
-    if (ids.length === 0) return invalid("ids", "Choose at least one entry.");
-    return HttpResponse.json({ submitted: ids, status: "pending" });
-  }),
-  http.get("*/periods/lock", () => HttpResponse.json(locks)),
-  http.post<never, Partial<LockPeriodBody>>("*/periods/lock", async ({ request }) => {
-    const body = await request.json();
-    if (!body.year) return invalid("year", "Give the year to lock.");
-    const year = body.year;
-    const same = (l: PeriodLock) => l.site_id === (body.site_id ?? null) && l.year === year && l.month === (body.month ?? null) && !l.reopened_at;
-    if (locks.some(same)) return error("PERIOD_LOCKED", 409, "This month is closed. Reopen it with a reason to change its data.");
-    const lock: PeriodLock = { company_id: COMPANY_ID, site_id: body.site_id ?? null, year, month: body.month ?? null, locked_by: 4, locked_at: new Date().toISOString() };
-    locks.push(lock);
-    return HttpResponse.json(lock, { status: 201 });
-  }),
-  http.post<never, Partial<UnlockPeriodBody>>("*/periods/unlock", async ({ request }) => {
-    const body = await request.json();
-    if (!body.reason?.trim()) return error("UNLOCK_REASON_REQUIRED", 400, "Give a reason for reopening this month.");
-    const lock = locks.find((l) => l.site_id === (body.site_id ?? null) && l.year === body.year && l.month === (body.month ?? null) && !l.reopened_at);
-    if (!lock) return notFound("That month isn't locked.");
-    Object.assign(lock, { reopened_by: 4, reopened_at: new Date().toISOString(), reopened_reason: body.reason });
-    return HttpResponse.json(lock);
-  }),
+  // S3-15 part 2: drafts, submit, "Nothing this month", live checks, month lock (./review.ts)
+  ...reviewHandlers,
 
   http.put<never, Partial<BulkApproveBody>>("*/user/emissions/bulk-approve", async ({ request }) => {
     const body = await request.json();
@@ -739,28 +706,12 @@ export const scope3Handlers = [
     const notReady = body.only_ready ? ids.filter((x) => x % 2 === 1) : [];
     return HttpResponse.json({ approved: ids.filter((x) => !notReady.includes(x)), skipped: notReady });
   }),
-  http.post<never, { emission_category?: string }>("*/user/emissions/check", () =>
-    HttpResponse.json({ ready: false, held: ["EVIDENCE_ATTACHED"] }),
-  ),
   http.get<{ id: string }>("*/user/emissions/:id/history", ({ params, request }) => {
     const months = Number(new URL(request.url).searchParams.get("months") ?? 6);
     return HttpResponse.json({
       emission_id: Number(params.id),
       months: Array.from({ length: months }, (_, i) => ({ month: `2026-${String(9 - i).padStart(2, "0")}-01`, tco2e: 4.2 + (i % 3) * 0.3 })),
     });
-  }),
-  http.post<never, Partial<NothingThisMonthBody>>("*/user/my-month/nothing", async ({ request }) => {
-    const body = await request.json();
-    if (!body.site_id || !body.category_id || !/^\d{4}-\d{2}-01$/.test(body.month ?? "")) return invalid("month", "Give the site, category and month (first day).");
-    const mark = { site_id: body.site_id, category_id: body.category_id, month: body.month as string };
-    nothing.push(mark);
-    return HttpResponse.json(mark, { status: 201 });
-  }),
-  // data-loss-reviewed: a test mock; it removes a "Nothing this month" mark from in-memory sample data, never a real record.
-  http.delete("*/user/my-month/nothing", async ({ request }) => {
-    const body = (await request.json()) as Partial<NothingThisMonthBody>;
-    nothing = nothing.filter((n) => !(n.site_id === body.site_id && n.category_id === body.category_id && n.month === body.month));
-    return new HttpResponse(null, { status: 204 });
   }),
 
   // S3-3 method and data quality on every row
