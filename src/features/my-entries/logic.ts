@@ -95,8 +95,10 @@ function findKey(data: Record<string, unknown>, name: string): string | undefine
 }
 
 // Same priority as the reporting layer and the old My emissions breakdown:
-// one field, not the sum of the numbers.
-const QUANTITY_KEYS = ["activity data", "activity_value", "value", "quantity", "amount", "consumption"];
+// one field, not the sum of the numbers. Last, a spend row's amount (S3-5: `spent_value`, "Spent value"
+// on older Category 1 forms), in its currency, which is the row's unit: a spend row has no other quantity.
+// Last, so an older form's informational "Spent value" never replaces the row's own quantity.
+const QUANTITY_KEYS = ["activity data", "activity_value", "value", "quantity", "amount", "consumption", "spent_value", "spent value"];
 
 /** The entry's activity quantity, or null when it has no canonical quantity field. */
 export function quantityOf(activityData: Record<string, unknown> | null | undefined): number | null {

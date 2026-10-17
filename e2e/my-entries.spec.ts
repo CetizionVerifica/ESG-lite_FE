@@ -8,6 +8,7 @@ const company = { company_id: 3, name: "Glochem" };
 const categories = [
   { category_id: 1, category_name: "Diesel", scope: "Scope 1" },
   { category_id: 2, category_name: "Grid electricity", scope: "Scope 2" },
+  { category_id: 21, category_name: "Purchased goods and services", scope: "Scope 3", ghg_category: 1 },
 ];
 const user = { name: "Uma User", email: "uma@example.com", site: { site_id: 7, name: "Hidd plant", company, categories } };
 const brand = { companyId: 3, name: "Glochem", primary: "#a01c2c", accent: "#333333", coverFrom: "#a01c2c", coverTo: "#333333", logoUrl: null };
@@ -31,6 +32,8 @@ const row = (over: object) => ({
 const rows = [
   row({ pk_id: 41, activity_data: { emission_category: "Diesel", quantity: "1000" }, status: "rejected", review_comment: "Wrong unit, should be litres", reviewed_by: { user_id: 2, name: "Mia Manager" }, reviewed_at: "2025-10-03T09:00:00.000Z" }),
   row({ pk_id: 42, category: categories[1], activity_data: { emission_category: "Grid Electricity", consumption: "25000" }, activity_data_unit: "kwh", total_emission: 12.3, status: "pending" }),
+  // A Category 1 row from the amount spent (S3-5): its quantity is the amount, in its currency.
+  row({ pk_id: 43, category: categories[2], activity_data: { emission_category: "Chemicals (USEEIO)", "@method": "spend_based", spent_value: "5000", currency: "USD" }, activity_data_unit: "USD", total_emission: 2.1 }),
 ];
 
 const dieselConfig = {
@@ -118,6 +121,16 @@ test("old path redirects; filters are visible and a status figure filters the ta
   expect(requests.some((r) => r.get("status") === "rejected")).toBe(true);
   // The other figures still count every status.
   await expect(page.locator("dl > div").filter({ hasText: "Pending" }).locator("dd").first()).toHaveText("1");
+});
+
+test("a spend row shows the amount spent as its quantity, in its currency", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/mine");
+  const table = page.getByRole("table", { name: "My entries" });
+  const spendRow = table.getByRole("row").filter({ hasText: "Purchased goods and services" });
+  await expect(spendRow).toContainText("5,000");
+  await expect(spendRow).toContainText("USD");
+  await expect(spendRow.getByRole("cell", { name: "—", exact: true })).toHaveCount(0);
 });
 
 test("clear filters empties status, category and period in one go", async ({ page }) => {
