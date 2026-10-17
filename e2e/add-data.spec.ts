@@ -14,6 +14,7 @@ const site = {
     { category_id: 11, category_name: "Business travel", scope: "Scope 3" },
     { category_id: 12, category_name: "Purchased electricity", scope: "Scope 2" },
     { category_id: 99, category_name: "FERA", scope: "Scope 3" },
+    { category_id: 13, category_name: "Upstream transportation and distribution", scope: "Scope 3" },
   ],
 };
 
@@ -86,10 +87,18 @@ const extraction = {
   ],
 };
 
-type Extra = { existing?: unknown[]; updated?: unknown[]; uploads?: string[] };
+type Extra = {
+  existing?: unknown[];
+  updated?: unknown[];
+  uploads?: string[];
+  /** S3-15: the company's review workflow switch is on; edits come back as drafts. */
+  workflow?: boolean;
+  submitted?: number[][];
+  checked?: unknown[][];
+};
 
 async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>, extra: Extra = {}) {
-  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [site] };
+  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [extra.workflow ? { ...site, company: { ...site.company, review_workflow_v2: true } } : site] };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "User");
@@ -139,7 +148,29 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       }
       if (/\/user\/emissions\/\d+$/.test(path) && request.method() === "PUT") {
         extra.updated?.push({ id: Number(path.split("/").pop()), body: request.postDataJSON() });
-        return json({ emission: { pk_id: Number(path.split("/").pop()) } });
+        return json({ emission: { pk_id: Number(path.split("/").pop()), ...(extra.workflow && { status: "draft" }) } });
+      }
+      if (path.endsWith("/user/emissions/check")) {
+        // Live checks (S3-15): unsaved rows as they'd be saved. A saved entry with the same quantity is a
+        // duplicate (an edit isn't compared with itself); evidence comes from the row; the factor check is
+        // always held so the test sees a User doesn't get it.
+        type CheckRow = { ref: string; id?: number; activity_data: Record<string, unknown>; has_evidence?: boolean };
+        const rows = (request.postDataJSON() as { rows: CheckRow[] }).rows;
+        extra.checked?.push(rows);
+        const saved = (extra.existing ?? []) as { pk_id: number; activity_data: Record<string, unknown> }[];
+        const results = rows.map((r) => {
+          const held = ["FACTOR_FOUND"];
+          // has_evidence left out on an edit: the saved row's evidence counts (the rejected sample has none).
+          if (!r.has_evidence) held.push("EVIDENCE_ATTACHED");
+          if (saved.some((x) => x.pk_id !== r.id && x.activity_data.quantity === r.activity_data.quantity)) held.push("NO_DUPLICATE");
+          return { ref: r.ref, checks: { ready: false, held } };
+        });
+        return json({ results });
+      }
+      if (path.endsWith("/user/emissions/submit")) {
+        const ids = (request.postDataJSON() as { ids: number[] }).ids;
+        extra.submitted?.push(ids);
+        return json({ submitted: ids, refused: [] });
       }
       if (path.endsWith("/user/documents/multiple")) {
         extra.uploads?.push(request.postData() ?? "");
@@ -207,6 +238,100 @@ test("contributor types a row, sees tCO2e live and submits it", async ({ page })
     date_of_reporting: "2025-09-30",
     reporting_period: "monthly",
   });
+});
+
+// The S3-8 standard transport form (ESG-lite src/scope3/transport/configs.ts), trimmed to the chains used here.
+const transportConfig = {
+  pk_id: 13,
+  config_name: "Transport - Standard - Upstream",
+  columns: [
+    { pk_id: 31, column_name: "Travel Mode", column_type: "select" },
+    { pk_id: 32, column_name: "Vehicle Type", column_type: "select" },
+    { pk_id: 33, column_name: "Fuel Type/Class", column_type: "select" },
+    { pk_id: 34, column_name: "Shipment Ref", column_type: "text" },
+    { pk_id: 35, column_name: "Weight (tonne)", column_type: "number" },
+    { pk_id: 36, column_name: "Distance travelled", column_type: "number" },
+    { pk_id: 37, column_name: "Fuel used (litres)", column_type: "number" },
+    { pk_id: 38, column_name: "Your share of the load (%)", column_type: "number" },
+  ],
+  column_options: {
+    "31": [{ id: "Road", label: "Road" }],
+    "32": [{ id: "HGV (all diesel)", label: "HGV (all diesel)" }],
+    "33": [{ id: "All rigids [tonne.km]", label: "All rigids [tonne.km]" }, { id: "Diesel used [litre]", label: "Diesel used [litre]" }],
+  },
+  column_dependencies: { "Vehicle Type": "Travel Mode", "Fuel Type/Class": "Vehicle Type" },
+  dependent_options: {
+    "Vehicle Type": { Road: [{ id: "HGV (all diesel)", label: "HGV (all diesel)" }] },
+    "Fuel Type/Class": {
+      "HGV (all diesel)": [
+        { id: "All rigids [tonne.km]", label: "All rigids [tonne.km]" },
+        { id: "Diesel used [litre]", label: "Diesel used [litre]" },
+      ],
+    },
+  },
+  emission_category_mapping: {
+    "Road|HGV (all diesel)|All rigids [tonne.km]": "Road - HGV (all diesel) - All rigids [tonne.km]",
+    "Road|HGV (all diesel)|Diesel used [litre]": "Fuel - Diesel (average biofuel blend) [litre]",
+  },
+  extra_fields: [{ key: "paid_by", label: "Who paid for this transport?", type: "select", required: false, options: ["We paid", "Customer or other"] }],
+  calculation: {
+    mode: "per_unit",
+    identity_columns: ["Shipment Ref"],
+    legacy_field: "Distance travelled",
+    methods: {
+      "tonne.km": { multiply: ["Weight (tonne)", "Distance travelled"], activity_unit: "tonne.km" },
+      km: { multiply: ["Distance travelled"], activity_unit: "km" },
+      litre: { multiply: ["Fuel used (litres)", "Your share of the load (%)"], percent: ["Your share of the load (%)"], activity_unit: "litre" },
+    },
+  },
+};
+
+test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends what the engine saves (S3-8)", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  await page.route(/\/user\/column-configs\/site\/4\/category\/13(\?|$)/, (route) => route.fulfill({ json: [transportConfig] }));
+  await page.route(/\/user\/emission-factors\/site\/4\/category\/13(\?|$)/, (route) => {
+    const year = Number(new URL(route.request().url()).searchParams.get("year") ?? 2024);
+    return route.fulfill({
+      json: [
+        { emission_factor_id: 41, emission_category_name: "Fuel - Diesel (average biofuel blend) [litre]", factor_value: 3.1238, denominator_unit: "litre", year },
+        { emission_factor_id: 42, emission_category_name: "Road - HGV (all diesel) - All rigids [tonne.km]", factor_value: 0.2408, denominator_unit: "tonne.km", year },
+      ],
+    });
+  });
+  await page.route(/\/user\/units\/site\/4\/category\/13(\?|$)/, (route) =>
+    route.fulfill({ json: ["km", "tonne.km", "litre"].map((unit_name, i) => ({ unit_id: 50 + i, unit_name })) }),
+  );
+  await page.goto("/data/new?site=4&category=13&period=2025-09");
+
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Travel Mode", { exact: true }).selectOption({ label: "Road" });
+  await row.getByLabel("Vehicle Type", { exact: true }).selectOption({ label: "HGV (all diesel)" });
+  await row.getByLabel("Fuel Type/Class", { exact: true }).selectOption({ label: "Diesel used [litre]" });
+  await row.getByLabel("Shipment Ref", { exact: true }).fill("GL-FUEL-0925");
+  await row.getByLabel("Fuel Used (Litres)", { exact: true }).fill("1000");
+  await row.getByLabel("Your Share Of The Load (%)", { exact: true }).fill("100");
+  await row.getByLabel("Unit").selectOption("litre");
+  // 1,000 L × 100 % × 3.1238 kg/L (life-cycle diesel, factor year 2024) = 3.12 t
+  await expect(row.getByText("= 3.12 tCO₂e")).toBeVisible();
+  await expect(row.getByText(/^Litres your carrier used for your goods/)).toBeVisible();
+
+  await row.getByText("More details").click();
+  await row.getByLabel("Who paid for this transport?").selectOption({ label: "We paid" });
+  await expect(row.getByText(/^If you paid for it, it belongs in Category 4/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created).toHaveLength(1);
+  expect(created[0].body).toMatchObject({
+    site_id: 4,
+    category_id: 13,
+    activity_data_unit: "litre",
+    activity_data: { "Fuel used (litres)": "1000", "Your share of the load (%)": "100", emission_category: "Fuel - Diesel (average biofuel blend) [litre]" },
+    extra_data: { paid_by: "We paid" },
+  });
+  expect(created[0].body).not.toHaveProperty("is_estimate");
 });
 
 test("the engine's notes on a saved row show on the result (S3-4)", async ({ page }) => {
@@ -380,6 +505,67 @@ test("a rejected entry can be fixed from the entries already saved", async ({ pa
   expect(updated[0]).toMatchObject({ id: 55, body: { activity_data: { fuel_type: "diesel", quantity: "1600" }, activity_data_unit: "litre" } });
 });
 
+test("Fix and resubmit (S3-15): a Fix link opens the rejected row with live checks, then Save and submit sends it", async ({ page }) => {
+  const created: unknown[] = [];
+  const updated: { id: number; body: Record<string, unknown> }[] = [];
+  const submitted: number[][] = [];
+  const checked: { ref: string; id?: number; activity_data: Record<string, unknown> }[][] = [];
+  await signIn(page, created, false, [], undefined, { existing: [rejected], updated, workflow: true, submitted, checked });
+  await page.goto("/data/new?site=4&category=9&period=2025-09&fix=55");
+
+  // The row is loaded straight away, with the manager's reason above it.
+  await expect(page.getByText("Sent back to you")).toBeVisible();
+  await expect(page.getByText("Quantity is missing a zero").first()).toBeVisible();
+  const row = page.getByRole("region", { name: "Row 1" });
+  await expect(row.getByLabel("Quantity")).toHaveValue("160");
+  await expect(page).not.toHaveURL(/fix=/);
+
+  // Live checks: a User sees the checks they can act on, not the factor one; an edit isn't its own duplicate.
+  const checks = page.getByRole("region", { name: "Checks before you send" });
+  await expect(checks.getByText("No evidence")).toBeVisible();
+  await expect(checks.getByText("No duplicate")).toBeVisible();
+  await expect(checks.getByText(/factor/i)).toHaveCount(0);
+  await row.getByLabel("Quantity").fill("1600");
+  // The unsaved row is checked as the save would send it, as an edit of entry 55.
+  await expect.poll(() => checked.at(-1)?.[0]?.activity_data.quantity).toBe("1600");
+  expect(checked.at(-1)?.[0]).toMatchObject({ id: 55, activity_data: { fuel_type: "diesel", quantity: "1600" } });
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByRole("button", { name: "Save as draft" })).toBeVisible();
+  await page.getByRole("button", { name: "Save and submit" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(updated).toHaveLength(1);
+  expect(submitted).toEqual([[55]]);
+});
+
+test("live checks (S3-15): typing a duplicate value holds Duplicate before saving; attaching evidence clears Evidence", async ({ page }) => {
+  const created: unknown[] = [];
+  const checked: { ref: string; has_evidence?: boolean }[][] = [];
+  await signIn(page, created, false, [], undefined, { existing: [rejected], workflow: true, checked });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Unit").selectOption("litre");
+  await row.getByLabel("Quantity").fill("500");
+
+  const checks = page.getByRole("region", { name: "Checks before you send" });
+  await expect(checks.getByText("No duplicate")).toBeVisible();
+  await expect(checks.getByText("No evidence")).toBeVisible();
+
+  // The saved, rejected entry has 160 litres: the same value is held as a possible duplicate, before any save.
+  await row.getByLabel("Quantity").fill("160");
+  await expect(checks.getByText("Possible duplicate")).toBeVisible();
+  expect(created).toHaveLength(0);
+
+  await row.getByText("Evidence", { exact: true }).click();
+  await row.locator('input[type="file"]').setInputFiles({ name: "meter-sep.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
+  await expect(checks.getByText("Evidence attached")).toBeVisible();
+  await expect(checks.getByText("No evidence")).toHaveCount(0);
+  expect(checked.at(-1)?.[0]).toMatchObject({ has_evidence: true });
+  // A check never blocks sending.
+  await expect(page.getByRole("button", { name: "Review" })).toBeEnabled();
+});
+
 test("a passenger.km row works the distance out in the drawer", async ({ page }) => {
   const created: { body: Record<string, unknown>; replace: boolean }[] = [];
   await signIn(page, created);
@@ -402,7 +588,8 @@ test("a passenger.km row works the distance out in the drawer", async ({ page })
 
   // Rail is an estimate on the road corridor.
   await drawer.getByRole("radio", { name: "Rail" }).click();
-  await expect(drawer.getByText("Estimate")).toBeVisible();
+  await expect(drawer.getByText("Estimate", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("The entry is saved as an estimate.")).toBeVisible();
   await drawer.getByRole("radio", { name: "Road" }).click();
   await drawer.getByRole("button", { name: "Use this distance" }).click();
 
@@ -415,6 +602,34 @@ test("a passenger.km row works the distance out in the drawer", async ({ page })
   await expect(page.getByText("1 row sent for approval")).toBeVisible();
   expect(created[0].body).toMatchObject({ activity_data: { "Activity Data": "43", emission_category: "Car (petrol)" }, activity_data_unit: "passenger.km" });
   expect(Object.keys(created[0].body.activity_data as object)).not.toContain("Activity Data__distance");
+  // A road route is not an estimate (S3-3 is_estimate).
+  expect(created[0].body).not.toHaveProperty("is_estimate");
+});
+
+test("a rail estimate from the distance drawer is saved as an estimate (S3-3)", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  await page.goto("/data/new?site=4&category=11&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Emission category").selectOption({ label: "Car (petrol)" });
+  await row.getByLabel("Unit").selectOption("passenger.km");
+  await row.getByLabel("Passenger").fill("1");
+  await row.getByRole("button", { name: "Calculate distance" }).click();
+  const drawer = page.getByRole("dialog", { name: "Calculate distance" });
+  await drawer.getByRole("textbox", { name: "From" }).fill("Manama");
+  await drawer.getByRole("textbox", { name: "From" }).press("Enter");
+  await drawer.getByRole("textbox", { name: "To" }).fill("Riffa");
+  await drawer.getByRole("textbox", { name: "To" }).press("Enter");
+  await drawer.getByRole("radio", { name: "Rail" }).click();
+  await expect(drawer.getByText("The entry is saved as an estimate.")).toBeVisible();
+  await drawer.getByRole("button", { name: "Use this distance" }).click();
+  await expect(row.getByLabel("Distance (km)")).toHaveValue("21.5");
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0].body).toMatchObject({ is_estimate: true, activity_data_unit: "passenger.km" });
+  expect(created[0].body.activity_data).not.toHaveProperty("_estimates");
 });
 
 test("typed rows ask before leaving the page", async ({ page }) => {

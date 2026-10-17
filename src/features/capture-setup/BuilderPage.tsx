@@ -192,7 +192,7 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
             <ExtraTab draft={draft} onChange={update} savedKeys={savedExtraKeys} />
           </TabPanel>
           <TabPanel idBase="builder" value="calculation" current={tab}>
-            <CalcTab draft={draft} onChange={update} />
+            <CalcTab draft={draft} onChange={update} ghgCategory={source.category?.ghg_category ?? null} />
           </TabPanel>
           <TabPanel idBase="builder" value="test" current={tab}>
             <TestTab
@@ -206,7 +206,7 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
           </TabPanel>
         </div>
         <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
-          <Preview draft={draft} formId={id} siteName={source.site?.name} categoryName={source.category?.category_name} />
+          <Preview draft={draft} formId={id} siteName={source.site?.name} categoryName={source.category?.category_name} ghgCategory={source.category?.ghg_category ?? null} />
         </div>
       </div>
 

@@ -87,6 +87,11 @@ describe("listParams", () => {
     expect(listParams({ ...base, tab: "approvals", attention: true })).toMatchObject({ batchId: null, attention: null });
   });
 
+  it("passes the S3-3 method and data quality filters (method=, dq_max=)", () => {
+    expect(listParams({ ...base, tab: "ledger", method: "spend_based", dqMax: 2 })).toMatchObject({ method: "spend_based", dqMax: 2 });
+    expect(listParams({ ...base, tab: "approvals" })).toMatchObject({ method: null, dqMax: null });
+  });
+
   it("drops sorts the server can't do", () => {
     expect(listParams({ ...base, tab: "ledger", sort: { id: "activity", dir: "asc" } })).toMatchObject({ sort: null, order: null });
   });
@@ -187,6 +192,11 @@ describe("activityFields", () => {
   const r = row({
     activity_data: { quantity: "120.5", grade: "11", fuel_type: "1", category_name: "Diesel", note: "", extra_field: "Site B" },
     activity_data_unit: "litre",
+  });
+
+  it("leaves the row's method out: it has its own line (S3-3)", () => {
+    const withMethod = row({ activity_data: { quantity: "40", "@method": "distance_based" } });
+    expect(activityFields(withMethod, undefined).map((x) => x.key)).toEqual(["quantity"]);
   });
 
   it("orders by the form, resolves labels and skips bookkeeping and empty values", () => {

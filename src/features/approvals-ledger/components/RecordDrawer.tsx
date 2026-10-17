@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, ExternalLink, FileText } from "lucide-react";
+import { ExternalLink, FileText } from "lucide-react";
 import { useTheme } from "../../../theme";
 import { type CheckContext, checkLines, factorYearFor, readChecks } from "../../../lib/scope3/checks";
 import {
   Badge,
   Button,
-  CHECK_ICONS,
+  CheckList,
   ChartFrame,
+  DataQualityBadge,
   DocumentViewer,
   Drawer,
   EntityAuditTimeline,
@@ -29,6 +30,7 @@ import { EditForm } from "./EditForm";
 import { deflatorLine, drawerRateTerm, fxLine } from "../../../lib/scope3/spend";
 import { type FactorSnapshot, type LedgerRow, activityFields, formatFactorValue, importProvenance, matchedByText, quantityOf, rowMonth, rowPeriodLabel } from "../logic";
 import { feraSubLabel } from "../../../lib/scope3/fera";
+import { rowQuality } from "../../../lib/scope3/dq";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -194,6 +196,7 @@ function Body({ row, fera, status, checkContext }: { row: LedgerRow; fera: Ledge
 
       <Section title="Calculation">
         <Calculation row={row} quantity={quantityOf(fields)} />
+        <Quality row={row} />
       </Section>
 
       <MonthHistory row={row} />
@@ -278,6 +281,30 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
   );
 }
 
+/** S3-3: how the row was calculated and how good its data is; nothing for a Scope 1 or 2 row without them. */
+function Quality({ row }: { row: LedgerRow }) {
+  const q = rowQuality(row);
+  if (!q.show) return null;
+  return (
+    <dl className="mt-2" data-testid="drawer-quality">
+      <Row label="How it was calculated">
+        <span data-testid="drawer-method">{q.method}</span>
+        {q.estimate && (
+          <Badge tone="warn" className="ml-1.5">
+            Estimate
+          </Badge>
+        )}
+      </Row>
+      <Row label="Data quality">
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          <DataQualityBadge dq={q.dq} />
+          {q.dataType && <span className="text-xs text-muted">{q.dataType} data</span>}
+        </span>
+      </Row>
+    </dl>
+  );
+}
+
 function Evidence({ emissionId }: { emissionId: number }) {
   const docs = useDocuments(emissionId);
   const [viewing, setViewing] = useState<ViewerFile | null>(null);
@@ -339,33 +366,12 @@ function WhyHeld({ row, context }: { row: LedgerRow; context?: CheckContext }) {
   if (!checks) return <p className="text-sm text-muted">The checks haven't run on this entry yet, so it waits for your review.</p>;
   const lines = checkLines(checks, { ...context, year: factorYearFor(row.date_of_reporting) });
   const held = lines.filter((l) => !l.passed);
-  const ordered = [...held, ...lines.filter((l) => l.passed)];
   return (
     <div className="space-y-2" data-testid="why-held">
       <p className="text-sm text-ink">
         {held.length === 0 ? "This entry passes every check." : held.length === 1 ? "Held back by 1 check." : `Held back by ${held.length} checks.`}
       </p>
-      <ul className="divide-y divide-line rounded-control border border-line">
-        {ordered.map((l) => {
-          const Icon = CHECK_ICONS[l.icon];
-          return (
-            <li key={l.id} className="flex items-start gap-2 px-3 py-2 text-sm" data-check={l.id} data-passed={l.passed}>
-              {l.passed ? <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0 text-good" /> : <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warn" />}
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5">
-                  <Icon aria-hidden className="size-3.5 shrink-0 text-muted" />
-                  <span className={cn(!l.passed && "font-medium")}>{l.label}</span>
-                  <span className="sr-only">{l.passed ? "(passed)" : "(held)"}</span>
-                </span>
-                {!l.passed && <span className="mt-0.5 block text-xs text-muted">{l.hint}</span>}
-              </span>
-              <span className={cn("shrink-0 text-xs font-medium", l.passed ? "text-good" : "text-warn")} aria-hidden>
-                {l.passed ? "Pass" : "Held"}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      <CheckList lines={lines} />
     </div>
   );
 }

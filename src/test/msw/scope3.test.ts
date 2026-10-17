@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { setupServer } from "msw/node";
 import type { Scope3ErrorBody } from "../../lib/scope3/contracts";
-import { type Scope3CategoryRow, type Scope3Report, resetScope3Mocks, scope3Handlers } from "./scope3";
+import { CAT1_FORM_METHODS, type MockEmission, type Scope3CategoryRow, type Scope3Report, resetScope3Mocks, scope3Handlers } from "./scope3";
+import { readMethodOptions } from "../../lib/scope3/dq";
 
 const server = setupServer(...scope3Handlers);
 const API = "http://api.test";
@@ -38,9 +39,11 @@ describe("Scope 3 mock handlers", () => {
     expect(rows.find((r) => r.ghg_category === 2)?.status).toBe("included");
   });
 
-  it("only takes cradle-to-gate supplier figures", async () => {
+  it("only takes cradle-to-gate supplier figures, unless the boundary is confirmed", async () => {
     const bad = await post("/suppliers/1/factors", { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_grave", reference_year: 2025, gwp_set: "AR6" });
     expect(((await bad.json()) as Scope3ErrorBody).code).toBe("SUPPLIER_FACTOR_BOUNDARY");
+    const confirmed = await post("/suppliers/1/factors", { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_grave", reference_year: 2025, gwp_set: "AR6", confirm_boundary: true });
+    expect(confirmed.status).toBe(201);
     const ok = await post("/suppliers/1/factors", { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6" });
     expect(ok.status).toBe(201);
   });
@@ -75,17 +78,19 @@ describe("Scope 3 mock handlers", () => {
   });
 
   it("locks a month once; reopening it leaves no active lock", async () => {
-    expect(((await (await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).json()) as Scope3ErrorBody).code).toBe("PERIOD_LOCKED");
+    // Locking an already locked site again changes nothing (one lock row per site).
+    expect(((await (await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).json()) as { locked: boolean }).locked).toBe(true);
     await post("/periods/unlock", { site_id: 1, year: 2026, month: 8, reason: "Late invoice" });
-    const locks = (await (await fetch(`${API}/periods/lock`)).json()) as { reopened_at?: string | null }[];
-    expect(locks.every((l) => l.reopened_at)).toBe(true);
-    expect((await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).status).toBe(201);
+    const after = (await (await fetch(`${API}/periods/lock?year=2026&month=8&site_id=1`)).json()) as { sites: { locked: boolean }[] };
+    expect(after.sites[0].locked).toBe(false);
+    // August has nothing entered, so it can't be locked again until it's complete.
+    expect(((await (await post("/periods/lock", { site_id: 1, year: 2026, month: 8 })).json()) as Scope3ErrorBody).code).toBe("PERIOD_INCOMPLETE");
   });
 
   it("keeps server-owned supplier factor fields and 404s an unknown supplier", async () => {
     const body = { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6", source: "supplier_request", company_id: 2, id: 99 };
-    const made = (await (await post("/suppliers/1/factors", body)).json()) as { id: number; company_id: number; source: string };
-    expect(made).toMatchObject({ company_id: 1, source: "manual" });
+    const made = (await (await post("/suppliers/1/factors", body)).json()) as { id: number; supplier_id: number; source: string };
+    expect(made).toMatchObject({ supplier_id: 1, source: "manual" });
     expect(made.id).not.toBe(99);
     expect((await post("/suppliers/999/factors", body)).status).toBe(404);
   });
@@ -104,9 +109,22 @@ describe("Scope 3 mock handlers", () => {
 
   it("answers the endpoints folded in from the module specs", async () => {
     expect((await put("/scope3/screening/inputs", { year: 2026, inputs: [{ ghg_category: 1, basis: "spend", amount: 1e6, currency: "USD" }] })).status).toBe(200);
+    // Inputs are kept per year and year type (ESG-lite #169); CY when left out.
+    expect(((await (await put("/scope3/screening/inputs", { year: 2026, year_type: "FY", inputs: [] })).json()) as { year_type: string }).year_type).toBe("FY");
+    expect(((await (await put("/scope3/screening/inputs", { year: 2026, inputs: [] })).json()) as { year_type: string }).year_type).toBe("CY");
+    expect((await put("/scope3/screening/inputs", { year: 2026, year_type: "QY", inputs: [] })).status).toBe(400);
     expect(((await (await post("/scope3/extrapolate", { ghg_category: 4, site_id: 1, year: 2026, year_type: "CY", basis: "coverage", coverage_pct: 100 })).json()) as Scope3ErrorBody).code).toBe("EXTRAPOLATION_BASIS_INVALID");
     expect((await post("/scope3/extrapolate", { ghg_category: 4, site_id: 1, year: 2026, year_type: "CY", basis: "coverage", coverage_pct: 85 })).status).toBe(201);
     expect((await post("/v1/scope3/eeio-sector", { lines: [{ description: "Copper rod" }], sectors: [] })).status).toBe(200);
+    // S3-12 shapes: 15 categories with sizes and suggestions; a dry run shows the formula and saves nothing.
+    const screening = (await (await fetch(`${API}/scope3/screening?year=2025`)).json()) as { categories: { n: number; suggestion: { status: string } }[]; sites: unknown[] };
+    expect(screening.categories).toHaveLength(15);
+    expect(screening.categories.find((c) => c.n === 1)?.suggestion.status).toBe("included");
+    expect(screening.sites.length).toBeGreaterThan(0);
+    const dry = await post("/scope3/extrapolate?dry_run=1", { ghg_category: 6, site_id: 1, year: 2025, year_type: "CY", basis: "coverage", coverage_pct: 85 });
+    expect(dry.status).toBe(200);
+    expect(((await dry.json()) as { total_kgco2e: string }).total_kgco2e).toBe("150000.0000");
+    expect((await post("/scope3/screening/sector-suggestions", { description: "Flights", amount: 10, currency: "USD" })).status).toBe(200);
 
     const survey = { site_id: 1, year: 2026, year_type: "CY", total_employees: 3, responses: [{ ref: "A1", mode: "Rail", one_way_km: 10, days_per_week: 5, weeks_per_year: 48 }] };
     expect((await post("/scope3/commuting/surveys", survey)).status).toBe(201);
@@ -124,10 +142,57 @@ describe("Scope 3 mock handlers", () => {
 
     const approve = (await (await put("/user/emissions/bulk-approve", { ids: [2, 3], only_ready: true })).json()) as { approved: number[]; skipped: number[] };
     expect(approve).toEqual({ approved: [2], skipped: [3] });
-    expect((await post("/user/emissions/check", {})).status).toBe(200);
+    expect((await post("/user/emissions/check", { ids: [701] })).status).toBe(200);
     expect(((await (await fetch(`${API}/user/emissions/7/history?months=6`)).json()) as { months: unknown[] }).months).toHaveLength(6);
-    expect((await post("/user/my-month/nothing", { site_id: 1, category_id: 2, month: "2026-09-01" })).status).toBe(201);
+    expect((await post("/user/my-month/nothing", { site_id: 1, category_id: 2, month: "2026-09-01" })).status).toBe(200);
     const del = await fetch(`${API}/user/my-month/nothing`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ site_id: 1, category_id: 2, month: "2026-09-01" }) });
-    expect(del.status).toBe(204);
+    expect(del.status).toBe(200);
+  });
+});
+
+describe("S3-3 method and data quality mocks", () => {
+  type List = { data: MockEmission[]; total: number };
+  const list = async (query = "") => (await (await fetch(`${API}/user/emissions${query}`)).json()) as List;
+
+  it("returns method, dq, data_type and is_estimate on every row", async () => {
+    const { data } = await list();
+    expect(data.map((e) => e.method)).toEqual(["supplier_specific", "average_data", "spend_based", null]);
+    expect(data[0].dq).toMatchObject({ overall: 1, source: "auto" });
+    expect(data[2].dq).toMatchObject({ overall: 3, reliability: 3 });
+    expect(data[0].data_type).toBe("primary");
+    expect(data[3].dq).toBeNull();
+  });
+
+  it("filters by method= and dq_max=, leaving unscored rows out of dq_max, and refuses bad values", async () => {
+    expect((await list("?method=spend_based")).data.map((e) => e.pk_id)).toEqual([503]);
+    expect((await list("?dq_max=2")).data.map((e) => e.pk_id)).toEqual([501, 502]);
+    expect((await list("?dq_max=1")).data.map((e) => e.pk_id)).toEqual([501]);
+    expect((await fetch(`${API}/user/emissions?method=spend`)).status).toBe(400);
+    expect((await fetch(`${API}/user/emissions?dq_max=4`)).status).toBe(400);
+  });
+
+  it("serves the Category 1 form's method_options in the contract shape", async () => {
+    const [form] = (await (await fetch(`${API}/user/column-configs/site/1/category/11`)).json()) as { method_options: unknown }[];
+    expect(readMethodOptions(form.method_options)).toEqual(CAT1_FORM_METHODS);
+  });
+
+  it("saves a method the form offers with its score, and refuses one it doesn't with METHOD_NOT_ALLOWED", async () => {
+    const ok = await post("/user/emissions", { site_id: 1, category_id: 11, activity_data: { amount: "1000" }, method: "spend_based", is_estimate: true });
+    expect(ok.status).toBe(201);
+    const saved = ((await ok.json()) as { emission: MockEmission }).emission;
+    expect(saved).toMatchObject({ method: "spend_based", is_estimate: true, data_type: "secondary" });
+    expect(saved.dq?.overall).toBe(3);
+
+    const refused = await post("/user/emissions", { site_id: 1, category_id: 11, activity_data: { amount: "1" }, method: "hybrid" });
+    expect(refused.status).toBe(400);
+    const body = (await refused.json()) as Scope3ErrorBody;
+    expect(body.code).toBe("METHOD_NOT_ALLOWED");
+    expect(body.message).toMatch(/This form offers: Supplier's own figure, Average data, From the amount spent/);
+
+    const unknown = await post("/user/emissions", { site_id: 1, category_id: 11, activity_data: { amount: "1" }, method: "guess" });
+    expect(unknown.status).toBe(400);
+    // No method: the form's first, most specific one.
+    const fallback = await post("/user/emissions", { site_id: 1, category_id: 11, activity_data: { amount: "1" } });
+    expect(((await fallback.json()) as { emission: MockEmission }).emission.method).toBe("supplier_specific");
   });
 });
