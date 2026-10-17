@@ -114,7 +114,7 @@ describe("KPI contracts (mirror of 01-contracts)", () => {
   });
 
   it("gives each §4 error code its HTTP status", () => {
-    expect(KPI_ERROR_CODES).toHaveLength(18);
+    expect(KPI_ERROR_CODES).toHaveLength(21);
     expect(KPI_ERROR_STATUS.KPI_TRACKING_OFF).toBe(403);
     expect(KPI_ERROR_STATUS.KPI_REASON_REQUIRED).toBe(400);
     expect(isKpiErrorCode("KPI_PERIOD_LOCKED")).toBe(true);

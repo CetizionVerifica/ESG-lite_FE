@@ -826,8 +826,8 @@ export const kpiHandlers = [
       const result: ReviewKpiValuesResult = { updated: [], refused: [] };
       for (const id of body.ids) {
         const v = state.values.find((x) => x.id === id);
-        if (!v || v.status !== "pending") result.refused.push({ id, code: "NOT_PENDING" });
-        else if (body.only_ready && v.checks?.length) result.refused.push({ id, code: "NOT_READY" });
+        if (!v || v.status !== "pending") result.refused.push({ id, code: "KPI_NOT_PENDING" });
+        else if (body.only_ready && v.checks?.length) result.refused.push({ id, code: "KPI_NOT_READY" });
         else {
           v.status = action === "approve" ? "approved" : "rejected";
           v.reviewed_by = 12;

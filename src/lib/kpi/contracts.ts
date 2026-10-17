@@ -772,6 +772,10 @@ export const KPI_ERROR_STATUS = {
   KPI_FORBIDDEN: 403,
   KPI_COMPANY_REQUIRED: 400,
   KPI_CODE_TAKEN: 409,
+  // Per-id refusals of approve and reject (KPI-8).
+  KPI_NOT_PENDING: 409,
+  KPI_NOT_READY: 409,
+  KPI_SELF_REVIEW: 403,
 } as const;
 export type KpiErrorCode = keyof typeof KPI_ERROR_STATUS;
 export const KPI_ERROR_CODES = Object.keys(KPI_ERROR_STATUS) as KpiErrorCode[];

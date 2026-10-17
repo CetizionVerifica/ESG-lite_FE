@@ -222,6 +222,9 @@ export const ERROR_MESSAGE: Record<KpiErrorCode, string> = {
   KPI_FORBIDDEN: "Your role can't do this.",
   KPI_COMPANY_REQUIRED: "Choose a client first.",
   KPI_CODE_TAKEN: "A KPI with this code already exists. Pick another code.",
+  KPI_NOT_PENDING: "It isn't waiting for review any more.",
+  KPI_NOT_READY: "It needs attention first.",
+  KPI_SELF_REVIEW: "You entered it yourself, so another manager reviews it.",
 };
 
 /** "GRI 303-3", "BRSR P6-E3", "ESRS E3-4": a badge's text. */

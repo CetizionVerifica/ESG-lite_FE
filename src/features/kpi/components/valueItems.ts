@@ -76,7 +76,11 @@ export function valueItems(values: KpiValue[], lookup: KpiLookup, lastYear: KpiV
         const b = "value_numeric" in before ? { value: before.value_numeric, unit: before.unit } : { value: before.value, unit: before.unit };
         change = compareToLast({ value: v.value_numeric, unit: v.unit }, b, def?.canonical_unit ?? v.canonical_unit ?? null, lastLabel).changeText;
       }
-      const { ready, held } = readChecks(v.checks);
+      // The server also sends `check_items: [{id, held, detail}]`, which carries the reason text.
+      const items = (v as { check_items?: unknown }).check_items;
+      const { ready, held } = Array.isArray(items)
+        ? { ready: readChecks(v.checks).ready, held: readChecks(items.filter((c) => (c as { held?: unknown })?.held !== false)).held }
+        : readChecks(v.checks);
       return {
         id: v.id,
         value: v,
