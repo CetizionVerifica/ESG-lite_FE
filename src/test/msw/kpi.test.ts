@@ -160,12 +160,12 @@ describe("KPI mock handlers: shapes match the contract types", () => {
     for (const t of s.material_topics as { material: boolean; reason: string | null }[]) if (!t.material) expect(t.reason).toBeTruthy();
   });
 
-  it("GET /kpi/my: September has 4 due, 1 sent back and 7 done", async () => {
+  it("GET /kpi/my: September has 4 due, 1 sent back and 8 done (7 plus the calculated water consumed)", async () => {
     const my = await get<{ period: string; items: { group: string; value: unknown }[]; counts: Record<string, number> }>("/kpi/my?period=2026-09");
     expect(my.period).toBe("2026-09");
     all(my.items, MY_ITEM, "my.items");
     for (const i of my.items) if (i.value) check(i.value, VALUE, "my.items.value");
-    expect(my.counts).toEqual({ due: 4, sent_back: 1, done: 7, total: 12 });
+    expect(my.counts).toEqual({ due: 4, sent_back: 1, done: 8, total: 13 });
     expect(my.items.filter((i) => i.group === "due")).toHaveLength(4);
   });
 
@@ -245,7 +245,7 @@ describe("KPI mock handlers: behaviour", () => {
     sub = (await (await send("POST", "/kpi/values/submit", { ids: [id] })).json()) as typeof sub;
     expect(sub.submitted).toEqual([id]);
     const my = await get<{ counts: Record<string, number> }>("/kpi/my?period=2026-09");
-    expect(my.counts).toMatchObject({ due: 3, done: 8 });
+    expect(my.counts).toMatchObject({ due: 3, done: 9 });
   });
 
   it("approves only ready values, needs a reason to reject, and won't lock an incomplete month", async () => {

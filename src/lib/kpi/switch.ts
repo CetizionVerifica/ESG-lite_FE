@@ -73,3 +73,10 @@ export function isKpiTrackingOff(error: unknown): boolean {
   const res = (error as { response?: { status?: number; data?: { code?: unknown } } } | null)?.response;
   return res?.status === 403 && res.data?.code === "KPI_TRACKING_OFF";
 }
+
+/** The `company_id` KPI calls pass: the selected client for a Superadmin, none for a company's own people. */
+export function useKpiCompanyId(): number | null {
+  const { role } = useAuth();
+  const { clientId } = useClientContext();
+  return role === "Superadmin" ? clientId : null;
+}

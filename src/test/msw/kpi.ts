@@ -36,6 +36,7 @@ import {
   type KpiPeriodLock,
   type KpiPeriodLockStatus,
   type KpiSetup,
+  type KpiSetupPerson,
   type KpiStatus,
   type KpiTargetWithProgress,
   type KpiUnlockBody,
@@ -57,6 +58,9 @@ import {
   type SuggestMappingResult,
   type SuggestValuesResult,
 } from "../../lib/kpi/contracts";
+import { formulaCodes } from "../../lib/kpi/formula";
+import { recommendKpis } from "../../lib/kpi/recommend";
+import { convertUnit } from "../../lib/kpi/units";
 import {
   ACME,
   ACME_ASSIGNMENTS,
@@ -70,6 +74,7 @@ import {
   KPI_MAPPINGS,
   KPI_SITES,
   KPI_TARGETS_SEED,
+  KPI_USERS,
   KPI_VALUES_SEED,
   RAVI_KPI_CODES,
   kpiByCode,
@@ -100,6 +105,7 @@ const initialState = () => ({
   evidence: copy(KPI_EVIDENCE_SEED),
   locks: [] as KpiPeriodLock[],
   targets: copy(KPI_TARGETS_SEED),
+  invites: 0,
 });
 
 let state = initialState();
@@ -108,6 +114,20 @@ let state = initialState();
 export function resetKpiMocks(): void {
   state = initialState();
 }
+
+/** A company that has just been switched on: no frameworks, KPIs or owners yet, setup not finished (KPI-3 wizard). */
+export function startKpiSetupFresh(): void {
+  state.setup = {
+    settings: { company_id: ACME.company_id, year_type: "CY", first_year: 2026, due_day: 15, setup_completed_at: null },
+    frameworks: [],
+    material_topics: [],
+    kpis: [],
+    assignments: [],
+  };
+}
+
+/** How many `kpi_assigned` invitations the setup sent (KPI-3). */
+export const kpiMockInvites = () => state.invites;
 
 /** Turns ACME's KPI tracking switch on or off for the following requests. */
 export function setKpiMockEnabled(enabled: boolean): void {
@@ -143,8 +163,24 @@ function frameworkIds(param: string | null): Set<number> | null {
   return new Set(state.frameworks.filter((f) => f.code === param.toUpperCase()).map((f) => f.id));
 }
 
-/** Units the mock converts to the canonical one; anything else keeps its number. */
-const TO_CANONICAL: Record<string, number> = { kL: 1, litres: 0.001, ML: 1000, kg: 0.001, kWh: 0.001, GJ: 1 / 3.6 };
+/** A value as the server answers it (KPI-4 as built): with `kpi_code`, `canonical_unit` and its evidence. */
+const out = (v: KpiValue): KpiValue => {
+  const def = kpiOf(v.kpi_definition_id);
+  return {
+    ...v,
+    kpi_code: def?.code ?? "",
+    canonical_unit: def?.canonical_unit ?? null,
+    evidence: state.evidence.filter((e) => e.kpi_value_id === v.id).map(({ id, document_url, document_name, uploaded_by, uploaded_at }) => ({ id, document_url, document_name, uploaded_by, uploaded_at })),
+  };
+};
+
+/** The setup as `GET /kpi/setup` answers it, plus what the wizard reads: `recommended`, `sites` and `people` (KPI-3 FE assumptions). */
+function setupOut(): KpiSetup {
+  const material = new Map(state.setup.material_topics.map((t) => [t.esrs_topic, t.material]));
+  const { ids } = recommendKpis({ ...state, definitions: state.definitions.filter((d) => d.active) }, state.setup.frameworks.map((f) => f.framework_id), material);
+  const people: KpiSetupPerson[] = KPI_USERS.map((u) => ({ user_id: u.user_id, name: u.name, role: u.role, site_ids: u.site_id ? [u.site_id] : u.role === "Manager" ? KPI_SITES.map((x) => x.site_id) : [] }));
+  return { ...state.setup, recommended: [...ids].sort((a, b) => a - b), sites: KPI_SITES.map((x) => ({ ...x })), people };
+}
 
 const addMonths = (ym: string, n: number) => {
   const [y, m] = ym.split("-").map(Number);
@@ -181,6 +217,18 @@ function usedIn(kpiId: number): MyKpiItem["used_in"] {
     });
 }
 
+/** The KPI-7 spec fields of an item: breakdowns, evidence rule, formula, reviewer. */
+const itemExtras = (def: KpiDefinition) => ({
+  level: def.level,
+  decimals: def.decimals,
+  breakdowns: def.breakdowns,
+  needs_evidence: BRSR_CORE_KPI_IDS.has(def.id),
+  auto_source: def.auto_source,
+  formula: def.formula,
+  year_type: state.setup.settings.year_type,
+  reviewer_name: "Mia Haddad",
+});
+
 function myKpis(period: string): MyKpis {
   const items: MyKpiItem[] = [];
   for (const code of RAVI_KPI_CODES) {
@@ -207,10 +255,45 @@ function myKpis(period: string): MyKpis {
       period_end: p.end,
       frequency: def.default_frequency,
       due_date: `${addMonths(period, 1)}-${String(state.setup.settings.due_day).padStart(2, "0")}`,
-      group: myKpiGroup(value),
-      value,
+      group: def.source === "manual" ? myKpiGroup(value) : "done",
       last_value: last ? { value: last.value_numeric, unit: last.unit, period_start: last.period_start } : null,
       used_in: usedIn(def.id),
+      ...itemExtras(def),
+      value: value ? out(value) : null,
+    });
+  }
+  // A calculated KPI of the site, read-only with its inputs (KPI-6 preview).
+  const consumption = state.definitions.find((d) => d.code === "WATER_CONSUMPTION");
+  const p = consumption && periodEnding(consumption, period);
+  if (consumption && p && state.setup.kpis.find((k) => k.kpi_definition_id === consumption.id)?.selected !== false) {
+    const inputs = formulaCodes(consumption.formula ?? "").map((code) => {
+      const d = state.definitions.find((x) => x.code === code) as KpiDefinition;
+      const v = state.values.find((x) => x.kpi_definition_id === d.id && x.site_id === CALLER.site_id && x.period_start === p.start);
+      return { code, name: d.name, value: v?.value_canonical ?? null, unit: d.canonical_unit, status: v?.status ?? null };
+    });
+    items.push({
+      kpi_definition_id: consumption.id,
+      code: consumption.code,
+      name: consumption.name,
+      question: consumption.question,
+      help: consumption.help,
+      topic: consumption.topic,
+      source: "formula",
+      value_type: consumption.value_type,
+      canonical_unit: consumption.canonical_unit,
+      allowed_units: consumption.allowed_units,
+      site_id: CALLER.site_id,
+      site_name: siteName(CALLER.site_id),
+      period_start: p.start,
+      period_end: p.end,
+      frequency: consumption.default_frequency,
+      due_date: `${addMonths(period, 1)}-${String(state.setup.settings.due_day).padStart(2, "0")}`,
+      group: "done",
+      value: null,
+      last_value: null,
+      used_in: usedIn(consumption.id),
+      ...itemExtras(consumption),
+      inputs,
     });
   }
   const counts = { due: 0, sent_back: 0, done: 0, total: items.length };
@@ -218,7 +301,9 @@ function myKpis(period: string): MyKpis {
   return { period, items, counts };
 }
 
-function upsert(item: KpiValueInput, index: number): KpiValueUpsertResult {
+function upsert(raw: KpiValueInput, index: number): KpiValueUpsertResult {
+  const byCode = raw.kpi_code ? state.definitions.find((d) => d.code === raw.kpi_code) : undefined;
+  const item: KpiValueInput = { ...raw, kpi_definition_id: raw.kpi_definition_id ?? byCode?.id, frequency: raw.frequency ?? byCode?.default_frequency ?? kpiOf(raw.kpi_definition_id)?.default_frequency ?? "monthly" };
   const def = kpiOf(item.kpi_definition_id);
   if (!def) return { index, ok: false, code: "KPI_NOT_SELECTED", message: "This KPI isn't in the company's list." };
   if (!state.setup.kpis.find((k) => k.kpi_definition_id === def.id)?.selected) return { index, ok: false, code: "KPI_NOT_SELECTED", message: "The company doesn't track this KPI." };
@@ -235,7 +320,7 @@ function upsert(item: KpiValueInput, index: number): KpiValueUpsertResult {
   if (existing && existing.status !== "draft" && existing.status !== "rejected") return { index, ok: false, code: "KPI_NOT_DRAFT", message: "This value was already sent for review." };
   const unit = item.unit ?? def.canonical_unit;
   const numeric = item.value_numeric ?? null;
-  const canonical = numeric === null ? null : numeric * (unit && unit !== def.canonical_unit ? (TO_CANONICAL[unit] ?? 1) : 1);
+  const canonical = numeric === null ? null : unit && def.canonical_unit && unit !== def.canonical_unit ? (convertUnit(numeric, unit, def.canonical_unit) ?? numeric) : numeric;
   const base: KpiValue = existing ?? {
     id: nextId(state.values),
     company_id: ACME.company_id,
@@ -277,7 +362,7 @@ function upsert(item: KpiValueInput, index: number): KpiValueUpsertResult {
     updated_at: NOW,
   };
   state.values = existing ? state.values.map((v) => (v.id === saved.id ? saved : v)) : [...state.values, saved];
-  return { index, ok: true, value: saved };
+  return { index, ok: true, value: out(saved) };
 }
 
 function lockStatus(year: number, period: number | null): KpiPeriodLockStatus {
@@ -426,7 +511,8 @@ export const kpiHandlers = [
   http.get(
     "*/kpi/catalogue",
     gated(() => {
-      const enabled = new Set(state.setup.frameworks.map((f) => f.framework_id));
+      // Every active framework version (the Admin picks from them in setup), as the server answers.
+      const enabled = new Set(state.frameworks.filter((f) => f.active).map((f) => f.id));
       const disclosures = state.disclosures.filter((d) => enabled.has(d.framework_id));
       const ids = new Set(disclosures.map((d) => d.id));
       return HttpResponse.json<KpiCatalogue>({
@@ -439,7 +525,7 @@ export const kpiHandlers = [
   ),
 
   // KPI-3: setup
-  http.get("*/kpi/setup", gated(() => HttpResponse.json<KpiSetup>(state.setup))),
+  http.get("*/kpi/setup", gated(() => HttpResponse.json<KpiSetup>(setupOut()))),
   http.put(
     "*/kpi/setup",
     gated(async ({ request }) => {
@@ -455,7 +541,15 @@ export const kpiHandlers = [
         kpis: body.kpis ? body.kpis.map((k) => ({ ...k, company_id: ACME.company_id })) : s.kpis,
         assignments: body.assignments ? body.assignments.map((a) => ({ ...a, company_id: ACME.company_id })) : s.assignments,
       };
-      return HttpResponse.json<KpiSetup>(state.setup);
+      return HttpResponse.json<KpiSetup>(setupOut());
+    }),
+  ),
+  http.post(
+    "*/kpi/setup/invite",
+    gated(() => {
+      const owners = new Set(state.setup.assignments.map((a) => a.owner_user_id));
+      state.invites += owners.size;
+      return HttpResponse.json({ notified: owners.size });
     }),
   ),
   http.post(
@@ -489,7 +583,12 @@ export const kpiHandlers = [
       };
       state.definitions = [...state.definitions, row];
       state.setup.kpis = [...state.setup.kpis, { company_id: ACME.company_id, kpi_definition_id: id, selected: true, frequency: null, reason_excluded: null }];
-      return HttpResponse.json<KpiDefinition>(row, { status: 201 });
+      for (const m of body.mappings ?? []) {
+        if (state.disclosures.some((d) => d.id === m.disclosure_id)) {
+          state.mappings = [...state.mappings, { id: nextId(state.mappings), disclosure_id: m.disclosure_id, kpi_definition_id: id, fit: m.fit ?? "exact", breakdown_key: null, display_unit: row.canonical_unit, note: m.note ?? null }];
+        }
+      }
+      return HttpResponse.json({ definition: row }, { status: 201 });
     }),
   ),
 
@@ -517,7 +616,7 @@ export const kpiHandlers = [
           (!q.get("to") || v.period_start <= (q.get("to") as string)) &&
           (!statuses?.length || statuses.includes(v.status)),
       );
-      return HttpResponse.json<{ values: KpiValue[] }>({ values: rows });
+      return HttpResponse.json<{ values: KpiValue[] }>({ values: rows.map(out) });
     }),
   ),
   http.put(
@@ -550,10 +649,17 @@ export const kpiHandlers = [
   ),
   http.post(
     "*/kpi/values/:id/evidence",
-    gated(({ params }) => {
+    gated(async ({ params, request }) => {
       const id = Number(params.id);
       if (!state.values.some((v) => v.id === id)) return notFound("Value not found.");
-      const row: KpiValueEvidence = { id: nextId(state.evidence), kpi_value_id: id, document_url: `https://assets.example.invalid/kpi/${id}.pdf`, document_name: "evidence.pdf", uploaded_by: CALLER.user_id, uploaded_at: NOW };
+      let name = "evidence.pdf";
+      try {
+        const file = (await request.formData()).get("file");
+        if (file && typeof file === "object" && "name" in file && file.name) name = String(file.name);
+      } catch {
+        // No multipart body (a JSON link or an empty test call): keep the sample name.
+      }
+      const row: KpiValueEvidence = { id: nextId(state.evidence), kpi_value_id: id, document_url: `https://assets.example.invalid/kpi/${encodeURIComponent(name)}`, document_name: name, uploaded_by: CALLER.user_id, uploaded_at: NOW };
       state.evidence = [...state.evidence, row];
       return HttpResponse.json({ evidence: row }, { status: 201 });
     }),
@@ -635,7 +741,7 @@ export const kpiHandlers = [
       const year = Number(new URL(request.url).searchParams.get("year") ?? 2026);
       const values = state.values.filter((v) => v.source === "auto" && v.period_start.startsWith(String(year)));
       for (const v of values) v.auto_snapshot = { read_at: NOW, rows: v.auto_snapshot?.rows ?? 0, link: v.auto_snapshot?.link ?? null };
-      return HttpResponse.json<KpiAutoRefreshResult>({ year, refreshed: values.length, values });
+      return HttpResponse.json<KpiAutoRefreshResult>({ year, refreshed: values.length, values: values.map(out) });
     }),
   ),
 
