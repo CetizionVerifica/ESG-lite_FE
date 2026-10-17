@@ -98,6 +98,7 @@ export function EnterRows(p: Props) {
         // Shown while the row still has the refused method; picking another clears it.
         methodError={p.methodErrors?.[row.id]?.method === row[ROW_METHOD_COLUMN] ? p.methodErrors?.[row.id]?.message : undefined}
         onChange={(column, value) => p.dispatch({ type: "change", model: p.model, id: row.id, column, value })}
+        onRowMethod={(method) => p.dispatch({ type: "patch", id: row.id, patch: { [ROW_METHOD_COLUMN]: method } })}
         onExtraChange={(key, value) => p.dispatch({ type: "extra", id: row.id, key, value })}
         onDuplicate={() => p.dispatch({ type: "duplicate", id: row.id })}
         onRemove={() => p.dispatch({ type: "remove", id: row.id })}

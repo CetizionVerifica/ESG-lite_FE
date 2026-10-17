@@ -9,6 +9,8 @@ type Props = {
   amountError?: string;
   /** "Choose the currency" and similar, under the Currency field. */
   currencyError?: string;
+  /** SE-1: the exchange-rate help is for reviewers (or a company set to full detail). */
+  showCalcDetail?: boolean;
 };
 
 const parseAmount = (v: unknown): number | null => {
@@ -21,7 +23,7 @@ const parseAmount = (v: unknown): number | null => {
  * ESGLite converts) and an optional invoice date. The currency is also the
  * row's unit, as the backend stores it.
  */
-export function SpendFields({ row, onChange: change, amountError, currencyError }: Props) {
+export function SpendFields({ row, onChange: change, amountError, currencyError, showCalcDetail = true }: Props) {
   const currencies = useCurrencies();
   // Any value typed here makes the row a spend row for the engine ("From the amount spent").
   const onChange = (column: string, value: string) => {
@@ -56,7 +58,7 @@ export function SpendFields({ row, onChange: change, amountError, currencyError 
         label="Invoice date"
         value={String(row[SPEND_FIELDS.invoiceDate] ?? "")}
         onChange={(v) => onChange(SPEND_FIELDS.invoiceDate, v)}
-        help="Optional. The exchange rate is the one on this date; without it, the reporting date."
+        help={showCalcDetail ? "Optional. The exchange rate is the one on this date; without it, the reporting date." : "Optional."}
       />
     </>
   );
