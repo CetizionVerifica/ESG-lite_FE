@@ -29,6 +29,12 @@ const factors = [
   { emission_factor_id: 1, emission_category_name: "Aluminium (spend)", factor_value: 0.9, denominator_unit: "USD", year: 2019, factor_type: "eeio_spend", geography: "GLO", price_currency: "USD" },
   { emission_factor_id: 2, emission_category_name: "Aluminium", factor_value: 8.6, denominator_unit: "kg", year: 2025, factor_type: "life_cycle", geography: "BH" },
 ];
+const gulf = { supplier_id: 1, name: "Gulf Smelter Co.", country: "BH", email: null };
+const gulfFigure = { id: 1, supplier_factor_id: 1, supplier_id: 1, item: "Aluminium", unit: "kg", kgco2e_per_unit: 8.6, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6", source: "manual", evidence_document_id: null, material_factor_id: null, supplier_request_id: null, has_evidence: false };
+const pickGulf = async (page: Page) => {
+  await page.getByRole("region", { name: "Row 1" }).getByRole("combobox", { name: "Supplier" }).click();
+  await page.getByRole("option", { name: "Gulf Smelter Co." }).click();
+};
 const poor = { technology: 3, geography: 3, time: 3, completeness: 1, reliability: 3, overall: 3, source: "auto" };
 
 const saved = (over: object = {}) => ({
@@ -88,6 +94,10 @@ async function signIn(page: Page, role: "User" | "Manager", api: Api, fullDetail
       if (path.endsWith("/fx-rates/currencies")) return json({ currencies: [{ code: "USD", name: "US dollar" }, { code: "INR", name: "Indian rupee" }] });
       if (path.endsWith("/fx-rates")) return json({ currency: "USD", to: "USD", date: "2026-09-30", rate: 1, as_of: "2026-09-30", source: "same currency" });
       if (path.endsWith("/user/emissions/batches")) return json([]);
+      // S3-6: the form's first method is "Supplier's own figure", so a row names its supplier.
+      if (path.endsWith("/suppliers") && request.method() === "GET")
+        return json({ company_id: 1, year: 2026, year_type: "CY", can_edit: false, suppliers: [{ ...gulf, rows_this_year: 0, tco2e: 0, has_factor: true, factor_count: 1, has_facility_data: false, last_request: null }] });
+      if (path.endsWith("/suppliers/1")) return json({ supplier: gulf, factors: [gulfFigure], facility_data: [], requests: [], can_edit: false });
       if (/\/user\/emissions\/\d+\/history$/.test(path)) return json({ emission_id: 77, months: [] });
       if (path.endsWith("/user/emissions") && request.method() === "POST") {
         const body = request.postDataJSON() as Record<string, unknown>;
@@ -117,7 +127,10 @@ test("a contributor enters values only: the form's method is sent, no method cho
   await row.getByLabel("Emission category").selectOption("Aluminium");
   await row.getByRole("textbox", { name: "Amount" }).fill("1000");
   await row.getByLabel("Unit").selectOption("kg");
+  await pickGulf(page);
+  // The supplier's own figure, 8.6 kg per kg, without the figure line (reviewers see that).
   await expect(row.getByText("= 8.60 tCO₂e")).toBeVisible();
+  await expect(row.getByTestId("supplier-figure")).toHaveCount(0);
   await expect(row.getByRole("group", { name: "How is row 1 calculated?" })).toHaveCount(0);
   await expect(row.getByRole("radio")).toHaveCount(0);
   await expect(row.getByLabel("Calculation method")).toHaveCount(0);
@@ -127,7 +140,7 @@ test("a contributor enters values only: the form's method is sent, no method cho
   await page.getByRole("button", { name: "Submit for approval" }).click();
   await expect(page.getByText("1 row sent for approval")).toBeVisible();
   // The form decides: its first (most specific) method.
-  expect(api.posts[0]).toMatchObject({ method: "supplier_specific", site_id: 4, category_id: 21 });
+  expect(api.posts[0]).toMatchObject({ method: "supplier_specific", supplier_id: 1, site_id: 4, category_id: 21 });
 
   await page.goto("/data/mine");
   await page.getByRole("table", { name: "My entries" }).getByRole("row").filter({ hasText: "Purchased materials" }).click();
@@ -185,6 +198,7 @@ test("on a company set to full detail, a method the form refuses goes back to th
   await row.getByRole("textbox", { name: "Amount" }).fill("1000");
   await expect(row.getByLabel("Unit")).toHaveValue("");
   await row.getByLabel("Unit").selectOption("kg");
+  await pickGulf(page);
   await page.getByRole("button", { name: "Review" }).click();
   await page.getByRole("button", { name: "Submit for approval" }).click();
 
@@ -257,8 +271,16 @@ test("a Superadmin picks the methods a Category 1 form offers", async ({ page })
   await expect(page.getByText(/Fix 1 thing before saving/)).toBeVisible();
   await offered.getByLabel("Units for Supplier's own figure").fill("kg");
   // The preview shows what contributors see: no choice, the form's first method as a line.
-  await expect(page.getByTestId("form-preview").getByRole("radio")).toHaveCount(0);
-  await expect(page.getByTestId("form-preview").getByTestId("method-line")).toContainText("Supplier's own figure");
+  const preview = page.getByTestId("form-preview");
+  const methodRadios = preview.getByRole("radio", { name: /supplier's own figure|amount spent/i });
+  await expect(methodRadios).toHaveCount(0);
+  await expect(preview.getByTestId("method-line")).toContainText("Supplier's own figure");
+  // Preview as a Manager: every offered method is a card to pick; back to Contributor shows the default line again.
+  await preview.getByRole("radio", { name: "Manager" }).click();
+  await expect(methodRadios).toHaveCount(2);
+  await preview.getByRole("radio", { name: "Contributor" }).click();
+  await expect(methodRadios).toHaveCount(0);
+  await expect(preview.getByTestId("method-line")).toContainText("Supplier's own figure");
   await page.getByRole("button", { name: "Save form" }).click();
   await expect.poll(() => puts.length).toBe(1);
   expect((puts[0] as { method_options: unknown }).method_options).toEqual([

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
 import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
@@ -20,6 +21,7 @@ import { DATA_TYPE_LABELS, autoDq, dataTypeFor, isMethod, unitsForMethod, type M
 import { TRAVEL_MODE_NOTE, distanceFieldOf } from "../../../lib/scope3/travel";
 import { SPEND_FIELDS, spendPreviewLine } from "../../../lib/scope3/spend";
 import { CAT3_PREVIEW_PREFIX, cat3PreviewText, type Scope3Sub } from "../../../lib/scope3/fera";
+import { supplierMethodOf } from "../logic/supplier";
 import { SpendFields } from "./SpendFields";
 
 const SPEND_EXTRA_KEYS = new Set<string>(Object.values(SPEND_FIELDS));
@@ -58,6 +60,8 @@ type Props = {
   onCalculateDistance: (column: string, field: DistanceField) => void;
   /** Evidence files for a typed row; bill rows have their bill. */
   evidence?: { items: FileDropItem[]; onAdd: (files: File[]) => void; onRemove: (id: string) => void };
+  /** S3-6: the Supplier field of a Category 1 or 2 row. */
+  supplierSlot?: ReactNode;
   /** The site's country (ISO alpha-2), for the data quality preview (S3-3). */
   siteCountry?: string | null;
   /** The server refused the row's method (METHOD_NOT_ALLOWED): its words, shown on the method cards. */
@@ -73,7 +77,9 @@ type Props = {
 export function EntryRow(p: Props) {
   const { row, model, calc } = p;
   const mapped = Object.keys(model.mapping).length > 0;
-  const factor = row.emission_category ? calc.getEmissionFactor(row.emission_category) : undefined;
+  // S3-6: a supplier-method row is calculated from the supplier's figures, not the activity's factor.
+  const supplierMethod = supplierMethodOf(row);
+  const factor = row.emission_category && !supplierMethod ? calc.getEmissionFactor(row.emission_category) : undefined;
   const result = calc.calculateEmission(row);
   const twin = (c: EmissionCalculator | null | undefined) => (c && row.emission_category && c.getEmissionFactor(row.emission_category) ? c.calculateEmission(row).value : null);
   const cat3 = p.feraCalc
@@ -197,6 +203,8 @@ export function EntryRow(p: Props) {
         <p className="text-xs text-bad">{p.methodError}</p>
       ) : null}
 
+      {p.supplierSlot}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((c) => {
             const labelExtra = isAiField(row, c.column_name) ? <AiChip /> : undefined;
@@ -289,6 +297,8 @@ export function EntryRow(p: Props) {
                 <> · no {p.factorYear} factor; {factor.year} used for {p.reportingYear} data</>
               )}
             </>
+          ) : supplierMethod ? (
+            p.showCalcDetail ? <>From the supplier's figures · {methodLabel(supplierMethod, ghg)}</> : null
           ) : row.emission_category ? (
             <span className="text-bad">No factor for this category</span>
           ) : null}
@@ -317,6 +327,12 @@ export function EntryRow(p: Props) {
               {/* Exact to the 2 decimals the saved total keeps. */}
               = {formatNumber(result.value, 2)} tCO₂e
               {result.status === "converted" && <span className="block text-xs font-normal text-muted">unit converted</span>}
+              {p.showCalcDetail &&
+                result.notes?.map((n) => (
+                  <span key={n} className="block text-xs font-normal text-muted" data-testid="calc-note">
+                    {n}
+                  </span>
+                ))}
             </p>
           ) : (
             // No issue but no figure: a spend rate loading or that failed to load; a muted note, never an error.

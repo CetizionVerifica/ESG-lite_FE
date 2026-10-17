@@ -4,6 +4,7 @@ import { factorYearForDate, yearlyPeriodEndDate, type PeriodMode, type YearType 
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { isSupportedCurrency } from "../../../lib/scope3/spend";
 import type { ModalRow } from "../types";
+import { SUPPLIER_ROW_KEYS, supplierMethodOf, supplierPayload } from "./supplier";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isRowMethod } from "../../../lib/scope3/dq";
 
@@ -84,6 +85,11 @@ export function rowIssue(row: ModalRow, calc: EmissionCalculator): RowIssue | nu
   // The spend form hides the unit, so a spend row with nothing entered yet asks for the amount, not a unit.
   if (calc.usesSpendForm(row)) return { field: "values", message: "Enter the amount spent" };
   if (!row.activity_data_unit) return { field: "activity_data_unit", message: "Choose a unit" };
+  // S3-6: a supplier's figure (or the hybrid lines) sets the unit, not the activity's factor.
+  if (supplierMethodOf(row)) {
+    const r = calc.calculateEmission(row);
+    return r.value === null ? { field: "values", message: r.status } : null;
+  }
   const expected = calc.getExpectedUnit(row.emission_category);
   if (expected && !unitsMatchExact(expected, row.activity_data_unit) && !canConvert(row.activity_data_unit, expected)) {
     const bracket = row.emission_category.match(/\[([^\]]+)\]/)?.[1];
@@ -109,7 +115,10 @@ export interface EmissionPayload {
   activity_data_unit?: string;
   reporting_period: PeriodMode;
   year_type?: YearType;
-  /** S3-3: how the row was calculated (the row's method), when it has one. */
+  /** S3-6: the supplier the goods came from, and for "Supplier's own figure" the figure chosen. */
+  supplier_id?: number;
+  supplier_factor_id?: number;
+  /** S3-3: how the row was calculated (the row's method), when it has one; S3-6's supplier methods included. */
   method?: string;
   /** S3-3: sent (true) only when a value came from an estimate, such as the distance helper's rail or sea estimate. */
   is_estimate?: boolean;
@@ -136,8 +145,12 @@ export function buildPayload(
     if (key.endsWith("__multiplier") || key.endsWith("__distance")) continue;
     // Private row state: FERA flag, mapping key, the bill a row came from, the saved entry it edits.
     if (key === "_isFeraRow" || key === "_ecmKey" || key === "_bill" || key === "_editOf" || key === "_editSaved") continue;
+    if ((SUPPLIER_ROW_KEYS as readonly string[]).includes(key)) continue;
+    // The supplier methods go in `method`; "@method" only matters to a spec that reads it (S3-9).
+    if (key === ROW_METHOD_COLUMN && supplierMethodOf(row)) continue;
     activity[key] = value;
   }
+  const supplier = supplierPayload(row);
   const method = row[ROW_METHOD_COLUMN];
   const estimated = Array.isArray(_estimates) && _estimates.length > 0;
   const date = entryDate(ctx.period);
@@ -145,14 +158,16 @@ export function buildPayload(
     site_id: ctx.siteId,
     category_id: ctx.categoryId,
     activity_data: activity,
-    extra_data: _extra_data ?? {},
+    extra_data: supplier.extra ? { ...(_extra_data ?? {}), ...supplier.extra } : (_extra_data ?? {}),
     total_emission: 0,
     unit: "tCO2e",
     date_of_reporting: ctx.period.mode === "yearly" ? date : (rowDate as string | undefined) || date,
     activity_data_unit: activity_data_unit || undefined,
     reporting_period: ctx.period.mode,
     year_type: ctx.period.mode === "yearly" ? ctx.period.yearType : undefined,
-    ...(isRowMethod(method) ? { method } : {}),
+    ...(supplier.supplier_id ? { supplier_id: supplier.supplier_id } : {}),
+    ...(supplier.supplier_factor_id ? { supplier_factor_id: supplier.supplier_factor_id } : {}),
+    ...(supplier.method ? { method: supplier.method } : isRowMethod(method) ? { method } : {}),
     ...(estimated ? { is_estimate: true } : {}),
   };
 }

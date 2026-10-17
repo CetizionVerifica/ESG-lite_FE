@@ -10,6 +10,8 @@ import {
   formFromDeclaration,
   formFromReply,
   isBoundaryRefusal,
+  scope3AcceptNote,
+  scope3Boundary,
   submitProblem,
   studyLabel,
   validityText,
@@ -125,6 +127,26 @@ describe("review form", () => {
   });
 });
 
+describe("S3-6: Scope 3 on accept", () => {
+  it("a figure that isn't cradle-to-gate needs the boundary confirmed to count for Scope 3", () => {
+    const f = formFromReply(base);
+    expect(scope3Boundary(base, { ...f, boundary: "cradle_to_gate" })).toEqual({ boundary: "cradle_to_gate", needsConfirm: false });
+    expect(scope3Boundary(base, { ...f, boundary: "cradle_to_grave" })).toEqual({ boundary: "cradle_to_grave", needsConfirm: true });
+    expect(scope3Boundary(base, { ...f, boundary: "gate_to_gate" }).needsConfirm).toBe(true);
+    // No boundary stated: the footprint's is the figure's.
+    const grave = { ...base, study: base.study ? { ...base.study, boundary: "cradle_to_grave" as const } : base.study };
+    expect(scope3Boundary(grave, { ...f, boundary: null })).toEqual({ boundary: "cradle_to_grave", needsConfirm: true });
+  });
+
+  it("says why no Scope 3 supplier figure was created, and nothing when it was", () => {
+    expect(scope3AcceptNote({ scope3_warning: null })).toBeNull();
+    expect(scope3AcceptNote(undefined)).toBeNull();
+    expect(scope3AcceptNote({ scope3_warning: { code: "SUPPLIER_FACTOR_BOUNDARY", boundary: "cradle_to_grave" } })).toBe(
+      "It is cradle-to-grave, so no Scope 3 supplier figure was created. To count it for Category 1, add it on the Suppliers page and confirm the boundary there.",
+    );
+  });
+});
+
 describe("ask form", () => {
   const ok = { study_id: 21, input_id: 9, material: "Ingot", unit: "kg", supplier_name: "", supplier_email: "a@b.co", due_date: "", note: "" };
   it("needs a footprint, material, unit and a valid email; the due date can't be past", () => {
@@ -136,8 +158,10 @@ describe("ask form", () => {
     expect(askProblem({ ...ok, due_date: "2025-12-31" }, "2026-01-01")).toMatch(/past/);
   });
   it("reads ?new=1&study=&input=", () => {
-    expect(askParams(new URLSearchParams("new=1&study=21&input=9"))).toEqual({ open: true, study_id: 21, input_id: 9 });
-    expect(askParams(new URLSearchParams("study=x"))).toEqual({ open: false, study_id: null, input_id: null });
+    expect(askParams(new URLSearchParams("new=1&study=21&input=9"))).toEqual({ open: true, study_id: 21, input_id: 9, supplier_name: "", supplier_email: "" });
+    expect(askParams(new URLSearchParams("study=x"))).toEqual({ open: false, study_id: null, input_id: null, supplier_name: "", supplier_email: "" });
+    // S3-6: the Suppliers page fills in who is asked.
+    expect(askParams(new URLSearchParams("new=1&supplier=Gulf+Smelter+Co.&email=pcf%40gulf.example"))).toMatchObject({ open: true, supplier_name: "Gulf Smelter Co.", supplier_email: "pcf@gulf.example" });
   });
 });
 

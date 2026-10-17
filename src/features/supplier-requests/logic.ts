@@ -156,6 +156,24 @@ export function acceptProblem(r: SupplierRequest, form: AcceptForm, confirmBound
   return null;
 }
 
+/**
+ * S3-6: the boundary the accepted figure will carry (the one in the form, else
+ * the footprint's), and whether it only counts as the supplier's Scope 3 figure
+ * once the boundary is confirmed. Scope 3 takes cradle-to-gate figures only
+ * (SUPPLIER_FACTOR_BOUNDARY); PCF takes it either way.
+ */
+export function scope3Boundary(r: SupplierRequest, form: AcceptForm): { boundary: string | null; needsConfirm: boolean } {
+  const boundary = form.boundary ?? r.study?.boundary ?? null;
+  return { boundary, needsConfirm: !!boundary && boundary !== "cradle_to_gate" };
+}
+
+/** S3-6: the note shown after an accept that added no Scope 3 supplier figure, or null. */
+export function scope3AcceptNote(res: { scope3_warning?: { code: string; boundary: string } | null } | null | undefined): string | null {
+  const w = res?.scope3_warning;
+  if (!w) return null;
+  return `It is ${boundaryLabel(w.boundary).toLowerCase()}, so no Scope 3 supplier figure was created. To count it for Category 1, add it on the Suppliers page and confirm the boundary there.`;
+}
+
 export type AskForm = {
   study_id: number | null;
   input_id: number | null;
@@ -179,13 +197,17 @@ export function askProblem(f: AskForm, today = new Date().toISOString().slice(0,
   return null;
 }
 
-/** Parse `?new=1&study=&input=` into the Ask form's starting point. */
-export function askParams(params: URLSearchParams): { open: boolean; study_id: number | null; input_id: number | null } {
+/**
+ * Parse `?new=1&study=&input=` into the Ask form's starting point. The
+ * Suppliers page (S3-6) adds `&supplier=&email=` to fill in who is asked.
+ */
+export function askParams(params: URLSearchParams): { open: boolean; study_id: number | null; input_id: number | null; supplier_name: string; supplier_email: string } {
   const id = (k: string) => {
     const n = Number(params.get(k));
     return Number.isInteger(n) && n > 0 ? n : null;
   };
-  return { open: params.get("new") === "1", study_id: id("study"), input_id: id("input") };
+  const text = (k: string, max: number) => (params.get(k) ?? "").trim().slice(0, max);
+  return { open: params.get("new") === "1", study_id: id("study"), input_id: id("input"), supplier_name: text("supplier", 200), supplier_email: text("email", 200) };
 }
 
 type AxiosLike = { response?: { status?: number; data?: { message?: unknown; boundary_mismatch?: unknown } } };

@@ -39,9 +39,11 @@ describe("Scope 3 mock handlers", () => {
     expect(rows.find((r) => r.ghg_category === 2)?.status).toBe("included");
   });
 
-  it("only takes cradle-to-gate supplier figures", async () => {
+  it("only takes cradle-to-gate supplier figures, unless the boundary is confirmed", async () => {
     const bad = await post("/suppliers/1/factors", { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_grave", reference_year: 2025, gwp_set: "AR6" });
     expect(((await bad.json()) as Scope3ErrorBody).code).toBe("SUPPLIER_FACTOR_BOUNDARY");
+    const confirmed = await post("/suppliers/1/factors", { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_grave", reference_year: 2025, gwp_set: "AR6", confirm_boundary: true });
+    expect(confirmed.status).toBe(201);
     const ok = await post("/suppliers/1/factors", { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6" });
     expect(ok.status).toBe(201);
   });
@@ -85,8 +87,8 @@ describe("Scope 3 mock handlers", () => {
 
   it("keeps server-owned supplier factor fields and 404s an unknown supplier", async () => {
     const body = { item: "Rod", unit: "kg", kgco2e_per_unit: 4, boundary: "cradle_to_gate", reference_year: 2025, gwp_set: "AR6", source: "supplier_request", company_id: 2, id: 99 };
-    const made = (await (await post("/suppliers/1/factors", body)).json()) as { id: number; company_id: number; source: string };
-    expect(made).toMatchObject({ company_id: 1, source: "manual" });
+    const made = (await (await post("/suppliers/1/factors", body)).json()) as { id: number; supplier_id: number; source: string };
+    expect(made).toMatchObject({ supplier_id: 1, source: "manual" });
     expect(made.id).not.toBe(99);
     expect((await post("/suppliers/999/factors", body)).status).toBe(404);
   });
