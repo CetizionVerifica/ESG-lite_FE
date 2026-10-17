@@ -30,3 +30,19 @@ Unit for every check rule; API tenant isolation, publish blocked on error, versi
 
 ## Done when
 Every live form passes the check; rows carry `form_version`; Superadmins hear about missing factors.
+
+## As built (2026-10-17, frontend part 2/2)
+- **Logic** `src/features/capture-setup/check.ts` (pure):
+  - `readCheck`: null when the server sends no check (an older server, or `{}`), and then nothing blocks or publishes.
+  - `tabForIssue`: a problem's field path → the builder tab that fixes it.
+  - `newErrors`: the draft's errors the saved form doesn't have.
+  - `versionChanges`: what a version changed from the one before, setting by setting, in the builder's words.
+- **Check tab** (`?tab=check`, the `form_needs_factor` link):
+  - On open it shows the saved form's check (`GET …/:id/check`). With unsaved changes, "Check again" checks the draft (`POST /admin/column-configs/check` with `pk_id`), and the panel says whether it shows the saved form or the changes, and whether the form changed since.
+  - Errors and warnings each have "Go to <tab>". The tab's count is the error count.
+- **Save** runs the draft check first. **Only problems the saved form doesn't have stop the save** (listed in a callout, Check tab opened), so a live form with old problems can be fixed a step at a time. A form that passes is saved, then published with the optional "Note for this version". The toast says "Version n is live." or "Nothing changed since version n". One that still has old problems is saved and not published: "N things still to fix before a new version can go live".
+  - Save and publish are one mutation (`useSaveForm({payload, publish, note})`), so the toast reads the publish result although the builder remounts on the new server copy. A refused publish leaves the save done and says why.
+- **History** (header button): `HistoryDrawer` lists versions newest first with who, when, the note, a "Live" badge and the changes from the previous version.
+- **Forms list**: a red "N things to fix" badge beside the form name, with the first error as its title (`GET /admin/column-configs/checks`).
+- **Approvals drawer**: "Form · Form version n" in Activity when the row has one (`LedgerRow.form_version`).
+- **Deviation:** the spec says a broken form "can't be saved". A save that adds a problem is refused; a save of a form that already had problems (29 of 152 live forms on production data) isn't, or nobody could fix them gradually. Such a form isn't published until it passes, and keeps its red mark.
