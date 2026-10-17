@@ -233,9 +233,19 @@ test("a manager sees how an entry was calculated, and filters by method and data
   await expect(page.getByRole("tooltip")).toContainText("Reliability: Poor");
 });
 
-test("a Superadmin picks the methods a Category 1 form offers", async ({ page }) => {
+test("a Superadmin sets how a Category 1 form is calculated: the record's answer picks the method (SE-3)", async ({ page }) => {
   const puts: unknown[] = [];
-  const form = { ...goodsForm, method_options: null, site: { site_id: 4, name: "Bahrain plant" }, category: goods, extra_fields: [], calculation: null };
+  const recordType = { pk_id: 2, column_name: "record_type", column_type: "select" };
+  const form = {
+    ...goodsForm,
+    columns: [...goodsForm.columns, recordType],
+    column_options: { "2": [{ id: "invoice", label: "Invoice amount" }, { id: "supplier_figure", label: "Supplier's figure" }] },
+    method_options: null,
+    site: { site_id: 4, name: "Bahrain plant" },
+    category: goods,
+    extra_fields: [],
+    calculation: null,
+  };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Superadmin");
@@ -254,37 +264,39 @@ test("a Superadmin picks the methods a Category 1 form offers", async ({ page })
         return json({ message: "updated", columnConfig: { ...form, ...request.postDataJSON() } });
       }
       if (path.endsWith("/admin/column-configs/5")) return json(form);
-      if (path.endsWith("/admin/columns")) return json([{ pk_id: 1, column_name: "amount", column_type: "number" }]);
+      if (path.endsWith("/admin/columns")) return json([{ pk_id: 1, column_name: "amount", column_type: "number" }, recordType]);
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       return json([]);
     },
   );
   await page.goto("/capture/forms/5?tab=calculation");
-  const offered = page.getByTestId("methods-offered");
-  await expect(offered).toContainText("Category 1 · Purchased goods and services");
-  // Ticked out of order; saved most specific first.
-  await offered.getByRole("checkbox", { name: "From the amount spent" }).click();
-  await offered.getByRole("checkbox", { name: "Supplier's own figure" }).click();
-  await offered.getByLabel("Units for From the amount spent").fill("USD, EUR");
-  await page.getByRole("button", { name: "Save form" }).click();
-  await expect(page.getByText(/Fix 1 thing before saving/)).toBeVisible();
-  await offered.getByLabel("Units for Supplier's own figure").fill("kg");
-  // The preview shows what contributors see: no choice, the form's first method as a line.
+  const section = page.getByTestId("method-section");
+  await expect(section).toContainText("Category 1 · Purchased goods and services");
+  await section.getByRole("radio", { name: "It depends on the record" }).click();
+  await section.getByLabel("The question contributors answer").selectOption("record_type");
+  // Mapped out of order; offered most specific first.
+  await section.getByLabel("Method for Invoice amount").selectOption("spend_based");
+  await section.getByLabel("Method for Supplier's figure").selectOption("supplier_specific");
+  await section.getByLabel("Units for From the amount spent").fill("USD, EUR");
+  await section.getByLabel("Units for Supplier's own figure").fill("kg");
+  // The preview shows what contributors see: the question in the client's words, no method choice.
   const preview = page.getByTestId("form-preview");
   const methodRadios = preview.getByRole("radio", { name: /supplier's own figure|amount spent/i });
+  await expect(preview.getByLabel("Record Type")).toBeVisible();
   await expect(methodRadios).toHaveCount(0);
-  await expect(preview.getByTestId("method-line")).toContainText("Supplier's own figure");
-  // Preview as a Manager: every offered method is a card to pick; back to Contributor shows the default line again.
-  await preview.getByRole("radio", { name: "Manager" }).click();
+  // The reviewer view shows the method cards; back to the contributor view hides them again.
+  await preview.getByRole("radio", { name: "Reviewer view" }).click();
   await expect(methodRadios).toHaveCount(2);
-  await preview.getByRole("radio", { name: "Contributor" }).click();
+  await preview.getByRole("radio", { name: "Contributor view" }).click();
   await expect(methodRadios).toHaveCount(0);
-  await expect(preview.getByTestId("method-line")).toContainText("Supplier's own figure");
   await page.getByRole("button", { name: "Save form" }).click();
   await expect.poll(() => puts.length).toBe(1);
-  expect((puts[0] as { method_options: unknown }).method_options).toEqual([
+  const body = puts[0] as { method_options: unknown; method_by_choice: unknown };
+  expect(body.method_options).toEqual([
     { method: "supplier_specific", units: ["kg"] },
     { method: "spend_based", units: ["USD", "EUR"] },
   ]);
+  expect(body.method_by_choice).toEqual({ column: "record_type", map: { invoice: "spend_based", supplier_figure: "supplier_specific" } });
 });
+

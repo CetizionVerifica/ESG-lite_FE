@@ -21,13 +21,22 @@ import {
   updateMethod,
 } from "../../builder";
 import { isGhgCategoryNumber } from "../../../../lib/scope3/contracts";
-import { MethodsOffered } from "./MethodsOffered";
+import { SUPPORTED_CURRENCIES } from "../../../../lib/scope3/spend";
+import type { RowMethod } from "../../../../lib/scope3/dq";
+import { fixableUnits, setFixedCurrency, setFixedUnit } from "../../formSettings";
+import { MethodSection } from "./MethodSection";
 
 export type CalcTabProps = {
   draft: BuilderDraft;
   onChange: (update: (d: BuilderDraft) => BuilderDraft) => void;
-  /** The form's GHG Protocol category (Scope 3): shows "Methods offered" (S3-3). */
+  /** The form's GHG Protocol category (Scope 3): shows how the category is calculated (SE-3). */
   ghgCategory?: number | null;
+  /** SE-3: adds a method's recipe (fields, creating any the library lacks, and formula). */
+  onApplyRecipe?: (method: RowMethod) => void;
+  /** SE-3: adds a "What does your record show?" choice field. */
+  onAddQuestion?: () => void;
+  /** A recipe or the question is being added. */
+  busy?: boolean;
 };
 
 const MODES: { value: CalcMode; label: string }[] = [
@@ -57,7 +66,7 @@ function Chip({ on, label, onToggle }: { on: boolean; label: string; onToggle: (
 }
 
 /** How the activity amount is worked out, in plain words. */
-export function CalcTab({ draft, onChange, ghgCategory }: CalcTabProps) {
+export function CalcTab({ draft, onChange, ghgCategory, onApplyRecipe, onAddQuestion, busy }: CalcTabProps) {
   const mode = calcMode(draft);
   const calc = draft.calculation;
   const numbers = draft.fields.filter(isNumber);
@@ -68,7 +77,10 @@ export function CalcTab({ draft, onChange, ghgCategory }: CalcTabProps) {
 
   return (
     <div className="space-y-4">
-      {isGhgCategoryNumber(ghgCategory) && <MethodsOffered draft={draft} onChange={onChange} ghgCategory={ghgCategory} />}
+      {isGhgCategoryNumber(ghgCategory) && (
+        <MethodSection draft={draft} onChange={onChange} ghgCategory={ghgCategory} onApplyRecipe={(m) => onApplyRecipe?.(m)} onAddQuestion={() => onAddQuestion?.()} busy={busy} />
+      )}
+      <UnitAndCurrency draft={draft} onChange={onChange} />
       <div className="space-y-1">
         <SegmentedControl<CalcMode> label="Calculation" value={mode} onChange={(m) => onChange((d) => setCalcMode(d, m))} options={MODES} />
         <p className="text-sm text-muted">{HELP[mode]}</p>
@@ -188,5 +200,47 @@ export function CalcTab({ draft, onChange, ghgCategory }: CalcTabProps) {
         </div>
       )}
     </div>
+  );
+}
+
+/** SE-3 · A fixed unit hides the unit select for contributors; a fixed currency hides the Currency field. */
+function UnitAndCurrency({ draft, onChange }: Pick<CalcTabProps, "draft" | "onChange">) {
+  const units = fixableUnits(draft);
+  const spend = draft.methodOptions.some((o) => o.method === "spend_based");
+  const ANY = "";
+  return (
+    <section aria-labelledby="unit-currency-title" className="space-y-3 border-b border-line pb-4" data-testid="unit-currency">
+      <h3 id="unit-currency-title" className="text-sm font-medium text-ink">
+        Unit{spend ? " and currency" : ""}
+      </h3>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {units.length > 0 ? (
+          <Select<string>
+            label="Unit"
+            value={draft.fixedUnit ?? ANY}
+            onChange={(v) => onChange((d) => setFixedUnit(d, v || null))}
+            options={[{ value: ANY, label: "Contributors choose" }, ...units.map((u) => ({ value: u, label: `Always ${u}` }))]}
+            help="A fixed unit is shown as text; rows in another unit are refused."
+          />
+        ) : (
+          <TextField
+            label="Fixed unit (optional)"
+            value={draft.fixedUnit ?? ""}
+            onChange={(v) => onChange((d) => setFixedUnit(d, v))}
+            placeholder="Contributors choose"
+            help="A fixed unit is shown as text; rows in another unit are refused."
+          />
+        )}
+        {spend && (
+          <Select<string>
+            label="Currency"
+            value={draft.fixedCurrency ?? ANY}
+            onChange={(v) => onChange((d) => setFixedCurrency(d, v || null))}
+            options={[{ value: ANY, label: "The client's default" }, ...SUPPORTED_CURRENCIES.map((c) => ({ value: c, label: `Always ${c}` }))]}
+            help="With one currency the Currency field is hidden."
+          />
+        )}
+      </div>
+    </section>
   );
 }

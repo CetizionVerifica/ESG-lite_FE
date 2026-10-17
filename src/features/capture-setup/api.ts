@@ -155,3 +155,22 @@ export function useAutoCreate() {
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
   });
 }
+
+/**
+ * SE-3: adds library columns a recipe or the method question needs, and hands
+ * back the created columns (the library list refetches).
+ */
+export function useAddLibraryColumns() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (cols: { column_name: string; column_type: string }[]) => {
+      const created: LibraryColumn[] = [];
+      for (const c of cols) {
+        const res = (await createColumn({ column_name: c.column_name, column_type: c.column_type, dropdown_options: c.column_type === "select" ? [] : null })) as { column?: LibraryColumn } & LibraryColumn;
+        created.push(res.column ?? res);
+      }
+      return created;
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.columns() }),
+  });
+}

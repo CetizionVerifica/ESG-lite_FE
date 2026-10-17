@@ -21,6 +21,10 @@ export type Company = {
   mcp_enabled?: boolean | null;
   /** "Smart import" for the client's Managers and Admins (XI0); absent on servers without migrate:ai-import = off. */
   ai_import_enabled?: boolean | null;
+  /** SE-2: how much of the calculation the client's Users see where they enter data ("total" or "full"). */
+  entry_detail?: string | null;
+  /** SE-2: the currency a spend row takes when it names none (INR for current clients). */
+  default_currency?: string | null;
 };
 export type Site = { site_id: number; name: string; address?: string | null; company?: { company_id: number } | null; country?: { name: string } | null };
 export type AdminUser = {

@@ -8,6 +8,7 @@
 // on the legacy page.
 import { ROW_METHOD_COLUMN, resolveSpecMethod, specNumericColumns } from "./emissionCalc";
 import { type MethodOptions, readMethodOptions, unitsForMethod } from "../scope3/dq";
+import { type FormSettings, readFormSettings } from "../forms/settings";
 import type {
   CalculationSpec,
   ColumnConfig,
@@ -31,6 +32,8 @@ export interface FormModel {
   spec: CalculationSpec | null;
   /** S3-3: the methods the form offers, most specific first, with their units; empty when it doesn't limit them. */
   methodOptions: MethodOptions;
+  /** SE-2/SE-3: field settings, the method question, a fixed unit and currency (src/lib/forms/settings.ts). */
+  settings: FormSettings;
 }
 
 export const toFormModel = (config: ColumnConfig | null | undefined): FormModel => ({
@@ -42,6 +45,7 @@ export const toFormModel = (config: ColumnConfig | null | undefined): FormModel 
   extraFields: config?.extra_fields ?? [],
   spec: config?.calculation ?? null,
   methodOptions: readMethodOptions(config?.method_options),
+  settings: readFormSettings(config),
 });
 
 /**

@@ -222,6 +222,11 @@ describe("field keys", () => {
     expect(fieldNameError(removed, 2, "mode")).toMatch(/used this key/);
     expect(fieldNameError(d0, 2, "truck", [{ pk_id: 99, column_name: "Truck" }])).toMatch(/library column/);
     expect(fieldNameError(d0, 2, "truck", [{ pk_id: 2, column_name: "truck" }])).toBeNull();
+    // A key the form or the library already has passes as it is (S3-8's "Fuel used (litres)"); a typed one keeps to plain characters.
+    const litres = draftFromConfig({ ...transport, columns: [...transport.columns, { pk_id: 9, column_name: "Fuel used (litres)", column_type: "number" }] });
+    expect(fieldNameError(litres, 9, "Fuel used (litres)")).toBeNull();
+    expect(fieldNameError(d0, 9, "Share (%)", [{ pk_id: 9, column_name: "Share (%)" }])).toBeNull();
+    expect(fieldNameError(litres, 9, "Fuel used [l]")).toBe("Use letters, numbers, spaces or _.");
   });
 
   it("checks dependent branch lists and keeps saved ids as they are", () => {
