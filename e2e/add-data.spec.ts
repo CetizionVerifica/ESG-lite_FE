@@ -292,10 +292,8 @@ const transportConfig = {
   },
 };
 
-test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends what the engine saves (S3-8)", async ({ page }) => {
-  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
-  await signIn(page, created);
-  await page.route(/\/user\/column-configs\/site\/4\/category\/13(\?|$)/, (route) => route.fulfill({ json: [transportConfig] }));
+const routeTransport = async (page: Page, form: Record<string, unknown> = transportConfig) => {
+  await page.route(/\/user\/column-configs\/site\/4\/category\/13(\?|$)/, (route) => route.fulfill({ json: [form] }));
   await page.route(/\/user\/emission-factors\/site\/4\/category\/13(\?|$)/, (route) => {
     const year = Number(new URL(route.request().url()).searchParams.get("year") ?? 2024);
     return route.fulfill({
@@ -308,6 +306,12 @@ test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends w
   await page.route(/\/user\/units\/site\/4\/category\/13(\?|$)/, (route) =>
     route.fulfill({ json: ["km", "tonne.km", "litre"].map((unit_name, i) => ({ unit_id: 50 + i, unit_name })) }),
   );
+};
+
+test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends what the engine saves (S3-8)", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  await routeTransport(page);
   await page.goto("/data/new?site=4&category=13&period=2025-09");
 
   const row = page.getByRole("region", { name: "Row 1" });
@@ -338,6 +342,38 @@ test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends w
     extra_data: { paid_by: "We paid" },
   });
   expect(created[0].body).not.toHaveProperty("is_estimate");
+});
+
+test("SE-1: on a form offering several methods, a User picks from every method's units and the unit says the method", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  await signIn(page, created);
+  // As the S3-8 seed writes it (ESG-lite configs.ts methodOptionsFor(4)): fuel first.
+  await routeTransport(page, {
+    ...transportConfig,
+    method_options: [
+      { method: "fuel_based", units: ["litre"] },
+      { method: "distance_based", units: ["tonne.km", "km"] },
+      { method: "spend_based", units: ["INR", "USD"] },
+    ],
+  });
+  await page.goto("/data/new?site=4&category=13&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  // Every method's units, not only the first method's; spend has its own fields.
+  await expect(row.getByLabel("Unit").locator("option")).toHaveText(["Choose a unit", "litre", "tonne.km", "km"]);
+  await expect(row.getByText("How is row 1 calculated?")).toHaveCount(0);
+  await row.getByLabel("Travel Mode", { exact: true }).selectOption({ label: "Road" });
+  await row.getByLabel("Vehicle Type", { exact: true }).selectOption({ label: "HGV (all diesel)" });
+  await row.getByLabel("Fuel Type/Class", { exact: true }).selectOption({ label: "All rigids [tonne.km]" });
+  await row.getByLabel("Shipment Ref", { exact: true }).fill("GL-ROAD-0925");
+  await row.getByLabel("Weight (Tonne)", { exact: true }).fill("10");
+  await row.getByLabel("Distance Travelled", { exact: true }).fill("500");
+  await row.getByLabel("Unit").selectOption("tonne.km");
+  // 10 t × 500 km × 0.2408 kg/tonne.km = 1.20 t
+  await expect(row.getByText("= 1.20 tCO₂e")).toBeVisible();
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0].body).toMatchObject({ activity_data_unit: "tonne.km", activity_data: { "@method": "distance_based" } });
 });
 
 test("SE-1: with company detail set to full, a User sees how the row is worked out", async ({ page }) => {

@@ -55,8 +55,9 @@ const rate = {
   no_deflator: false,
 };
 
-async function signIn(page: Page, created: unknown[], rateQueries: URLSearchParams[], rateStatus = 200) {
-  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [site] };
+/** `entryDetail` "total": a client that shows Users the total only (SE-1's default). */
+async function signIn(page: Page, created: unknown[], rateQueries: URLSearchParams[], rateStatus = 200, entryDetail: "full" | "total" = "full") {
+  const user = { user_id: 7, name: "Uma User", email: "uma@midal.com", sites: [{ ...site, company: { ...site.company, entry_detail: entryDetail } }] };
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "User");
@@ -167,4 +168,30 @@ test("a spend row whose exchange rate can't load says the total is calculated on
   await page.getByRole("button", { name: "Submit for approval" }).click();
   await expect(page.getByText("1 row sent for approval")).toBeVisible();
   expect(created[0]).toMatchObject({ activity_data: { spent_value: "1240000", currency: "INR" }, activity_data_unit: "INR" });
+});
+
+test("SE-1: a User enters the amount and sees the total, not the rate, the deflator or the exchange rate", async ({ page }) => {
+  await signIn(page, [], [], 200, "total");
+  await page.goto("/data/new?site=4&category=21&period=2026-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Material").selectOption({ label: "Chemicals" });
+  await row.getByLabel("Amount spent").fill("1240000");
+  await row.getByLabel("Currency").selectOption("INR");
+  await row.getByLabel("Invoice date").fill("2026-09-03");
+  await expect(row.getByText("= 5.19 tCO₂e")).toBeVisible();
+  await expect(row.getByTestId("spend-preview")).toHaveCount(0);
+  for (const text of ["rate on", "kgCO₂e/USD", "deflated", "exchange rate"]) {
+    await expect(row.getByText(text, { exact: false })).toHaveCount(0);
+  }
+});
+
+test("SE-1: when the rate can't load, a User reads that the total is worked out on send", async ({ page }) => {
+  await signIn(page, [], [], 503, "total");
+  await page.goto("/data/new?site=4&category=21&period=2026-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Material").selectOption({ label: "Chemicals" });
+  await row.getByLabel("Amount spent").fill("1240000");
+  await row.getByLabel("Currency").selectOption("INR");
+  await expect(row.getByText("The total is worked out when you send.")).toBeVisible();
+  await expect(row.getByText(/exchange rate/i)).toHaveCount(0);
 });

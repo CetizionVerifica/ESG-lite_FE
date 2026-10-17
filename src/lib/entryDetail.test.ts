@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { USER_MISSING_FACTOR, USER_UNIT_CANNOT_CONVERT, companyOfUserSite, plainIssue, plainProblem, showCalcDetail } from "./entryDetail";
+import {
+  USER_MISSING_FACTOR,
+  USER_TOTAL_ON_SEND,
+  USER_TOTAL_PENDING,
+  USER_UNIT_CANNOT_CONVERT,
+  allMethodUnits,
+  companyOfUserSite,
+  methodForUnit,
+  plainIssue,
+  plainProblem,
+  showCalcDetail,
+} from "./entryDetail";
+import { SPEND_RATE_FAILED, SPEND_RATE_PENDING } from "./scope3/spend";
 
 describe("showCalcDetail (SE-1)", () => {
   const settings = { total: { entry_detail: "total" }, full: { entry_detail: "full" }, missing: {}, none: null };
@@ -65,5 +77,37 @@ describe("plain problems for a User", () => {
     expect(plainIssue("UNKNOWN_ACTIVITY", '"Biogas" matches no emission factor or mapping. Did you mean: Diesel; Coal; Briquette; LSHS; Natural gas?')).toBe(
       `"Biogas" isn't one of this form's options. Did you mean: Diesel; Coal; Briquette; LSHS; Natural gas?`,
     );
+  });
+});
+
+describe("a spend row's exchange rate is never named to a User", () => {
+  it("the rate's status and problems are said plainly", () => {
+    expect(plainProblem(SPEND_RATE_PENDING)).toBe(USER_TOTAL_PENDING);
+    expect(plainProblem(SPEND_RATE_FAILED)).toBe(USER_TOTAL_ON_SEND);
+    expect(plainProblem("No exchange rate for INR on 3 Sep 2026")).toBe(USER_MISSING_FACTOR);
+    expect(plainProblem("No deflator for 2026")).toBe(USER_MISSING_FACTOR);
+  });
+});
+
+describe("a User's method from the unit (forms that ask no question yet)", () => {
+  // The S3-8 Category 4 transport form's method_options (ESG-lite src/scope3/transport/configs.ts).
+  const transport = [
+    { method: "fuel_based", units: ["litre", "kWh", "kg"] },
+    { method: "distance_based", units: ["tonne.km", "km"] },
+    { method: "site_specific", units: ["kWh", "kg"] },
+    { method: "average_data", units: ["m3.day", "pallet.day", "teu.day"] },
+  ];
+  it("offers every method's units once, in the form's order", () => {
+    expect(allMethodUnits(transport)).toEqual(["litre", "kWh", "kg", "tonne.km", "km", "m3.day", "pallet.day", "teu.day"]);
+    expect(allMethodUnits([{ method: "distance_based", units: [] }])).toBeNull();
+  });
+  it("the first method listing the unit, as the engine records it", () => {
+    expect(methodForUnit(transport, "tonne.km")).toBe("distance_based");
+    expect(methodForUnit(transport, "Tonne KM")).toBe("distance_based");
+    expect(methodForUnit(transport, "litre")).toBe("fuel_based");
+    expect(methodForUnit(transport, "kWh")).toBe("fuel_based");
+    expect(methodForUnit(transport, "m³.day")).toBe("average_data");
+    expect(methodForUnit(transport, "passenger.km")).toBeNull();
+    expect(methodForUnit(transport, "")).toBeNull();
   });
 });

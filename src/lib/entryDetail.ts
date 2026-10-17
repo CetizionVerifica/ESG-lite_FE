@@ -7,6 +7,8 @@
 // Admins and Superadmins keep today's detail: factor, unit match, Category 3
 // (FERA) rows, method and engine notes. Spec: src/features/add-data/SE-1.CLAUDE.md.
 // Pure; the hooks are in ./useCalcDetail.ts.
+import { normalizeUnitKey } from "./emissions/emissionCalc";
+
 /** `company.entry_detail` (SE-2 adds the column): "total" (default) or "full". */
 export type EntryDetail = "total" | "full";
 
@@ -32,6 +34,9 @@ export function companyOfUserSite(user: unknown, siteId?: number | null): Detail
 /** What a User reads when a row can't be worked out: something they can act on, no factor words. */
 export const USER_MISSING_FACTOR = "We can't work this row out yet. Ask your administrator.";
 export const USER_UNIT_CANNOT_CONVERT = "This unit can't be used here. Choose another unit.";
+/** A spend row while its exchange rate loads, or when it couldn't load (the server works it out on send). */
+export const USER_TOTAL_PENDING = "Working out the total…";
+export const USER_TOTAL_ON_SEND = "The total is worked out when you send.";
 
 /**
  * A calculation status or row problem in a User's words. The calculator and
@@ -41,6 +46,10 @@ export const USER_UNIT_CANNOT_CONVERT = "This unit can't be used here. Choose an
  * Quantity", "Choose a unit") is already plain and passes through.
  */
 export function plainProblem(message: string): string {
+  // S3-5's spend rows: the exchange rate is calculation detail too.
+  if (/looking up the exchange rate/i.test(message)) return USER_TOTAL_PENDING;
+  if (/couldn't load the exchange rate/i.test(message)) return USER_TOTAL_ON_SEND;
+  if (/exchange rate|fx rate|deflator/i.test(message)) return USER_MISSING_FACTOR;
   if (/no emission factor|no factor|factor has no unit|emission factor .* has no unit/i.test(message)) return USER_MISSING_FACTOR;
   if (/unit mismatch|can't be converted|cannot be converted|no conversion|is per |unit is not configured/i.test(message)) return USER_UNIT_CANNOT_CONVERT;
   return message;
@@ -60,4 +69,33 @@ export function plainIssue(code: string, message: string): string {
   // A name the form doesn't know: keep the "Did you mean" suggestions, they let the User fix the sheet.
   if (code === "UNKNOWN_ACTIVITY") return message.replace(/ matches no emission factor(?: or mapping)?\./i, " isn't one of this form's options.");
   return plainProblem(message);
+}
+
+type OfferedMethod = { method: string; units: string[] };
+
+/** Every unit a form's methods offer, in the form's order, once each; null when they list none. */
+export function allMethodUnits(options: readonly OfferedMethod[]): string[] | null {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of options.flatMap((o) => o.units)) {
+    const key = normalizeUnitKey(u);
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      out.push(u);
+    }
+  }
+  return out.length ? out : null;
+}
+
+/**
+ * The method a User's row is, from its unit, on a form that offers several
+ * methods and asks no question to choose (the S3-8 transport forms, until
+ * SE-3/SE-5 give them one): the first offered method that lists the unit, as
+ * the engine records for a row that names none (ESG-lite compute.ts
+ * `methodForUnit`). Null when no method lists it.
+ */
+export function methodForUnit(options: readonly OfferedMethod[], unit: unknown): string | null {
+  const key = normalizeUnitKey(unit);
+  if (!key) return null;
+  return options.find((o) => o.units.some((u) => normalizeUnitKey(u) === key))?.method ?? null;
 }

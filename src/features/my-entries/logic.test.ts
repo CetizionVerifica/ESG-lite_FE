@@ -176,4 +176,20 @@ describe("What was entered (SE-1)", () => {
     expect(activityFields(historical, undefined, { plain: true }).map((f) => f.key)).toEqual(["fuelType", "activity", "source"]);
     expect(activityFields(historical).map((f) => f.key)).toEqual(["fuelType", "activity", "emissionFactor", "emissionFactorUnit", "calculatedEmission", "source"]);
   });
+
+  it("a User sees their choices, not the quantity the engine worked out or the factor's name those choices led to", () => {
+    // An S3-8 transport row as saved on a copy of production data.
+    const transport = {
+      "Travel Mode": "Road",
+      "Fuel Type/Class": "Diesel used [litre]",
+      "Fuel used (litres)": "1000",
+      activity_value: "1000",
+      emission_category: "Fuel - Diesel (average biofuel blend) [litre]",
+    };
+    const mapped = { emission_category_mapping: { "Road|HGV (all diesel)|Diesel used [litre]": "Fuel - Diesel (average biofuel blend) [litre]" } };
+    expect(activityFields(transport, mapped, { plain: true }).map((f) => f.key)).toEqual(["Travel Mode", "Fuel Type/Class", "Fuel used (litres)"]);
+    expect(activityFields(transport, mapped).map((f) => f.key)).toEqual(["Travel Mode", "Fuel Type/Class", "Fuel used (litres)", "activity_value", "emission_category"]);
+    // A form without a choices map: the activity is what the User picked, so it stays.
+    expect(activityFields(transport, {}, { plain: true }).map((f) => f.key)).toContain("emission_category");
+  });
 });

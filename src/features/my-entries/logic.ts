@@ -160,6 +160,8 @@ export type LabelConfig = {
   column_options?: Record<string, Option[]>;
   dependent_options?: Record<string, Record<string, Option[]>>;
   column_dependencies?: Record<string, string>;
+  /** The form's choices → activity map; when set, the row's activity comes from the person's choices. */
+  emission_category_mapping?: Record<string, string> | null;
 };
 
 const sameText = (a: unknown, b: unknown) => String(a).toLowerCase() === String(b).toLowerCase();
@@ -213,13 +215,22 @@ export type ActivityField = { key: string; value: string };
  */
 export const SHEET_CALC_KEYS = new Set(["emissionFactor", "emissionFactorUnit", "calculatedEmission"]);
 
+/**
+ * What a User's own entry shows them (SE-1): not the old sheet's calculation,
+ * not the quantity the engine worked out from their fields (`activity_value`),
+ * and, on a form whose choices pick the activity, not the factor's name the
+ * choices led to (`emission_category`); their choices are listed instead.
+ */
+const hiddenFromUser = (key: string, config: LabelConfig | undefined) =>
+  SHEET_CALC_KEYS.has(key) || key === "activity_value" || (key === "emission_category" && Object.keys(config?.emission_category_mapping ?? {}).length > 0);
+
 /** What the user entered, in entry order, with option labels; bookkeeping keys left out. `plain`: a User's view (SE-1). */
 export function activityFields(activityData: Record<string, unknown> | null | undefined, config?: LabelConfig, opts: { plain?: boolean } = {}): ActivityField[] {
   const data = activityData ?? {};
   return Object.entries(data)
     // `@method` and `_private` keys are internal (SE-1): never shown as something the user entered; the
     // row's method has its own "How it was calculated" line (S3-3).
-    .filter(([key]) => !(opts.plain && SHEET_CALC_KEYS.has(key)))
+    .filter(([key]) => !(opts.plain && hiddenFromUser(key, config)))
     .filter(([key, value]) => !META_KEYS.has(key) && !key.startsWith("@") && !key.startsWith("_") && value !== null && value !== undefined && value !== "")
     .map(([key, value]) => ({
       key,
