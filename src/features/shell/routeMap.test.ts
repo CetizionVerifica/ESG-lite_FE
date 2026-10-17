@@ -10,6 +10,7 @@ import {
   canAccess,
   clientIdFromRoute,
   homeFor,
+  meetsRequirement,
   pathForClient,
   resolveLegacyRedirect,
   withClientId,
@@ -70,9 +71,13 @@ describe("route map", () => {
 });
 
 describe("nav per role", () => {
+  // With every switch off and with KPI tracking on (KPI-1).
+  const FLAGS = [{}, { kpi: true }];
+
   it("only links to pages the role may open", () => {
+    for (const flags of FLAGS)
     for (const role of ROLES) {
-      for (const link of navLinks(role)) {
+      for (const link of navLinks(role, flags)) {
         const route = routeFor(resolveNavTo(link.to, 7));
         expect(route, `${role}: ${link.to}`).toBeDefined();
         expect(canAccess(role, route as (typeof SHELL_ROUTES)[number]), `${role}: ${link.to}`).toBe(true);
@@ -81,15 +86,45 @@ describe("nav per role", () => {
   });
 
   it("hides every other role's pages", () => {
+    for (const flags of FLAGS)
     for (const role of ROLES) {
-      const mine = new Set(navLinks(role).map((l) => resolveNavTo(l.to, 7).split("?")[0]));
+      const mine = new Set(navLinks(role, flags).map((l) => resolveNavTo(l.to, 7).split("?")[0]));
       for (const other of ROLES.filter((r) => r !== role)) {
-        for (const link of navLinks(other)) {
+        for (const link of navLinks(other, flags)) {
           const route = routeFor(resolveNavTo(link.to, 7)) as (typeof SHELL_ROUTES)[number];
           if (!canAccess(role, route)) expect(mine.has(resolveNavTo(link.to, 7).split("?")[0])).toBe(false);
         }
       }
     }
+  });
+});
+
+describe("KPI routes (01-contracts §6)", () => {
+  it("registers every KPI route behind the switch, except the global library", () => {
+    const kpi = SHELL_ROUTES.filter((r) => r.id.startsWith("kpi-"));
+    expect(kpi.map((r) => [r.id, r.path])).toEqual([
+      ["kpi-my", "/kpi"],
+      ["kpi-setup", "/kpi/setup"],
+      ["kpi-targets", "/kpi/targets"],
+      ["kpi-dashboard", "/kpi/dashboard"],
+      ["kpi-reports", "/reports/kpi/:framework"],
+      ["kpi-library", "/setup/kpi-library"],
+    ]);
+    for (const r of kpi) expect((r as { requires?: string }).requires, r.id).toBe(r.id === "kpi-library" ? undefined : "kpi");
+  });
+
+  it("gives each KPI route the §6 roles", () => {
+    const roles = (id: string) => SHELL_ROUTES.find((r) => r.id === id)?.roles;
+    expect(roles("kpi-my")).toEqual(["User", "Manager", "Admin"]);
+    expect(roles("kpi-setup")).toEqual(["Admin", "Superadmin"]);
+    expect(roles("kpi-library")).toEqual(["Superadmin"]);
+  });
+
+  it("meets a requirement only when its switch is on", () => {
+    expect(meetsRequirement(undefined, {})).toBe(true);
+    expect(meetsRequirement("kpi", {})).toBe(false);
+    expect(meetsRequirement("kpi", { kpi: false })).toBe(false);
+    expect(meetsRequirement("kpi", { kpi: true })).toBe(true);
   });
 });
 

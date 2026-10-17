@@ -3,6 +3,7 @@ import { Navigate, useLocation, useRouteError } from "react-router-dom";
 import { RotateCw } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
+import { KpiGate } from "../../lib/kpi/KpiGate";
 import StatusPage from "./components/StatusPage";
 import { type LegacyRedirect, type Role, type ShellRoute, asRole, canAccess, homeFor, resolveLegacyRedirect } from "./routeMap";
 
@@ -51,12 +52,25 @@ export function PlaceholderPage({ route }: { route: ShellRoute }) {
   );
 }
 
-/** Shows the route only to its roles; others get the 403 page, not the login. */
+/**
+ * Shows the route only to its roles; others get the 403 page, not the login.
+ * A route behind a company switch (KPI-1 `requires: "kpi"`) shows "not
+ * available" while the switch is off.
+ */
 export function RoleGuard({ route, children }: { route: ShellRoute; children: ReactNode }) {
   const role = useRole();
   const redirect = role ? route.roleRedirect?.[role] : undefined;
   if (redirect) return <Navigate to={redirect} replace />;
-  return canAccess(role, route) ? <>{children}</> : <ForbiddenPage />;
+  if (!canAccess(role, route)) return <ForbiddenPage />;
+  if (route.requires === "kpi") {
+    const staff = role === "Superadmin";
+    return (
+      <KpiGate staff={staff} home={staff ? "/clients" : homeFor(role)}>
+        {children}
+      </KpiGate>
+    );
+  }
+  return <>{children}</>;
 }
 
 /** `/` → the role's home. */

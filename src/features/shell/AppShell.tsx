@@ -3,6 +3,7 @@ import { Outlet, useLocation, useMatches, useNavigate, useParams } from "react-r
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
+import { useKpiTracking } from "../../lib/kpi/switch";
 import { useTheme } from "../../theme";
 import { CommandPalette } from "../../ui";
 import { shellUser } from "./account";
@@ -69,8 +70,11 @@ export default function AppShell() {
   }, [role, urlClientId, clientId, setClientId]);
 
   const previewStyle = usePreviewStyle(clientId, clientScoped, resolvedAppearance);
-  const nav = navFor(role);
-  const commands = useMemo(() => routeCommands(role, clientId), [role, clientId]);
+  // KPI-1: items behind a company switch show only while it's on.
+  const kpi = useKpiTracking();
+  const flags = useMemo(() => ({ kpi }), [kpi]);
+  const nav = navFor(role, flags);
+  const commands = useMemo(() => routeCommands(role, clientId, flags), [role, clientId, flags]);
   const account = shellUser(user, rawRole);
 
   const onClientPicked = (id: number) => {

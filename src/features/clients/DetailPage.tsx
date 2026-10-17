@@ -5,6 +5,7 @@ import { Badge, Button, EmptyState, Modal, PageHeader, Skeleton, TabPanel, Tabs,
 import { errorMessage, hasBrand, useAdminUsers, useBrand, useCompanies, useDeleteCompany, useDownloadSetup, useSites, useThreshold, useUpdateCompany } from "./api";
 import { ClaudeImportsToggle } from "./components/ClaudeImportsToggle";
 import { SmartImportToggle } from "./components/SmartImportToggle";
+import { KpiTrackingToggle } from "./components/KpiTrackingToggle";
 import { CompanyDrawer } from "./components/CompanyDrawer";
 import { SetupCopyDrawer } from "./components/SetupCopyDrawer";
 import { ClientLogo, StatusBadge } from "./components/bits";
@@ -177,6 +178,7 @@ export default function ClientDetailPage() {
         <div className="space-y-5">
           <OverviewTab row={row} />
           <SmartImportToggle row={row} />
+          <KpiTrackingToggle row={row} />
           <ClaudeImportsToggle row={row} />
         </div>
       </TabPanel>

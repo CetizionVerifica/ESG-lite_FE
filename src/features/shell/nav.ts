@@ -1,4 +1,4 @@
-import { CLIENT_ID, type Role, withClientId } from "./routeMap";
+import { CLIENT_ID, type FeatureFlags, type Requirement, type Role, meetsRequirement, withClientId } from "./routeMap";
 
 /** Top-bar navigation per role. Labels are final copy from the F2 spec. */
 
@@ -7,6 +7,8 @@ export interface NavLinkItem {
   label: string;
   /** May contain CLIENT_ID; resolve with resolveNavTo before linking. */
   to: string;
+  /** A company switch the item needs (KPI-1: `"kpi"` = KPI tracking on); left out of the nav while it's off. */
+  requires?: Requirement;
 }
 
 export interface NavGroupItem {
@@ -17,12 +19,13 @@ export interface NavGroupItem {
 
 export type NavItem = NavLinkItem | NavGroupItem;
 
-const link = (label: string, to: string): NavLinkItem => ({ kind: "link", label, to });
+const link = (label: string, to: string, requires?: Requirement): NavLinkItem => (requires ? { kind: "link", label, to, requires } : { kind: "link", label, to });
 const group = (label: string, items: NavLinkItem[]): NavGroupItem => ({ kind: "group", label, items });
 
 export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   User: [
     link("Current Month", "/my-month"),
+    link("My KPIs", "/kpi", "kpi"), // KPI-1
     link("Add data", "/data/new"),
     link("My entries", "/data/mine"),
     link("Production", "/production"),
@@ -31,17 +34,31 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     link("Overview", "/overview"),
     group("Data", [
       link("Approvals", "/data/approvals"),
+      link("KPIs", "/kpi/dashboard", "kpi"), // KPI-1
       link("Emissions ledger", "/data/ledger"),
       link("Production data", "/data/production"),
       link("Suppliers", "/suppliers"),
       link("Bulk upload", "/capture/upload"),
     ]),
-    group("Reports", [link("GHG report", "/reports/ghg"), link("EDE report", "/reports/ede"), link("Scope 3 boundary", "/settings/scope3")]),
+    group("Reports", [
+      link("GHG report", "/reports/ghg"),
+      link("EDE report", "/reports/ede"),
+      link("Framework reports", "/reports/kpi/GRI", "kpi"), // KPI-1
+      link("Scope 3 boundary", "/settings/scope3"),
+    ]),
     link("Targets (SBTi)", "/targets"),
     link("Products (PCF)", "/products"),
     link("Team", "/team"),
   ],
-  Admin: [link("Users", "/users"), link("Bulk upload", "/capture/upload"), link("Brand theme", "/brand"), link("Scope 3 boundary", "/settings/scope3"), link("Suppliers", "/suppliers")],
+  Admin: [
+    link("Users", "/users"),
+    link("Bulk upload", "/capture/upload"),
+    link("Brand theme", "/brand"),
+    link("Scope 3 boundary", "/settings/scope3"),
+    link("Suppliers", "/suppliers"),
+    link("KPIs", "/kpi/dashboard", "kpi"), // KPI-1
+    link("KPI setup", "/kpi/setup", "kpi"), // KPI-1
+  ],
   Superadmin: [
     link("Console", "/console"),
     group("Clients", [
@@ -59,6 +76,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Categories", "/setup/reference?tab=categories"),
       link("Units", "/setup/reference?tab=units"),
       link("Products", "/setup/products"),
+      link("KPI library", "/setup/kpi-library"), // KPI-2: the global library, not behind a client's switch
     ]),
     group("Factors", [
       link("Emission factors", "/factors"),
@@ -75,13 +93,24 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
 };
 
-export function navFor(role: Role | null): NavItem[] {
-  return role ? NAV_BY_ROLE[role] : [];
+/**
+ * The role's nav with the company's switches applied (KPI-1): items whose
+ * `requires` is off are left out, and a group left empty goes too. No flags =
+ * every switch off.
+ */
+export function navFor(role: Role | null, flags: FeatureFlags = {}): NavItem[] {
+  if (!role) return [];
+  const shown = (item: NavLinkItem) => meetsRequirement(item.requires, flags);
+  return NAV_BY_ROLE[role].flatMap((item): NavItem[] => {
+    if (item.kind === "link") return shown(item) ? [item] : [];
+    const items = item.items.filter(shown);
+    return items.length ? [{ ...item, items }] : [];
+  });
 }
 
 /** Every link a role can reach from the nav, groups flattened, in nav order. */
-export function navLinks(role: Role | null): { label: string; to: string; group?: string }[] {
-  return navFor(role).flatMap((item) =>
+export function navLinks(role: Role | null, flags: FeatureFlags = {}): { label: string; to: string; group?: string }[] {
+  return navFor(role, flags).flatMap((item) =>
     item.kind === "link"
       ? [{ label: item.label, to: item.to }]
       : item.items.map((child) => ({ label: child.label, to: child.to, group: item.label })),

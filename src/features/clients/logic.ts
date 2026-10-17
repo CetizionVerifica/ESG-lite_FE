@@ -21,6 +21,8 @@ export type Company = {
   mcp_enabled?: boolean | null;
   /** "Smart import" for the client's Managers and Admins (XI0); absent on servers without migrate:ai-import = off. */
   ai_import_enabled?: boolean | null;
+  /** "KPI tracking" (KPI-1, D2); absent on servers without migrate:kpi-switch = off. */
+  kpi_tracking_enabled?: boolean;
 };
 export type Site = { site_id: number; name: string; address?: string | null; company?: { company_id: number } | null; country?: { name: string } | null };
 export type AdminUser = {

@@ -19,6 +19,13 @@ describe("command registry", () => {
     expect(brand?.to).toBe("/clients/9/brand");
   });
 
+  it("offers KPI pages only while the company's KPI tracking is on (KPI-1)", () => {
+    expect(routeCommands("User", null).map((c) => c.to)).not.toContain("/kpi");
+    expect(routeCommands("User", null, { kpi: false }).map((c) => c.to)).not.toContain("/kpi");
+    expect(routeCommands("User", null, { kpi: true }).find((c) => c.to === "/kpi")?.label).toBe("My KPIs");
+    expect(routeCommands("Admin", null, { kpi: true }).map((c) => c.label)).toContain("KPI setup");
+  });
+
   it("keeps recent items unique, newest first, capped", () => {
     expect(pushRecent(["a", "b"], "b")).toEqual(["b", "a"]);
     expect(pushRecent(["a", "b", "c"], "d", 3)).toEqual(["d", "a", "b"]);

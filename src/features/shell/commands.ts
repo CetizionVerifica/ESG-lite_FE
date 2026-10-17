@@ -1,5 +1,5 @@
 import { navLinks, resolveNavTo } from "./nav";
-import type { Role } from "./routeMap";
+import type { FeatureFlags, Role } from "./routeMap";
 
 /**
  * ⌘K registry. Today it holds the routes a role can open; entity search
@@ -14,9 +14,10 @@ export interface Command {
   keywords: string;
 }
 
-export function routeCommands(role: Role | null, clientId: number | null): Command[] {
+/** Pages a role can open from the nav; items behind a switch that's off (KPI-1) aren't offered. */
+export function routeCommands(role: Role | null, clientId: number | null, flags: FeatureFlags = {}): Command[] {
   if (!role) return [];
-  const pages = navLinks(role).map((l) => ({
+  const pages = navLinks(role, flags).map((l) => ({
     id: `route:${l.to}`,
     label: l.label,
     group: l.group ?? "Pages",

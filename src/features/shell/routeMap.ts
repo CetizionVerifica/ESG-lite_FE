@@ -29,6 +29,18 @@ export interface ShellRoute {
   clientContext?: boolean;
   /** Roles that land somewhere else instead of seeing the 403 page. */
   roleRedirect?: Partial<Record<Role, string>>;
+  /** A company switch the route needs (KPI-1); while it's off the route shows "not available". */
+  requires?: Requirement;
+}
+
+/** Company switches nav items and routes can depend on (KPI-1: `"kpi"` = `kpi_tracking_enabled`). */
+export const REQUIREMENTS = ["kpi"] as const;
+export type Requirement = (typeof REQUIREMENTS)[number];
+/** Which switches are on for the signed-in user; a missing key is off. */
+export type FeatureFlags = Partial<Record<Requirement, boolean>>;
+
+export function meetsRequirement(requires: Requirement | undefined, flags: FeatureFlags): boolean {
+  return !requires || flags[requires] === true;
 }
 
 const ALL: readonly Role[] = ROLES;
@@ -104,6 +116,15 @@ export const SHELL_ROUTES = [
   { id: "capture-form", path: "/capture/forms/:id", title: "Form", crumb: ["Capture", "Data-entry forms", "Edit"], roles: ["Superadmin"], spec: "P24" },
   // Contributors reach it from Add data, for their own sites (P27).
   { id: "bulk-upload", path: "/capture/upload", title: "Bulk upload", crumb: ["Capture", "Bulk upload"], roles: ["Superadmin", "Admin", "Manager", "User"], spec: "P27" },
+
+  // KPI tracking (docs/kpi/01-contracts.md §6). Every route but the library is hidden while the company's switch is off (KPI-1).
+  // kpi-review is a tab of Approvals (/data/approvals?view=kpi), not a route of its own.
+  { id: "kpi-my", path: "/kpi", title: "My KPIs", crumb: ["My KPIs"], roles: ["User", "Manager", "Admin"], spec: "KPI-7", requires: "kpi" },
+  { id: "kpi-setup", path: "/kpi/setup", title: "KPI setup", crumb: ["Settings", "KPI setup"], roles: ["Admin", "Superadmin"], spec: "KPI-3", clientContext: true, requires: "kpi" },
+  { id: "kpi-targets", path: "/kpi/targets", title: "KPI targets", crumb: ["KPIs", "Targets"], roles: ["Manager", "Admin"], spec: "KPI-9", requires: "kpi" },
+  { id: "kpi-dashboard", path: "/kpi/dashboard", title: "KPIs", crumb: ["Data", "KPIs"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-10", clientContext: true, requires: "kpi" },
+  { id: "kpi-reports", path: "/reports/kpi/:framework", title: "Framework reports", crumb: ["Reports", "Framework reports"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-11", clientContext: true, requires: "kpi" },
+  { id: "kpi-library", path: "/setup/kpi-library", title: "KPI library", crumb: ["Setup", "KPI library"], roles: ["Superadmin"], spec: "KPI-2" },
 ] as const satisfies readonly ShellRoute[];
 
 export type ShellRouteId = (typeof SHELL_ROUTES)[number]["id"];
