@@ -133,6 +133,28 @@ test("a Category 1 row from the amount spent shows the rate and deflator, and se
   });
 });
 
+test("clearing the material after picking it drops the activity: no total, nothing sent from the earlier choice", async ({ page }) => {
+  const created: Record<string, unknown>[] = [];
+  await signIn(page, created, []);
+  await page.goto("/data/new?site=4&category=21&period=2026-09");
+
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Material").selectOption({ label: "Chemicals" });
+  await row.getByLabel("Amount spent").fill("1000");
+  await row.getByLabel("Currency").selectOption("USD");
+  await expect(row.getByText(/= [0-9.]+ tCO₂e/)).toBeVisible();
+
+  // Back to no material: the row no longer carries "Chemicals (USEEIO)" or a total from it.
+  await row.getByLabel("Material").selectOption("");
+  await expect(row.getByText(/= [0-9.]+ tCO₂e/)).toHaveCount(0);
+  await expect(row.getByTestId("spend-preview")).toHaveCount(0);
+  await expect(row.getByText("Chemicals (USEEIO)")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByRole("button", { name: "Submit for approval" })).toHaveCount(0);
+  expect(created).toHaveLength(0);
+});
+
 test("the spend form works at 390px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await signIn(page, [], []);

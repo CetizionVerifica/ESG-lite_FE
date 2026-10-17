@@ -45,17 +45,30 @@ export function prefillSelects(m: FormModel, row: ModalRow): ModalRow {
   if (!stored) return row;
   const hit = Object.entries(m.mapping).find(([, category]) => lower(category) === lower(stored));
   if (!hit) return row;
-  const next: ModalRow = { ...row, _ecmKey: row._ecmKey || hit[0] };
+  const next: ModalRow = { ...row };
   const labels = hit[0].split("|");
-  selectChain(m).forEach((col, i) => {
-    const label = labels[i];
-    if (label === undefined || rowValue(next, col.column_name)) return;
+  const chain = selectChain(m);
+  const optionsOf = (col: ColumnEntity) => {
     const parent = isDependentColumn(m, col.column_name) ? parentColumnOf(m, col.column_name) : null;
     const parentValue = parent ? rowValue(next, parent) : undefined;
-    const option = columnOptionsFor(m, col, parentValue || undefined).find((o) => lower(o.label) === lower(label));
+    return columnOptionsFor(m, col, parentValue || undefined);
+  };
+  chain.forEach((col, i) => {
+    const label = labels[i];
+    if (label === undefined || rowValue(next, col.column_name)) return;
+    const option = optionsOf(col).find((o) => lower(o.label) === lower(label));
     if (option) next[col.column_name] = String(option.id);
   });
-  return next;
+  // The row's activity counts as picked by its selects (_ecmKey) only when every select holds the option
+  // its key names. An option since removed or renamed, or a select the entry already holds differently,
+  // leaves the stored activity as it is: editing another field must not clear it (applyChange clears an
+  // activity with an _ecmKey once the selects no longer map to it).
+  const resolved = labels.every((label, i) => {
+    const col = chain[i];
+    const value = col ? rowValue(next, col.column_name) : undefined;
+    return !!value && optionsOf(col).some((o) => String(o.id) === String(value) && lower(o.label) === lower(label));
+  });
+  return resolved ? { ...next, _ecmKey: row._ecmKey || hit[0] } : next;
 }
 
 /** The entry as a form row: what the user entered, its unit and extra fields, bookkeeping left out. */

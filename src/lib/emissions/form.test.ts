@@ -136,6 +136,37 @@ describe("form model (flat mapping and calculation specs)", () => {
     expect(autoEmissionCategory(m, { id: 1, fuel: "7" })).toEqual({ key: "diesel", category: "Diesel (avg biofuel blend)" });
   });
 
+  describe("clearing a mapped select outside any dependency chain", () => {
+    // A Category 1 form whose one select maps straight to an activity (no column_dependencies).
+    const goods = toFormModel({
+      pk_id: 5,
+      config_name: "Purchased goods",
+      columns: [col(1, "Emission Category"), col(2, "Notes", "text")],
+      column_options: { "1": [{ id: "a", label: "Analytical Spares" }, { id: "b", label: "AMC Charges" }] },
+      emission_category_mapping: { "Analytical Spares": "Analytical Spares", "AMC Charges": "AMC Charges" },
+    });
+
+    it("clears the row's activity, so nothing is calculated or sent from the earlier choice", () => {
+      let row = applyChange(goods, newRow(goods, 1), "Emission Category", "a");
+      expect(row).toMatchObject({ emission_category: "Analytical Spares", _ecmKey: "Analytical Spares" });
+      row = applyChange(goods, row, "Emission Category", "");
+      expect(row).toMatchObject({ emission_category: "", _ecmKey: "" });
+    });
+
+    it("keeps the activity when another column changes", () => {
+      let row = applyChange(goods, newRow(goods, 1), "Emission Category", "b");
+      row = applyChange(goods, row, "Notes", "March invoice");
+      expect(row).toMatchObject({ emission_category: "AMC Charges", _ecmKey: "AMC Charges" });
+    });
+
+    it("leaves an activity picked by hand alone on a form without a mapping", () => {
+      const plain = toFormModel({ pk_id: 6, config_name: "Plain", columns: [col(1, "Site meter"), col(2, "quantity", "number")], column_options: { "1": [{ id: 1, label: "Main" }] } });
+      let row = applyChange(plain, newRow(plain, 1), "emission_category", "Diesel");
+      row = applyChange(plain, row, "Site meter", "");
+      expect(row.emission_category).toBe("Diesel");
+    });
+  });
+
   it("per_method: a method change clears unused numbers, prefills percents and preselects the unit", () => {
     const m = toFormModel({
       pk_id: 3,

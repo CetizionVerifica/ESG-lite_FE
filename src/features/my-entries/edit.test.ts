@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type ColumnConfig, type ColumnEntity, createEmissionCalculator, toFormModel } from "../../lib/emissions";
+import { type ColumnConfig, type ColumnEntity, applyChange, createEmissionCalculator, toFormModel } from "../../lib/emissions";
 import type { EmissionData } from "../../services/emissionService";
 import { buildUpdate, canEdit, monthBounds, editIssue, editedDate, monthEndDate, prefillSelects, rowFromEntry, saveErrorMessage } from "./edit";
 
@@ -71,6 +71,23 @@ describe("rowFromEntry", () => {
       disposal_method: "lf",
     });
     expect(row.disposal_method).toBe("lf");
+  });
+
+  it("keeps an older entry's activity through an edit when its option was since removed", () => {
+    // "Open loop" is gone from the form: the selects can't be filled, so the activity isn't tied to them.
+    const trimmed = toFormModel({
+      ...waste,
+      dependent_options: { ...waste.dependent_options, disposal_method: { "Metal|Any metals": [{ id: "lf", label: "Landfill" }] } },
+    });
+    const row = rowFromEntry(trimmed, entry());
+    expect(row._ecmKey).toBeFalsy();
+    expect(applyChange(trimmed, row, "quantity", "1500").emission_category).toBe("Metal: open loop recycling");
+  });
+
+  it("doesn't tie the activity to selects the entry holds differently", () => {
+    const row = prefillSelects(model, { id: 1, emission_category: "Metal: open loop recycling", activity_type: "m", type_of_waste: "am", disposal_method: "lf" });
+    expect(row._ecmKey).toBeFalsy();
+    expect(applyChange(model, row, "quantity", "5").emission_category).toBe("Metal: open loop recycling");
   });
 
   it("does nothing for a category that isn't in the mapping", () => {
