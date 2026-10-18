@@ -37,7 +37,7 @@ const SITES: Site[] = [
 ];
 const USERS: User[] = [
   { user_id: 1, name: "Ana", last_name: "Ruiz", email: "ana@x.io", role: "User", sites: [{ site_id: 2, name: "Plant B" }, { site_id: 1, name: "Plant A" }], categories: [fuel], last_login_at: "2026-10-01T10:00:00Z" },
-  { user_id: 2, email: "boss@x.io", role: "Admin", site: { site_id: 3, name: "Other plant" }, last_login_at: null },
+  { user_id: 2, email: "boss@x.io", role: "Admin", company: other, last_login_at: null },
   { user_id: 3, name: "Root", email: "root@x.io", role: "Superadmin" },
 ];
 
@@ -64,7 +64,9 @@ describe("matchesFilters", () => {
   it("filters by role, client, site and text", () => {
     expect(rows.filter((r) => matchesFilters(r, { ...none, roles: ["Admin", "Superadmin"] })).map((r) => r.user_id)).toEqual([2, 3]);
     expect(rows.filter((r) => matchesFilters(r, { ...none, clientIds: [1] })).map((r) => r.user_id)).toEqual([1]);
-    expect(rows.filter((r) => matchesFilters(r, { ...none, siteIds: [3] })).map((r) => r.user_id)).toEqual([2]);
+    // The Admin belongs to client 2 itself, not to its site.
+    expect(rows.filter((r) => matchesFilters(r, { ...none, clientIds: [2] })).map((r) => r.user_id)).toEqual([2]);
+    expect(rows.filter((r) => matchesFilters(r, { ...none, siteIds: [3] })).map((r) => r.user_id)).toEqual([]);
     expect(rows.filter((r) => matchesFilters(r, { ...none, q: "plant b" })).map((r) => r.user_id)).toEqual([1]);
     expect(rows.filter((r) => matchesFilters(r, { ...none, q: "BOSS" })).map((r) => r.user_id)).toEqual([2]);
   });
@@ -85,8 +87,8 @@ describe("validate", () => {
     expect(validate({ ...emptyDraft(), email: "a@b.co", role: "Admin" })).toEqual({ company_id: "Choose the client this person works for." });
     expect(validate({ ...emptyDraft(1), email: "a@b.co", role: "Manager" })).toEqual({ site_ids: "Choose at least one site." });
     expect(validate({ ...emptyDraft(1), email: "a@b.co", role: "User", site_ids: [1] })).toEqual({ category_ids: "Choose at least one category this person can enter." });
-    expect(validate({ ...emptyDraft(1), email: "a@b.co", role: "Admin" })).toEqual({ site_ids: "Choose the site this admin belongs to." });
-    expect(validate({ ...emptyDraft(1), email: "a@b.co", role: "Admin", site_ids: [2] })).toEqual({});
+    // An Admin belongs to a client, not a site.
+    expect(validate({ ...emptyDraft(1), email: "a@b.co", role: "Admin" })).toEqual({});
   });
 });
 
@@ -106,7 +108,7 @@ describe("site and category helpers", () => {
   });
   it("applies role and client changes", () => {
     const d = { ...emptyDraft(1), role: "User" as const, site_ids: [1, 2], category_ids: [1] };
-    expect(withRole(d, "Admin")).toMatchObject({ site_ids: [1], category_ids: [], company_id: 1 });
+    expect(withRole(d, "Admin")).toMatchObject({ site_ids: [], category_ids: [], company_id: 1 });
     expect(withRole(d, "Superadmin")).toMatchObject({ site_ids: [], category_ids: [], company_id: null });
     expect(withClient(d, 2)).toMatchObject({ company_id: 2, site_ids: [], category_ids: [] });
     expect(withClient(d, 1)).toBe(d);
@@ -119,8 +121,8 @@ describe("toPayload", () => {
     const d = { ...emptyDraft(1), name: " Lee ", email: " lee@x.io ", role: "User" as const, site_ids: [1], category_ids: [1, 2] };
     expect(toPayload(d, null)).toEqual({ name: "Lee", email: "lee@x.io", role: "User", site_ids: [1], category_ids: [1, 2] });
   });
-  it("creates an Admin with their site", () => {
-    expect(toPayload({ ...emptyDraft(1), email: "a@x.io", role: "Admin", site_ids: [2] }, null)).toEqual({ email: "a@x.io", role: "Admin", site_id: 2 });
+  it("creates an Admin for their client", () => {
+    expect(toPayload({ ...emptyDraft(1), email: "a@x.io", role: "Admin" }, null)).toEqual({ email: "a@x.io", role: "Admin", company_id: 1 });
   });
   it("sends only changed fields on edit", () => {
     const row = rows[0];
@@ -131,7 +133,9 @@ describe("toPayload", () => {
   });
   it("moves sites to the right field when the role changes", () => {
     const row = rows[0];
-    expect(toPayload(withRole(draftFrom(row), "Admin"), row)).toEqual({ role: "Admin", site_id: 1 });
+    expect(toPayload(withRole(draftFrom(row), "Admin"), row)).toEqual({ role: "Admin", company_id: 1 });
+    // Moving an Admin to another client sends only the client.
+    expect(toPayload(withClient(draftFrom(rows[1]), 1), rows[1])).toEqual({ company_id: 1 });
     expect(toPayload(withRole(draftFrom(rows[1]), "Superadmin"), rows[1])).toEqual({ role: "Superadmin", site_id: null });
   });
   it("is clean right after opening", () => {

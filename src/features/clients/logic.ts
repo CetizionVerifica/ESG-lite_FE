@@ -31,7 +31,9 @@ export type AdminUser = {
   last_name?: string | null;
   email: string;
   role: string;
-  /** The one site a data-entry user (or company admin) belongs to. */
+  /** A company Admin's client (an Admin belongs to a client, not a site). */
+  company?: { company_id: number } | null;
+  /** The one site a data-entry user belongs to. */
   site?: { site_id: number } | null;
   /** Sites a manager looks after. */
   sites?: { site_id: number }[] | null;
@@ -71,7 +73,7 @@ export function buildRows(companies: Company[], sites: Site[] = [], users: Admin
   }
   const usersBy = new Map<number, AdminUser[]>();
   for (const u of users) {
-    const ids = new Set<number>();
+    const ids = new Set<number>(u.company?.company_id ? [u.company.company_id] : []);
     for (const sid of [u.site?.site_id, ...(u.sites ?? []).map((s) => s.site_id)]) {
       const cid = sid ? companyOfSite.get(sid) : undefined;
       if (cid) ids.add(cid);

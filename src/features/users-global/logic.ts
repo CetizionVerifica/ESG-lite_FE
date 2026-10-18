@@ -20,7 +20,9 @@ export type User = {
   email: string;
   role: string;
   timezone?: string | null;
-  /** The one site of an Admin, or of a User created before multi-site. */
+  /** An Admin's client: an Admin belongs to a client, not a site. */
+  company?: Company | null;
+  /** The one site of a User created before multi-site. */
   site?: Site | null;
   /** Sites of a Manager or User. */
   sites?: Site[] | null;
@@ -41,7 +43,7 @@ export function isRole(value: unknown): value is Role {
   return typeof value === "string" && (ROLES as readonly string[]).includes(value);
 }
 
-/** Manager and User work on several sites; Admin has exactly one; Superadmin none. */
+/** Manager and User work on several sites; Admin (one client) and Superadmin have none. */
 export const multiSite = (role: Role | null) => role === "Manager" || role === "User";
 
 export function personName(u: Pick<User, "name" | "last_name" | "email">): string {
@@ -66,7 +68,7 @@ export function buildRows(users: User[], sites: Site[] = []): UserRow[] {
       siteList.push({ ...full, ...s, company: s.company ?? full?.company ?? null, categories: full?.categories ?? s.categories ?? null, name: s.name ?? full?.name ?? "" });
     }
     siteList.sort((a, b) => a.name.localeCompare(b.name));
-    const clients: Company[] = [];
+    const clients: Company[] = u.company ? [u.company] : [];
     for (const s of siteList) {
       if (s.company && !clients.some((c) => c.company_id === s.company!.company_id)) clients.push(s.company);
     }
@@ -118,6 +120,7 @@ export function emptyDraft(defaultCompanyId: number | null = null): UserDraft {
 
 /** The client a person works for: the one owning most of their sites (several only for someone given a mix before it was refused). */
 function mainClientId(row: UserRow): number | null {
+  if (row.company) return row.company.company_id;
   let best: number | null = null;
   let most = 0;
   for (const c of row.clients) {
@@ -152,8 +155,6 @@ export function validate(d: UserDraft): Partial<Record<DraftField, string>> {
   if (!d.role) e.role = "Choose a role.";
   if (d.role && d.role !== "Superadmin" && !internalAccount(d) && d.company_id === null) e.company_id = "Choose the client this person works for.";
   if (multiSite(d.role) && d.site_ids.length === 0) e.site_ids = "Choose at least one site.";
-  // Users have no client link of their own: an Admin's client is their site's.
-  if (d.role === "Admin" && d.company_id !== null && d.site_ids.length === 0) e.site_ids = "Choose the site this admin belongs to.";
   if (d.role === "User" && d.site_ids.length > 0 && d.category_ids.length === 0) e.category_ids = "Choose at least one category this person can enter.";
   return e;
 }
@@ -197,11 +198,11 @@ export function retargetCategories(selected: number[], before: Category[], after
   return [...kept, ...added].sort((a, b) => a - b);
 }
 
-/** Applies a role change: Superadmin drops client and sites; Admin keeps at most one site. */
+/** Applies a role change: Superadmin drops client and sites; Admin keeps the client and drops the sites. */
 export function withRole(d: UserDraft, role: Role | null): UserDraft {
   // "Internal" applies to Managers and Users only.
   if (role === "Superadmin") return { ...d, role, company_id: null, site_ids: [], category_ids: [], is_internal: false };
-  if (role === "Admin") return { ...d, role, site_ids: d.site_ids.slice(0, 1), category_ids: [], is_internal: false };
+  if (role === "Admin") return { ...d, role, site_ids: [], category_ids: [], is_internal: false };
   return { ...d, role };
 }
 
@@ -239,6 +240,8 @@ export type UserPayload = {
   timezone?: string | null;
   site_id?: number | null;
   site_ids?: number[];
+  /** An Admin's client. */
+  company_id?: number | null;
   category_ids?: number[];
 };
 
@@ -299,9 +302,12 @@ export function toPayload(d: UserDraft, row: UserRow | null): UserPayload {
   if (base ? d.is_internal !== base.is_internal : d.is_internal) p.is_internal = d.is_internal;
 
   const sitesChanged = sendsSites(d, row);
-  if (sitesChanged) {
+  if (d.role === "Admin") {
+    // An Admin belongs to a client, not a site.
+    if (!base || d.role !== base.role || d.company_id !== base.company_id) p.company_id = d.company_id;
+  } else if (sitesChanged) {
     if (multiSite(d.role)) p.site_ids = d.site_ids;
-    else p.site_id = d.role === "Admin" ? (d.site_ids[0] ?? null) : null;
+    else p.site_id = null;
   }
   if (d.role === "User" && (sitesChanged || !sameIds(d.category_ids, base?.category_ids ?? []))) p.category_ids = d.category_ids;
   if (!row) {

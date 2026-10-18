@@ -322,13 +322,20 @@ export function contributorSites(user: unknown) {
 /** A site as `/company-admin/sites` returns it: the Admin's client's, with categories, without the company. */
 export type RawCompanySite = { site_id: number; name: string; categories?: { category_id: number; category_name: string; scope?: string | null }[] | null };
 
+/** An Admin's own client from the signed-in user (an Admin belongs to a client, not a site). */
+export function sessionCompany(user: unknown): ReturnType<typeof contributorSites>[number]["company"] {
+  const c = ((user ?? {}) as { company?: RawSite["company"] }).company;
+  return c ? { company_id: c.company_id, name: c.name ?? "", ai_import_enabled: c.ai_import_enabled ?? null } : null;
+}
+
 /**
  * An Admin's sites: every site of their client (`/company-admin/sites`), each
- * carrying the client (and its Smart import switch) the session user names.
- * Anyone else, or before that list loads, keeps the session user's own sites.
+ * carrying the client (and its Smart import switch): the Admin's own client,
+ * else the one their session sites name. Anyone else, or before that list
+ * loads, keeps the session user's own sites.
  */
-export function withClientSites<S extends ReturnType<typeof contributorSites>[number]>(own: S[], clientSites: RawCompanySite[] | undefined): ReturnType<typeof contributorSites> {
-  const company = own.find((s) => s.company)?.company ?? null;
+export function withClientSites<S extends ReturnType<typeof contributorSites>[number]>(own: S[], clientSites: RawCompanySite[] | undefined, ownCompany: ReturnType<typeof sessionCompany> = null): ReturnType<typeof contributorSites> {
+  const company = ownCompany ?? own.find((s) => s.company)?.company ?? null;
   if (!clientSites?.length || !company) return own;
   return clientSites.map((s) => ({
     site_id: s.site_id,

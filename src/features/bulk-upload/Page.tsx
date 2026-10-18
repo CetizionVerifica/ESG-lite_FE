@@ -11,7 +11,7 @@ import { UploadStep } from "./components/UploadStep";
 import { SmartImportFlow } from "./components/smart/SmartImportFlow";
 import { useUploadContext } from "./hooks/useUploadContext";
 import { smartImportEnabled } from "./smart/logic";
-import { type ImportResult, type MapField, STEPS, autoMap, buildFields, contributorSites, fileProblem, mappingsFor, monthEndDate, setHeader, skippedMatrix, toggleSkip, withClientSites } from "./logic";
+import { type ImportResult, type MapField, STEPS, autoMap, buildFields, contributorSites, fileProblem, mappingsFor, monthEndDate, sessionCompany, setHeader, skippedMatrix, toggleSkip, withClientSites } from "./logic";
 import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 
 type Sheet = { documentId: number; headers: string[]; fileName: string };
@@ -44,7 +44,7 @@ export default function BulkUploadPage() {
   const sessionSites = useMemo(() => contributorSites(user), [user]);
   // An Admin may import into every site of their client; the session user carries only their own site.
   const companySites = useCompanySites(role === "Admin");
-  const ownSites = useMemo(() => withClientSites(sessionSites, companySites.data), [sessionSites, companySites.data]);
+  const ownSites = useMemo(() => withClientSites(sessionSites, companySites.data, sessionCompany(user)), [sessionSites, companySites.data, user]);
   const siteList = contributor
     ? { data: ownSites, loading: false, error: null, retry: () => undefined }
     : { data: allSites.data ?? [], loading: allSites.isLoading, error: allSites.error ? errorMessage(allSites.error, "Try again in a moment.") : null, retry: () => void allSites.refetch() };

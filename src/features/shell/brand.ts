@@ -26,6 +26,7 @@ interface SessionSite {
 }
 
 interface SessionUser {
+  company?: { name?: string | null } | null;
   site?: SessionSite | null;
   sites?: SessionSite[] | null;
 }
@@ -38,6 +39,6 @@ interface SessionUser {
 export function brandForUser(role: string | null, user: SessionUser | null | undefined, pack: ThemePack): ShellBrand {
   if (asRole(role) === "Superadmin" || !user) return PLATFORM_BRAND;
   if (pack.id !== "planetpulse") return { name: pack.name, logoUrl: pack.logoUrl, logoOnDarkUrl: pack.logoOnDarkUrl };
-  const name = user.site?.company?.name ?? user.sites?.find((s) => s.company?.name)?.company?.name;
+  const name = user.company?.name ?? user.site?.company?.name ?? user.sites?.find((s) => s.company?.name)?.company?.name;
   return name ? { name } : PLATFORM_BRAND;
 }

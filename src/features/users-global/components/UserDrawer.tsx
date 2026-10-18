@@ -56,7 +56,7 @@ type Props = {
 
 const ROLE_HELP: Record<Role, string> = {
   Superadmin: "Runs ESGLite for every client. No client or sites.",
-  Admin: "Manages one client, from the site picked below.",
+  Admin: "Manages the whole client picked below, every site of it.",
   Manager: "Reviews and approves data for the sites picked below.",
   User: "Enters data for the sites and categories picked below.",
 };
@@ -231,21 +231,6 @@ export function UserDrawer(props: Props) {
               />
             )}
 
-            {draft.role === "Admin" && (
-              <Select<number>
-                label="Site"
-                required
-                help="An admin's client comes from this site."
-                placeholder="Choose a site"
-                error={fieldError("site_ids")}
-                value={draft.site_ids[0] ?? null}
-                onChange={(v) => setSites(v === null ? [] : [v])}
-                options={clientSites.map((s) => ({ value: s.site_id, label: s.name }))}
-                emptyText={draft.company_id === null ? "Choose a client first" : "This client has no sites"}
-                loading={props.sites.loading}
-              />
-            )}
-
             {foreign.length > 0 && (
               <Callout
                 tone="warn"
@@ -286,8 +271,8 @@ export function UserDrawer(props: Props) {
                 onChange={(ids) => set("category_ids", ids)}
               />
             )}
-            {/* D17: only for a client's people, once they exist; hidden while that client's KPI switch is off. */}
-            {row && !internal && draft.company_id !== null && (draft.role === "User" || draft.role === "Manager" || draft.role === "Admin") && (
+            {/* D17: site topics, so for a client's Managers and Users (an Admin has no sites; their company-level topics are set in KPI setup), once they exist; hidden while that client's KPI switch is off. */}
+            {row && !internal && draft.company_id !== null && (draft.role === "User" || draft.role === "Manager") && (
               <KpiTopicsField
                 userId={row.user_id}
                 companyId={draft.company_id}

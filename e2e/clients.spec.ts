@@ -33,7 +33,7 @@ const SITES = [
   { site_id: 3, name: "Pune", company: { company_id: 2 }, country: { name: "India" } },
 ];
 const USERS = [
-  { user_id: 4, name: "Omar", last_name: "Saleh", email: "omar@example.com", role: "Admin", site: { site_id: 1 }, sites: [] },
+  { user_id: 4, name: "Omar", last_name: "Saleh", email: "omar@example.com", role: "Admin", company: { company_id: 1 }, site: null, sites: [] },
   { user_id: 5, name: "Mia", last_name: "Manager", email: "mia@example.com", role: "Manager", site: null, sites: [{ site_id: 1 }, { site_id: 2 }] },
 ];
 const MIDAL_BUNDLE = {
