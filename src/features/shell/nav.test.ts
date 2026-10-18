@@ -74,17 +74,18 @@ describe("switch-aware nav (KPI-1)", () => {
       "Overview",
       "Data ▾ (Approvals, Emissions ledger, Production data, Suppliers, Bulk upload)",
       "Reports ▾ (GHG report, EDE report, Framework reports, Scope 3 boundary)",
-      "KPIs ▾ (Dashboard, Targets)",
+      "KPIs ▾ (ESG dashboard, Dashboard, Targets)",
       "Targets (SBTi)",
       "Products (PCF)",
       "Team",
     ]);
-    expect(show(navFor("Admin", { kpi: true }))).toEqual(["Users", "Bulk upload", "Brand theme", "Scope 3 boundary", "Suppliers", "KPIs ▾ (Dashboard, Targets, Framework reports, KPI setup)"]);
+    expect(show(navFor("Admin", { kpi: true }))).toEqual(["Users", "Bulk upload", "Brand theme", "Scope 3 boundary", "Suppliers", "KPIs ▾ (ESG dashboard, Dashboard, Targets, Framework reports, KPI setup)"]);
   });
 
   it("gives a Superadmin every KPI page an Admin has, plus the KPI review, behind the client's switch (D18)", () => {
     const kpi = navLinks("Superadmin", { kpi: true }).filter((l) => l.group === "KPIs");
     expect(kpi.map((l) => [l.label, l.to])).toEqual([
+      ["ESG dashboard", "/kpi/esg"],
       ["Dashboard", "/kpi/dashboard"],
       ["Targets", "/kpi/targets"],
       ["Approvals", "/data/approvals?view=kpi"],

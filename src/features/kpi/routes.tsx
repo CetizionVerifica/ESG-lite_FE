@@ -10,12 +10,14 @@ const ReviewView = lazy(() => import("./review/View")); // KPI-8
 const TargetsPage = lazy(() => import("./targets/Page")); // KPI-9
 const DashboardPage = lazy(() => import("./dashboard/Page")); // KPI-10
 const ReportsPage = lazy(() => import("./reports/Page")); // KPI-11
+const EsgPage = lazy(() => import("./esg/Page")); // wave E
 
 export const pages: ModulePages = {
   "kpi-my": <MyKpisPage />, // KPI-7
   "kpi-setup": <SetupPage />, // KPI-3
   "kpi-targets": <TargetsPage />, // KPI-9
   "kpi-dashboard": <DashboardPage />, // KPI-10
+  "kpi-esg": <EsgPage />, // wave E
   "kpi-reports": <ReportsPage />, // KPI-11
   "kpi-library": <LibraryPage />, // KPI-2
 };

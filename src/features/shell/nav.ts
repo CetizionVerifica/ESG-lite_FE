@@ -25,6 +25,7 @@ const link = (label: string, to: string, requires?: Requirement): NavLinkItem =>
 const group = (label: string, items: NavLinkItem[]): NavGroupItem => ({ kind: "group", label, items });
 /** A KPI page (KPI-1: behind the switch), with its palette name. */
 const kpiLink = (label: string, to: string, palette?: string): NavLinkItem => ({ ...link(label, to, "kpi"), ...(palette ? { palette } : {}) });
+const KPI_ESG = kpiLink("ESG dashboard", "/kpi/esg"); // Wave E: first in the KPIs group
 const KPI_DASHBOARD = kpiLink("Dashboard", "/kpi/dashboard", "KPI dashboard");
 const KPI_TARGETS = kpiLink("Targets", "/kpi/targets", "KPI targets"); // KPI-9 nav fix (wave D)
 const KPI_REPORTS = kpiLink("Framework reports", "/reports/kpi/GRI");
@@ -53,7 +54,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Framework reports", "/reports/kpi/GRI", "kpi"), // KPI-1
       link("Scope 3 boundary", "/settings/scope3"),
     ]),
-    group("KPIs", [KPI_DASHBOARD, KPI_TARGETS]), // KPI-1, wave D: Targets next to Dashboard
+    group("KPIs", [KPI_ESG, KPI_DASHBOARD, KPI_TARGETS]), // KPI-1, wave D: Targets next to Dashboard
     link("Targets (SBTi)", "/targets"),
     link("Products (PCF)", "/products"),
     link("Team", "/team"),
@@ -64,7 +65,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     link("Brand theme", "/brand"),
     link("Scope 3 boundary", "/settings/scope3"),
     link("Suppliers", "/suppliers"),
-    group("KPIs", [KPI_DASHBOARD, KPI_TARGETS, KPI_REPORTS, KPI_SETUP]), // KPI-1, wave D
+    group("KPIs", [KPI_ESG, KPI_DASHBOARD, KPI_TARGETS, KPI_REPORTS, KPI_SETUP]), // KPI-1, wave D
   ],
   Superadmin: [
     link("Console", "/console"),
@@ -98,7 +99,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     ]),
     group("Reports", [link("GHG", "/reports/ghg"), link("EDE", "/reports/ede")]),
     // D18: everything an Admin has for KPIs, for the chosen client, plus the KPI review (Approvals → KPIs).
-    group("KPIs", [KPI_DASHBOARD, KPI_TARGETS, kpiLink("Approvals", "/data/approvals?view=kpi", "KPI approvals"), KPI_REPORTS, KPI_SETUP]),
+    group("KPIs", [KPI_ESG, KPI_DASHBOARD, KPI_TARGETS, kpiLink("Approvals", "/data/approvals?view=kpi", "KPI approvals"), KPI_REPORTS, KPI_SETUP]),
   ],
 };
 

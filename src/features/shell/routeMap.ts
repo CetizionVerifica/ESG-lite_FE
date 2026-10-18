@@ -124,6 +124,8 @@ export const SHELL_ROUTES = [
   { id: "kpi-setup", path: "/kpi/setup", title: "KPI setup", crumb: ["Settings", "KPI setup"], roles: ["Admin", "Superadmin"], spec: "KPI-3", clientContext: true, requires: "kpi" },
   { id: "kpi-targets", path: "/kpi/targets", title: "KPI targets", crumb: ["KPIs", "Targets"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-9", clientContext: true, requires: "kpi" },
   { id: "kpi-dashboard", path: "/kpi/dashboard", title: "KPIs", crumb: ["Data", "KPIs"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-10", clientContext: true, requires: "kpi" },
+  // Wave E: the ESG dashboard (E / S / G) for managers and above.
+  { id: "kpi-esg", path: "/kpi/esg", title: "ESG dashboard", crumb: ["KPIs", "ESG dashboard"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-ESG", clientContext: true, requires: "kpi" },
   { id: "kpi-reports", path: "/reports/kpi/:framework", title: "Framework reports", crumb: ["Reports", "Framework reports"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-11", clientContext: true, requires: "kpi" },
   { id: "kpi-library", path: "/setup/kpi-library", title: "KPI library", crumb: ["Setup", "KPI library"], roles: ["Superadmin"], spec: "KPI-2" },
 ] as const satisfies readonly ShellRoute[];

@@ -107,6 +107,7 @@ describe("KPI routes (01-contracts §6)", () => {
       ["kpi-setup", "/kpi/setup"],
       ["kpi-targets", "/kpi/targets"],
       ["kpi-dashboard", "/kpi/dashboard"],
+      ["kpi-esg", "/kpi/esg"],
       ["kpi-reports", "/reports/kpi/:framework"],
       ["kpi-library", "/setup/kpi-library"],
     ]);
