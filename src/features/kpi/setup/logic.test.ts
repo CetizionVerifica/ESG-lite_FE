@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { KpiSetup, KpiSetupPerson } from "../../../lib/kpi/contracts";
 import { KPI_DEFINITIONS, KPI_DISCLOSURES, KPI_FRAMEWORKS, KPI_MAPPINGS, kpiByCode } from "../../../test/msw/kpiData";
 import {
+  groupByPillarTopic,
   cellKey,
   codesOf,
   countSelected,
@@ -199,5 +200,24 @@ describe("KPI setup: owners by topic (D17)", () => {
       ],
     });
     expect(overridesPayload(overrides, owners, [water, discharge])).toEqual([{ kpi_definition_id: discharge.id, site_id: 1, owner_user_id: 12, reviewer_user_id: null }]);
+  });
+});
+
+describe("D19 · step 3 groups by pillar, then topic", () => {
+  it("puts each KPI under its own pillar (board diversity under Governance) and counts the ticked ones", () => {
+    const choices = new Map(KPI_DEFINITIONS.map((d) => [d.id, { selected: d.code !== "AIR_PM" && d.code !== "AIR_NOX", reason: "", frequency: null }]));
+    const groups = groupByPillarTopic(KPI_DEFINITIONS, choices);
+    expect(groups.map((g) => g.pillar)).toEqual(["environment", "social", "governance"]);
+    expect(groups.map((g) => g.items.map((t) => t.topic))).toEqual([
+      ["climate", "energy", "water", "waste", "pollution", "materials"],
+      ["workforce", "health_safety", "diversity", "training"],
+      ["diversity", "governance", "ethics"],
+    ]);
+    expect(groups[2].items[0].defs.map((d) => d.code)).toEqual(["WOMEN_ON_BOARD"]);
+    expect(groups.map((g) => [g.selected, g.total])).toEqual([
+      [17, 19],
+      [10, 10],
+      [3, 3],
+    ]);
   });
 });

@@ -3,6 +3,8 @@ import { Plus, X } from "lucide-react";
 import { KPI_TOPICS, type KpiDefinition, type KpiSetupPerson, type KpiSetupSite, type KpiTopic } from "../../../../lib/kpi/contracts";
 import { TOPIC_LABEL } from "../../../../lib/kpi/labels";
 import { Badge, Button, Combobox, EmptyState, Select, TabPanel, Tabs, cn, focusRing, panel } from "../../../../ui";
+import { topicsByPillar } from "../../../../lib/kpi/pillars";
+import { PillarBadge } from "../../components/PillarBadge";
 import { type TopicGrid, cellKey, differsFromTopic, eligibleOwners, kpiCountText, parseCellKey, topicKey } from "../logic";
 
 type View = "topics" | "exceptions";
@@ -78,56 +80,66 @@ export function TopicOwnersStep({ defs, sites, people, grid, owners, onOwner, on
                 </tr>
               </thead>
               <tbody>
-                {grid.topics.map((topic) => {
-                  const label = TOPIC_LABEL[topic];
-                  const hasSiteKpis = sites.some((s) => grid.cells.has(topicKey(topic, s.site_id)));
-                  const cell = (siteId: number | null, name: string, opts: { value: number; label: string }[]) => {
-                    const key = topicKey(topic, siteId);
-                    const ids = grid.cells.get(key);
-                    if (!ids) {
+                {topicsByPillar(grid.topics).flatMap((pg) => [
+                  <tr key={`pillar-${pg.pillar}`} className="border-b border-line bg-tint/40" data-testid="topic-pillar-row">
+                    <th scope="colgroup" colSpan={1 + sites.length + (grid.company ? 1 : 0) + (sites.length > 1 ? 1 : 0)} className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-muted">
+                      <span className="sticky left-3 inline-flex items-center gap-1.5">
+                        <PillarBadge pillar={pg.pillar} />
+                        {pg.label}
+                      </span>
+                    </th>
+                  </tr>,
+                  ...pg.items.map((topic) => {
+                    const label = TOPIC_LABEL[topic];
+                    const hasSiteKpis = sites.some((s) => grid.cells.has(topicKey(topic, s.site_id)));
+                    const cell = (siteId: number | null, name: string, opts: { value: number; label: string }[]) => {
+                      const key = topicKey(topic, siteId);
+                      const ids = grid.cells.get(key);
+                      if (!ids) {
+                        return (
+                          <td key={siteId ?? COMPANY} className="px-3 py-2 align-top text-xs text-muted">
+                            No KPIs here
+                          </td>
+                        );
+                      }
                       return (
-                        <td key={siteId ?? COMPANY} className="px-3 py-2 align-top text-xs text-muted">
-                          No KPIs here
+                        <td key={siteId ?? COMPANY} className={cn("px-3 py-1.5 align-top", flagged.has(key) && "bg-bad-soft/40")} data-testid="topic-cell">
+                          <Combobox<number>
+                            label={siteId === null ? `${label} for the company` : `${label} at ${name}`}
+                            hideLabel
+                            value={owners.get(key) ?? null}
+                            onChange={(v) => onOwner(key, v)}
+                            options={opts}
+                            placeholder="Choose a person"
+                            emptyText={siteId === null ? "Nobody in the company yet" : "Nobody works at this site yet"}
+                            error={flagged.has(key) ? "Choose who enters it." : undefined}
+                          />
+                          <p className="mt-1 text-xs text-muted">
+                            {label} · {kpiCountText(ids.length)}
+                          </p>
                         </td>
                       );
-                    }
+                    };
                     return (
-                      <td key={siteId ?? COMPANY} className={cn("px-3 py-1.5 align-top", flagged.has(key) && "bg-bad-soft/40")} data-testid="topic-cell">
-                        <Combobox<number>
-                          label={siteId === null ? `${label} for the company` : `${label} at ${name}`}
-                          hideLabel
-                          value={owners.get(key) ?? null}
-                          onChange={(v) => onOwner(key, v)}
-                          options={opts}
-                          placeholder="Choose a person"
-                          emptyText={siteId === null ? "Nobody in the company yet" : "Nobody works at this site yet"}
-                          error={flagged.has(key) ? "Choose who enters it." : undefined}
-                        />
-                        <p className="mt-1 text-xs text-muted">
-                          {label} · {kpiCountText(ids.length)}
-                        </p>
-                      </td>
+                      <tr key={topic} className="border-b border-line last:border-0" data-testid="topic-row">
+                        <th scope="row" className="sticky left-0 z-10 max-w-48 bg-panel px-3 py-2 text-left font-medium text-ink">
+                          {label}
+                        </th>
+                        {sites.map((s) => cell(s.site_id, s.name, siteOptions.get(s.site_id) ?? []))}
+                        {grid.company && cell(null, "Company", companyOptions)}
+                        {sites.length > 1 && (
+                          <td className="px-3 py-1.5 align-top">
+                            {hasSiteKpis && (
+                              <Button size="sm" variant="ghost" onClick={() => onSameForEverySite(topic)} aria-label={`Same person for every site: ${label}`}>
+                                Same person for every site
+                              </Button>
+                            )}
+                          </td>
+                        )}
+                      </tr>
                     );
-                  };
-                  return (
-                    <tr key={topic} className="border-b border-line last:border-0" data-testid="topic-row">
-                      <th scope="row" className="sticky left-0 z-10 max-w-48 bg-panel px-3 py-2 text-left font-medium text-ink">
-                        {label}
-                      </th>
-                      {sites.map((s) => cell(s.site_id, s.name, siteOptions.get(s.site_id) ?? []))}
-                      {grid.company && cell(null, "Company", companyOptions)}
-                      {sites.length > 1 && (
-                        <td className="px-3 py-1.5 align-top">
-                          {hasSiteKpis && (
-                            <Button size="sm" variant="ghost" onClick={() => onSameForEverySite(topic)} aria-label={`Same person for every site: ${label}`}>
-                              Same person for every site
-                            </Button>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
+                  }),
+                ])}
               </tbody>
             </table>
           </div>

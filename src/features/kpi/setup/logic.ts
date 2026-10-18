@@ -15,12 +15,14 @@ import {
   type KpiSetupSite,
   type KpiTopic,
   type KpiTopicAssignment,
+  KPI_PILLARS,
   KPI_TOPICS,
   type PutKpiSetupBody,
   type UnitDimension,
   type KpiValueType,
 } from "../../../lib/kpi/contracts";
 import type { FrameworkUse } from "../../../lib/kpi/badges";
+import { type PillarGroup, groupByPillar, pillarOf } from "../../../lib/kpi/pillars";
 import { type Recommendation, recommendKpis } from "../../../lib/kpi/recommend";
 import { familyUnits, unitInfo } from "../../../lib/kpi/units";
 
@@ -123,6 +125,14 @@ export interface TopicGroup {
 /** KPIs grouped by topic in the library's topic order; within a topic, entered KPIs after auto and calculated ones. */
 export function groupByTopic(defs: KpiDefinition[]): TopicGroup[] {
   return KPI_TOPICS.map((topic) => ({ topic, defs: defs.filter((d) => d.topic === topic).sort((a, b) => a.name.localeCompare(b.name)) })).filter((g) => g.defs.length);
+}
+
+/** D19: KPIs grouped by pillar (the KPI's own), then by topic; each pillar with how many of its KPIs are ticked. */
+export function groupByPillarTopic(defs: KpiDefinition[], choices: Map<number, KpiChoice>): (PillarGroup<TopicGroup> & { selected: number; total: number })[] {
+  return groupByPillar(KPI_PILLARS.flatMap((p) => groupByTopic(defs.filter((d) => pillarOf(d) === p)).map((g) => ({ ...g, pillar: p }))), (g) => g.pillar).map((g) => {
+    const all = g.items.flatMap((t) => t.defs);
+    return { ...g, selected: all.filter((d) => choices.get(d.id)?.selected).length, total: all.length };
+  });
 }
 
 /** "34 KPIs selected · 12 filled from your data · 4 calculated · 18 to enter" */

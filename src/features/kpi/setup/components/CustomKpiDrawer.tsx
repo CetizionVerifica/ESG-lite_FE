@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
-import { KPI_FREQUENCIES, KPI_LEVELS, KPI_TOPICS, type CustomKpiBody, type KpiDefinition, type KpiFrequency, type KpiLevel, type KpiMappingSuggestion, type KpiTopic } from "../../../../lib/kpi/contracts";
+import { KPI_FREQUENCIES, KPI_LEVELS, KPI_PILLARS, KPI_TOPICS, TOPIC_PILLAR, type KpiPillar, type CustomKpiBody, type KpiDefinition, type KpiFrequency, type KpiLevel, type KpiMappingSuggestion, type KpiTopic } from "../../../../lib/kpi/contracts";
 import { AI_DOWN_MESSAGE, checkMapping } from "../../../../lib/kpi/ai";
-import { FIT_LABEL, FREQUENCY_LABEL, LEVEL_LABEL, TOPIC_LABEL, disclosureBadge } from "../../../../lib/kpi/labels";
+import { FIT_LABEL, FREQUENCY_LABEL, LEVEL_LABEL, PILLAR_LABEL, TOPIC_LABEL, disclosureBadge } from "../../../../lib/kpi/labels";
+import { topicPillarNote } from "../../../../lib/kpi/pillars";
 import { KPI_UNITS } from "../../../../lib/kpi/units";
 import { AiChip, Badge, Button, Drawer, Select, TextField, Textarea, cn, focusRing } from "../../../../ui";
 import { kpiErrorMessage, useCreateCustomKpi, useSuggestMapping } from "../api";
@@ -25,6 +26,9 @@ export function CustomKpiDrawer({ open, onClose, onCreated }: { open: boolean; o
   const [help, setHelp] = useState("");
   const [unit, setUnit] = useState("");
   const [topic, setTopic] = useState<KpiTopic>("governance");
+  /** D19: null follows the topic's pillar. */
+  const [pillarPick, setPillarPick] = useState<KpiPillar | null>(null);
+  const pillar = pillarPick ?? TOPIC_PILLAR[topic];
   const [frequency, setFrequency] = useState<KpiFrequency>("monthly");
   const [level, setLevel] = useState<KpiLevel>("site");
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
@@ -41,6 +45,7 @@ export function CustomKpiDrawer({ open, onClose, onCreated }: { open: boolean; o
     setQuestion("");
     setHelp("");
     setUnit("");
+    setPillarPick(null);
     setSuggestions(null);
     setAiDown(null);
     setPicked([]);
@@ -71,6 +76,8 @@ export function CustomKpiDrawer({ open, onClose, onCreated }: { open: boolean; o
       question: question.trim(),
       help: help.trim() || null,
       topic,
+      // D19: sent only when it differs from the topic's; the server defaults it otherwise.
+      ...(pillar !== TOPIC_PILLAR[topic] ? { pillar } : {}),
       ...shape,
       aggregation: shape.unit_dimension === "ratio" ? "average" : "sum",
       level,
@@ -128,6 +135,20 @@ export function CustomKpiDrawer({ open, onClose, onCreated }: { open: boolean; o
             </datalist>
           </div>
           <Select<KpiTopic> label="Topic" value={topic} onChange={(v) => v && setTopic(v)} options={KPI_TOPICS.map((t) => ({ value: t, label: TOPIC_LABEL[t] }))} />
+          <div className="space-y-1">
+            <Select<KpiPillar>
+              label="Pillar"
+              value={pillar}
+              onChange={(v) => v && setPillarPick(v === TOPIC_PILLAR[topic] ? null : v)}
+              options={KPI_PILLARS.map((p) => ({ value: p, label: PILLAR_LABEL[p] }))}
+              help="Follows the topic unless you change it."
+            />
+            {pillar !== TOPIC_PILLAR[topic] && (
+              <p className="text-xs text-warn" data-testid="pillar-override-note">
+                {topicPillarNote(topic)}
+              </p>
+            )}
+          </div>
           <Select<KpiFrequency> label="How often" value={frequency} onChange={(v) => v && setFrequency(v)} options={KPI_FREQUENCIES.map((f) => ({ value: f, label: FREQUENCY_LABEL[f] }))} />
           <Select<KpiLevel> label="Entered for" value={level} onChange={(v) => v && setLevel(v)} options={KPI_LEVELS.map((l) => ({ value: l, label: l === "site" ? "Each site" : LEVEL_LABEL[l] }))} />
         </div>
