@@ -25,6 +25,7 @@ import {
 import { useIntensity, useOverview, usePendingEntries, usePendingProduction, useSubmission, useThreshold } from "./api";
 import { AttentionList } from "./components/AttentionList";
 import { CategoryBars } from "./components/CategoryBars";
+import { KpiTiles } from "./components/KpiTiles";
 import { LowerTabs } from "./components/LowerTabs";
 import { SitesTable } from "./components/SitesTable";
 import { SubmissionPanel } from "./components/SubmissionPanel";
@@ -205,6 +206,9 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
       <PageHeader title={title} context={chips} />
 
       <KpiStrip items={kpis} loading={overview.isPending} error={err(overview)} onRetry={() => overview.refetch()} />
+
+      {/* KPI-10 (wave D): KPI readiness and KPIs due, only while KPI tracking is on. */}
+      <KpiTiles />
 
       {nothingApproved && (
         <Callout

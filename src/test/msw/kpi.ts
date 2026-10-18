@@ -1024,6 +1024,19 @@ export const kpiHandlers = [
     }),
   ),
 
+  // KPI-10 (wave D): the Overview tiles, for the caller's scope (Ravi's My KPIs in the sample)
+  http.get(
+    "*/kpi/overview",
+    gated(({ request }) => {
+      const period = new URL(request.url).searchParams.get("period") ?? "2026-09";
+      const my = myKpis(period);
+      const manual = my.items.filter((i) => i.source === "manual");
+      const count = (g: string) => manual.filter((i) => i.group === g).length;
+      const coverage = dashboard(2026, null, null, null).coverage;
+      return HttpResponse.json({ readiness: coverage.map((c) => ({ framework: c.framework, version: c.version, percent: c.percent })), due: { due: count("due"), sent_back: count("sent_back"), done: count("done") }, period });
+    }),
+  ),
+
   // KPI-10: dashboard
   http.get(
     "*/kpi/dashboard",

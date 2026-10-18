@@ -334,4 +334,11 @@ describe("KPI mock handlers: behaviour", () => {
     expect(moved.moved).toEqual([expect.objectContaining({ topic: "water", site_name: "Bahrain plant", from_name: "Mia Haddad" })]);
     expect((await get<{ topics: string[] }>("/kpi/people/11/topics")).topics).toEqual(["water", "waste"]);
   });
+
+  it("GET /kpi/overview: readiness per framework and the month's counts (KPI-10 wave D)", async () => {
+    const o = await get<{ readiness: { framework: string; percent: number }[]; due: { due: number; sent_back: number; done: number }; period: string }>("/kpi/overview");
+    expect(o.readiness.map((r) => `${r.framework} ${r.percent}`)).toEqual(["GRI 82", "BRSR 74", "ESRS 68"]);
+    expect(o.due).toEqual({ due: 4, sent_back: 1, done: 3 });
+    expect(o.period).toBe("2026-09");
+  });
 });

@@ -781,6 +781,14 @@ export interface KpiReportOmission {
   esrs_topic?: EsrsTopic | null;
 }
 
+/** `GET /kpi/overview` (KPI-10 wave D): the Overview page's two tiles, for the caller's scope. */
+export interface KpiOverview {
+  readiness: { framework: FrameworkCode; version: string | null; percent: number | null }[];
+  due: { due: number; sent_back: number; done: number };
+  /** YYYY-MM the due counts are for. */
+  period: string | null;
+}
+
 /** `POST /kpi/ai/suggest-values {document_id}` (KPI-12): suggestions only, a person confirms. */
 export interface KpiValueSuggestion {
   kpi: string;

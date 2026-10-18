@@ -18,6 +18,7 @@ import {
   type KpiReportRow,
   type KpiTargetWithProgress,
   type KpiPersonTopics,
+  type KpiOverview,
   type KpiTopic,
   type KpiTopicMove,
   KPI_TOPICS,
@@ -170,6 +171,18 @@ export async function putPersonTopics(userId: number, body: PutKpiPersonTopicsBo
     }),
   );
   return { topics: topicList(data.topics ?? body.topics), site_ids: Array.isArray(data.site_ids) ? (data.site_ids as number[]) : (body.site_ids ?? []), moved: moved.filter((m) => (KPI_TOPICS as readonly string[]).includes(m.topic)) };
+}
+
+// KPI-10 (wave D): the Overview tiles
+const count = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
+/** `GET /kpi/overview` → `{readiness:[{framework, version, percent}], due:{due, sent_back, done}, period}`; also read when wrapped as `{overview}`. */
+export async function getKpiOverview(companyId?: number | null): Promise<KpiOverview> {
+  const root = obj(asRow<unknown>((await api.get("/kpi/overview", { params: companyParams(companyId) })).data, "overview"));
+  const due = obj(root.due);
+  const readiness = asList<Loose>(root, "readiness")
+    .filter((r) => (FRAMEWORK_CODES as readonly string[]).includes(String(r.framework).toUpperCase()))
+    .map((r) => ({ framework: String(r.framework).toUpperCase() as FrameworkCode, version: typeof r.version === "string" ? r.version : null, percent: r.percent == null ? null : Math.round(count(r.percent)) }));
+  return { readiness, due: { due: count(due.due), sent_back: count(due.sent_back), done: count(due.done) }, period: typeof root.period === "string" ? root.period : null };
 }
 
 // KPI-7: what the caller owes
