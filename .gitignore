@@ -32,3 +32,6 @@ playwright-report/
 .ci-base/
 eslint-base.json
 eslint-head.json
+
+# TypeScript incremental build state
+*.tsbuildinfo
