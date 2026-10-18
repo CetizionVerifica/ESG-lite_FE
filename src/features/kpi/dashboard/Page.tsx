@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from "react-router-dom";
-import { BarChart3, FileSpreadsheet, Target } from "lucide-react";
+import { BarChart3, FileSpreadsheet, Leaf, Target } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { canReviewKpis } from "../../../lib/kpi/switch";
 import { FRAMEWORK_CODES, type FrameworkCode, KPI_TOPICS, type KpiTopic } from "../../../lib/kpi/contracts";
@@ -76,6 +76,10 @@ export default function DashboardPage() {
       />
       <div className="flex flex-wrap items-center gap-2">
         <RefreshFromDataButton year={year} />
+        <Link to={`/kpi/esg${year !== thisYear || site ? `?${new URLSearchParams({ ...(year !== thisYear ? { year: String(year) } : {}), ...(site ? { site: String(site) } : {}) }).toString()}` : ""}`} className={linkButton}>
+          <Leaf aria-hidden className="size-4" />
+          See the ESG dashboard
+        </Link>
         <Link to="/kpi/targets" className={linkButton}>
           <Target aria-hidden className="size-4" />
           Targets

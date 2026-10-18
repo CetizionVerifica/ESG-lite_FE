@@ -2,10 +2,11 @@
  * KPI-7 · My KPIs logic (pure): grouping, progress, the order "Save and
  * next" walks, what "Submit all" sends, and the draft ↔ value mapping.
  */
-import { KPI_TOPICS, type KpiTopic, type KpiValue, type KpiValueInput, type KpiValueSuggestion, type MyKpiItem } from "../../../lib/kpi/contracts";
+import { KPI_TOPICS, type KpiPillar, type KpiTopic, TOPIC_PILLAR, type KpiValue, type KpiValueInput, type KpiValueSuggestion, type MyKpiItem } from "../../../lib/kpi/contracts";
 import { checkValue, sourceLine } from "../../../lib/kpi/ai";
 import { TOPIC_LABEL, breakdownLabel } from "../../../lib/kpi/labels";
 import { formatWithUnit } from "../../../lib/kpi/units";
+import { pillarOf } from "../../../lib/kpi/pillars";
 import { dueText, fillQuestion, lastPeriodText, periodText } from "../../../lib/kpi/entry";
 import type { EntryDraft, QuestionCardItem } from "../components/KpiQuestionCard";
 
@@ -61,6 +62,8 @@ export const topicLabelOf = (i: Pick<MyKpiItem, "topic" | "topic_label">) => i.t
 export interface TopicGroup {
   topic: KpiTopic;
   label: string;
+  /** D19: the topic's pillar, for the letter badge. */
+  pillar: KpiPillar;
   items: MyKpiItem[];
   /** Over every item of the topic for the period, not only the rows shown. */
   done: number;
@@ -80,7 +83,9 @@ export function topicGroups(rows: MyKpiItem[], all: MyKpiItem[] = rows): TopicGr
     const items = rows
       .filter((i) => i.topic === topic)
       .sort((a, b) => Number(b.group === "sent_back") - Number(a.group === "sent_back") || a.due_date.localeCompare(b.due_date) || a.name.localeCompare(b.name));
-    return { topic, label: topicLabelOf(items[0] ?? mine[0]), items, done: p.done, total: p.total };
+    const first = items[0] ?? mine[0];
+    // D19: the topic's pillar (the server's on the item, else the topic's default).
+    return { topic, label: topicLabelOf(first), pillar: first ? pillarOf(first) : TOPIC_PILLAR[topic], items, done: p.done, total: p.total };
   });
 }
 

@@ -33,6 +33,7 @@ import { TableView } from "./components/TableView";
 import { TemplateUpload } from "./components/TemplateUpload";
 import { EntryDrawer } from "./components/EntryDrawer";
 import { KpiRow } from "./components/KpiRow";
+import { PillarBadge } from "../components/PillarBadge";
 import { type AiSuggestion, defaultPeriod, groupItems, itemKey, matchSuggestions, nextDueDate, progressOf, readyToSubmit, submitQuestion, topicChips, topicFilter, topicGroups, workOrder } from "./logic";
 import { useKpiCompanyId } from "../../../lib/kpi/switch";
 
@@ -183,9 +184,12 @@ export default function MyKpisPage() {
         return (
           <section key={g.topic} aria-labelledby={`kpi-topic-${g.topic}`} data-testid="kpi-topic-group">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 bg-tint/40 px-4 py-2">
-              <h3 id={`kpi-topic-${g.topic}`} className="text-sm font-semibold text-ink">
-                {g.label} <span className="font-normal text-muted">· {g.items.length}</span>
-              </h3>
+              <span className="flex items-center gap-1.5">
+                <PillarBadge pillar={g.pillar} />
+                <h3 id={`kpi-topic-${g.topic}`} className="text-sm font-semibold text-ink">
+                  {g.label} <span className="font-normal text-muted">· {g.items.length}</span>
+                </h3>
+              </span>
               <span className="flex items-center gap-2 text-xs text-muted">
                 <span aria-hidden className="block h-1.5 w-16 overflow-hidden rounded-full bg-tint">
                   <span className="block h-full rounded-full bg-brand" style={{ width: `${pct}%` }} />

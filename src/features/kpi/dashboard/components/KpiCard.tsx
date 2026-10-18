@@ -4,6 +4,8 @@ import { TARGET_STATUS_LABEL } from "../../../../lib/kpi/labels";
 import { targetText } from "../../../../lib/kpi/targets";
 import { formatWithUnit } from "../../../../lib/kpi/units";
 import { cn, panel } from "../../../../ui";
+import { pillarOf } from "../../../../lib/kpi/pillars";
+import { PillarBadge } from "../../components/PillarBadge";
 import { Sparkline } from "../../components/Sparkline";
 import { TargetProgress } from "../../components/TargetProgress";
 import { changeText, periodShort } from "../logic";
@@ -25,7 +27,10 @@ export function KpiCard({ card, year, topic, target }: { card: KpiDashboardCard;
   const tone = target?.direction === "reduce" ? (c <= 0 ? "text-good" : "text-warn") : target?.direction === "increase" ? (c >= 0 ? "text-good" : "text-warn") : "text-muted";
   return (
     <article className={cn(panel, "relative space-y-2 p-4")} aria-label={card.name} data-testid="kpi-card">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{topic}</p>
+      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+        <PillarBadge pillar={pillarOf(card)} />
+        {topic}
+      </p>
       <div className="flex items-start justify-between gap-2">
         <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
           {status && (
