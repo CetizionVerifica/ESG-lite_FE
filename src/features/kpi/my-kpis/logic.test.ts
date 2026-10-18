@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { KpiValue, MyKpiItem } from "../../../lib/kpi/contracts";
+import type { AiSuggestion } from "./logic";
 import {
   defaultPeriod,
   draftFromValue,
@@ -14,6 +15,9 @@ import {
   submitQuestion,
   toValueInput,
   gridDraft,
+  matchSuggestions,
+  suggestionChip,
+  suggestionFill,
   parseCell,
   topicChips,
   topicFilter,
@@ -161,5 +165,49 @@ describe("My KPIs table view (KPI-7 part 3)", () => {
     const i = item({ value: value({ value_numeric: 10, unit: "kL", comment: "meter 2" }) });
     expect(gridDraft(i, 12, "kL")).toMatchObject({ value: 12, unit: "kL", comment: "meter 2" });
     expect(gridDraft(item(), 5, "")).toMatchObject({ value: 5, unit: "m³" });
+  });
+});
+
+describe("My KPIs AI suggestions (KPI-12)", () => {
+  const sug = (over: Partial<AiSuggestion> = {}): AiSuggestion => ({
+    id: "s1",
+    documentName: "water-bill.pdf",
+    kpi_code: "WATER_WITHDRAWAL",
+    value: 1200,
+    unit: "m³",
+    breakdown_key: null,
+    period_start: "2026-09-01",
+    period_end: "2026-09-30",
+    site_hint: "Bahrain plant",
+    source_page: 2,
+    quote: "Water consumed: 1,200 m³",
+    confidence: 0.92,
+    why: null,
+    ...over,
+  });
+
+  it("puts a suggestion on its KPI's card for that period, never on done or auto rows", () => {
+    const water = ITEMS[1];
+    const m = matchSuggestions(ITEMS, [sug(), sug({ id: "s2", kpi_code: "GHG_SCOPE1" }), sug({ id: "s3", kpi_code: "WASTE_RECOVERED", kpi_definition_id: 16 }), sug({ id: "s4", kpi_code: "UNKNOWN" })]);
+    expect([...m.keys()]).toEqual([itemKey(water)]);
+    expect(m.get(itemKey(water))?.map((s) => s.id)).toEqual(["s1"]);
+  });
+
+  it("Use fills the total, a split line, or text, and stops at a unit the KPI doesn't take", () => {
+    const water = item();
+    const d = draftFromValue(water);
+    expect(suggestionFill(water, sug(), d)).toEqual({ patch: { value: 1200, unit: "m³" } });
+    expect(suggestionFill(water, sug({ value: "700", breakdown_key: "groundwater" }), d)).toEqual({ patch: { breakdown: { groundwater: 700, surface: null } } });
+    expect(suggestionFill(water, sug({ breakdown_key: "rain" }), d)).toHaveProperty("blocked");
+    expect(suggestionFill(water, sug({ unit: "gal" }), d)).toEqual({ blocked: "The document says gal, which this KPI doesn't take. Type the value yourself." });
+    expect(suggestionFill(item({ value_type: "yes_no" }), sug({ value: "Yes", unit: null }), d)).toEqual({ patch: { text: "yes" } });
+    expect(suggestionFill(item({ value_type: "text" }), sug({ value: "Policy updated", unit: null }), d)).toEqual({ patch: { text: "Policy updated" } });
+  });
+
+  it("labels the chip with the value, the source page and Check this below 0.6", () => {
+    const water = item();
+    const chip = suggestionChip(water, sug({ confidence: 0.55, breakdown_key: "groundwater", value: 700 }), draftFromValue(water));
+    expect(chip).toMatchObject({ label: "Groundwater: 700 m³", source: "Suggested from water-bill.pdf, page 2", check: true, blocked: null });
+    expect(suggestionChip(water, sug(), draftFromValue(water)).check).toBe(false);
   });
 });

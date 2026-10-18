@@ -21,6 +21,7 @@ import {
   isKpiErrorCode,
 } from "../../lib/kpi/contracts";
 import { handlers, resetKpiMocks, setKpiMockEnabled } from "./index";
+import { setKpiAiAvailable } from "./kpi";
 import { KPI_DEFINITIONS, KPI_DISCLOSURES, KPI_MAPPINGS } from "./kpi";
 
 const server = setupServer(...handlers);
@@ -205,10 +206,13 @@ describe("KPI mock handlers: shapes match the contract types", () => {
     expect(auto.refreshed).toBeGreaterThan(0);
     expect(auto).toMatchObject({ unchanged: 0, removed: 0, locked: 0, formulas: [] });
     all(auto.values, VALUE, "auto.values");
-    const sv = (await (await send("POST", "/kpi/ai/suggest-values", { document_id: 7 })).json()) as { suggestions: unknown[] };
-    all(sv.suggestions, { kpi: "string", value: "number", unit: "string", period: "string", source_page: "number?", confidence: "number" }, "suggest-values");
+    const sv = (await (await send("POST", "/kpi/ai/suggest-values", { document_id: 7, period: "2026-09" })).json()) as { document_name: string; suggestions: unknown[] };
+    expect(sv.document_name).toBe("document-7.pdf");
+    all(sv.suggestions, { kpi_code: "string", value: "number", unit: "string", period_start: "string", source_page: "number?", quote: "string?", confidence: "number", why: "string?" }, "suggest-values");
     const sm = (await (await send("POST", "/kpi/ai/suggest-mapping", { name: "Rainwater harvested" })).json()) as { suggestions: unknown[] };
-    all(sm.suggestions, { disclosure_id: "number", framework: FRAMEWORK_CODES, code: "string", fit: MAPPING_FITS, confidence: "number" }, "suggest-mapping");
+    all(sm.suggestions, { framework: FRAMEWORK_CODES, code: "string", title: "string", why: "string", confidence: "number" }, "suggest-mapping");
+    setKpiAiAvailable(false);
+    expect(await (await send("POST", "/kpi/ai/suggest-values", { document_id: 7 })).json()).toEqual({ available: false, message: expect.any(String) });
   });
 });
 

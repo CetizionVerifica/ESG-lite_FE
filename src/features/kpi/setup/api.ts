@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CustomKpiBody, KpiSetup, PutKpiSetupBody } from "../../../lib/kpi/contracts";
 import { useKpiCompanyId } from "../../../lib/kpi/switch";
-import { createCustomKpi, getKpiCatalogue, getKpiSetup, getSetupPeople, inviteKpiOwners, putKpiSetup, suggestKpiMapping } from "../../../services/kpiService";
+import { type MappingSuggestions, readMappingSuggestions } from "../../../lib/kpi/ai";
+import { createCustomKpi, getKpiCatalogue, getKpiSetup, getSetupPeople, inviteKpiOwners, isAiDown, putKpiSetup, suggestKpiMapping } from "../../../services/kpiService";
 
 export { kpiErrorMessage, recommendedIds } from "../../../services/kpiService";
 
@@ -56,7 +57,27 @@ export function useInviteOwners() {
   return useMutation({ mutationFn: () => inviteKpiOwners(companyId) });
 }
 
+/**
+ * KPI-12 `POST /kpi/ai/suggest-mapping`: disclosures from the company's
+ * catalogue, found back by framework and code. AI down (an answer
+ * `{available:false}`, a timeout or a 5xx) reads as unavailable, not an error.
+ */
 export function useSuggestMapping() {
   const companyId = useKpiCompanyId();
-  return useMutation({ mutationFn: (body: { name: string; question?: string; unit?: string | null }) => suggestKpiMapping(body, companyId) });
+  const catalogue = useQuery({ queryKey: keys.catalogue(companyId), queryFn: () => getKpiCatalogue(companyId), staleTime: 5 * 60_000 });
+  return useMutation({
+    mutationFn: async (body: { name: string; question?: string; unit?: string | null; topic?: string | null }): Promise<MappingSuggestions> => {
+      const cat = catalogue.data ?? (await catalogue.refetch()).data;
+      const find = (framework: string, code: string) => {
+        const ids = new Set((cat?.frameworks ?? []).filter((f) => f.code === framework).map((f) => f.id));
+        return cat?.disclosures.find((d) => ids.has(d.framework_id) && d.code === code)?.id;
+      };
+      try {
+        return readMappingSuggestions(await suggestKpiMapping(body, companyId), find);
+      } catch (e) {
+        if (isAiDown(e)) return { available: false, message: null, suggestions: [] };
+        throw e;
+      }
+    },
+  });
 }

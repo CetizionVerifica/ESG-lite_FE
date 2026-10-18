@@ -2,7 +2,7 @@ import { Calculator } from "lucide-react";
 import type { KpiTargetWithProgress, MyKpiItem } from "../../../../lib/kpi/contracts";
 import { targetText } from "../../../../lib/kpi/targets";
 import { formatWithUnit } from "../../../../lib/kpi/units";
-import { Badge, Button, StatusPill, cn } from "../../../../ui";
+import { AiChip, Badge, Button, StatusPill, cn } from "../../../../ui";
 import { FormulaExplainer } from "../../components/FormulaExplainer";
 import { FromYourDataChip } from "../../components/FromYourDataChip";
 import { TargetProgress } from "../../components/TargetProgress";
@@ -21,7 +21,7 @@ const lastShort = (i: MyKpiItem) => {
  * due date, with its status and one action. Auto and calculated items are
  * read-only: "From your data" or "Calculated", never a card.
  */
-export function KpiRow({ item, today, showSite, onOpen, target }: { item: MyKpiItem; today: string; showSite: boolean; onOpen: () => void; target?: KpiTargetWithProgress | null }) {
+export function KpiRow({ item, today, showSite, onOpen, target, aiCount = 0 }: { item: MyKpiItem; today: string; showSite: boolean; onOpen: () => void; target?: KpiTargetWithProgress | null; /** KPI-12: AI suggestions waiting on this card. */ aiCount?: number }) {
   const v = item.value;
   const site = showSite ? (item.site_name ?? "Company") : null;
 
@@ -67,7 +67,10 @@ export function KpiRow({ item, today, showSite, onOpen, target }: { item: MyKpiI
   return (
     <li className={cn("flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", item.group === "sent_back" && "bg-warn-soft/40")} data-testid="kpi-row">
       <div className="min-w-0 space-y-1">
-        <p className="font-medium text-ink">{item.name}</p>
+        <p className="flex flex-wrap items-center gap-2 font-medium text-ink">
+          {item.name}
+          {aiCount > 0 && <AiChip label={aiCount === 1 ? "AI suggestion" : `${aiCount} AI suggestions`} hint=", open the card to check it" />}
+        </p>
         {sub.length > 0 && <p className="flex flex-wrap gap-x-3 text-sm text-muted">{sub.map((s) => <span key={s as string}>{s}</span>)}</p>}
         {(item.group === "sent_back" || status === "draft") && v?.review_comment && (
           <p className="text-sm text-ink">

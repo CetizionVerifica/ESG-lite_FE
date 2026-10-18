@@ -818,31 +818,49 @@ export interface KpiOverview {
   period: string | null;
 }
 
-/** `POST /kpi/ai/suggest-values {document_id}` (KPI-12): suggestions only, a person confirms. */
+/**
+ * `POST /kpi/ai/suggest-values` (KPI-12): multipart `file` plus `site_id` and
+ * `period` (YYYY-MM), or JSON `{document_id, site_id, period}`. Suggestions
+ * only; a person confirms each one in the entry card. Shape as the backend
+ * serves it (wave D, from the coordinator).
+ */
 export interface KpiValueSuggestion {
-  kpi: string;
-  value: number;
-  unit: string;
-  /** YYYY-MM */
-  period: string;
+  kpi_code: string;
+  kpi_definition_id?: number | null;
+  /** A number, or text such as "Yes" for yes/no and text KPIs. As written; never converted. */
+  value: number | string;
+  unit: string | null;
+  /** Set: the value is one split line (e.g. "groundwater"), not the total. */
+  breakdown_key: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  site_hint: string | null;
   source_page: number | null;
+  /** The words on the page the value came from. */
+  quote: string | null;
+  /** 0–1; below 0.6 the card says "Check this". */
   confidence: number;
+  why: string | null;
 }
-export interface SuggestValuesResult {
-  suggestions: KpiValueSuggestion[];
-}
+export type SuggestValuesResult =
+  | { available?: true; document_id: number | null; document_name: string | null; pages: number | null; suggestions: KpiValueSuggestion[] }
+  /** AI is down (or the caller is a Superadmin, for now): not an error, a calm note. */
+  | { available: false; message: string };
 
-/** `POST /kpi/ai/suggest-mapping {name, question, unit}` (KPI-12). Mock shape. */
+/** `POST /kpi/ai/suggest-mapping {name, question, unit, topic}` (KPI-12, Admin): disclosures from the company's catalogue. */
 export interface KpiMappingSuggestion {
-  disclosure_id: number;
+  /** Not sent by the backend; the FE finds it in the catalogue by framework and code. */
+  disclosure_id?: number;
   framework: FrameworkCode;
   code: string;
-  fit: MappingFit;
+  title: string | null;
+  section: string | null;
+  why: string | null;
+  /** 0–1; 0.5 or less reads "Check this". */
   confidence: number;
+  fit?: MappingFit;
 }
-export interface SuggestMappingResult {
-  suggestions: KpiMappingSuggestion[];
-}
+export type SuggestMappingResult = { available?: true; suggestions: KpiMappingSuggestion[] } | { available: false; message: string };
 
 // ---------------------------------------------------------------------------
 // §4 Error codes

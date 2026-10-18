@@ -26,12 +26,14 @@ import {
   useContextParams,
   useToast,
 } from "../../../ui";
-import { keys, kpiErrorMessage, useDownloadTemplate, useMyKpis, useSubmitValues, useTargetsFor } from "./api";
+import { keys, kpiErrorMessage, useDownloadTemplate, useMyKpis, useSubmitValues, useSuggestValues, useTargetsFor } from "./api";
+import type { EntryDraft } from "../components/KpiQuestionCard";
+import { AiFillPanel, type AiFillState } from "./components/AiFillPanel";
 import { TableView } from "./components/TableView";
 import { TemplateUpload } from "./components/TemplateUpload";
 import { EntryDrawer } from "./components/EntryDrawer";
 import { KpiRow } from "./components/KpiRow";
-import { defaultPeriod, groupItems, itemKey, nextDueDate, progressOf, readyToSubmit, submitQuestion, topicChips, topicFilter, topicGroups, workOrder } from "./logic";
+import { type AiSuggestion, defaultPeriod, groupItems, itemKey, matchSuggestions, nextDueDate, progressOf, readyToSubmit, submitQuestion, topicChips, topicFilter, topicGroups, workOrder } from "./logic";
 import { useKpiCompanyId } from "../../../lib/kpi/switch";
 
 type Tab = "due" | "sent_back" | "done";
@@ -107,6 +109,36 @@ export default function MyKpisPage() {
       { replace: true },
     );
   const tab: Tab = params.get("tab") === "sent_back" || params.get("tab") === "done" ? (params.get("tab") as Tab) : "due";
+  // KPI-12: suggestions from a dropped document, on the cards they match; Use only fills the input.
+  const suggestValues = useSuggestValues();
+  const [aiState, setAiState] = useState<AiFillState>({ status: "idle" });
+  const [aiList, setAiList] = useState<AiSuggestion[]>([]);
+  const [aiFilled, setAiFilled] = useState<Map<string, Partial<EntryDraft>>>(new Map());
+  const aiByItem = useMemo(() => matchSuggestions(items, aiList), [items, aiList]);
+  const readDocument = (file: File) => {
+    setAiState({ status: "reading", file: file.name });
+    const site = siteId ?? (sites.length === 1 ? sites[0].site_id : null);
+    suggestValues.mutate(
+      { file, period: periodKey, siteId: site },
+      {
+        onSuccess: (r) => {
+          if (!r.available) {
+            setAiState({ status: "down", file: file.name, message: r.message });
+            return;
+          }
+          const stamp = Date.now().toString(36);
+          const list = r.suggestions.map((sg, n) => ({ ...sg, id: `${stamp}-${n}`, documentName: r.documentName ?? file.name }));
+          setAiList((prev) => [...prev, ...list]);
+          const matched = matchSuggestions(items, list);
+          setAiState({ status: "done", file: file.name, found: [...matched.values()].reduce((n, l) => n + l.length, 0), matched: matched.size });
+        },
+        onError: (e) => setAiState({ status: "error", file: file.name, message: kpiErrorMessage(e, `Couldn't read ${file.name}. Try another file, or enter the values yourself.`) }),
+      },
+    );
+  };
+  const dropSuggestion = (id: string) => setAiList((prev) => prev.filter((x) => x.id !== id));
+  const aiPending = [...aiByItem.values()].reduce((n, l) => n + l.length, 0);
+
   // KPI-7 part 3: the fast lane, a keyboard table of what's still to enter (`?view=table`).
   const view: View = params.get("view") === "table" ? "table" : "list";
   const todo = workOrder(shown);
@@ -162,7 +194,7 @@ export default function MyKpisPage() {
             </div>
             <ul className="divide-y divide-line">
               {g.items.map((i) => (
-                <KpiRow key={itemKey(i)} item={i} today={today} showSite={multiSite} onOpen={() => openEntry(itemKey(i))} target={i.source === "manual" ? null : targetFor(i)} />
+                <KpiRow key={itemKey(i)} item={i} today={today} showSite={multiSite} onOpen={() => openEntry(itemKey(i))} target={i.source === "manual" ? null : targetFor(i)} aiCount={aiByItem.get(itemKey(i))?.length ?? 0} />
               ))}
             </ul>
           </section>
@@ -244,6 +276,16 @@ export default function MyKpisPage() {
               {ready.length ? `Submit ${ready.length} ready ${ready.length === 1 ? "value" : "values"}` : "Submit all"}
             </Button>
           </section>
+
+          <AiFillPanel
+            state={aiState}
+            onFile={readDocument}
+            pending={aiPending}
+            onClear={() => {
+              setAiList([]);
+              setAiState({ status: "idle" });
+            }}
+          />
 
           {refused.length > 0 && (
             <Callout tone="warn" title="Some values weren't sent" onDismiss={() => setRefused([])}>
@@ -354,6 +396,17 @@ export default function MyKpisPage() {
           hasNext={!!next}
           onClose={() => setParam("entry", null)}
           onSaved={(title) => toast({ title })}
+          suggestions={aiByItem.get(itemKey(open)) ?? []}
+          aiFilled={aiFilled.get(itemKey(open))}
+          onAiUse={(sg, patch) => {
+            dropSuggestion(sg.id);
+            setAiFilled((m) => {
+              const key = itemKey(open);
+              const was = m.get(key) ?? {};
+              return new Map(m).set(key, { ...was, ...patch, breakdown: { ...(was.breakdown ?? {}), ...(patch.breakdown ?? {}) } });
+            });
+          }}
+          onAiDismiss={(sg) => dropSuggestion(sg.id)}
           onNext={() => {
             if (next) setParam("entry", itemKey(next));
             else {

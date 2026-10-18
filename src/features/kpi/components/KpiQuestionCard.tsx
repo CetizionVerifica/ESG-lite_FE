@@ -6,6 +6,10 @@ import { breakdownTitle, checkBreakdown, compareToLast } from "../../../lib/kpi/
 import { breakdownLabel } from "../../../lib/kpi/labels";
 import { conversionLine, formatWithUnit } from "../../../lib/kpi/units";
 import {
+  AiChip,
+  AiLabel,
+  Badge,
+  Button,
   Callout,
   FileDrop,
   type FileDropItem,
@@ -13,6 +17,7 @@ import {
   SegmentedControl,
   TextField,
   Textarea,
+  Tooltip,
   UnitInput,
   cn,
   focusRing,
@@ -63,7 +68,24 @@ export type KpiQuestionCardProps = {
   onRemoveEvidence?: (evidence: KpiEvidenceOut) => void;
   /** Ids inside the card start with this. */
   idBase: string;
+  /** KPI-12: AI suggestions for this card; "Use" only fills the input. */
+  suggestions?: CardSuggestion[];
+  onUseSuggestion?: (id: string) => void;
+  onDismissSuggestion?: (id: string) => void;
+  /** Inputs still holding what the AI suggested (the AiLabel pattern from add-data). */
+  aiFields?: { value: boolean; breakdown: string[] };
 };
+
+/** One AI suggestion as the card shows it (KPI-12; built by My KPIs). */
+export interface CardSuggestion {
+  id: string;
+  label: string;
+  source: string;
+  quote: string | null;
+  why: string | null;
+  check: boolean;
+  blocked: string | null;
+}
 
 const NUMERIC: KpiValueType[] = ["number", "percent", "integer", "currency"];
 const EVIDENCE_TYPES = [".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic", ".xlsx", ".xls", ".csv", ".docx"];
@@ -75,7 +97,26 @@ const EVIDENCE_TYPES = [".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic", ".xls
  * comment that open only when asked for. Used by My KPIs and, later, the
  * table view's row drawer and the review drawer's edit mode.
  */
-export function KpiQuestionCard({ item, draft, onChange, onBlur, readOnly = false, reviewComment, reviewerName, evidence = [], uploads = [], onAddFiles, onRemoveEvidence, idBase }: KpiQuestionCardProps) {
+export function KpiQuestionCard({
+  item,
+  draft,
+  onChange,
+  onBlur,
+  readOnly = false,
+  reviewComment,
+  reviewerName,
+  evidence = [],
+  uploads = [],
+  onAddFiles,
+  onRemoveEvidence,
+  idBase,
+  suggestions = [],
+  onUseSuggestion,
+  onDismissSuggestion,
+  aiFields,
+}: KpiQuestionCardProps) {
+  const amountLabel = <AiLabel text="Amount" ai={!!aiFields?.value} />;
+  const answerLabel = <AiLabel text="Answer" ai={!!aiFields?.value} />;
   const numeric = NUMERIC.includes(item.valueType);
   const unit = draft.unit || item.canonicalUnit || "";
   const units = item.allowedUnits.length ? item.allowedUnits : item.canonicalUnit ? [item.canonicalUnit] : [];
@@ -101,11 +142,43 @@ export function KpiQuestionCard({ item, draft, onChange, onBlur, readOnly = fals
         {item.help && <p className="text-sm text-muted">{item.help}</p>}
       </div>
 
+      {!readOnly && suggestions.length > 0 && (
+        <section aria-label="AI suggestions" className="space-y-2">
+          {suggestions.map((sg) => (
+            <div key={sg.id} className="space-y-1.5 rounded-control border border-line bg-tint p-3" data-testid="ai-suggestion">
+              <p className="flex flex-wrap items-center gap-2 text-sm">
+                {sg.check ? <Badge tone="warn">Check this</Badge> : <AiChip label="AI suggestion" hint="" />}
+                <b className="font-num font-medium text-ink">{sg.label}</b>
+              </p>
+              {sg.quote ? (
+                <Tooltip content={`“${sg.quote}”`} toggleOnClick>
+                  <button type="button" className={cn("text-left text-xs text-muted underline decoration-dotted underline-offset-2", focusRing)}>
+                    {sg.source}
+                  </button>
+                </Tooltip>
+              ) : (
+                <p className="text-xs text-muted">{sg.source}</p>
+              )}
+              {sg.check && sg.why && <p className="text-xs text-muted">{sg.why}</p>}
+              {sg.blocked && <p className="text-xs text-warn">{sg.blocked}</p>}
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" disabled={!!sg.blocked} onClick={() => onUseSuggestion?.(sg.id)} aria-label={`Use ${sg.label}`}>
+                  Use
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => onDismissSuggestion?.(sg.id)} aria-label={`Dismiss ${sg.label}`}>
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
       {numeric ? (
         <div className="space-y-1">
           {units.length > 1 ? (
             <UnitInput
-              label="Amount"
+              label={amountLabel}
               value={{ value: draft.value, unit }}
               units={units}
               disabled={readOnly}
@@ -113,7 +186,7 @@ export function KpiQuestionCard({ item, draft, onChange, onBlur, readOnly = fals
               placeholder="0"
             />
           ) : (
-            <NumberField label="Amount" value={draft.value} unit={unit || undefined} disabled={readOnly} onChange={(value) => onChange({ value })} placeholder="0" />
+            <NumberField label={amountLabel} value={draft.value} unit={unit || undefined} disabled={readOnly} onChange={(value) => onChange({ value })} placeholder="0" />
           )}
           <p aria-live="polite" className="min-h-5 text-sm text-muted" data-testid="kpi-conversion">
             {conversion}
@@ -133,9 +206,9 @@ export function KpiQuestionCard({ item, draft, onChange, onBlur, readOnly = fals
           />
         </div>
       ) : item.valueType === "text" ? (
-        <Textarea label="Answer" value={draft.text} disabled={readOnly} onChange={(text) => onChange({ text })} rows={4} />
+        <Textarea label={answerLabel} value={draft.text} disabled={readOnly} onChange={(text) => onChange({ text })} rows={4} />
       ) : (
-        <TextField label="Answer" value={draft.text} disabled={readOnly} onChange={(text) => onChange({ text })} />
+        <TextField label={answerLabel} value={draft.text} disabled={readOnly} onChange={(text) => onChange({ text })} />
       )}
 
       {item.last && numeric && (
@@ -165,13 +238,18 @@ export function KpiQuestionCard({ item, draft, onChange, onBlur, readOnly = fals
 
       <div className="divide-y divide-line rounded-control border border-line">
         {split.length > 0 && (
-          <Section title={breakdownTitle(item.breakdowns?.by)} hint={item.usedIn.some((u) => u.framework === "BRSR") ? "needed for BRSR" : "optional"} initiallyOpen={filledParts > 0}>
+          <Section
+            key={aiFields?.breakdown.length ? "split-ai" : "split"}
+            title={breakdownTitle(item.breakdowns?.by)}
+            hint={item.usedIn.some((u) => u.framework === "BRSR") ? "needed for BRSR" : "optional"}
+            initiallyOpen={filledParts > 0}
+          >
             <div className="space-y-2 px-3 pb-3">
               <div className="grid gap-2 sm:grid-cols-3">
                 {split.map((key) => (
                   <NumberField
                     key={key}
-                    label={breakdownLabel(key)}
+                    label={<AiLabel text={breakdownLabel(key)} ai={!!aiFields?.breakdown.includes(key)} />}
                     value={draft.breakdown[key] ?? null}
                     unit={unit || undefined}
                     disabled={readOnly}

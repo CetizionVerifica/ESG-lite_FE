@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { getResponse } from "msw";
-import { kpiHandlers, resetKpiMocks, setKpiMockEnabled, startKpiSetupFresh } from "../src/test/msw/kpi";
+import { kpiHandlers, resetKpiMocks, setKpiAiAvailable, setKpiMockEnabled, startKpiSetupFresh } from "../src/test/msw/kpi";
 
 /**
  * KPI wave B Playwright API: every `/kpi/*` call is answered by the same
@@ -70,10 +70,11 @@ const kpiAudit = (url: URL) =>
  * `keepState` leaves the KPI mocks as an earlier page in the same test left
  * them (a Manager rejects, then the contributor opens My KPIs).
  */
-export async function kpiApp(page: Page, opts: { role: string; user: object; enabled?: boolean; freshSetup?: boolean; keepState?: boolean; other?: (url: URL) => unknown; /** A Superadmin's chosen client at the start (D18). */ clientId?: number }) {
+export async function kpiApp(page: Page, opts: { role: string; user: object; enabled?: boolean; freshSetup?: boolean; keepState?: boolean; other?: (url: URL) => unknown; /** A Superadmin's chosen client at the start (D18). */ clientId?: number; /** KPI-12: the AI service is down. */ aiDown?: boolean }) {
   if (!opts.keepState) resetKpiMocks();
   if (opts.enabled === false) setKpiMockEnabled(false);
   if (opts.freshSetup) startKpiSetupFresh();
+  if (opts.aiDown) setKpiAiAvailable(false);
   const calls: Call[] = [];
   const user = opts.enabled === false ? JSON.parse(JSON.stringify(opts.user).replace(/"kpi_tracking_enabled":true/g, '"kpi_tracking_enabled":false')) : opts.user;
   await page.addInitScript(

@@ -52,11 +52,11 @@ import {
   type PutKpiSetupBody,
   type PutKpiValuesResult,
   type SubmitKpiValuesResult,
-  type SuggestMappingResult,
   MY_KPI_GROUPS,
   isKpiErrorCode,
 } from "../lib/kpi/contracts";
 import { ERROR_MESSAGE } from "../lib/kpi/labels";
+import { type ValueSuggestions, readValueSuggestions } from "../lib/kpi/ai";
 
 /**
  * KPI tracking (ESG-lite src/kpi, mounted at /kpi; docs/kpi/01-contracts.md §3).
@@ -131,9 +131,34 @@ export const inviteKpiOwners = async (companyId?: number | null): Promise<KpiInv
   const data = (await api.post("/kpi/setup/invite", {}, { params: companyParams(companyId) })).data as Partial<KpiInviteResult> | null;
   return { notified: Number(data?.notified ?? 0) };
 };
-/** `POST /kpi/ai/suggest-mapping` (KPI-12): suggestions only, the Admin picks. */
-export const suggestKpiMapping = async (body: { name: string; question?: string; unit?: string | null }, companyId?: number | null) =>
-  asList<SuggestMappingResult["suggestions"][number]>((await api.post("/kpi/ai/suggest-mapping", body, { params: companyParams(companyId) })).data, "suggestions");
+/** The AI calls can take about a minute (wave D): longer than the app's default. */
+const AI_TIMEOUT_MS = 90_000;
+/** `POST /kpi/ai/suggest-mapping` (KPI-12): suggestions only, the Admin picks. The raw answer; `readMappingSuggestions` reads it. */
+export const suggestKpiMapping = async (body: { name: string; question?: string; unit?: string | null; topic?: string | null }, companyId?: number | null): Promise<unknown> =>
+  (await api.post("/kpi/ai/suggest-mapping", body, { params: companyParams(companyId), timeout: AI_TIMEOUT_MS })).data as unknown;
+/**
+ * `POST /kpi/ai/suggest-values` (KPI-12): multipart `file` with `site_id` and
+ * `period`, or JSON `{document_id, site_id, period}`. Suggestions only.
+ */
+export async function suggestKpiValues(input: { file?: File; documentId?: number; siteId?: number | null; period: string }, companyId?: number | null): Promise<ValueSuggestions> {
+  const config = { params: companyParams(companyId), timeout: AI_TIMEOUT_MS };
+  let data: unknown;
+  if (input.file) {
+    const form = new FormData();
+    form.append("file", input.file);
+    form.append("period", input.period);
+    if (input.siteId) form.append("site_id", String(input.siteId));
+    data = (await api.post("/kpi/ai/suggest-values", form, config)).data;
+  } else {
+    data = (await api.post("/kpi/ai/suggest-values", { document_id: input.documentId, period: input.period, ...(input.siteId ? { site_id: input.siteId } : {}) }, config)).data;
+  }
+  return readValueSuggestions(data, input.file?.name ?? null);
+}
+/** True for a failure that means "AI is down" (no answer, a timeout, a 5xx): shown as the calm note, not an error. */
+export function isAiDown(e: unknown): boolean {
+  const err = e as { response?: { status?: number }; code?: string } | null;
+  return !err?.response || (err.response.status ?? 0) >= 500 || err.code === "ECONNABORTED";
+}
 
 type PersonRow = { user_id: number; name?: string | null; last_name?: string | null; email?: string; role?: string; site?: { site_id: number } | null; sites?: { site_id: number }[] | null };
 const personName = (u: PersonRow) => [u.name, u.last_name].filter(Boolean).join(" ").trim() || u.email || `User ${u.user_id}`;

@@ -2,8 +2,10 @@
  * KPI-7 · My KPIs logic (pure): grouping, progress, the order "Save and
  * next" walks, what "Submit all" sends, and the draft ↔ value mapping.
  */
-import { KPI_TOPICS, type KpiTopic, type KpiValue, type KpiValueInput, type MyKpiItem } from "../../../lib/kpi/contracts";
-import { TOPIC_LABEL } from "../../../lib/kpi/labels";
+import { KPI_TOPICS, type KpiTopic, type KpiValue, type KpiValueInput, type KpiValueSuggestion, type MyKpiItem } from "../../../lib/kpi/contracts";
+import { checkValue, sourceLine } from "../../../lib/kpi/ai";
+import { TOPIC_LABEL, breakdownLabel } from "../../../lib/kpi/labels";
+import { formatWithUnit } from "../../../lib/kpi/units";
 import { dueText, fillQuestion, lastPeriodText, periodText } from "../../../lib/kpi/entry";
 import type { EntryDraft, QuestionCardItem } from "../components/KpiQuestionCard";
 
@@ -210,3 +212,95 @@ export const gridDraft = (i: MyKpiItem, value: number | null, unit: string): Ent
 
 /** "my-kpis-2026-09.xlsx" when the server sends no file name. */
 export const templateFileName = (period: string) => `my-kpis-${period}.xlsx`;
+
+// ---------------------------------------------------------------------------
+// KPI-12 · AI suggestions on the cards (suggest only)
+// ---------------------------------------------------------------------------
+
+/** A suggestion as My KPIs keeps it: with an id and the document it came from. */
+export type AiSuggestion = KpiValueSuggestion & { id: string; documentName: string | null };
+
+/** What a card shows for one suggestion. */
+export interface SuggestionChip {
+  id: string;
+  /** "1,200 m³", "Groundwater: 700 m³", "Yes" */
+  label: string;
+  /** "Suggested from water-bill.pdf, page 2" */
+  source: string;
+  quote: string | null;
+  why: string | null;
+  /** Confidence below 0.6: the chip says "Check this". */
+  check: boolean;
+  /** Why Use is off (a unit this KPI doesn't take, a split it doesn't have); null = Use fills the input. */
+  blocked: string | null;
+}
+
+const editable = (i: MyKpiItem) => !isReadOnlySource(i) && i.group !== "done";
+
+/**
+ * Puts each suggestion on the card it belongs to: same KPI (code or id),
+ * same period when the AI read one, and the site the AI read when the person
+ * has several. Suggestions for KPIs that aren't theirs to enter are left out.
+ */
+export function matchSuggestions(items: MyKpiItem[], suggestions: AiSuggestion[]): Map<string, AiSuggestion[]> {
+  const out = new Map<string, AiSuggestion[]>();
+  for (const s of suggestions) {
+    let pool = items.filter((i) => editable(i) && (i.code === s.kpi_code || (s.kpi_definition_id != null && i.kpi_definition_id === s.kpi_definition_id)));
+    if (s.period_start) {
+      const same = pool.filter((i) => i.period_start === s.period_start || (i.period_start <= s.period_start! && (!i.period_end || s.period_start! <= i.period_end)));
+      if (same.length) pool = same;
+    }
+    if (pool.length > 1 && s.site_hint) {
+      const hint = s.site_hint.toLowerCase();
+      const site = pool.filter((i) => (i.site_name ?? "").toLowerCase() === hint);
+      if (site.length) pool = site;
+    }
+    const target = pool[0];
+    if (target) out.set(itemKey(target), [...(out.get(itemKey(target)) ?? []), s]);
+  }
+  return out;
+}
+
+const NUMERIC_TYPES = new Set(["number", "percent", "integer", "currency"]);
+
+/**
+ * What "Use" puts into the card's inputs (never saved here; the draft saves
+ * as if typed). A split line goes into that line; the unit is the
+ * document's own, so a unit the KPI doesn't take turns Use off.
+ */
+export function suggestionFill(i: MyKpiItem, s: KpiValueSuggestion, draft: EntryDraft): { patch: Partial<EntryDraft> } | { blocked: string } {
+  const units = i.allowed_units.length ? i.allowed_units : i.canonical_unit ? [i.canonical_unit] : [];
+  const n = typeof s.value === "number" ? s.value : Number(String(s.value).replace(/,/g, ""));
+  if (s.breakdown_key) {
+    if (!(i.breakdowns?.values ?? []).includes(s.breakdown_key)) return { blocked: "This KPI isn't split that way. Type the value yourself if it fits." };
+    if (!Number.isFinite(n)) return { blocked: "The document's figure isn't a number." };
+    if (s.unit && draft.unit && s.unit !== draft.unit) return { blocked: `The document says ${s.unit} and the card is in ${draft.unit}. Type it yourself in ${draft.unit}.` };
+    return { patch: { breakdown: { ...draft.breakdown, [s.breakdown_key]: n } } };
+  }
+  if (NUMERIC_TYPES.has(i.value_type)) {
+    if (!Number.isFinite(n)) return { blocked: "The document's figure isn't a number." };
+    if (s.unit && units.length && !units.includes(s.unit)) return { blocked: `The document says ${s.unit}, which this KPI doesn't take. Type the value yourself.` };
+    return { patch: { value: n, ...(s.unit ? { unit: s.unit } : {}) } };
+  }
+  const text = String(s.value).trim();
+  if (i.value_type === "yes_no") {
+    const yn = text.toLowerCase();
+    return yn === "yes" || yn === "no" ? { patch: { text: yn } } : { blocked: "The document's answer isn't a yes or a no." };
+  }
+  return { patch: { text } };
+}
+
+/** The chip for one suggestion on its card. */
+export function suggestionChip(i: MyKpiItem, s: AiSuggestion, draft: EntryDraft): SuggestionChip {
+  const value = typeof s.value === "number" ? formatWithUnit(s.value, s.unit, i.decimals) : String(s.value);
+  const fill = suggestionFill(i, s, draft);
+  return {
+    id: s.id,
+    label: s.breakdown_key ? `${breakdownLabel(s.breakdown_key)}: ${value}` : value,
+    source: sourceLine(s.documentName, s.source_page),
+    quote: s.quote,
+    why: s.why,
+    check: checkValue(s),
+    blocked: "blocked" in fill ? fill.blocked : null,
+  };
+}

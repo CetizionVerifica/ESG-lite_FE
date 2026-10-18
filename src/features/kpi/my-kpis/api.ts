@@ -3,7 +3,8 @@ import type { KpiTargetWithProgress, KpiValueInput, MyKpiItem, MyKpis } from "..
 import { ERROR_MESSAGE } from "../../../lib/kpi/labels";
 import { isKpiErrorCode } from "../../../lib/kpi/contracts";
 import { useKpiCompanyId } from "../../../lib/kpi/switch";
-import { commitMyTemplate, downloadMyTemplate, getKpiTargets, getMyKpis, planMyTemplate, removeKpiEvidence, saveKpiValues, submitKpiValues, uploadKpiEvidence } from "../../../services/kpiService";
+import type { ValueSuggestions } from "../../../lib/kpi/ai";
+import { commitMyTemplate, downloadMyTemplate, isAiDown, suggestKpiValues, getKpiTargets, getMyKpis, planMyTemplate, removeKpiEvidence, saveKpiValues, submitKpiValues, uploadKpiEvidence } from "../../../services/kpiService";
 import { fileNameFrom, saveBlob } from "../../../ui";
 import { templateFileName, withValue } from "./logic";
 
@@ -99,4 +100,23 @@ export function useCommitTemplate() {
   const qc = useQueryClient();
   const companyId = useKpiCompanyId();
   return useMutation({ mutationFn: (planId: string) => commitMyTemplate(planId, companyId), onSettled: () => qc.invalidateQueries({ queryKey: keys.all }) });
+}
+
+/**
+ * KPI-12 `POST /kpi/ai/suggest-values` with the dropped document. Can take
+ * about a minute; the page keeps working meanwhile. AI down (an answer
+ * `{available:false}`, a timeout or a 5xx) is a calm note, not an error.
+ */
+export function useSuggestValues() {
+  const companyId = useKpiCompanyId();
+  return useMutation({
+    mutationFn: async ({ file, period, siteId }: { file: File; period: string; siteId: number | null }): Promise<ValueSuggestions> => {
+      try {
+        return await suggestKpiValues({ file, period, siteId }, companyId);
+      } catch (e) {
+        if (isAiDown(e)) return { available: false, message: null, documentId: null, documentName: file.name, suggestions: [] };
+        throw e;
+      }
+    },
+  });
 }

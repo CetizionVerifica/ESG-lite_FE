@@ -18,6 +18,7 @@ export { useContextParams, readContext, writeContext, CONTEXT_KEYS, type Context
 export { useDropStaleCategories } from "./hooks/useDropStaleCategories";
 export * from "./table";
 export { Badge, type BadgeTone } from "./Badge";
+export { AiChip, AiLabel } from "./AiLabel";
 export { Scope3CategoryChip, type Scope3CategoryChipProps } from "./Scope3CategoryChip";
 export { CheckChip, ReadyChip, UncheckedChip } from "./CheckChip";
 export { CheckList } from "./CheckList";

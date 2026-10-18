@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
-import { KPI_FREQUENCIES, KPI_LEVELS, KPI_TOPICS, type CustomKpiBody, type KpiDefinition, type KpiFrequency, type KpiLevel, type KpiTopic, type SuggestMappingResult } from "../../../../lib/kpi/contracts";
+import { KPI_FREQUENCIES, KPI_LEVELS, KPI_TOPICS, type CustomKpiBody, type KpiDefinition, type KpiFrequency, type KpiLevel, type KpiMappingSuggestion, type KpiTopic } from "../../../../lib/kpi/contracts";
+import { AI_DOWN_MESSAGE, checkMapping } from "../../../../lib/kpi/ai";
 import { FIT_LABEL, FREQUENCY_LABEL, LEVEL_LABEL, TOPIC_LABEL, disclosureBadge } from "../../../../lib/kpi/labels";
 import { KPI_UNITS } from "../../../../lib/kpi/units";
-import { Button, Drawer, Select, TextField, Textarea, cn, focusRing } from "../../../../ui";
+import { AiChip, Badge, Button, Drawer, Select, TextField, Textarea, cn, focusRing } from "../../../../ui";
 import { kpiErrorMessage, useCreateCustomKpi, useSuggestMapping } from "../api";
 import { unitShape } from "../logic";
 
-type Suggestion = SuggestMappingResult["suggestions"][number];
+type Suggestion = KpiMappingSuggestion & { disclosure_id: number };
 
 const UNIT_HINTS = [...new Set(Object.values(KPI_UNITS).map((u) => u.label))];
 
@@ -27,6 +28,7 @@ export function CustomKpiDrawer({ open, onClose, onCreated }: { open: boolean; o
   const [frequency, setFrequency] = useState<KpiFrequency>("monthly");
   const [level, setLevel] = useState<KpiLevel>("site");
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  const [aiDown, setAiDown] = useState<string | null>(null);
   const [picked, setPicked] = useState<number[]>([]);
   const [tried, setTried] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +42,7 @@ export function CustomKpiDrawer({ open, onClose, onCreated }: { open: boolean; o
     setHelp("");
     setUnit("");
     setSuggestions(null);
+    setAiDown(null);
     setPicked([]);
     setTried(false);
     setError(null);
@@ -47,8 +50,13 @@ export function CustomKpiDrawer({ open, onClose, onCreated }: { open: boolean; o
 
   const askAi = async () => {
     setError(null);
+    setAiDown(null);
     try {
-      setSuggestions(await suggest.mutateAsync({ name: name.trim(), question: question.trim(), unit: unit.trim() || null }));
+      const r = await suggest.mutateAsync({ name: name.trim(), question: question.trim(), unit: unit.trim() || null, topic });
+      if (!r.available) {
+        setAiDown(r.message || AI_DOWN_MESSAGE);
+        setSuggestions(null);
+      } else setSuggestions(r.suggestions.filter((x): x is Suggestion => typeof x.disclosure_id === "number"));
     } catch (e) {
       setError(kpiErrorMessage(e, "Couldn't get suggestions. You can add the KPI without them."));
     }
@@ -68,7 +76,7 @@ export function CustomKpiDrawer({ open, onClose, onCreated }: { open: boolean; o
       level,
       default_frequency: frequency,
       decimals: shape.value_type === "integer" ? 0 : 2,
-      mappings: (suggestions ?? []).filter((s) => picked.includes(s.disclosure_id)).map((s) => ({ disclosure_id: s.disclosure_id, fit: s.fit, note: null })),
+      mappings: (suggestions ?? []).filter((s) => picked.includes(s.disclosure_id)).map((s) => ({ disclosure_id: s.disclosure_id, fit: s.fit ?? "partial", note: null })),
     };
     try {
       const def = await create.mutateAsync(body);
@@ -134,24 +142,33 @@ export function CustomKpiDrawer({ open, onClose, onCreated }: { open: boolean; o
               Suggest
             </Button>
           </div>
-          {suggestions === null ? (
+          {aiDown ? (
+            <p role="status" className="text-sm text-muted" data-testid="ai-unavailable">
+              {aiDown}
+            </p>
+          ) : suggestions === null ? (
             <p className="text-xs text-muted">Get suggestions for disclosures this KPI could answer. You choose which apply.</p>
           ) : suggestions.length === 0 ? (
             <p className="text-xs text-muted">No close match. It's tracked as your own KPI.</p>
           ) : (
-            <ul className="space-y-1">
+            <ul className="space-y-2" aria-label="Suggested disclosures">
               {suggestions.map((s) => (
                 <li key={s.disclosure_id}>
-                  <label className="flex items-center gap-2 text-sm text-ink">
+                  <label className="flex items-start gap-2 text-sm text-ink">
                     <input
                       type="checkbox"
-                      className={cn("size-4 accent-brand", focusRing)}
+                      className={cn("mt-0.5 size-4 shrink-0 accent-brand", focusRing)}
                       checked={picked.includes(s.disclosure_id)}
                       onChange={(e) => setPicked((p) => (e.target.checked ? [...p, s.disclosure_id] : p.filter((x) => x !== s.disclosure_id)))}
                     />
-                    <span>{disclosureBadge(s.framework, s.code)}</span>
-                    <span className="text-xs text-muted">
-                      {FIT_LABEL[s.fit]} fit · {Math.round(s.confidence * 100)} % sure
+                    <span className="min-w-0 space-y-0.5">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium">{disclosureBadge(s.framework, s.code)}</span>
+                        {s.title && <span>{s.title}</span>}
+                        {checkMapping(s) ? <Badge tone="warn">Check this</Badge> : <AiChip />}
+                      </span>
+                      {s.why && <span className="block text-xs text-muted">{s.why}</span>}
+                      {s.fit && <span className="block text-xs text-muted">{FIT_LABEL[s.fit]} fit</span>}
                     </span>
                   </label>
                 </li>

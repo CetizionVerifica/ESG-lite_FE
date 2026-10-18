@@ -69,6 +69,7 @@ import {
   type SubmitKpiValuesResult,
   type SuggestMappingResult,
   type SuggestValuesResult,
+  type KpiValueSuggestion,
   type TargetStatus,
 } from "../../lib/kpi/contracts";
 import { ESRS_TOPIC_LABEL, TOPIC_LABEL } from "../../lib/kpi/labels";
@@ -123,6 +124,8 @@ const initialState = () => ({
   invites: 0,
   /** KPI-7 part 3: planned template uploads by plan id, until committed. */
   plans: new Map<string, KpiValueInput[]>(),
+  /** KPI-12: false = the AI service is down (answers `{available:false, message}`). */
+  aiAvailable: true,
   /** `kpi:site` pairs reminded today (KPI-10 remind, once a day). */
   reminded: new Set<string>(),
 });
@@ -148,6 +151,11 @@ export function startKpiSetupFresh(): void {
 
 /** How many `kpi_assigned` invitations the setup sent (KPI-3). */
 export const kpiMockInvites = () => state.invites;
+
+/** KPI-12: takes the AI service down (or back up) for the following requests. */
+export function setKpiAiAvailable(available: boolean): void {
+  state.aiAvailable = available;
+}
 
 /** Turns ACME's KPI tracking switch on or off for the following requests. */
 export function setKpiMockEnabled(enabled: boolean): void {
@@ -1162,23 +1170,45 @@ export const kpiHandlers = [
     }),
   ),
 
-  // KPI-12: AI assist (suggest only)
+  // KPI-12: AI assist (suggest only), shapes as the backend serves them (wave D)
   http.post(
     "*/kpi/ai/suggest-values",
     gated(async ({ request }) => {
-      const body = await json<{ document_id: number }>(request);
-      if (!body.document_id) return badRequest("document_id is required.");
-      return HttpResponse.json<SuggestValuesResult>({
-        suggestions: [
-          { kpi: "WATER_WITHDRAWAL", value: 1200, unit: "m³", period: "2026-09", source_page: 1, confidence: 0.92 },
-          { kpi: "WATER_DISCHARGE", value: 860, unit: "m³", period: "2026-09", source_page: 2, confidence: 0.71 },
-        ],
-      });
+      if (!state.aiAvailable) return HttpResponse.json({ available: false, message: "AI not available right now. You can still enter everything yourself." });
+      let name = "document.pdf";
+      let period = "2026-09";
+      if ((request.headers.get("content-type") ?? "").includes("application/json")) {
+        const body = await json<{ document_id: number; period?: string }>(request);
+        if (!body.document_id) return badRequest("document_id or a file is required.");
+        name = `document-${body.document_id}.pdf`;
+        period = body.period ?? period;
+      } else {
+        const form = await request.formData();
+        const file = form.get("file");
+        if (!file || typeof file === "string") return badRequest("A file is required.");
+        name = (file as File).name || name;
+        period = String(form.get("period") ?? period);
+      }
+      const start = `${period}-01`;
+      const end = lastDay(period);
+      const at = (s: Omit<KpiValueSuggestion, "period_start" | "period_end" | "site_hint">): KpiValueSuggestion => ({ ...s, period_start: start, period_end: end, site_hint: "Bahrain plant" });
+      const suggestions = /waste/i.test(name)
+        ? [
+            at({ kpi_code: "WASTE_GENERATED", kpi_definition_id: 15, value: 11.2, unit: "t", breakdown_key: null, source_page: 1, quote: "Total collected: 11.2 tonnes", confidence: 0.85, why: "found 'Total collected: 11.2 tonnes' on page 1" }),
+            at({ kpi_code: "WASTE_GENERATED", kpi_definition_id: 15, value: 3.1, unit: "t", breakdown_key: "hazardous", source_page: 1, quote: "of which hazardous: 3.1 t", confidence: 0.8, why: "found 'of which hazardous: 3.1 t' on page 1" }),
+          ]
+        : [
+            at({ kpi_code: "WATER_WITHDRAWAL", kpi_definition_id: 13, value: 1200, unit: "m³", breakdown_key: null, source_page: 2, quote: "Water consumed this period: 1,200 m³", confidence: 0.92, why: "found 'Water consumed this period: 1,200 m³' on page 2" }),
+            at({ kpi_code: "WATER_WITHDRAWAL", kpi_definition_id: 13, value: 700, unit: "m³", breakdown_key: "groundwater", source_page: 2, quote: "Borewell: 700 m³", confidence: 0.8, why: "found 'Borewell: 700 m³' on page 2" }),
+            at({ kpi_code: "WATER_DISCHARGE", kpi_definition_id: 14, value: 905, unit: "m³", breakdown_key: null, source_page: 3, quote: "Effluent, estimated: about 905 m³", confidence: 0.55, why: "the bill gives an estimate on page 3" }),
+          ];
+      return HttpResponse.json<SuggestValuesResult>({ document_id: 501, document_name: name, pages: 3, suggestions });
     }),
   ),
   http.post(
     "*/kpi/ai/suggest-mapping",
     gated(async ({ request }) => {
+      if (!state.aiAvailable) return HttpResponse.json({ available: false, message: "AI not available right now. You can still enter everything yourself." });
       const body = await json<{ name: string; question?: string }>(request);
       if (!body.name?.trim()) return badRequest("name is required.");
       const words = `${body.name} ${body.question ?? ""}`.toLowerCase();
@@ -1186,11 +1216,12 @@ export const kpiHandlers = [
       const hits = topic ? state.disclosures.filter((d) => d.title.toLowerCase().includes(topic)).slice(0, 3) : [];
       return HttpResponse.json<SuggestMappingResult>({
         suggestions: hits.map((d, i) => ({
-          disclosure_id: d.id,
           framework: (state.frameworks.find((f) => f.id === d.framework_id) as KpiFramework).code,
           code: d.code,
-          fit: i === 0 ? "partial" : "derived",
-          confidence: Math.round((0.8 - i * 0.15) * 100) / 100,
+          title: d.title,
+          section: d.section,
+          why: i === 0 ? `It measures the same thing: ${d.title.toLowerCase()}.` : `It's close: ${d.title.toLowerCase()}.`,
+          confidence: Math.round((0.8 - i * 0.3) * 100) / 100,
         })),
       });
     }),

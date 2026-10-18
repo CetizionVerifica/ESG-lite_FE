@@ -5,7 +5,8 @@ import { VALUE_STATUS_LABEL } from "../../../../lib/kpi/labels";
 import { Button, Drawer, Modal, StatusPill, useUnsavedGuard } from "../../../../ui";
 import { KpiQuestionCard } from "../../components/KpiQuestionCard";
 import { type SaveState, useEntryDraft } from "../hooks/useEntryDraft";
-import { itemKey, periodLabelOf, questionItem } from "../logic";
+import type { EntryDraft } from "../../components/KpiQuestionCard";
+import { type AiSuggestion, itemKey, periodLabelOf, questionItem, suggestionChip, suggestionFill } from "../logic";
 
 export type EntryDrawerProps = {
   item: MyKpiItem;
@@ -17,7 +18,22 @@ export type EntryDrawerProps = {
   /** Saved: open the next item (or close at the end). */
   onNext: () => void;
   onSaved: (message: string) => void;
+  /** KPI-12: AI suggestions matched to this item, and what an earlier "Use" put in. */
+  suggestions?: AiSuggestion[];
+  aiFilled?: Partial<EntryDraft>;
+  onAiUse?: (s: AiSuggestion, patch: Partial<EntryDraft>) => void;
+  onAiDismiss?: (s: AiSuggestion) => void;
 };
+
+/** Which inputs still hold what the AI suggested (they lose the mark once changed). */
+function aiFieldsOf(filled: Partial<EntryDraft> | undefined, draft: EntryDraft) {
+  if (!filled) return undefined;
+  const value = filled.value !== undefined ? draft.value === filled.value : filled.text !== undefined && draft.text === filled.text;
+  const breakdown = Object.entries(filled.breakdown ?? {})
+    .filter(([k, v]) => v !== null && draft.breakdown[k] === v)
+    .map(([k]) => k);
+  return { value, breakdown };
+}
 
 function SaveStatus({ state, error }: { state: SaveState; error: string | null }) {
   if (state === "saving")
@@ -50,7 +66,7 @@ function SaveStatus({ state, error }: { state: SaveState; error: string | null }
  * you type; "Save and next" saves and moves on; pending and approved values
  * open read-only. Leaving with something unsaved asks first.
  */
-export function EntryDrawer({ item, listKey, position, hasNext, onClose, onNext, onSaved }: EntryDrawerProps) {
+export function EntryDrawer({ item, listKey, position, hasNext, onClose, onNext, onSaved, suggestions = [], aiFilled, onAiUse, onAiDismiss }: EntryDrawerProps) {
   const status = item.value?.status ?? null;
   const editable = status === null || status === "draft" || status === "rejected";
   const entry = useEntryDraft(item, listKey, editable);
@@ -131,6 +147,21 @@ export function EntryDrawer({ item, listKey, position, hasNext, onClose, onNext,
         uploads={entry.uploads}
         onAddFiles={editable ? (files) => void entry.addFiles(files) : undefined}
         onRemoveEvidence={editable ? (ev) => void entry.removeEvidence(ev) : undefined}
+        suggestions={editable ? suggestions.map((sg) => suggestionChip(item, sg, entry.draft)) : []}
+        onUseSuggestion={(id) => {
+          const sg = suggestions.find((x) => x.id === id);
+          if (!sg) return;
+          const fill = suggestionFill(item, sg, entry.draft);
+          if (!("patch" in fill)) return;
+          // Fills the input only; the draft saves as if typed, and nothing is submitted.
+          entry.change(fill.patch);
+          onAiUse?.(sg, fill.patch);
+        }}
+        onDismissSuggestion={(id) => {
+          const sg = suggestions.find((x) => x.id === id);
+          if (sg) onAiDismiss?.(sg);
+        }}
+        aiFields={aiFieldsOf(aiFilled, entry.draft)}
       />
       <Modal
         open={blocker.state === "blocked" && entry.state === "error"}
