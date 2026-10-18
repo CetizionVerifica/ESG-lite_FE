@@ -78,7 +78,7 @@ test("the entry card converts as you type, nudges a big jump, saves the draft, a
   await expect(page.getByTestId("kpi-row").filter({ hasText: "Waste generated" })).toContainText("Draft saved");
 });
 
-test("fix a sent-back value, Save and next through the list topic by topic, then Submit all with a refusal explained", async ({ page }) => {
+test("fix a sent-back value, Save and next through the list topic by topic, then Submit all (evidence optional, nothing refused)", async ({ page }) => {
   const calls = await kpiApp(page, { role: "User", user: RAVI });
   await open(page);
   await page.getByRole("button", { name: "Fix: Water withdrawn" }).click();
@@ -123,20 +123,10 @@ test("fix a sent-back value, Save and next through the list topic by topic, then
   const confirm = page.getByRole("dialog", { name: "Send 4 values to Mia Haddad for review?" });
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", { name: "Send 4" }).click();
-  await expect(page.getByText("3 values sent for review.")).toBeVisible();
-  // Recordable injuries is BRSR Core: it needs evidence first.
-  const refused = page.getByRole("status").filter({ hasText: "Some values weren't sent" });
-  await expect(refused).toContainText("Recordable injuries: Attach a document before sending this value: BRSR Core needs evidence.");
-
-  await refused.getByRole("button", { name: "Open" }).click();
-  card = drawer(page);
-  await card.locator('input[type="file"]').setInputFiles({ name: "injury-log-sep.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
-  await expect(card.getByRole("link", { name: /injury-log-sep\.pdf/ })).toBeVisible();
-  await card.getByRole("button", { name: "Close", exact: true }).click();
-  await page.getByRole("button", { name: "Submit 1 ready value" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Send 1" }).click();
-  await expect(page.getByText("1 value sent for review.")).toBeVisible();
-  expect(calls.filter((c) => c.path.endsWith("/kpi/values/submit")).map((c) => (c.body as { ids: number[] }).ids.length)).toEqual([4, 1]);
+  // Evidence is optional, BRSR Core included (D15 revised 2026-10-18): all four go, none refused.
+  await expect(page.getByText("4 values sent for review.")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Some values weren't sent" })).toHaveCount(0);
+  expect(calls.filter((c) => c.path.endsWith("/kpi/values/submit")).map((c) => (c.body as { ids: number[] }).ids.length)).toEqual([4]);
   await expect(page.getByTestId("kpi-progress")).toContainText("11 of 12 done");
 });
 

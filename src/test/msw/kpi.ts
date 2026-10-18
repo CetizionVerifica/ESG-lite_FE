@@ -1110,7 +1110,6 @@ export const kpiHandlers = [
       for (const id of ids) {
         const v = state.values.find((x) => x.id === id);
         if (!v || v.status !== "draft") result.refused.push({ id, code: "KPI_NOT_DRAFT" });
-        else if (BRSR_CORE_KPI_IDS.has(v.kpi_definition_id) && !state.evidence.some((e) => e.kpi_value_id === id)) result.refused.push({ id, code: "KPI_EVIDENCE_REQUIRED" });
         else {
           v.status = "pending";
           v.submitted_at = NOW;
@@ -1160,7 +1159,8 @@ export const kpiHandlers = [
       for (const id of body.ids) {
         const v = state.values.find((x) => x.id === id);
         if (!v || v.status !== "pending") result.refused.push({ id, code: "KPI_NOT_PENDING" });
-        else if (body.only_ready && v.checks?.length) result.refused.push({ id, code: "KPI_NOT_READY" });
+        // Informational checks (no evidence, unit converted) never hold a value, as on the server.
+        else if (body.only_ready && v.checks?.some((c) => c.id !== "KPI_EVIDENCE" && c.id !== "KPI_UNIT_CONVERTED")) result.refused.push({ id, code: "KPI_NOT_READY" });
         else {
           v.status = action === "approve" ? "approved" : "rejected";
           v.reviewed_by = 12;

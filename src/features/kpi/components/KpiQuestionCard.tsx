@@ -268,8 +268,9 @@ export function KpiQuestionCard({
 
         <Section
           title="Attach evidence"
-          hint={evidenceCount ? `${evidenceCount} ${evidenceCount === 1 ? "file" : "files"}` : item.needsEvidence ? "needed for BRSR Core" : "optional"}
-          initiallyOpen={item.needsEvidence && evidenceCount === 0 && !readOnly}
+          // Evidence is optional, BRSR Core included (D15 revised 2026-10-18): the section stays closed until asked for.
+          hint={evidenceCount ? `${evidenceCount} ${evidenceCount === 1 ? "file" : "files"}` : item.needsEvidence ? "optional · recommended for BRSR Core" : "optional"}
+          initiallyOpen={false}
         >
           <div className="space-y-2 px-3 pb-3">
             {evidence.length > 0 && (

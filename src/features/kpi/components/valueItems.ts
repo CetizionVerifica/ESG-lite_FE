@@ -12,7 +12,8 @@ import { type KpiLookup, valueText } from "./lookup";
 export const lastYearStart = (start: string) => `${Number(start.slice(0, 4)) - 1}${start.slice(4)}`;
 
 /** Checks that only inform the reviewer: they don't hold a value back (01-contracts §5). */
-export const INFO_CHECKS: ReadonlySet<string> = new Set<KpiCheckId>(["KPI_UNIT_CONVERTED"]);
+// No evidence is a note, never a hold: evidence is optional (D15 revised 2026-10-18).
+export const INFO_CHECKS: ReadonlySet<string> = new Set<KpiCheckId>(["KPI_EVIDENCE", "KPI_UNIT_CONVERTED"]);
 
 export interface ValueCheck {
   id: string;

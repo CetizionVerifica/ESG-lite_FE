@@ -63,8 +63,8 @@ test("with ACME chosen: setup and topic owners, a target, review and close, remi
   await expect(page.getByRole("heading", { name: "Approvals", level: 1 })).toBeVisible();
   await expect(page.getByRole("tab", { name: /KPIs/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tab", { name: /Ledger/ })).toHaveCount(0);
-  await page.getByRole("button", { name: "Approve all 4 ready" }).click();
-  await expect(page.getByText("Approved 4 values.")).toBeVisible();
+  await page.getByRole("button", { name: "Approve all 5 ready" }).click();
+  await expect(page.getByText("Approved 5 values.")).toBeVisible();
   await expect.poll(() => calls.filter((c) => c.path.endsWith("/kpi/values/approve")).length, { timeout: 15_000 }).toBe(1);
   await page.goto("/data/approvals?view=kpi&step=close&period=2026-08");
   await page.getByRole("button", { name: "Lock August 2026 for 3 sites" }).click();

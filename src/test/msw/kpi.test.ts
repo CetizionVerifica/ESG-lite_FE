@@ -275,12 +275,9 @@ describe("KPI mock handlers: behaviour", () => {
     expect(results.map((r) => (r.ok ? "ok" : r.code))).toEqual(["ok", "KPI_AUTO_READ_ONLY", "KPI_UNIT_NOT_ALLOWED"]);
     for (const r of results) if (!r.ok) expect(isKpiErrorCode(r.code)).toBe(true);
     const id = results[0].value!.id;
-    // Waste generated is BRSR Core: no evidence, no submit.
-    let sub = (await (await send("POST", "/kpi/values/submit", { ids: [id, 3] })).json()) as { submitted: number[]; refused: { id: number; code: string }[] };
-    expect(sub).toEqual({ submitted: [], refused: [{ id, code: "KPI_EVIDENCE_REQUIRED" }, { id: 3, code: "KPI_NOT_DRAFT" }] });
-    expect((await send("POST", `/kpi/values/${id}/evidence`)).status).toBe(201);
-    sub = (await (await send("POST", "/kpi/values/submit", { ids: [id] })).json()) as typeof sub;
-    expect(sub.submitted).toEqual([id]);
+    // Waste generated is BRSR Core, yet evidence is optional (D15 revised 2026-10-18): it submits without any.
+    const sub = (await (await send("POST", "/kpi/values/submit", { ids: [id, 3] })).json()) as { submitted: number[]; refused: { id: number; code: string }[] };
+    expect(sub).toEqual({ submitted: [id], refused: [{ id: 3, code: "KPI_NOT_DRAFT" }] });
     const my = await get<{ counts: Record<string, number> }>("/kpi/my?period=2026-09");
     expect(my.counts).toMatchObject({ due: 3, done: 9 });
   });

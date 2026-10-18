@@ -37,7 +37,7 @@ const approved = KPI_VALUES_SEED.filter((v) => v.status === "approved");
 describe("readChecks", () => {
   it("reads the list shape and the {ready, held} shape, with plain words", () => {
     expect(readChecks([{ id: "KPI_CHANGE_LIMIT", detail: "3× last September" }]).held).toEqual([{ id: "KPI_CHANGE_LIMIT", label: "3× last September", info: false }]);
-    expect(readChecks({ ready: false, held: ["KPI_EVIDENCE"] })).toEqual({ ready: false, held: [{ id: "KPI_EVIDENCE", label: "No evidence", info: false }] });
+    expect(readChecks({ ready: false, held: ["KPI_EVIDENCE"] })).toEqual({ ready: false, held: [{ id: "KPI_EVIDENCE", label: "No evidence attached", info: true }] });
     expect(readChecks({ ready: true, held: [{ id: "KPI_UNIT_CONVERTED" }] }).held[0]).toMatchObject({ label: "Unit converted", info: true });
     expect(readChecks(null)).toEqual({ ready: null, held: [] });
     expect(readChecks([{ id: "SOMETHING_NEW" }]).held[0].label).toBe("Needs a look");
@@ -57,8 +57,9 @@ describe("reviewRows", () => {
 
   it("splits Ready and Needs attention; informational checks don't hold a value", () => {
     const { ready, attention } = splitRows(rows);
-    expect(ready.map((r) => r.id)).toEqual([9, 7, 11, 13]);
-    expect(attention.map((r) => r.id)).toEqual([10, 12]);
+    // 12 has only "No evidence attached": a note, not a hold (D15 revised).
+    expect(ready.map((r) => r.id)).toEqual([9, 7, 11, 13, 12]);
+    expect(attention.map((r) => r.id)).toEqual([10]);
     const converted = reviewRows([{ ...pending[0], checks: [{ id: "KPI_UNIT_CONVERTED" }] } as KpiValue], lookup);
     expect(converted[0].ready).toBe(true);
   });

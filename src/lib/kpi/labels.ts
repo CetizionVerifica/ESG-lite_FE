@@ -209,7 +209,7 @@ export const LOCK_LEFT_REASON_LABEL: Record<KpiLockLeftReason, string> = {
 
 /** Review check chips (05-ux S4). */
 export const CHECK_LABEL: Record<KpiCheckId, string> = {
-  KPI_EVIDENCE: "No evidence",
+  KPI_EVIDENCE: "No evidence attached",
   KPI_CHANGE_LIMIT: "Big change on last year",
   KPI_BREAKDOWN_SUM: "Split doesn't add up",
   KPI_UNIT_CONVERTED: "Unit converted",

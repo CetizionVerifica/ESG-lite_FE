@@ -9,7 +9,7 @@ export type YearSettings = { yearType: YearType; firstYear: number; dueDay: numb
 /** Who each framework is for, in one line (05-ux S2 step 1). */
 const WHO_FOR: Record<string, string> = {
   GRI: "For any company reporting to investors, customers or the public worldwide.",
-  BRSR: "For companies listed in India (SEBI). Includes BRSR Core, which needs evidence.",
+  BRSR: "For companies listed in India (SEBI). Includes BRSR Core, where attaching evidence is recommended.",
   ESRS: "For companies under the EU's CSRD. Asks which topics matter to you first.",
 };
 

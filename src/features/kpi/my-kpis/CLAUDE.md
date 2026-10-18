@@ -4,7 +4,7 @@
 > Depends on: KPI-3, KPI-4 (FE starts on mocks in wave 1) · Owns: FE `kpi/my-kpis`, `components/KpiQuestionCard`, `FrameworkBadges`, `FromYourDataChip`, `src/kpi/values/my.ts`, `src/kpi/values/template.ts` · Touches: `my-month` (a "KPIs due" card only)
 
 ## Job to be done
-The same person who enters their site's fuel and electricity enters its KPIs. They open one page and see what's due, answer plain questions one at a time, attach evidence and submit, **without knowing anything about GRI, BRSR or ESRS** (D1, 05-ux S3).
+The same person who enters their site's fuel and electricity enters its KPIs. They open one page and see what's due, answer plain questions one at a time, attach evidence if they have it (optional, D15 revised 2026-10-18) and submit, **without knowing anything about GRI, BRSR or ESRS** (D1, 05-ux S3).
 
 ## Today
 - **My month** (`features/my-month`: `Checklist`, `DueBanner`, `DraftsPanel`, `SentBackPanel`) is the contributor's home, built on `contributorObligations.ts`.

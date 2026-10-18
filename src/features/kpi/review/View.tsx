@@ -31,7 +31,7 @@ import { type ReviewRow, approveAllLabel, draftOf, editInput, refusalLines, revi
 type Group = "ready" | "attention";
 type Step = "review" | "close";
 
-const READY_NOTE = "These passed every check: in range, evidence attached, units fine.";
+const READY_NOTE = "These passed every check: in range, split adds up, units fine. Evidence is optional.";
 const ATTENTION_NOTE = "Held values say why: a big jump, missing evidence, a split that doesn't add up.";
 
 /**

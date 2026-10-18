@@ -25,23 +25,24 @@ test("Ready and Needs attention, then Approve all ready with an undo, then for r
   await open(page);
   await expect(page.getByRole("heading", { name: "Approvals", level: 1 })).toBeVisible();
   await expect(page.getByRole("tab", { name: /KPIs/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tab", { name: /Ready/ })).toContainText("4");
-  await expect(page.getByRole("tab", { name: /Needs attention/ })).toContainText("2");
-  await expect(page.getByText("These passed every check: in range, evidence attached, units fine.")).toBeVisible();
-  await expect(rows(page)).toHaveCount(4);
+  // Matola's waste has no evidence: a note, not a hold (D15 revised), so it's ready too.
+  await expect(page.getByRole("tab", { name: /Ready/ })).toContainText("5");
+  await expect(page.getByRole("tab", { name: /Needs attention/ })).toContainText("1");
+  await expect(page.getByText("These passed every check: in range, split adds up, units fine. Evidence is optional.")).toBeVisible();
+  await expect(rows(page)).toHaveCount(5);
   // Waste generated at Dammam: 9.8 t against 10.4 t last September.
   await expect(rows(page).filter({ hasText: "Dammam" })).toContainText("−6 %");
 
-  await page.getByRole("button", { name: "Approve all 4 ready" }).click();
-  await expect(page.getByText("Approved 4 values.")).toBeVisible();
+  await page.getByRole("button", { name: "Approve all 5 ready" }).click();
+  await expect(page.getByText("Approved 5 values.")).toBeVisible();
   await expect(rows(page)).toHaveCount(0);
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(rows(page)).toHaveCount(4);
+  await expect(rows(page)).toHaveCount(5);
   expect(approveCalls(calls)).toHaveLength(0);
 
-  await page.getByRole("button", { name: "Approve all 4 ready" }).click();
+  await page.getByRole("button", { name: "Approve all 5 ready" }).click();
   await expect.poll(() => approveCalls(calls).length, { timeout: 15_000 }).toBe(1);
-  expect(approveCalls(calls)[0].body).toEqual({ ids: [9, 7, 11, 13], only_ready: true });
+  expect(approveCalls(calls)[0].body).toEqual({ ids: [9, 7, 11, 13, 12], only_ready: true });
   await expect(page.getByText("Nothing is ready to approve.", { exact: false })).toBeVisible();
 });
 
@@ -52,7 +53,6 @@ test("a held value says why; reject it with a reason chip, and the contributor s
   await expect(held).toContainText("3× last September");
   await expect(held).toContainText("New cooling tower filled");
   await expect(held).toContainText("+213 %");
-  await expect(rows(page).filter({ hasText: "Matola" })).toContainText("No evidence");
 
   // The drawer: question, value, history, last periods.
   await held.click();
@@ -69,10 +69,12 @@ test("a held value says why; reject it with a reason chip, and the contributor s
   await expect(page.getByText("Value sent back")).toBeVisible();
   const reject = calls.find((c) => c.path.endsWith("/kpi/values/reject"));
   expect(reject?.body).toEqual({ ids: [10], reason: "Looks too high" });
-  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toHaveCount(0);
 
   // Ravi's own pending value at Bahrain plant, sent back from the Ready group.
   await page.getByRole("tab", { name: /Ready/ }).click();
+  // No evidence doesn't hold a value back: Matola's waste waits under Ready.
+  await expect(rows(page).filter({ hasText: "Matola" }).filter({ hasText: "Waste generated" })).toHaveCount(1);
   await rows(page).filter({ hasText: "Waste recovered" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Reject" }).click();
   const second = page.getByRole("alertdialog", { name: "Reject this value?" });
@@ -108,11 +110,11 @@ test("edit a pending value in the drawer with a reason; it stays pending", async
 test("keyboard: J moves, A approves with undo", async ({ page }) => {
   await app(page);
   await open(page);
-  await expect(rows(page)).toHaveCount(4);
+  await expect(rows(page)).toHaveCount(5);
   await page.locator("body").press("j");
   await expect(rows(page).first()).toBeFocused();
   await page.keyboard.press("a");
-  await expect(rows(page)).toHaveCount(3);
+  await expect(rows(page)).toHaveCount(4);
   await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
 });
 

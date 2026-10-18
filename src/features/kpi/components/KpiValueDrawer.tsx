@@ -146,7 +146,7 @@ function DrawerBody({ item, onClose, review, canRefresh }: { item: KpiValueItem;
         {pending && item.checks.length === 0 && (
           <p className="flex items-center gap-2 text-sm text-good">
             <ShieldCheck aria-hidden className="size-4" />
-            Passed every check: in range, evidence where it's needed, units fine.
+            Passed every check: in range, split adds up, units fine.
           </p>
         )}
         {v.status === "rejected" && v.review_comment && (
