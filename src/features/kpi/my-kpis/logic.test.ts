@@ -13,6 +13,8 @@ import {
   readyToSubmit,
   submitQuestion,
   toValueInput,
+  gridDraft,
+  parseCell,
   topicChips,
   topicFilter,
   topicGroups,
@@ -141,5 +143,23 @@ describe("draft and value", () => {
     const next = withValue(ITEMS, itemKey(ITEMS[1]), value({ status: "draft" }));
     expect(next[1].group).toBe("due");
     expect(withValue(ITEMS, itemKey(ITEMS[3]), value({ status: "pending" }))[3].group).toBe("done");
+  });
+});
+
+describe("My KPIs table view (KPI-7 part 3)", () => {
+  it("checks a typed cell the way the card does", () => {
+    const num = { value_type: "number" as const };
+    expect(parseCell("1,200", num)).toEqual({ value: 1200, error: null });
+    expect(parseCell("  ", num)).toEqual({ value: null, error: null });
+    expect(parseCell("12a", num).error).toBe("Type a number, like 1200.");
+    expect(parseCell("2.5", { value_type: "integer" }).error).toBe("Type a whole number.");
+    expect(parseCell("140", { value_type: "percent" }).error).toBe("A percentage is between 0 and 100.");
+    expect(parseCell("40", { value_type: "percent" })).toEqual({ value: 40, error: null });
+  });
+
+  it("saves a cell on top of the draft that's there", () => {
+    const i = item({ value: value({ value_numeric: 10, unit: "kL", comment: "meter 2" }) });
+    expect(gridDraft(i, 12, "kL")).toMatchObject({ value: 12, unit: "kL", comment: "meter 2" });
+    expect(gridDraft(item(), 5, "")).toMatchObject({ value: 5, unit: "m³" });
   });
 });

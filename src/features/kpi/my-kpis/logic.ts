@@ -180,3 +180,33 @@ export function defaultPeriod(today: Date): { year: number; month: number } {
 export function withValue(items: MyKpiItem[], key: string, value: KpiValue): MyKpiItem[] {
   return items.map((i) => (itemKey(i) === key ? { ...i, value, group: value.status === "rejected" ? "sent_back" : value.status === "draft" ? "due" : "done" } : i));
 }
+
+// ---------------------------------------------------------------------------
+// Table view (KPI-7 part 3): one row per to-do item, typed by keyboard
+// ---------------------------------------------------------------------------
+
+/** Value types the grid types into; the others ("Yes / No", text) open the card. */
+export const isGridNumeric = (i: Pick<MyKpiItem, "value_type">) => NUMERIC.has(i.value_type);
+
+/** What a grid cell shows from the saved value. */
+export const cellText = (i: MyKpiItem): string => (i.value?.value_numeric === null || i.value?.value_numeric === undefined ? "" : String(i.value.value_numeric));
+
+/**
+ * A typed cell, checked the way the card checks it: a number ("1,200" is
+ * fine), a whole number for counts, 0–100 for a percentage. Empty = no value.
+ */
+export function parseCell(raw: string, i: Pick<MyKpiItem, "value_type">): { value: number | null; error: string | null } {
+  const text = raw.trim().replace(/[\s,]/g, "");
+  if (!text) return { value: null, error: null };
+  const n = Number(text);
+  if (!Number.isFinite(n)) return { value: null, error: "Type a number, like 1200." };
+  if (i.value_type === "integer" && !Number.isInteger(n)) return { value: null, error: "Type a whole number." };
+  if (i.value_type === "percent" && (n < 0 || n > 100)) return { value: null, error: "A percentage is between 0 and 100." };
+  return { value: n, error: null };
+}
+
+/** The draft a grid cell saves: the item's saved draft with the new value and unit. */
+export const gridDraft = (i: MyKpiItem, value: number | null, unit: string): EntryDraft => ({ ...draftFromValue(i), value, unit: unit || i.canonical_unit || "" });
+
+/** "my-kpis-2026-09.xlsx" when the server sends no file name. */
+export const templateFileName = (period: string) => `my-kpis-${period}.xlsx`;

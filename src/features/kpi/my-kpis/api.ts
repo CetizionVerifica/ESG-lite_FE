@@ -3,8 +3,9 @@ import type { KpiTargetWithProgress, KpiValueInput, MyKpiItem, MyKpis } from "..
 import { ERROR_MESSAGE } from "../../../lib/kpi/labels";
 import { isKpiErrorCode } from "../../../lib/kpi/contracts";
 import { useKpiCompanyId } from "../../../lib/kpi/switch";
-import { getKpiTargets, getMyKpis, removeKpiEvidence, saveKpiValues, submitKpiValues, uploadKpiEvidence } from "../../../services/kpiService";
-import { withValue } from "./logic";
+import { commitMyTemplate, downloadMyTemplate, getKpiTargets, getMyKpis, planMyTemplate, removeKpiEvidence, saveKpiValues, submitKpiValues, uploadKpiEvidence } from "../../../services/kpiService";
+import { fileNameFrom, saveBlob } from "../../../ui";
+import { templateFileName, withValue } from "./logic";
 
 export { kpiErrorMessage } from "../../../services/kpiService";
 
@@ -72,4 +73,30 @@ export function useTargetsFor(): (item: Pick<MyKpiItem, "kpi_definition_id" | "s
     const mine = (q.data ?? []).filter((t) => t.kpi_definition_id === item.kpi_definition_id);
     return mine.find((t) => t.site_id === item.site_id) ?? mine.find((t) => t.site_id === null) ?? null;
   };
+}
+
+/** KPI-7 part 3: `GET /kpi/my/template` saved under the server's file name. */
+export function useDownloadTemplate() {
+  const companyId = useKpiCompanyId();
+  return useMutation({
+    mutationFn: async ({ period, siteId }: { period: string; siteId: number | null }) => {
+      const { blob, fileName } = await downloadMyTemplate(period, siteId, companyId);
+      const name = fileNameFrom(fileName, templateFileName(period));
+      saveBlob(blob, name);
+      return name;
+    },
+  });
+}
+
+/** `POST /kpi/my/template` (multipart): the plan; nothing is saved yet. */
+export function usePlanTemplate() {
+  const companyId = useKpiCompanyId();
+  return useMutation({ mutationFn: ({ file, period, siteId }: { file: File; period: string; siteId: number | null }) => planMyTemplate(file, period, siteId, companyId) });
+}
+
+/** `POST /kpi/my/template {plan_id, commit}`: the ready rows become drafts; the list reads them again. */
+export function useCommitTemplate() {
+  const qc = useQueryClient();
+  const companyId = useKpiCompanyId();
+  return useMutation({ mutationFn: (planId: string) => commitMyTemplate(planId, companyId), onSettled: () => qc.invalidateQueries({ queryKey: keys.all }) });
 }

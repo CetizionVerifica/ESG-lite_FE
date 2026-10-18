@@ -16,6 +16,7 @@
  * Bahrain plant) for `/kpi/my`, and every write is allowed.
  */
 import { http, HttpResponse } from "msw";
+import * as XLSX from "xlsx";
 import {
   type CustomKpiBody,
   FRAMEWORK_CODES,
@@ -120,6 +121,8 @@ const initialState = () => ({
   locks: [] as KpiPeriodLock[],
   targets: copy(KPI_TARGETS_SEED),
   invites: 0,
+  /** KPI-7 part 3: planned template uploads by plan id, until committed. */
+  plans: new Map<string, KpiValueInput[]>(),
   /** `kpi:site` pairs reminded today (KPI-10 remind, once a day). */
   reminded: new Set<string>(),
 });
@@ -681,6 +684,55 @@ function checkDefinition(row: KpiDefinition): Response | null {
 }
 
 // ---------------------------------------------------------------------------
+// KPI-7 part 3: the My KPIs template
+// ---------------------------------------------------------------------------
+
+/** Columns of the template sheet (assumed; the server's template is the source). */
+export const KPI_TEMPLATE_HEADERS = ["KPI code", "KPI", "Site", "Period start", "Unit", "Value", "Comment"] as const;
+
+/** One row per item the caller still has to enter (D17: only what they own). */
+function templateSheet(period: string): ArrayBuffer {
+  const rows = myKpis(period)
+    .items.filter((i) => i.source === "manual" && i.group !== "done")
+    .map((i) => [i.code, i.name, i.site_name ?? "Company", i.period_start, i.value?.unit ?? i.canonical_unit ?? "", i.value?.value_numeric ?? "", i.value?.comment ?? ""]);
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([[...KPI_TEMPLATE_HEADERS], ...rows]), "My KPIs");
+  return XLSX.write(book, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+}
+
+/** Plans a filled template like a bulk upload: a row per filled line, with the issue that keeps it out. */
+function planTemplate(buffer: ArrayBuffer, period: string) {
+  const book = XLSX.read(new Uint8Array(buffer), { type: "array" });
+  const sheet = book.Sheets[book.SheetNames[0]];
+  const lines = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false, defval: "" });
+  const head = (lines[0] ?? []).map((h) => String(h).trim().toLowerCase());
+  const col = (name: string) => head.indexOf(name.toLowerCase());
+  const items = myKpis(period).items;
+  const inputs: KpiValueInput[] = [];
+  const rows = lines.slice(1).flatMap((line, n) => {
+    const cell = (name: string) => String(line[col(name)] ?? "").trim();
+    const code = cell("KPI code");
+    const raw = cell("Value");
+    if (!code || raw === "") return [];
+    const site = cell("Site");
+    const item = items.find((i) => i.code === code && (i.site_name ?? "Company") === site);
+    const unit = cell("Unit") || item?.canonical_unit || null;
+    const value = Number(raw.replace(/,/g, ""));
+    let issue: { code: KpiErrorCode; message: string } | null = null;
+    if (!item) issue = { code: "KPI_NOT_ASSIGNED", message: "This KPI isn't yours to enter for this site and period." };
+    else if (item.group === "done") issue = { code: "KPI_NOT_DRAFT", message: "This value was already sent for review." };
+    else if (!Number.isFinite(value)) issue = { code: "KPI_VALUE_INVALID", message: "The value isn't a number." };
+    else if (item.value_type === "percent" && (value < 0 || value > 100)) issue = { code: "KPI_VALUE_INVALID", message: "A percentage is between 0 and 100." };
+    else if (unit && item.allowed_units.length && !item.allowed_units.includes(unit)) issue = { code: "KPI_UNIT_NOT_ALLOWED", message: `Use one of ${item.allowed_units.join(", ")}.` };
+    if (item && !issue) inputs.push({ kpi_definition_id: item.kpi_definition_id, site_id: item.site_id, period_start: item.period_start, frequency: item.frequency, value_numeric: value, unit, comment: cell("Comment") || item.value?.comment || null });
+    return [{ row: n + 2, kpi_definition_id: item?.kpi_definition_id ?? null, kpi_code: code, name: item?.name ?? cell("KPI"), site_id: item?.site_id ?? null, site_name: item?.site_name ?? site, period_start: item?.period_start ?? cell("Period start"), value: Number.isFinite(value) ? value : raw, unit, comment: cell("Comment") || null, issue }];
+  });
+  const plan_id = `plan-${state.plans.size + 1}`;
+  state.plans.set(plan_id, inputs);
+  return { plan_id, rows, counts: { ready: inputs.length, issues: rows.length - inputs.length } };
+}
+
+// ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
 
@@ -828,6 +880,39 @@ export const kpiHandlers = [
       const period = new URL(request.url).searchParams.get("period") ?? "2026-09";
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return badRequest("period is YYYY-MM.");
       return HttpResponse.json<MyKpis>(myKpis(period));
+    }),
+  ),
+
+  // KPI-7 part 3: the template (XLSX), its plan and the commit as drafts
+  http.get(
+    "*/kpi/my/template",
+    gated(({ request }) => {
+      const period = new URL(request.url).searchParams.get("period") ?? "2026-09";
+      return HttpResponse.arrayBuffer(templateSheet(period), {
+        headers: { "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "content-disposition": `attachment; filename="my-kpis-${period}.xlsx"` },
+      });
+    }),
+  ),
+  http.post(
+    "*/kpi/my/template",
+    gated(async ({ request }) => {
+      if ((request.headers.get("content-type") ?? "").includes("application/json")) {
+        const body = await json<{ plan_id: string; commit: boolean }>(request);
+        const inputs = state.plans.get(String(body.plan_id));
+        if (!inputs) return error("KPI_NOT_FOUND", "That upload has expired. Upload the file again.");
+        state.plans.delete(String(body.plan_id));
+        const saved = inputs.map((x, i) => upsert(x, i)).filter((r) => r.ok).length;
+        return HttpResponse.json({ saved });
+      }
+      const form = await request.formData();
+      const file = form.get("file");
+      if (!file || typeof file === "string") return badRequest("file is required.");
+      const period = String(form.get("period") ?? "2026-09");
+      try {
+        return HttpResponse.json({ plan: planTemplate(await (file as Blob).arrayBuffer(), period) });
+      } catch {
+        return error("KPI_VALIDATION", "That file isn't a spreadsheet we can read.");
+      }
     }),
   ),
 

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ClipboardCheck, PartyPopper, Send } from "lucide-react";
+import { ClipboardCheck, Download, PartyPopper, Send, Upload } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import type { MyKpiItem } from "../../../lib/kpi/contracts";
 import { KpiNotAvailable } from "../../../lib/kpi/KpiNotAvailable";
@@ -14,6 +14,7 @@ import {
   EmptyState,
   Modal,
   PageHeader,
+  SegmentedControl,
   SkeletonText,
   TabPanel,
   Tabs,
@@ -25,13 +26,16 @@ import {
   useContextParams,
   useToast,
 } from "../../../ui";
-import { keys, kpiErrorMessage, useMyKpis, useSubmitValues, useTargetsFor } from "./api";
+import { keys, kpiErrorMessage, useDownloadTemplate, useMyKpis, useSubmitValues, useTargetsFor } from "./api";
+import { TableView } from "./components/TableView";
+import { TemplateUpload } from "./components/TemplateUpload";
 import { EntryDrawer } from "./components/EntryDrawer";
 import { KpiRow } from "./components/KpiRow";
 import { defaultPeriod, groupItems, itemKey, nextDueDate, progressOf, readyToSubmit, submitQuestion, topicChips, topicFilter, topicGroups, workOrder } from "./logic";
 import { useKpiCompanyId } from "../../../lib/kpi/switch";
 
 type Tab = "due" | "sent_back" | "done";
+type View = "list" | "table";
 type SiteLike = { site_id: number; name?: string | null };
 
 const isoToday = () => {
@@ -103,6 +107,11 @@ export default function MyKpisPage() {
       { replace: true },
     );
   const tab: Tab = params.get("tab") === "sent_back" || params.get("tab") === "done" ? (params.get("tab") as Tab) : "due";
+  // KPI-7 part 3: the fast lane, a keyboard table of what's still to enter (`?view=table`).
+  const view: View = params.get("view") === "table" ? "table" : "list";
+  const todo = workOrder(shown);
+  const download = useDownloadTemplate();
+  const [uploading, setUploading] = useState(false);
   const openKey = params.get("entry");
   const open = openKey ? (items.find((i) => itemKey(i) === openKey) ?? null) : null;
   const at = openKey ? order.indexOf(openKey) : -1;
@@ -279,24 +288,60 @@ export default function MyKpisPage() {
             </div>
           )}
 
-          <div className="space-y-0">
-            <Tabs<Tab>
-              label="My KPIs"
-              idBase="my-kpis"
-              value={tab}
-              onChange={(t) => setParam("tab", t === "due" ? null : t)}
-              items={[
-                { value: "due", label: "Due", count: groups.due.length + groups.sentBack.length },
-                { value: "sent_back", label: "Sent back", count: groups.sentBack.length },
-                { value: "done", label: "Done", count: groups.done.length + groups.filled.length },
-              ]}
-            />
-            {(["due", "sent_back", "done"] as Tab[]).map((t) => (
-              <TabPanel key={t} idBase="my-kpis" value={t} current={tab}>
-                <section className={cn(panel, "mt-3 overflow-hidden")}>{tabBody(t)}</section>
-              </TabPanel>
-            ))}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SegmentedControl<View> label="Show as" size="sm" value={view} onChange={(v) => setParam("view", v === "table" ? "table" : null)} options={[{ value: "list", label: "List" }, { value: "table", label: "Table" }]} />
+            {view === "table" && (
+              <span className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={download.isPending}
+                  onClick={() =>
+                    download.mutate(
+                      { period: periodKey, siteId },
+                      { onSuccess: (name) => toast({ title: `Downloaded ${name}`, description: "Fill in the Value column, then upload it here." }), onError: (e) => toast({ title: "Couldn't download the template", description: kpiErrorMessage(e, "Try again in a moment."), tone: "bad" }) },
+                    )
+                  }
+                >
+                  <Download aria-hidden className="size-4" />
+                  Download template
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setUploading(true)}>
+                  <Upload aria-hidden className="size-4" />
+                  Upload filled template
+                </Button>
+              </span>
+            )}
           </div>
+
+          {view === "table" ? (
+            todo.length ? (
+              <TableView items={todo} listKey={listKey} showSite={multiSite} onOpen={openEntry} />
+            ) : (
+              <section className={panel}>
+                <EmptyState icon={PartyPopper} title="Nothing due. You're all caught up." compact />
+              </section>
+            )
+          ) : (
+          <div className="space-y-0">
+              <Tabs<Tab>
+                label="My KPIs"
+                idBase="my-kpis"
+                value={tab}
+                onChange={(t) => setParam("tab", t === "due" ? null : t)}
+                items={[
+                  { value: "due", label: "Due", count: groups.due.length + groups.sentBack.length },
+                  { value: "sent_back", label: "Sent back", count: groups.sentBack.length },
+                  { value: "done", label: "Done", count: groups.done.length + groups.filled.length },
+                ]}
+              />
+              {(["due", "sent_back", "done"] as Tab[]).map((t) => (
+                <TabPanel key={t} idBase="my-kpis" value={t} current={tab}>
+                  <section className={cn(panel, "mt-3 overflow-hidden")}>{tabBody(t)}</section>
+                </TabPanel>
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -318,6 +363,17 @@ export default function MyKpisPage() {
           }}
         />
       )}
+
+      <TemplateUpload
+        open={uploading}
+        period={periodKey}
+        siteId={siteId}
+        onClose={() => setUploading(false)}
+        onSaved={(n) => {
+          setUploading(false);
+          toast({ title: n ? `${n} ${n === 1 ? "draft" : "drafts"} saved from the template.` : "Nothing was saved.", description: n ? "Check them, then send them with Submit." : undefined, tone: n ? "good" : undefined });
+        }}
+      />
 
       <Modal
         open={confirming}

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { setupServer } from "msw/node";
+import * as XLSX from "xlsx";
 import {
   AUTO_SOURCE_KEYS,
   ESRS_TOPICS,
@@ -340,5 +341,29 @@ describe("KPI mock handlers: behaviour", () => {
     expect(o.readiness.map((r) => `${r.framework} ${r.percent}`)).toEqual(["GRI 82", "BRSR 74", "ESRS 68"]);
     expect(o.due).toEqual({ due: 4, sent_back: 1, done: 3 });
     expect(o.period).toBe("2026-09");
+  });
+
+  it("KPI-7 part 3: the template lists only what's to enter, plans a filled copy with issues, and commits drafts", async () => {
+    const res = await fetch(`${API}/kpi/my/template?period=2026-09`);
+    expect(res.headers.get("content-disposition")).toContain("my-kpis-2026-09.xlsx");
+    const book = XLSX.read(new Uint8Array(await res.arrayBuffer()), { type: "array" });
+    const lines = XLSX.utils.sheet_to_json<string[]>(book.Sheets[book.SheetNames[0]], { header: 1 });
+    expect(lines[0]).toEqual(["KPI code", "KPI", "Site", "Period start", "Unit", "Value", "Comment"]);
+    const codes = lines.slice(1).map((l) => l[0]);
+    expect(codes).toContain("WASTE_GENERATED");
+    expect(codes).not.toContain("FATALITIES");
+    const fill = [lines[0], ["WASTE_GENERATED", "", "Bahrain plant", "2026-09-01", "t", "11", ""], ["AIR_NOX", "", "Bahrain plant", "2026-07-01", "kg", "1700", ""], ["FATALITIES", "", "Bahrain plant", "2026-09-01", "", "0", ""]];
+    const out = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(out, XLSX.utils.aoa_to_sheet(fill), "My KPIs");
+    const form = new FormData();
+    form.append("file", new Blob([XLSX.write(out, { type: "array", bookType: "xlsx" }) as ArrayBuffer]), "filled.xlsx");
+    form.append("period", "2026-09");
+    const plan = ((await (await fetch(`${API}/kpi/my/template`, { method: "POST", body: form })).json()) as { plan: { plan_id: string; rows: { kpi_code: string; issue: { code: string } | null }[]; counts: { ready: number; issues: number } } }).plan;
+    expect(plan.counts).toEqual({ ready: 2, issues: 1 });
+    expect(plan.rows.find((r) => r.kpi_code === "FATALITIES")?.issue?.code).toBe("KPI_NOT_ASSIGNED");
+    const commit = (await (await send("POST", "/kpi/my/template", { plan_id: plan.plan_id, commit: true })).json()) as { saved: number };
+    expect(commit.saved).toBe(2);
+    const waste = (await get<{ items: { code: string; value: { status: string; value_numeric: number } | null }[] }>("/kpi/my?period=2026-09")).items.find((i) => i.code === "WASTE_GENERATED");
+    expect(waste?.value).toMatchObject({ status: "draft", value_numeric: 11 });
   });
 });

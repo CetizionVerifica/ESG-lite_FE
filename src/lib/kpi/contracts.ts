@@ -781,6 +781,35 @@ export interface KpiReportOmission {
   esrs_topic?: EsrsTopic | null;
 }
 
+/** One row of a planned My KPIs template (`POST /kpi/my/template`, KPI-7 part 3). Assumed shape. */
+export interface KpiTemplateRow {
+  /** The sheet's row number, as the person sees it in Excel. */
+  row: number;
+  kpi_definition_id: number | null;
+  kpi_code: string | null;
+  name: string | null;
+  site_id: number | null;
+  site_name: string | null;
+  period_start: string | null;
+  value: number | string | null;
+  unit: string | null;
+  comment: string | null;
+  /** Why the row won't be saved; null = it will be saved as a draft. */
+  issue: { code: string; message: string } | null;
+}
+
+/** `POST /kpi/my/template` (multipart `file`, `period`, `site`): the plan, nothing saved yet. Assumed shape `{plan}`. */
+export interface KpiTemplatePlan {
+  plan_id: string;
+  rows: KpiTemplateRow[];
+  counts: { ready: number; issues: number };
+}
+
+/** `POST /kpi/my/template {plan_id, commit: true}`: the ready rows saved as drafts. Assumed shape. */
+export interface KpiTemplateCommitResult {
+  saved: number;
+}
+
 /** `GET /kpi/overview` (KPI-10 wave D): the Overview page's two tiles, for the caller's scope. */
 export interface KpiOverview {
   readiness: { framework: FrameworkCode; version: string | null; percent: number | null }[];

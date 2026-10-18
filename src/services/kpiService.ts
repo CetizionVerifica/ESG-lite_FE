@@ -19,6 +19,9 @@ import {
   type KpiTargetWithProgress,
   type KpiPersonTopics,
   type KpiOverview,
+  type KpiTemplateCommitResult,
+  type KpiTemplatePlan,
+  type KpiTemplateRow,
   type KpiTopic,
   type KpiTopicMove,
   KPI_TOPICS,
@@ -248,6 +251,54 @@ function readMyItem(raw: Loose): MyKpiItem {
 export function groupOf(value: Pick<KpiValue, "status"> | null): MyKpiItem["group"] {
   if (!value || value.status === "draft") return "due";
   return value.status === "rejected" ? "sent_back" : "done";
+}
+
+// KPI-7 part 3: the My KPIs template (rows are only what the caller owns, D17)
+const myParams = (period: string, siteId: number | null | undefined, companyId: number | null | undefined) => ({ period, ...(siteId ? { site: siteId } : {}), ...companyParams(companyId) });
+/** `GET /kpi/my/template?period=&site=` → XLSX, saved under the server's file name. */
+export async function downloadMyTemplate(period: string, siteId?: number | null, companyId?: number | null): Promise<{ blob: Blob; fileName: string | null }> {
+  try {
+    const res = await api.get<Blob>("/kpi/my/template", { params: myParams(period, siteId, companyId), responseType: "blob" });
+    const disposition = (res.headers as Record<string, unknown> | undefined)?.["content-disposition"];
+    return { blob: res.data, fileName: typeof disposition === "string" ? disposition : null };
+  } catch (e) {
+    throw await blobError(e);
+  }
+}
+function readTemplateRow(r: Loose, i: number): KpiTemplateRow {
+  const issue = obj(r.issue);
+  const code = pick<unknown>(issue.code, r.issue_code, r.code_issue);
+  const message = pick<unknown>(issue.message, r.issue_message, typeof r.issue === "string" ? r.issue : undefined);
+  return {
+    row: Number(pick(r.row, r.row_number, i + 2)),
+    kpi_definition_id: (pick(r.kpi_definition_id, null) as number | null) ?? null,
+    kpi_code: (pick(r.kpi_code, r.code, null) as string | null) ?? null,
+    name: (pick(r.name, r.kpi_name, null) as string | null) ?? null,
+    site_id: (pick(r.site_id, null) as number | null) ?? null,
+    site_name: (pick(r.site_name, null) as string | null) ?? null,
+    period_start: (pick(r.period_start, null) as string | null) ?? null,
+    value: (pick(r.value, r.value_numeric, r.value_text, null) as number | string | null) ?? null,
+    unit: (pick(r.unit, null) as string | null) ?? null,
+    comment: (pick(r.comment, null) as string | null) ?? null,
+    issue: code || message ? { code: String(code ?? ""), message: typeof message === "string" && message.trim() ? message : isKpiErrorCode(code) ? ERROR_MESSAGE[code] : "This row can't be saved." } : null,
+  };
+}
+/** `POST /kpi/my/template` (multipart): plans the filled template like a bulk upload; answers `{plan}` (a bare plan is read too). */
+export async function planMyTemplate(file: File, period: string, siteId?: number | null, companyId?: number | null): Promise<KpiTemplatePlan> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("period", period);
+  if (siteId) form.append("site", String(siteId));
+  const root = obj(asRow<unknown>((await api.post("/kpi/my/template", form, { params: companyParams(companyId) })).data, "plan"));
+  const rows = asList<Loose>(root, "rows").map(readTemplateRow);
+  const c = obj(root.counts);
+  const ready = rows.filter((r) => !r.issue).length;
+  return { plan_id: String(root.plan_id ?? ""), rows, counts: { ready: typeof c.ready === "number" ? c.ready : ready, issues: typeof c.issues === "number" ? c.issues : rows.length - ready } };
+}
+/** `POST /kpi/my/template {plan_id, commit: true}`: the ready rows become drafts. */
+export async function commitMyTemplate(planId: string, companyId?: number | null): Promise<KpiTemplateCommitResult> {
+  const data = obj((await api.post("/kpi/my/template", { plan_id: planId, commit: true }, { params: companyParams(companyId) })).data);
+  return { saved: Number(pick(data.saved, data.committed, 0)) || 0 };
 }
 
 // KPI-4 / KPI-7: values
