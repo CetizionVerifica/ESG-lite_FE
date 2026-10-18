@@ -5,7 +5,7 @@ import { periodText } from "../../../../lib/kpi/entry";
 import { kpiErrorMessage, useCommitTemplate, usePlanTemplate } from "../api";
 
 type Shown = "all" | "issues";
-const ACCEPT = [".xlsx", ".xls", ".csv"];
+const ACCEPT = [".xlsx"];
 const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
 
 /**
@@ -110,7 +110,7 @@ export function TemplateUpload({ open, period, siteId, onClose, onSaved }: { ope
           <>
             <FileDrop
               label="Filled template"
-              help="The sheet from Download template, with the Value column filled in. .xlsx, .xls or .csv."
+              help="The sheet from Download template, with the Value column filled in, saved as .xlsx."
               accept={ACCEPT}
               maxSize={10 * 1024 * 1024}
               multiple={false}

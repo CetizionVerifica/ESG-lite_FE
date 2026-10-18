@@ -1012,6 +1012,7 @@ export const KPI_ERROR_STATUS = {
   KPI_NOT_PENDING: 409,
   KPI_NOT_READY: 409,
   KPI_SELF_REVIEW: 403,
+  KPI_NOT_YOUR_REVIEW: 403,
 } as const;
 export type KpiErrorCode = keyof typeof KPI_ERROR_STATUS;
 export const KPI_ERROR_CODES = Object.keys(KPI_ERROR_STATUS) as KpiErrorCode[];
