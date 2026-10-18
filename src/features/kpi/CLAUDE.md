@@ -52,3 +52,9 @@ Module layout per `src/features/README.md`: `Page.tsx`, `components/`, `hooks/`,
    - a Playwright check of its main path;
    - a Playwright check that the page is hidden when the switch is off;
    - MSW handlers updated with its endpoints.
+
+## Wave D (plans/kpi/wave-d.md, binding)
+- **D17 topics:** setup step 4 is `setup/components/TopicOwnersStep.tsx` (By topic grid + Exceptions); owners resolve as the server's `resolveOwner` (`setup/logic.ts`). The users drawers use `src/lib/kpi/KpiTopicsField.tsx` (`PUT /kpi/people/:id/topics`, moved-from notes via `personTopics.ts`). My KPIs groups rows by topic (`?topic=`).
+- **D18 Superadmin:** KPI nav group, `/data/approvals` (KPIs tab only, `approvals-ledger/components/StaffKpiApprovals.tsx`), `/kpi/targets`; no client → `KpiChooseClient` with the shell's picker (`lib/kpi/clientPicker.ts`). Reviewers are `canReviewKpis` (Manager, Superadmin).
+- **KPI-7 part 3:** `my-kpis/components/TableView.tsx` (`?view=table`) and `TemplateUpload.tsx` (`GET`/`POST /kpi/my/template`).
+- **KPI-12:** `src/lib/kpi/ai.ts` reads both AI answers; `my-kpis/components/AiFillPanel.tsx` and the chips in `KpiQuestionCard`. Suggest only: Use fills the input; AI down is a calm note.
