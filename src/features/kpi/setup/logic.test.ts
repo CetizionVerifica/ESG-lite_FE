@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { KpiSetup, KpiSetupPerson } from "../../../lib/kpi/contracts";
 import { KPI_DEFINITIONS, KPI_DISCLOSURES, KPI_FRAMEWORKS, KPI_MAPPINGS, kpiByCode } from "../../../test/msw/kpiData";
 import {
-  applyToAllSites,
-  assignmentsPayload,
   cellKey,
   codesOf,
   countSelected,
@@ -11,13 +9,22 @@ import {
   initialChoices,
   initialFrameworkIds,
   initialMaterial,
-  initialOwners,
+  initialOverrides,
+  initialTopicOwners,
   kpisPayload,
   materialErrors,
   materialPayload,
   missingReasons,
+  overridesPayload,
   recommendationFor,
+  resolveOwner,
   resumeStep,
+  sameForEverySite,
+  topicAssignmentsPayload,
+  topicGrid,
+  topicKey,
+  unownedTopicSlots,
+  differsFromTopic,
   toggleFramework,
   unitShape,
   usesFor,
@@ -106,30 +113,91 @@ describe("KPI setup: KPIs", () => {
   });
 });
 
-describe("KPI setup: owners", () => {
+describe("KPI setup: owners by topic (D17)", () => {
   const water = kpiByCode("WATER_WITHDRAWAL");
+  const discharge = kpiByCode("WATER_DISCHARGE");
   const revenue = kpiByCode("REVENUE");
+  const injuries = kpiByCode("RECORDABLE_INJURIES");
 
-  it("defaults site KPIs to the site's data-entry user and company KPIs to an Admin", () => {
+  it("builds a topics × sites grid with a Company column, counting KPIs per slot", () => {
+    const grid = topicGrid([water, discharge, revenue, injuries], SITES);
+    expect(grid.topics).toEqual(["water", "health_safety", "governance"]);
+    expect(grid.company).toBe(true);
+    expect(grid.cells.get(topicKey("water", 1))).toEqual([water.id, discharge.id]);
+    expect(grid.cells.get(topicKey("governance", null))).toEqual([revenue.id]);
+    expect(grid.cells.has(topicKey("governance", 1))).toBe(false);
+  });
+
+  it("starts from what's saved, then the server's suggestion, then the site's first User or an Admin", () => {
     expect(defaultOwner(1, PEOPLE)).toBe(11);
     expect(defaultOwner(2, PEOPLE)).toBe(12);
     expect(defaultOwner(null, PEOPLE)).toBe(13);
-    const owners = initialOwners(fresh, [water, revenue], SITES, PEOPLE);
-    expect([...owners]).toEqual([
-      [cellKey(water.id, 1), 11],
-      [cellKey(water.id, 2), 12],
-      [cellKey(revenue.id, null), 13],
+    const grid = topicGrid([water, revenue], SITES);
+    expect([...initialTopicOwners(fresh, grid, PEOPLE)]).toEqual([
+      [topicKey("water", 1), 11],
+      [topicKey("water", 2), 12],
+      [topicKey("governance", null), 13],
     ]);
+    const setup: KpiSetup = {
+      ...fresh,
+      topic_assignments: [{ id: 1, site_id: 1, topic: "water", owner_user_id: 12, reviewer_user_id: null }],
+      // A suggestion for someone who doesn't work at the site is ignored.
+      suggested_topic_assignments: [{ site_id: 2, topic: "water", owner_user_id: 11, reviewer_user_id: null }],
+    };
+    expect(initialTopicOwners(setup, grid, PEOPLE).get(topicKey("water", 1))).toBe(12);
+    expect(initialTopicOwners(setup, grid, PEOPLE).get(topicKey("water", 2))).toBe(12);
   });
 
-  it("applies one person to every site they work at", () => {
-    const owners = initialOwners(fresh, [water], SITES, PEOPLE);
-    expect(applyToAllSites(owners, water.id, 12, SITES, PEOPLE).skipped).toEqual([]);
-    const ravi = applyToAllSites(owners, water.id, 11, SITES, PEOPLE);
+  it("resolves an owner as the server does: the exception, else the topic's person", () => {
+    const owners = new Map([[topicKey("water", 1), 11]]);
+    const overrides = new Map([[cellKey(discharge.id, 1), 12]]);
+    expect(resolveOwner(water, 1, overrides, owners)).toBe(11);
+    expect(resolveOwner(discharge, 1, overrides, owners)).toBe(12);
+    expect(resolveOwner(water, 2, overrides, owners)).toBeNull();
+    expect(differsFromTopic(discharge, 1, 12, owners)).toBe(true);
+    expect(differsFromTopic(discharge, 1, 11, owners)).toBe(false);
+  });
+
+  it("fills a row with the same person where they work, and names the other sites", () => {
+    const grid = topicGrid([water, revenue], SITES);
+    const owners = initialTopicOwners(fresh, grid, PEOPLE);
+    expect(sameForEverySite(owners, "water", 12, SITES, PEOPLE).skipped).toEqual([]);
+    const ravi = sameForEverySite(owners, "water", 11, SITES, PEOPLE);
     expect(ravi.skipped).toEqual(["Dammam"]);
-    expect(assignmentsPayload(ravi.owners)).toEqual([
-      { kpi_definition_id: water.id, site_id: 1, owner_user_id: 11, reviewer_user_id: null },
-      { kpi_definition_id: water.id, site_id: 2, owner_user_id: 12, reviewer_user_id: null },
+    expect(ravi.owners.get(topicKey("governance", null))).toBe(13);
+  });
+
+  it("asks for an owner only where a KPI would be left with nobody", () => {
+    const grid = topicGrid([water, discharge], SITES);
+    const owners = new Map<string, number | null>([
+      [topicKey("water", 1), null],
+      [topicKey("water", 2), 12],
     ]);
+    expect(unownedTopicSlots(grid, owners, new Map())).toEqual([topicKey("water", 1)]);
+    const both = new Map<string, number | null>([
+      [cellKey(water.id, 1), 12],
+      [cellKey(discharge.id, 1), 12],
+    ]);
+    expect(unownedTopicSlots(grid, owners, both)).toEqual([]);
+  });
+
+  it("saves the whole set of topic owners, keeps saved slots off the grid, and only real exceptions", () => {
+    const setup: KpiSetup = { ...fresh, topic_assignments: [{ id: 4, site_id: 1, topic: "biodiversity", owner_user_id: 11, reviewer_user_id: 12 }] };
+    const owners = new Map<string, number | null>([
+      [topicKey("water", 1), 11],
+      [topicKey("water", 2), null],
+    ]);
+    expect(topicAssignmentsPayload(owners, setup)).toEqual([
+      { site_id: 1, topic: "water", owner_user_id: 11, reviewer_user_id: null },
+      { site_id: 1, topic: "biodiversity", owner_user_id: 11, reviewer_user_id: 12 },
+    ]);
+    const overrides = initialOverrides({
+      ...fresh,
+      assignments: [
+        { company_id: 1, kpi_definition_id: water.id, site_id: 1, owner_user_id: 11, reviewer_user_id: null },
+        { company_id: 1, kpi_definition_id: discharge.id, site_id: 1, owner_user_id: 12, reviewer_user_id: null },
+      ],
+    });
+    expect(overridesPayload(overrides, owners, [water, discharge])).toEqual([{ kpi_definition_id: discharge.id, site_id: 1, owner_user_id: 12, reviewer_user_id: null }]);
   });
 });

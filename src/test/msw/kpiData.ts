@@ -19,11 +19,13 @@ import type {
   KpiDisclosureMap,
   KpiFramework,
   KpiTargetWithProgress,
+  KpiTopicAssignment,
   KpiValue,
   KpiValueEvidence,
   MappingFit,
   RequirementLevel,
 } from "../../lib/kpi/contracts";
+import { KPI_TOPICS } from "../../lib/kpi/contracts";
 
 export const ACME = { company_id: 1, name: "ACME" } as const;
 
@@ -330,18 +332,30 @@ export const RAVI_KPI_CODES = [
 
 const SITE_OWNER: Record<number, number> = { 1: 11, 2: 14, 3: 15 };
 
-export const ACME_ASSIGNMENTS: KpiAssignment[] = KPI_DEFINITIONS.filter((d) => d.source !== "formula" && d.code !== "AIR_PM").flatMap<KpiAssignment>((d) =>
-  d.level === "company"
-    ? [{ company_id: ACME.company_id, kpi_definition_id: d.id, site_id: null, owner_user_id: 13, reviewer_user_id: 12 }]
-    : KPI_SITES.map((s) => ({
-        company_id: ACME.company_id,
-        kpi_definition_id: d.id,
-        site_id: s.site_id,
-        // At Bahrain plant Ravi owns his twelve; the rest go to the site's manager.
-        owner_user_id: s.site_id === 1 && !(RAVI_KPI_CODES as readonly string[]).includes(d.code) ? 12 : SITE_OWNER[s.site_id],
-        reviewer_user_id: null,
-      })),
-);
+/**
+ * D17 · Who owns each topic: every site topic goes to the site's contributor
+ * (materials at Bahrain plant to Mia), every company topic to Omar.
+ */
+export const ACME_TOPIC_ASSIGNMENTS: KpiTopicAssignment[] = (() => {
+  const owned = KPI_DEFINITIONS.filter((d) => d.source !== "formula" && d.code !== "AIR_PM");
+  const rows: KpiTopicAssignment[] = [];
+  for (const topic of KPI_TOPICS) {
+    const defs = owned.filter((d) => d.topic === topic);
+    if (defs.some((d) => d.level === "site"))
+      for (const s of KPI_SITES) rows.push({ id: rows.length + 1, site_id: s.site_id, topic, owner_user_id: s.site_id === 1 && topic === "materials" ? 12 : SITE_OWNER[s.site_id], reviewer_user_id: null });
+    if (defs.some((d) => d.level === "company")) rows.push({ id: rows.length + 1, site_id: null, topic, owner_user_id: 13, reviewer_user_id: 12 });
+  }
+  return rows;
+})();
+
+/** D17 · Per-KPI exceptions: at Bahrain plant these go to Mia, so Ravi owns exactly his twelve. */
+export const ACME_ASSIGNMENTS: KpiAssignment[] = ["GHG_SCOPE2_MB", "ENERGY_NON_RENEWABLE", "LTIFR", "FATALITIES"].map((code) => ({
+  company_id: ACME.company_id,
+  kpi_definition_id: kpiByCode(code).id,
+  site_id: 1,
+  owner_user_id: 12,
+  reviewer_user_id: null,
+}));
 
 // ---------------------------------------------------------------------------
 // Values (KPI-4): September 2026, plus last September for comparison

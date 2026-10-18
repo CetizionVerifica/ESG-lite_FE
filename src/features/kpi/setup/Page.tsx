@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, CheckCircle2, Send } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
-import { ESRS_TOPICS, type KpiCatalogue, type KpiDefinition, type KpiSetup } from "../../../lib/kpi/contracts";
+import { ESRS_TOPICS, type KpiCatalogue, type KpiDefinition, type KpiSetup, type KpiTopic } from "../../../lib/kpi/contracts";
 import { KpiNotAvailable } from "../../../lib/kpi/KpiNotAvailable";
 import { FRAMEWORK_LABEL, ESRS_TOPIC_LABEL } from "../../../lib/kpi/labels";
 import { isKpiTrackingOff } from "../../../lib/kpi/switch";
@@ -12,29 +12,32 @@ import { CustomKpiDrawer } from "./components/CustomKpiDrawer";
 import { FrameworksStep, type YearSettings } from "./components/FrameworksStep";
 import { KpisStep } from "./components/KpisStep";
 import { MaterialityStep } from "./components/MaterialityStep";
-import { OwnersStep } from "./components/OwnersStep";
+import { TopicOwnersStep } from "./components/TopicOwnersStep";
 import {
   type KpiChoice,
   type MaterialState,
   STEPS,
   type StepId,
-  applyToAllSites,
-  assignmentsPayload,
   codesOf,
   countSelected,
   initialChoices,
   initialFrameworkIds,
   initialMaterial,
-  initialOwners,
+  initialOverrides,
+  initialTopicOwners,
   isStep,
   kpisPayload,
   materialErrors,
   materialPayload,
   missingReasons,
+  overridesPayload,
   ownedKpis,
   recommendationFor,
   resumeStep,
-  unownedCells,
+  sameForEverySite,
+  topicAssignmentsPayload,
+  topicGrid,
+  unownedTopicSlots,
   usesFor,
 } from "./logic";
 
@@ -93,6 +96,7 @@ function Wizard({ setup, catalogue }: { setup: KpiSetup; catalogue: KpiCatalogue
   const [material, setMaterial] = useState<MaterialState>(() => initialMaterial(setup));
   const [choiceEdits, setChoiceEdits] = useState<Map<number, KpiChoice>>(new Map());
   const [ownerEdits, setOwnerEdits] = useState<Map<string, number | null>>(new Map());
+  const [overrideEdits, setOverrideEdits] = useState<Map<string, number | null> | null>(null);
   const [addOwn, setAddOwn] = useState(false);
   const [finished, setFinished] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -133,16 +137,20 @@ function Wizard({ setup, catalogue }: { setup: KpiSetup; catalogue: KpiCatalogue
   const owned = useMemo(() => ownedKpis(defs, choices), [defs, choices]);
   const sites = useMemo(() => people.data?.sites ?? [], [people.data]);
   const persons = useMemo(() => people.data?.people ?? [], [people.data]);
+  // D17: one person per topic and site; per-KPI exceptions win over them.
+  const grid = useMemo(() => topicGrid(owned, sites), [owned, sites]);
   const owners = useMemo(() => {
-    const m = initialOwners(setup, owned, sites, persons);
+    const m = initialTopicOwners(setup, grid, persons);
     for (const [k, v] of ownerEdits) if (m.has(k)) m.set(k, v);
     return m;
-  }, [setup, owned, sites, persons, ownerEdits]);
+  }, [setup, grid, persons, ownerEdits]);
+  const savedOverrides = useMemo(() => initialOverrides(setup), [setup]);
+  const overrides = overrideEdits ?? savedOverrides;
 
   const counts = countSelected(defs, choices);
   const topicErrors = tried === "topics" ? materialErrors(material) : null;
   const reasonsMissing = tried === "kpis" ? missingReasons(choices, rec.ids) : null;
-  const ownersMissing = tried === "owners" ? unownedCells(owners) : null;
+  const ownersMissing = tried === "owners" ? unownedTopicSlots(grid, owners, overrides) : null;
 
   const materialNames = ESRS_TOPICS.filter((t) => material[t].material).map((t) => ESRS_TOPIC_LABEL[t].toLowerCase());
   const context = [
@@ -197,11 +205,13 @@ function Wizard({ setup, catalogue }: { setup: KpiSetup; catalogue: KpiCatalogue
       }
       return run({ kpis: kpisPayload(choices, rec.ids) }, "KPIs saved.");
     }
-    if (unownedCells(owners).length) {
-      setProblem("Choose who enters each KPI.");
+    if (unownedTopicSlots(grid, owners, overrides).length) {
+      setProblem("Choose who enters each topic.");
       return false;
     }
-    return run({ assignments: assignmentsPayload(owners), settings: { complete: true } }, "Owners saved.");
+    const saved = await run({ topic_assignments: topicAssignmentsPayload(owners, setup), assignments: overridesPayload(overrides, owners, owned), settings: { complete: true } }, "Owners saved.");
+    if (saved) setOverrideEdits(null);
+    return saved;
   };
 
   const nextOf = (s: StepId): StepId | null => {
@@ -231,16 +241,20 @@ function Wizard({ setup, catalogue }: { setup: KpiSetup; catalogue: KpiCatalogue
     }
   };
 
-  const applyAll = (kpiId: number) => {
-    const first = sites[0] ? owners.get(`${kpiId}:${sites[0].site_id}`) : null;
+  const sameForAll = (topic: KpiTopic) => {
+    const firstSite = sites.find((s) => owners.has(`${topic}:${s.site_id}`));
+    const first = firstSite ? owners.get(`${topic}:${firstSite.site_id}`) : null;
     if (!first) {
       toast({ title: "Choose a person for the first site first." });
       return;
     }
-    const res = applyToAllSites(owners, kpiId, first, sites, persons);
+    const res = sameForEverySite(owners, topic, first, sites, persons);
     setOwnerEdits((m) => {
       const nx = new Map(m);
-      for (const s of sites) nx.set(`${kpiId}:${s.site_id}`, res.owners.get(`${kpiId}:${s.site_id}`) ?? null);
+      for (const s of sites) {
+        const key = `${topic}:${s.site_id}`;
+        if (res.owners.has(key)) nx.set(key, res.owners.get(key) ?? null);
+      }
       return nx;
     });
     const who = persons.find((p) => p.user_id === first)?.name ?? "They";
@@ -272,7 +286,18 @@ function Wizard({ setup, catalogue }: { setup: KpiSetup; catalogue: KpiCatalogue
     if (people.error) return <EmptyState variant="error" title={kpiErrorMessage(people.error, "Couldn't load your sites and people.")} action={<Button onClick={() => void people.refetch()}>Try again</Button>} />;
     if (!sites.length && owned.some((d) => d.level === "site")) return <EmptyState title="Add a site first." description="Site KPIs are entered per site. Add your sites under Sites, then come back." />;
     return (
-      <OwnersStep defs={owned} sites={sites} people={persons} owners={owners} onOwner={(k, v) => setOwnerEdits((m) => new Map(m).set(k, v))} onApplyAll={applyAll} missing={ownersMissing} />
+      <TopicOwnersStep
+        defs={owned}
+        sites={sites}
+        people={persons}
+        grid={grid}
+        owners={owners}
+        onOwner={(k, v) => setOwnerEdits((m) => new Map(m).set(k, v))}
+        onSameForEverySite={sameForAll}
+        overrides={overrides}
+        onOverrides={setOverrideEdits}
+        missing={ownersMissing}
+      />
     );
   };
 

@@ -225,7 +225,55 @@ export interface KpiAssignment {
   reviewer_user_id: number | null;
 }
 
-/** `kpi_topic_grant`: empty for a user = every topic of their sites. */
+/**
+ * `kpi_topic_assignment` (D17, wave D): per site (null = the company level)
+ * each topic has one owner; the reviewer is optional (null = the site's
+ * Managers). A `kpi_assignment` row for a KPI × site overrides it.
+ */
+export interface KpiTopicAssignment {
+  id?: number;
+  site_id: number | null;
+  topic: KpiTopic;
+  /** Null in a `PUT /kpi/setup` row removes the slot. */
+  owner_user_id: number | null;
+  reviewer_user_id: number | null;
+}
+
+/** `GET /kpi/setup` `topics_in_use` (D17): topics of the selected KPIs, in `KPI_TOPICS` order. */
+export interface KpiTopicInUse {
+  topic: KpiTopic;
+  kpi_count: number;
+}
+
+/** `GET /kpi/people/:user_id/topics` (D17): the topics a person owns, overall and per site. */
+export interface KpiPersonTopics {
+  topics: KpiTopic[];
+  by_site: { site_id: number | null; site_name: string | null; topics: KpiTopic[] }[];
+}
+
+/** `PUT /kpi/people/:user_id/topics` body (D17). `site_ids` left out = all of the person's sites. */
+export interface PutKpiPersonTopicsBody {
+  topics: KpiTopic[];
+  site_ids?: number[];
+}
+
+/** One slot that changed hands: "Water at Noida moved from Ravi to Priya". */
+export interface KpiTopicMove {
+  site_id: number | null;
+  site_name: string | null;
+  topic: KpiTopic;
+  from_user_id: number | null;
+  from_name: string | null;
+}
+
+/** `PUT /kpi/people/:user_id/topics` answer (D17). */
+export interface PutKpiPersonTopicsResult {
+  topics: KpiTopic[];
+  site_ids: number[];
+  moved: KpiTopicMove[];
+}
+
+/** `kpi_topic_grant` (wave B): no longer read since D17; topics come from topic assignments. */
 export interface KpiTopicGrant {
   user_id: number;
   topic: KpiTopic;
@@ -374,6 +422,12 @@ export interface KpiSetup {
   /** Assumed (KPI-3 FE): the company's sites and people for the owners step, so a Superadmin needs no other endpoint. */
   sites?: KpiSetupSite[];
   people?: KpiSetupPerson[];
+  /** D17: who owns each topic per site (null site = company level). Missing on an older server. */
+  topic_assignments?: KpiTopicAssignment[];
+  /** D17: the server's default (each site's first User; an Admin for the company level). */
+  suggested_topic_assignments?: KpiTopicAssignment[];
+  /** D17: topics of the selected KPIs with their counts. */
+  topics_in_use?: KpiTopicInUse[];
 }
 export interface KpiSetupSite {
   site_id: number;
@@ -395,7 +449,10 @@ export type PutKpiSetupBody = Partial<{
   framework_ids: number[];
   material_topics: Pick<CompanyMaterialTopic, "esrs_topic" | "material" | "reason">[];
   kpis: Pick<CompanyKpi, "kpi_definition_id" | "selected" | "frequency" | "reason_excluded">[];
+  /** Per-KPI overrides of the topic owner (D17 "Exceptions"). */
   assignments: Omit<KpiAssignment, "company_id">[];
+  /** D17: replaces the whole set of topic owners. */
+  topic_assignments: Omit<KpiTopicAssignment, "id">[];
 }>;
 
 /** `POST /kpi/setup/custom-kpis` body (Admin): returns the `KpiDefinition` with `company_id` set. */
@@ -416,6 +473,8 @@ export interface MyKpiItem {
   question: string;
   help: string | null;
   topic: KpiTopic;
+  /** D17: the topic's plain name ("Water"); `TOPIC_LABEL` when the server leaves it out. */
+  topic_label?: string;
   source: KpiSource;
   value_type: KpiValueType;
   canonical_unit: string | null;

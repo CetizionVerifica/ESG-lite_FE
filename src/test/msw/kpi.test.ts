@@ -315,4 +315,23 @@ describe("KPI mock handlers: behaviour", () => {
     const noReason = await send("PUT", "/kpi/setup", { material_topics: [{ esrs_topic: "E4", material: false, reason: "" }] });
     expect(((await noReason.json()) as { code: string }).code).toBe("KPI_REASON_REQUIRED");
   });
+
+  it("D17: My KPIs follow topic owners and exceptions; a person's topics move with a note", async () => {
+    type My = { items: { code: string; topic: string; topic_label: string }[] };
+    const before = (await get<My>("/kpi/my?period=2026-09")).items;
+    expect(before.map((i) => i.code)).toContain("WATER_DISCHARGE");
+    expect(before.find((i) => i.code === "WATER_DISCHARGE")?.topic_label).toBe("Water");
+    const setup = await get<{ topic_assignments: { site_id: number | null; topic: string; owner_user_id: number }[]; suggested_topic_assignments: unknown[]; topics_in_use: { topic: string; kpi_count: number }[] }>("/kpi/setup");
+    expect(setup.topics_in_use[0]).toEqual({ topic: "climate", kpi_count: 4 });
+    expect(setup.suggested_topic_assignments.length).toBeGreaterThan(0);
+    // Water at Bahrain plant to Mia: Ravi no longer owes it.
+    const rows = setup.topic_assignments.map((t) => (t.site_id === 1 && t.topic === "water" ? { ...t, owner_user_id: 12 } : t));
+    expect((await send("PUT", "/kpi/setup", { topic_assignments: rows })).status).toBe(200);
+    expect((await get<My>("/kpi/my?period=2026-09")).items.map((i) => i.code)).not.toContain("WATER_DISCHARGE");
+    // Ravi takes water back through the users drawer.
+    const moved = (await (await send("PUT", "/kpi/people/11/topics", { topics: ["water", "waste"] })).json()) as { topics: string[]; site_ids: number[]; moved: { topic: string; site_name: string; from_name: string }[] };
+    expect(moved).toMatchObject({ topics: ["water", "waste"], site_ids: [1] });
+    expect(moved.moved).toEqual([expect.objectContaining({ topic: "water", site_name: "Bahrain plant", from_name: "Mia Haddad" })]);
+    expect((await get<{ topics: string[] }>("/kpi/people/11/topics")).topics).toEqual(["water", "waste"]);
+  });
 });

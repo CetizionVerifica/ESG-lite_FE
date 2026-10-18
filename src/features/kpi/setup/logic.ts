@@ -14,6 +14,7 @@ import {
   type KpiSetupPerson,
   type KpiSetupSite,
   type KpiTopic,
+  type KpiTopicAssignment,
   KPI_TOPICS,
   type PutKpiSetupBody,
   type UnitDimension,
@@ -177,41 +178,128 @@ export function eligibleOwners(siteId: number | null, people: KpiSetupPerson[]):
 /** The default owner: the site's data-entry user, else its manager; company KPIs go to an Admin (05-ux S2 step 4). */
 export const defaultOwner = (siteId: number | null, people: KpiSetupPerson[]): number | null => eligibleOwners(siteId, people)[0]?.user_id ?? null;
 
-/** Owner per cell: saved assignments, else the defaults. */
-export function initialOwners(setup: KpiSetup, defs: KpiDefinition[], sites: KpiSetupSite[], people: KpiSetupPerson[]): Map<string, number | null> {
-  const saved = new Map(setup.assignments.map((a) => [cellKey(a.kpi_definition_id, a.site_id), a.owner_user_id]));
-  const out = new Map<string, number | null>();
+// ---------------------------------------------------------------------------
+// Step 4 by topic (D17): each site's topics have one owner; per-KPI
+// overrides ("Exceptions") win over the topic owner.
+// ---------------------------------------------------------------------------
+
+/** A topic slot: topic and site ("c" = the company level). */
+export const topicKey = (topic: KpiTopic, siteId: number | null) => `${topic}:${siteId ?? "c"}`;
+
+export function parseTopicKey(key: string): { topic: KpiTopic; siteId: number | null } {
+  const [topic, site] = key.split(":");
+  return { topic: topic as KpiTopic, siteId: site === "c" ? null : Number(site) };
+}
+
+export function parseCellKey(key: string): { kpiId: number; siteId: number | null } {
+  const [kpi, site] = key.split(":");
+  return { kpiId: Number(kpi), siteId: site === "c" ? null : Number(site) };
+}
+
+export interface TopicGrid {
+  /** Topics with at least one KPI to own, in `KPI_TOPICS` order. */
+  topics: KpiTopic[];
+  /** True when some KPI is entered for the whole company (the Company column). */
+  company: boolean;
+  /** KPI ids per topic slot. A slot without KPIs isn't in the map. */
+  cells: Map<string, number[]>;
+}
+
+/** Topics × sites (+ Company) from the KPIs that need an owner. */
+export function topicGrid(defs: KpiDefinition[], sites: KpiSetupSite[]): TopicGrid {
+  const cells = new Map<string, number[]>();
+  const add = (key: string, id: number) => cells.set(key, [...(cells.get(key) ?? []), id]);
   for (const d of defs) {
-    const cells = d.level === "company" ? [null] : sites.map((s) => s.site_id);
-    for (const siteId of cells) {
-      const key = cellKey(d.id, siteId);
-      out.set(key, saved.get(key) ?? defaultOwner(siteId, people));
-    }
+    if (d.level === "company") add(topicKey(d.topic, null), d.id);
+    else for (const s of sites) add(topicKey(d.topic, s.site_id), d.id);
+  }
+  const topics = KPI_TOPICS.filter((t) => [...cells.keys()].some((k) => k.startsWith(`${t}:`)));
+  return { topics, company: defs.some((d) => d.level === "company"), cells };
+}
+
+/** "6 KPIs" */
+export const kpiCountText = (n: number) => `${n} ${n === 1 ? "KPI" : "KPIs"}`;
+
+const ownedRows = (rows: KpiTopicAssignment[] | undefined) => new Map((rows ?? []).filter((r) => r.owner_user_id != null).map((r) => [topicKey(r.topic, r.site_id ?? null), r.owner_user_id as number]));
+
+/**
+ * Owner per topic slot: what's saved, else the server's suggestion, else the
+ * same default as before (the site's first User; an Admin for the company).
+ */
+export function initialTopicOwners(setup: KpiSetup, grid: TopicGrid, people: KpiSetupPerson[]): Map<string, number | null> {
+  const saved = ownedRows(setup.topic_assignments);
+  const suggested = ownedRows(setup.suggested_topic_assignments);
+  const out = new Map<string, number | null>();
+  for (const key of grid.cells.keys()) {
+    const { siteId } = parseTopicKey(key);
+    const eligible = (id: number | undefined) => (id !== undefined && eligibleOwners(siteId, people).some((p) => p.user_id === id) ? id : undefined);
+    out.set(key, saved.get(key) ?? eligible(suggested.get(key)) ?? defaultOwner(siteId, people));
   }
   return out;
 }
 
-/** "Apply to all sites": the person goes to every site they work at; the others are named. */
-export function applyToAllSites(owners: Map<string, number | null>, kpiId: number, personId: number, sites: KpiSetupSite[], people: KpiSetupPerson[]) {
+/** Saved per-KPI overrides (`kpi_assignment` rows) by cell. */
+export const initialOverrides = (setup: KpiSetup): Map<string, number | null> => new Map(setup.assignments.map((a) => [cellKey(a.kpi_definition_id, a.site_id), a.owner_user_id]));
+
+/** Who enters one KPI × site, as the server's `resolveOwner` decides: the override, else the topic owner, else nobody. */
+export function resolveOwner(def: Pick<KpiDefinition, "id" | "topic">, siteId: number | null, overrides: Map<string, number | null>, topicOwners: Map<string, number | null>): number | null {
+  return overrides.get(cellKey(def.id, siteId)) ?? topicOwners.get(topicKey(def.topic, siteId)) ?? null;
+}
+
+/** "Same person for every site": the person goes to every site they work at; the others are named. */
+export function sameForEverySite(owners: Map<string, number | null>, topic: KpiTopic, personId: number, sites: KpiSetupSite[], people: KpiSetupPerson[]) {
   const next = new Map(owners);
   const skipped: string[] = [];
   for (const s of sites) {
-    if (eligibleOwners(s.site_id, people).some((p) => p.user_id === personId)) next.set(cellKey(kpiId, s.site_id), personId);
+    const key = topicKey(topic, s.site_id);
+    if (!owners.has(key)) continue;
+    if (eligibleOwners(s.site_id, people).some((p) => p.user_id === personId)) next.set(key, personId);
     else skipped.push(s.name);
   }
   return { owners: next, skipped };
 }
 
-export const unownedCells = (owners: Map<string, number | null>) => [...owners].filter(([, v]) => v === null).map(([k]) => k);
+/** Slots nobody owns, unless every KPI in the slot has its own exception. */
+export function unownedTopicSlots(grid: TopicGrid, owners: Map<string, number | null>, overrides: Map<string, number | null>): string[] {
+  return [...grid.cells].filter(([key, ids]) => owners.get(key) == null && ids.some((id) => overrides.get(cellKey(id, parseTopicKey(key).siteId)) == null)).map(([key]) => key);
+}
 
-/** Step 4's payload; the reviewer stays the site's managers (null). */
-export function assignmentsPayload(owners: Map<string, number | null>): NonNullable<PutKpiSetupBody["assignments"]> {
-  return [...owners]
-    .filter(([, owner]) => owner !== null)
+/**
+ * `PUT /kpi/setup` `topic_assignments`: the whole set. Slots not on the grid
+ * (a topic whose KPIs were all unticked) keep what's saved, so nothing is
+ * dropped by accident. The reviewer stays the site's managers (null) unless
+ * one was saved.
+ */
+export function topicAssignmentsPayload(owners: Map<string, number | null>, setup: KpiSetup): NonNullable<PutKpiSetupBody["topic_assignments"]> {
+  const saved = new Map((setup.topic_assignments ?? []).map((r) => [topicKey(r.topic, r.site_id ?? null), r]));
+  const rows: NonNullable<PutKpiSetupBody["topic_assignments"]> = [];
+  for (const [key, owner] of owners) {
+    if (owner === null) continue;
+    const { topic, siteId } = parseTopicKey(key);
+    rows.push({ site_id: siteId, topic, owner_user_id: owner, reviewer_user_id: saved.get(key)?.reviewer_user_id ?? null });
+  }
+  for (const [key, r] of saved) if (!owners.has(key) && r.owner_user_id != null) rows.push({ site_id: r.site_id ?? null, topic: r.topic, owner_user_id: r.owner_user_id, reviewer_user_id: r.reviewer_user_id ?? null });
+  return rows;
+}
+
+/** `PUT /kpi/setup` `assignments`: only the exceptions that differ from their topic's owner. */
+export function overridesPayload(overrides: Map<string, number | null>, owners: Map<string, number | null>, defs: KpiDefinition[]): NonNullable<PutKpiSetupBody["assignments"]> {
+  const byId = new Map(defs.map((d) => [d.id, d]));
+  return [...overrides]
+    .filter(([key, owner]) => {
+      const { kpiId, siteId } = parseCellKey(key);
+      const def = byId.get(kpiId);
+      return owner !== null && !!def && owners.get(topicKey(def.topic, siteId)) !== owner;
+    })
     .map(([key, owner]) => {
-      const [kpi, site] = key.split(":");
-      return { kpi_definition_id: Number(kpi), site_id: site === "c" ? null : Number(site), owner_user_id: owner as number, reviewer_user_id: null };
+      const { kpiId, siteId } = parseCellKey(key);
+      return { kpi_definition_id: kpiId, site_id: siteId, owner_user_id: owner as number, reviewer_user_id: null };
     });
+}
+
+/** An exception's marker: true when it sends the KPI to someone other than the topic owner. */
+export function differsFromTopic(def: Pick<KpiDefinition, "topic">, siteId: number | null, owner: number | null, owners: Map<string, number | null>): boolean {
+  return owner !== null && owners.get(topicKey(def.topic, siteId)) !== owner;
 }
 
 // ---------------------------------------------------------------------------

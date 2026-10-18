@@ -44,6 +44,12 @@ import {
   type KpiSetupPerson,
   type KpiStatus,
   type KpiTargetWithProgress,
+  type KpiTopic,
+  type KpiTopicAssignment,
+  type KpiTopicMove,
+  KPI_TOPICS,
+  type PutKpiPersonTopicsBody,
+  type PutKpiPersonTopicsResult,
   type KpiUnlockBody,
   type KpiValue,
   type KpiValueEvidence,
@@ -64,7 +70,7 @@ import {
   type SuggestValuesResult,
   type TargetStatus,
 } from "../../lib/kpi/contracts";
-import { ESRS_TOPIC_LABEL } from "../../lib/kpi/labels";
+import { ESRS_TOPIC_LABEL, TOPIC_LABEL } from "../../lib/kpi/labels";
 import { formulaCodes } from "../../lib/kpi/formula";
 import { recommendKpis } from "../../lib/kpi/recommend";
 import { convertUnit } from "../../lib/kpi/units";
@@ -72,6 +78,7 @@ import {
   ACME,
   ACME_ASSIGNMENTS,
   ACME_COMPANY_KPIS,
+  ACME_TOPIC_ASSIGNMENTS,
   ACME_MATERIAL_TOPICS,
   BRSR_CORE_KPI_IDS,
   KPI_DEFINITIONS,
@@ -83,7 +90,6 @@ import {
   KPI_TARGETS_SEED,
   KPI_USERS,
   KPI_VALUES_SEED,
-  RAVI_KPI_CODES,
   kpiByCode,
 } from "./kpiData";
 
@@ -107,7 +113,8 @@ const initialState = () => ({
     material_topics: copy(ACME_MATERIAL_TOPICS),
     kpis: copy(ACME_COMPANY_KPIS),
     assignments: copy(ACME_ASSIGNMENTS),
-  } as KpiSetup,
+    topic_assignments: copy(ACME_TOPIC_ASSIGNMENTS),
+  } as KpiSetup & { topic_assignments: KpiTopicAssignment[] },
   values: copy(KPI_VALUES_SEED),
   evidence: copy(KPI_EVIDENCE_SEED),
   locks: [] as KpiPeriodLock[],
@@ -132,6 +139,7 @@ export function startKpiSetupFresh(): void {
     material_topics: [],
     kpis: [],
     assignments: [],
+    topic_assignments: [],
   };
 }
 
@@ -183,12 +191,72 @@ const out = (v: KpiValue): KpiValue => {
   };
 };
 
-/** The setup as `GET /kpi/setup` answers it, plus what the wizard reads: `recommended`, `sites` and `people` (KPI-3 FE assumptions). */
+const people = (): KpiSetupPerson[] => KPI_USERS.map((u) => ({ user_id: u.user_id, name: u.name, role: u.role, site_ids: u.site_id ? [u.site_id] : u.role === "Manager" ? KPI_SITES.map((x) => x.site_id) : [] }));
+const personName = (id: number | null) => KPI_USERS.find((u) => u.user_id === id)?.name ?? null;
+
+/** Selected KPIs that need an owner (calculated ones don't). */
+const ownedDefs = () => state.setup.kpis.filter((k) => k.selected).map((k) => kpiOf(k.kpi_definition_id)).filter((d): d is KpiDefinition => !!d && d.source !== "formula");
+
+/** D17 `resolveOwner`: the per-KPI exception, else the topic's owner at that site, else nobody. */
+function ownerOf(def: KpiDefinition, siteId: number | null): number | null {
+  const override = state.setup.assignments.find((a) => a.kpi_definition_id === def.id && a.site_id === siteId);
+  if (override) return override.owner_user_id;
+  return state.setup.topic_assignments.find((t) => t.topic === def.topic && t.site_id === siteId)?.owner_user_id ?? null;
+}
+
+/** D17 default: each site's first User; the company level's first Admin. */
+function suggestedTopics(): KpiTopicAssignment[] {
+  const defs = ownedDefs();
+  const rows: KpiTopicAssignment[] = [];
+  for (const topic of KPI_TOPICS) {
+    const mine = defs.filter((d) => d.topic === topic);
+    if (mine.some((d) => d.level === "site"))
+      for (const s of KPI_SITES) {
+        const user = KPI_USERS.find((u) => u.role === "User" && u.site_id === s.site_id);
+        if (user) rows.push({ site_id: s.site_id, topic, owner_user_id: user.user_id, reviewer_user_id: null });
+      }
+    if (mine.some((d) => d.level === "company")) rows.push({ site_id: null, topic, owner_user_id: (KPI_USERS.find((u) => u.role === "Admin") as { user_id: number }).user_id, reviewer_user_id: null });
+  }
+  return rows;
+}
+
+/** The setup as `GET /kpi/setup` answers it, plus what the wizard reads: `recommended`, `sites` and `people` (KPI-3 FE assumptions), and D17's topic owners. */
 function setupOut(): KpiSetup {
   const material = new Map(state.setup.material_topics.map((t) => [t.esrs_topic, t.material]));
   const { ids } = recommendKpis({ ...state, definitions: state.definitions.filter((d) => d.active) }, state.setup.frameworks.map((f) => f.framework_id), material);
-  const people: KpiSetupPerson[] = KPI_USERS.map((u) => ({ user_id: u.user_id, name: u.name, role: u.role, site_ids: u.site_id ? [u.site_id] : u.role === "Manager" ? KPI_SITES.map((x) => x.site_id) : [] }));
-  return { ...state.setup, recommended: [...ids].sort((a, b) => a - b), sites: KPI_SITES.map((x) => ({ ...x })), people };
+  const defs = ownedDefs();
+  const topics_in_use = KPI_TOPICS.map((topic) => ({ topic, kpi_count: defs.filter((d) => d.topic === topic).length })).filter((t) => t.kpi_count > 0);
+  return { ...state.setup, recommended: [...ids].sort((a, b) => a - b), sites: KPI_SITES.map((x) => ({ ...x })), people: people(), suggested_topic_assignments: suggestedTopics(), topics_in_use };
+}
+
+/** D17 `PUT /kpi/people/:id/topics`: the person owns these topics on these sites, and no others there. */
+function setPersonTopics(userId: number, body: Partial<PutKpiPersonTopicsBody>): PutKpiPersonTopicsResult {
+  const person = people().find((p) => p.user_id === userId);
+  const mine: (number | null)[] = person?.role === "Admin" ? [null] : (person?.site_ids ?? []);
+  const siteIds: (number | null)[] = body.site_ids?.length ? body.site_ids.filter((id) => mine.includes(id)) : mine;
+  const topics = (body.topics ?? []).filter((t): t is KpiTopic => (KPI_TOPICS as readonly string[]).includes(t));
+  const moved: KpiTopicMove[] = [];
+  let rows = state.setup.topic_assignments;
+  for (const siteId of siteIds) {
+    rows = rows.filter((r) => !(r.site_id === siteId && r.owner_user_id === userId && !topics.includes(r.topic)));
+    for (const topic of topics) {
+      const current = rows.find((r) => r.site_id === siteId && r.topic === topic);
+      if (current?.owner_user_id === userId) continue;
+      if (current?.owner_user_id) moved.push({ site_id: siteId, site_name: siteName(siteId), topic, from_user_id: current.owner_user_id, from_name: personName(current.owner_user_id) });
+      rows = current ? rows.map((r) => (r === current ? { ...r, owner_user_id: userId } : r)) : [...rows, { id: Math.max(0, ...rows.map((r) => r.id ?? 0)) + 1, site_id: siteId, topic, owner_user_id: userId, reviewer_user_id: null }];
+    }
+  }
+  state.setup.topic_assignments = rows;
+  return { topics, site_ids: siteIds.filter((id): id is number => id !== null), moved };
+}
+
+function personTopics(userId: number) {
+  const rows = state.setup.topic_assignments.filter((r) => r.owner_user_id === userId);
+  const sites = [...new Set(rows.map((r) => r.site_id))];
+  return {
+    topics: KPI_TOPICS.filter((t) => rows.some((r) => r.topic === t)),
+    by_site: sites.map((site_id) => ({ site_id, site_name: siteName(site_id), topics: KPI_TOPICS.filter((t) => rows.some((r) => r.topic === t && r.site_id === site_id)) })),
+  };
 }
 
 const addMonths = (ym: string, n: number) => {
@@ -238,15 +306,21 @@ const itemExtras = (def: KpiDefinition) => ({
   reviewer_name: "Mia Haddad",
 });
 
+/** What Ravi owns at Bahrain plant, through his topics or an exception (D17), in topic order. */
+const callerDefs = () =>
+  ownedDefs()
+    .filter((d) => ownerOf(d, d.level === "company" ? null : CALLER.site_id) === CALLER.user_id)
+    .sort((a, b) => KPI_TOPICS.indexOf(a.topic) - KPI_TOPICS.indexOf(b.topic) || a.id - b.id);
+
 function myKpis(period: string): MyKpis {
   const items: MyKpiItem[] = [];
-  for (const code of RAVI_KPI_CODES) {
-    const def = kpiOf(kpiByCode(code).id) as KpiDefinition;
+  for (const def of callerDefs()) {
     const p = periodEnding(def, period);
     if (!p) continue;
-    const value = state.values.find((v) => v.kpi_definition_id === def.id && v.site_id === CALLER.site_id && v.period_start === p.start) ?? null;
+    const site = def.level === "company" ? null : CALLER.site_id;
+    const value = state.values.find((v) => v.kpi_definition_id === def.id && v.site_id === site && v.period_start === p.start) ?? null;
     const lastStart = `${Number(p.start.slice(0, 4)) - 1}${p.start.slice(4)}`;
-    const last = state.values.find((v) => v.kpi_definition_id === def.id && v.site_id === CALLER.site_id && v.period_start === lastStart);
+    const last = state.values.find((v) => v.kpi_definition_id === def.id && v.site_id === site && v.period_start === lastStart);
     items.push({
       kpi_definition_id: def.id,
       code: def.code,
@@ -254,12 +328,13 @@ function myKpis(period: string): MyKpis {
       question: def.question,
       help: def.help,
       topic: def.topic,
+      topic_label: TOPIC_LABEL[def.topic],
       source: def.source,
       value_type: def.value_type,
       canonical_unit: def.canonical_unit,
       allowed_units: def.allowed_units,
-      site_id: CALLER.site_id,
-      site_name: siteName(CALLER.site_id),
+      site_id: def.level === "company" ? null : CALLER.site_id,
+      site_name: siteName(site),
       period_start: p.start,
       period_end: p.end,
       frequency: def.default_frequency,
@@ -287,6 +362,7 @@ function myKpis(period: string): MyKpis {
       question: consumption.question,
       help: consumption.help,
       topic: consumption.topic,
+      topic_label: TOPIC_LABEL[consumption.topic],
       source: "formula",
       value_type: consumption.value_type,
       canonical_unit: consumption.canonical_unit,
@@ -680,6 +756,9 @@ export const kpiHandlers = [
         material_topics: body.material_topics ? body.material_topics.map((t) => ({ ...t, company_id: ACME.company_id, decided_by: 13, decided_at: NOW })) : s.material_topics,
         kpis: body.kpis ? body.kpis.map((k) => ({ ...k, company_id: ACME.company_id })) : s.kpis,
         assignments: body.assignments ? body.assignments.map((a) => ({ ...a, company_id: ACME.company_id })) : s.assignments,
+        topic_assignments: body.topic_assignments
+          ? body.topic_assignments.filter((t) => t.owner_user_id != null).map((t, i) => ({ id: i + 1, site_id: t.site_id ?? null, topic: t.topic, owner_user_id: t.owner_user_id, reviewer_user_id: t.reviewer_user_id ?? null }))
+          : s.topic_assignments,
       };
       return HttpResponse.json<KpiSetup>(setupOut());
     }),
@@ -687,9 +766,19 @@ export const kpiHandlers = [
   http.post(
     "*/kpi/setup/invite",
     gated(() => {
-      const owners = new Set(state.setup.assignments.map((a) => a.owner_user_id));
+      const owners = new Set([...state.setup.assignments.map((a) => a.owner_user_id), ...state.setup.topic_assignments.map((t) => t.owner_user_id)].filter((id): id is number => id != null));
       state.invites += owners.size;
       return HttpResponse.json({ notified: owners.size });
+    }),
+  ),
+  // D17: a person's topics (the company users drawer)
+  http.get("*/kpi/people/:id/topics", gated(({ params }) => HttpResponse.json(personTopics(Number(params.id))))),
+  http.put(
+    "*/kpi/people/:id/topics",
+    gated(async ({ params, request }) => {
+      const body = await json<PutKpiPersonTopicsBody>(request);
+      if (!Array.isArray(body.topics)) return error("KPI_VALIDATION", "topics is a list.");
+      return HttpResponse.json<PutKpiPersonTopicsResult>(setPersonTopics(Number(params.id), body));
     }),
   ),
   http.post(

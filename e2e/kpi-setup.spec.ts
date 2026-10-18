@@ -78,22 +78,39 @@ test("an admin sets up KPIs in four steps: frameworks, topics, KPIs with a reaso
   expect(await count()).toBe(before);
 
   await next(page).click();
-  await expect(page.getByRole("table", { name: "Who enters each site KPI" })).toBeVisible();
+  await expect(page.getByRole("table", { name: "Who enters each topic" })).toBeVisible();
   const kpis = puts(calls)[2].kpis as { kpi_definition_id: number; selected: boolean; reason_excluded: string | null }[];
   expect(kpis).toContainEqual({ kpi_definition_id: 14, selected: false, frequency: null, reason_excluded: "Zero liquid discharge at every plant" });
   expect(kpis.filter((k) => k.selected).length).toBe(before);
 
-  // Step 4: owners default to each site's data-entry user; apply one person to every site.
-  const cell = (kpi: string, site: string) => page.getByRole("combobox", { name: `${kpi} at ${site}` });
-  await expect(cell("Water withdrawn", "Bahrain plant")).toHaveValue("Ravi Kumar (User)");
-  await expect(cell("Water withdrawn", "Dammam")).toHaveValue("Sara Ali (User)");
-  await cell("Water withdrawn", "Bahrain plant").click();
-  await cell("Water withdrawn", "Bahrain plant").fill("Mia");
+  // Step 4 (D17): one person per topic and site, defaulted to each site's data-entry user; fill a row.
+  await expect(page.getByRole("tab", { name: "By topic" })).toHaveAttribute("aria-selected", "true");
+  const cell = (topic: string, site: string) => page.getByRole("combobox", { name: `${topic} at ${site}` });
+  await expect(cell("Water", "Bahrain plant")).toHaveValue("Ravi Kumar (User)");
+  await expect(cell("Water", "Dammam")).toHaveValue("Sara Ali (User)");
+  await expect(page.getByTestId("topic-row").filter({ has: page.getByRole("rowheader", { name: "Water" }) })).toContainText("Water · 1 KPI");
+  await cell("Water", "Bahrain plant").click();
+  await cell("Water", "Bahrain plant").fill("Mia");
   await page.getByRole("option", { name: "Mia Haddad (Manager)" }).click();
-  await page.getByRole("button", { name: "Apply Water withdrawn's first person to all sites" }).click();
+  await page.getByRole("button", { name: "Same person for every site: Water" }).click();
   await expect(page.getByText("Applied to all sites.")).toBeVisible();
-  await expect(cell("Water withdrawn", "Matola")).toHaveValue("Mia Haddad (Manager)");
-  await expect(page.getByRole("combobox", { name: "Revenue for the company" })).toHaveValue("Omar Saleh (Admin)");
+  await expect(cell("Water", "Matola")).toHaveValue("Mia Haddad (Manager)");
+  await expect(page.getByRole("combobox", { name: "Governance for the company" })).toHaveValue("Omar Saleh (Admin)");
+
+  // Exceptions: one KPI goes to someone other than its topic's person.
+  await page.getByRole("tab", { name: /Exceptions/ }).click();
+  await expect(page.getByText("No exceptions.")).toBeVisible();
+  await page.getByRole("combobox", { name: "KPI", exact: true }).click();
+  await page.getByRole("combobox", { name: "KPI", exact: true }).fill("Waste generated");
+  await page.getByRole("option", { name: "Waste generated" }).click();
+  await page.getByLabel("Where").selectOption({ label: "Dammam" });
+  await page.getByRole("combobox", { name: "Person" }).click();
+  await page.getByRole("option", { name: "Mia Haddad (Manager)" }).click();
+  await page.getByRole("button", { name: "Add exception" }).click();
+  const exception = page.getByTestId("exception-row");
+  await expect(exception).toContainText("Waste generated · Dammam");
+  await expect(exception).toContainText("Different from topic owner");
+  await expect(page.getByRole("tab", { name: /Exceptions/ })).toContainText("1");
 
   await next(page).click();
 
@@ -101,7 +118,9 @@ test("an admin sets up KPIs in four steps: frameworks, topics, KPIs with a reaso
   await expect(page.getByRole("heading", { name: "KPI setup is done" })).toBeVisible();
   const last = puts(calls)[3];
   expect(last.settings).toEqual({ complete: true });
-  expect(last.assignments).toContainEqual({ kpi_definition_id: 13, site_id: 3, owner_user_id: 12, reviewer_user_id: null });
+  expect(last.topic_assignments).toContainEqual({ site_id: 3, topic: "water", owner_user_id: 12, reviewer_user_id: null });
+  expect(last.topic_assignments).toContainEqual({ site_id: null, topic: "governance", owner_user_id: 13, reviewer_user_id: null });
+  expect(last.assignments).toEqual([{ kpi_definition_id: 15, site_id: 2, owner_user_id: 12, reviewer_user_id: null }]);
   await page.getByRole("button", { name: "Invite your team to enter KPIs" }).click();
   await expect(page.getByText(/people were told what they enter\./)).toBeVisible();
   expect(calls.some((c) => c.path.endsWith("/kpi/setup/invite"))).toBe(true);
@@ -133,7 +152,7 @@ test("without ESRS the topics step is skipped, and at 390 px nothing scrolls sid
   await expect(page.getByTestId("kpi-count")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await next(page).click();
-  await expect(page.getByRole("combobox", { name: "Water withdrawn at Bahrain plant" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Water at Bahrain plant" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
@@ -146,6 +165,23 @@ test("a finished setup opens as tabs and saves one part at a time", async ({ pag
   await expect(page.getByText("KPIs saved.")).toBeVisible();
   const body = puts(calls)[0].kpis as { kpi_definition_id: number; selected: boolean }[];
   expect(body).toContainEqual(expect.objectContaining({ kpi_definition_id: 20, selected: true }));
+});
+
+test("a finished setup's Who enters what tab shows the saved topic owners and exceptions", async ({ page }) => {
+  const calls = await kpiApp(page, { role: "Admin", user: OMAR });
+  await page.goto("/kpi/setup?step=owners");
+  await expect(page.getByRole("tab", { name: "Who enters what" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("combobox", { name: "Materials at Bahrain plant" })).toHaveValue("Mia Haddad (Manager)");
+  await expect(page.getByRole("combobox", { name: "Water at Dammam" })).toHaveValue("Sara Ali (User)");
+  await page.getByRole("tab", { name: /Exceptions/ }).click();
+  await expect(page.getByTestId("exception-row")).toHaveCount(4);
+  await expect(page.getByTestId("exception-row").filter({ hasText: "Fatalities · Bahrain plant" })).toContainText("Different from topic owner");
+  await page.getByRole("button", { name: "Remove the exception for Fatalities at Bahrain plant" }).click();
+  await expect(page.getByTestId("exception-row")).toHaveCount(3);
+  await page.getByRole("tabpanel", { name: /Who enters what/ }).getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Owners saved.")).toBeVisible();
+  const body = puts(calls)[0].assignments as { kpi_definition_id: number }[];
+  expect(body.map((a) => a.kpi_definition_id).sort((a, b) => a - b)).toEqual([3, 7, 26]);
 });
 
 test("with the switch off, KPI setup is not available and not in the nav", async ({ page }) => {
