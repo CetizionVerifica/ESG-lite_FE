@@ -25,7 +25,7 @@ import type {
   MappingFit,
   RequirementLevel,
 } from "../../lib/kpi/contracts";
-import { KPI_TOPICS } from "../../lib/kpi/contracts";
+import { KPI_TOPICS, TOPIC_PILLAR } from "../../lib/kpi/contracts";
 
 export const ACME = { company_id: 1, name: "ACME" } as const;
 
@@ -69,6 +69,8 @@ const def = (d: DefInput): KpiDefinition => ({
   active: true,
   created_at: CREATED,
   ...d,
+  // D19: the topic's pillar unless the row sets its own.
+  pillar: d.pillar ?? TOPIC_PILLAR[d.topic],
 });
 
 const GHG: Partial<KpiDefinition> = { unit_dimension: "mass", canonical_unit: "tCO₂e", allowed_units: ["tCO₂e"], decimals: 2 };
@@ -132,7 +134,8 @@ export const KPI_DEFINITIONS: KpiDefinition[] = [
   def({ id: 27, code: "FATALITIES", name: "Fatalities", question: "How many people died from work-related injuries at {site} in {period}?", topic: "health_safety", value_type: "integer", unit_dimension: "count", decimals: 0 }),
   def({ id: 28, code: "RECORDABLE_INJURIES", name: "Recordable injuries", question: "How many recordable work injuries were there at {site} in {period}?", topic: "health_safety", value_type: "integer", unit_dimension: "count", decimals: 0 }),
   def({ id: 29, code: "TRAINING_HOURS_AVG", name: "Training hours per employee", question: "On average, how many hours of training did each employee get in {period}?", topic: "training", unit_dimension: "time", canonical_unit: "hours", allowed_units: ["hours"], aggregation: "weighted_average", ...COMPANY_YEAR }),
-  def({ id: 30, code: "WOMEN_ON_BOARD", name: "Women on the board", question: "What share of the board were women at the end of {period}?", topic: "diversity", value_type: "percent", unit_dimension: "ratio", canonical_unit: "%", allowed_units: ["%"], aggregation: "latest", ...COMPANY_YEAR }),
+  // D19 override: board diversity is a governance measure, though its topic is Diversity (Social).
+  def({ id: 30, code: "WOMEN_ON_BOARD", name: "Women on the board", question: "What share of the board were women at the end of {period}?", topic: "diversity", pillar: "governance", value_type: "percent", unit_dimension: "ratio", canonical_unit: "%", allowed_units: ["%"], aggregation: "latest", ...COMPANY_YEAR }),
   def({ id: 31, code: "GENDER_PAY_GAP", name: "Pay ratio, women to men", question: "What was women's average pay as a share of men's in {period}?", topic: "diversity", value_type: "percent", unit_dimension: "ratio", canonical_unit: "%", allowed_units: ["%"], aggregation: "none", ...COMPANY_YEAR }),
   def({ id: 32, code: "COMPLAINTS_RECEIVED", name: "Complaints received", question: "How many complaints did the company receive in {period}, and how many were resolved?", topic: "ethics", ...HEADCOUNT, breakdowns: { by: ["state"], values: ["resolved", "open"] } }),
 ];

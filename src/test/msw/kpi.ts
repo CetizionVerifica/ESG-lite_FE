@@ -71,8 +71,16 @@ import {
   type SuggestValuesResult,
   type KpiValueSuggestion,
   type TargetStatus,
+  type DirectionGood,
+  KPI_PILLARS,
+  type KpiEsg,
+  type KpiEsgCounts,
+  type KpiEsgTrend,
+  type KpiPillar,
+  TOPIC_PILLAR,
 } from "../../lib/kpi/contracts";
-import { ESRS_TOPIC_LABEL, TOPIC_LABEL } from "../../lib/kpi/labels";
+import { ESRS_TOPIC_LABEL, PILLAR_LABEL, TOPIC_LABEL } from "../../lib/kpi/labels";
+import { isPillar, pillarOf } from "../../lib/kpi/pillars";
 import { formulaCodes } from "../../lib/kpi/formula";
 import { recommendKpis } from "../../lib/kpi/recommend";
 import { convertUnit } from "../../lib/kpi/units";
@@ -236,7 +244,7 @@ function setupOut(): KpiSetup {
   const material = new Map(state.setup.material_topics.map((t) => [t.esrs_topic, t.material]));
   const { ids } = recommendKpis({ ...state, definitions: state.definitions.filter((d) => d.active) }, state.setup.frameworks.map((f) => f.framework_id), material);
   const defs = ownedDefs();
-  const topics_in_use = KPI_TOPICS.map((topic) => ({ topic, kpi_count: defs.filter((d) => d.topic === topic).length })).filter((t) => t.kpi_count > 0);
+  const topics_in_use = KPI_TOPICS.map((topic) => ({ topic, kpi_count: defs.filter((d) => d.topic === topic).length, pillar: TOPIC_PILLAR[topic] })).filter((t) => t.kpi_count > 0);
   return { ...state.setup, recommended: [...ids].sort((a, b) => a - b), sites: KPI_SITES.map((x) => ({ ...x })), people: people(), suggested_topic_assignments: suggestedTopics(), topics_in_use };
 }
 
@@ -307,6 +315,7 @@ function usedIn(kpiId: number): MyKpiItem["used_in"] {
 
 /** The KPI-7 spec fields of an item: breakdowns, evidence rule, formula, reviewer. */
 const itemExtras = (def: KpiDefinition) => ({
+  pillar: pillarOf(def),
   level: def.level,
   decimals: def.decimals,
   breakdowns: def.breakdowns,
@@ -599,7 +608,13 @@ const DASHBOARD_CARDS: [code: string, value: number, previous: number, series: n
   ["ENERGY_TOTAL", 37210, 39020, [4300, 4260, 4310, 4210, 4100, 4050, 3990, 4180, 4320, 4260, 3980, 4120]],
   ["WATER_WITHDRAWAL", 31500, 33200, [3500, 3450, 3480, 3400, 3550, 3500, 3600, 3450, 3700, 3600, 3500, 3200]],
   ["WASTE_GENERATED", 98.4, 103.6, [11.9, 12.1, 11.6, 11.2, 11.8, 11.4, 11.1, 11.6, 11.3, 11.0, 10.9, 9.8]],
+  // Wave E: Social and Governance cards, so every pillar shows on the dashboard.
+  ["LTIFR", 0.38, 0.52, [0.55, 0.5, 0.48, 0.46, 0.44, 0.45, 0.41, 0.4, 0.39, 0.37, 0.4, 0.38]],
+  ["TRAINING_HOURS_AVG", 22, 18, [12, 14, 15, 18, 22]],
+  ["WOMEN_ON_BOARD", 25, 20, [10, 12.5, 12.5, 20, 25]],
+  ["COMPLAINTS_RECEIVED", 14, 21, [30, 27, 24, 21, 14]],
 ];
+const LAST_FIVE_YEARS = ["2022", "2023", "2024", "2025", "2026"];
 
 function dashboard(year: number, framework: string | null, site: number | null, topic: string | null): KpiDashboard {
   const frameworksOf = (kpiId: number) => [...new Set(usedIn(kpiId).map((u) => u.framework))];
@@ -621,7 +636,8 @@ function dashboard(year: number, framework: string | null, site: number | null, 
       value,
       previous,
       change_pct: value !== null && previous ? Math.round(((value - previous) / previous) * 1000) / 10 : null,
-      series: year === 2026 ? series.map((v, i) => ({ period: MONTHS_TO_SEP[i], value: v })) : [],
+      pillar: pillarOf(d),
+      series: year === 2026 ? series.map((v, i) => ({ period: series.length === 5 ? LAST_FIVE_YEARS[i] : MONTHS_TO_SEP[i], value: v })) : [],
       target: t ? { progress_pct: t.progress_pct, status: t.status ?? null, label: targetText(t), target_id: t.id } : null,
     };
   }).filter((c) => !topic || c.topic === topic);
@@ -639,6 +655,138 @@ function dashboard(year: number, framework: string | null, site: number | null, 
     gaps,
     cards,
     pending_not_in: { count: pending.length, value_ids: pending.map((v) => v.id) },
+  };
+}
+
+
+// ---------------------------------------------------------------------------
+// Wave E: the ESG dashboard (`GET /kpi/esg`)
+// ---------------------------------------------------------------------------
+
+/** Annual KPIs not due yet for 2026 (the year isn't over): left out of coverage. */
+const ESG_NOT_DUE = new Set(["GHG_SCOPE3"]);
+/** Last year's coverage per pillar, for "vs 2025". */
+const ESG_LAST_YEAR: Record<KpiPillar, number> = { environment: 71, social: 75, governance: 50 };
+
+/** Headlines per pillar (the server's `src/kpi/esg/headlines.ts`), with the good direction. */
+const ESG_HEADLINES: [code: string, direction: DirectionGood][] = [
+  // The composite headline (Scope 1 + 2), answered with Scope 1's id as the server does.
+  ["GHG_SCOPE1_2", "down"],
+  ["ENERGY_TOTAL", "down"],
+  ["WATER_WITHDRAWAL", "down"],
+  ["WASTE_GENERATED", "down"],
+  ["EMPLOYEES_TOTAL", null],
+  ["LTIFR", "down"],
+  ["WOMEN_IN_WORKFORCE", "up"],
+  ["TRAINING_HOURS_AVG", "up"],
+  ["WOMEN_ON_BOARD", "up"],
+  ["COMPLAINTS_RECEIVED", "down"],
+];
+const MONTHS_2026 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** Monthly values Jan–Sep 2026 (Oct–Dec not in yet), or 2022–2026 for annual KPIs; and last year's total. */
+const ESG_SERIES: Record<string, { values: (number | null)[]; previous: number; target?: { value: number; label: string; status: TargetStatus; progress_pct: number } }> = {
+  GHG_SCOPE1_2: { values: [2341, 2290, 2265, 2230, 2190, 2350, 2402, 2318, 2315.6, null, null, null], previous: 28950 },
+  ENERGY_TOTAL: { values: [4210, 4100, 4050, 3990, 4180, 4320, 4260, 3980, 4120, null, null, null], previous: 52100 },
+  WATER_WITHDRAWAL: { values: [3400, 3550, 3500, 3600, 3450, 3700, 3600, 3500, 3200, null, null, null], previous: 41600 },
+  WASTE_GENERATED: { values: [11.2, 11.8, 11.4, 11.1, 11.6, 11.3, 11.0, 10.9, 9.8, null, null, null], previous: 108.2 },
+  EMPLOYEES_TOTAL: { values: [1180, 1215, 1240, 1262, 1310], previous: 1262 },
+  LTIFR: { values: [0.48, 0.46, 0.44, 0.45, 0.41, 0.4, 0.39, 0.37, 0.38, null, null, null], previous: 0.52, target: { value: 0.35, label: "Below 0.35 by 2027", status: "behind", progress_pct: 82 } },
+  WOMEN_IN_WORKFORCE: { values: [18.4, 19.1, 20.3, 21.6, 23.2], previous: 21.6 },
+  TRAINING_HOURS_AVG: { values: [12, 14, 15, 18, 22], previous: 18 },
+  WOMEN_ON_BOARD: { values: [10, 12.5, 12.5, 20, 25], previous: 20, target: { value: 30, label: "30 % by 2028", status: "on_track", progress_pct: 50 } },
+  COMPLAINTS_RECEIVED: { values: [30, 27, 24, 21, 14], previous: 21 },
+};
+/** A site's share of a site-level KPI (so a site filter reads like a part of the company). */
+const SITE_SHARE: Record<number, number> = { 1: 0.42, 2: 0.33, 3: 0.25 };
+
+function esg(year: number, site: number | null, pillar: KpiPillar | null): KpiEsg {
+  const selected = state.setup.kpis.filter((k) => k.selected).map((k) => kpiOf(k.kpi_definition_id)).filter((d): d is KpiDefinition => !!d);
+  const expected = selected.filter((d) => !site || d.level === "site");
+  const pendingValues = state.values.filter((v) => v.status === "pending" && inYear(v, year) && (!site || v.site_id === site));
+  // 2026: the sample's statuses; 2025: everything approved; earlier: nothing in.
+  const statusOf = (d: KpiDefinition, siteId: number | null = site): "approved" | "pending" | "missing" | "not_due" => {
+    if (year < 2025) return "missing";
+    if (year === 2025) return "approved";
+    if (ESG_NOT_DUE.has(d.code)) return "not_due";
+    if (DASHBOARD_GAPS.some((g) => g.kpi_definition_id === d.id && (!siteId || g.site_id === siteId))) return "missing";
+    if (state.values.some((v) => v.status === "pending" && v.kpi_definition_id === d.id && inYear(v, year) && (!siteId || v.site_id === siteId))) return "pending";
+    return "approved";
+  };
+  const counts = (defs: KpiDefinition[], siteId: number | null = site): KpiEsgCounts & { not_due: number } => {
+    const st = defs.map((d) => statusOf(d, siteId));
+    const n = (k: string) => st.filter((x) => x === k).length;
+    const due = defs.length - n("not_due");
+    return { kpis: defs.length, approved: n("approved"), pending: n("pending"), missing: n("missing"), not_due: n("not_due"), coverage_pct: due ? Math.round((n("approved") / due) * 100) : null };
+  };
+  const pillars = KPI_PILLARS.map((p) => {
+    const defs = expected.filter((d) => pillarOf(d) === p);
+    const c = counts(defs);
+    const topics = KPI_TOPICS.filter((t) => defs.some((d) => d.topic === t)).map((topic) => {
+      const { kpis, approved, pending, missing, coverage_pct } = counts(defs.filter((d) => d.topic === topic));
+      return { topic, label: TOPIC_LABEL[topic], kpis, approved, pending, missing, coverage_pct };
+    });
+    const change = year === 2026 && c.coverage_pct !== null ? c.coverage_pct - ESG_LAST_YEAR[p] : null;
+    return { pillar: p, label: PILLAR_LABEL[p], ...c, change: { approved_pct_vs_last_year: change }, topics };
+  });
+
+  const share = (d: KpiDefinition) => (site && d.level === "site" ? (SITE_SHARE[site] ?? 1) : 1);
+  const round = (v: number, dp: number) => Math.round(v * 10 ** dp) / 10 ** dp;
+  const trends: KpiEsgTrend[] = [];
+  for (const [code, direction_good] of ESG_HEADLINES) {
+    const composite = code === "GHG_SCOPE1_2";
+    const found = selected.find((x) => x.code === (composite ? "GHG_SCOPE1" : code));
+    if (!found || !expected.includes(found)) continue;
+    const d = composite ? { ...found, code, name: "GHG emissions, Scope 1 and 2" } : found;
+    const p = pillarOf(d);
+    if (trends.filter((t) => t.pillar === p).length >= 4) continue;
+    const src = ESG_SERIES[code];
+    const annual = d.default_frequency === "annual";
+    const k = share(d);
+    const ratio = d.unit_dimension === "ratio" || d.aggregation === "weighted_average" || d.aggregation === "latest";
+    const scale = (v: number | null) => (v === null ? null : round(ratio ? v : v * k, d.decimals));
+    const values = year === 2026 ? src.values : year === 2025 && !annual ? src.values.map((v) => (v === null ? null : v * 1.06)) : src.values.map(() => null);
+    const series = annual
+      ? values.map((v, i) => ({ period: String(year - 4 + i), period_start: `${year - 4 + i}-01-01`, label: String(year - 4 + i), value: scale(v) }))
+      : values.map((v, i) => ({ period: `${year}-${String(i + 1).padStart(2, "0")}`, period_start: `${year}-${String(i + 1).padStart(2, "0")}-01`, label: `${MONTHS_2026[i]} ${year}`, value: scale(v) }));
+    const known = series.map((x) => x.value).filter((v): v is number => v !== null);
+    const value = !known.length ? null : annual || d.aggregation === "latest" ? known[known.length - 1] : ratio ? round(known.reduce((a, b) => a + b, 0) / known.length, d.decimals) : round(known.reduce((a, b) => a + b, 0), d.decimals);
+    const previous = year === 2026 ? scale(src.previous) : null;
+    trends.push({
+      pillar: p,
+      topic: d.topic,
+      kpi_definition_id: d.id,
+      code,
+      name: d.name,
+      unit: d.canonical_unit,
+      decimals: d.decimals,
+      direction_good,
+      series,
+      value,
+      previous,
+      change_pct: value !== null && previous ? round(((value - previous) / previous) * 100, 1) : null,
+      target: src.target && year === 2026 ? { ...src.target } : null,
+    });
+  }
+  const movers = trends
+    .filter((t) => t.change_pct !== null && t.direction_good !== null)
+    .sort((a, b) => Math.abs(b.change_pct as number) - Math.abs(a.change_pct as number))
+    .slice(0, 5)
+    .map((t) => ({ kpi_definition_id: t.kpi_definition_id, name: t.name, pillar: t.pillar, change_pct: t.change_pct as number, direction_good: t.direction_good, good: t.direction_good === "down" ? (t.change_pct as number) < 0 : (t.change_pct as number) > 0 }));
+  const sites = KPI_SITES.filter((x) => !site || x.site_id === site).map((x) => {
+    const at = selected.filter((d) => d.level === "site");
+    const cov = (p: KpiPillar) => counts(at.filter((d) => pillarOf(d) === p), x.site_id).coverage_pct;
+    return { site_id: x.site_id, name: x.name, pillars: { environment: cov("environment"), social: cov("social"), governance: cov("governance") } };
+  });
+  return {
+    year,
+    year_type: state.setup.settings.year_type,
+    label: String(year),
+    filters: { site, pillar, topic: null },
+    pillars,
+    trends: trends.filter((t) => !pillar || t.pillar === pillar),
+    sites,
+    movers: movers.filter((m) => !pillar || m.pillar === pillar),
+    pending_not_in: { count: pendingValues.length, link: "/data/approvals?view=kpi" },
   };
 }
 
@@ -683,6 +831,7 @@ const unknownFormulaCodes = (formula: string | null, defs: KpiDefinition[]) =>
 
 function checkDefinition(row: KpiDefinition): Response | null {
   if (!row.code || !row.name || !row.question) return badRequest("Code, name and question are required.");
+  if (row.pillar !== undefined && !isPillar(row.pillar)) return error("KPI_VALIDATION", "pillar must be environment, social or governance.");
   if (state.definitions.some((d) => d.code === row.code && d.id !== row.id && d.company_id === null)) return error("KPI_CODE_TAKEN", "That code is already used.");
   if (row.source === "formula" && (!row.formula || unknownFormulaCodes(row.formula, state.definitions).length || row.formula.includes(row.code))) {
     return error("KPI_FORMULA_INVALID", "The formula uses an unknown KPI code or refers to itself.");
@@ -854,6 +1003,8 @@ export const kpiHandlers = [
         question: body.question,
         help: body.help ?? null,
         topic: body.topic ?? "governance",
+        // D19: the Admin's pick, else the topic's pillar.
+        pillar: isPillar(body.pillar) ? body.pillar : TOPIC_PILLAR[body.topic ?? "governance"],
         value_type: body.value_type ?? "number",
         unit_dimension: body.unit_dimension ?? "none",
         canonical_unit: body.canonical_unit ?? null,
@@ -1127,6 +1278,16 @@ export const kpiHandlers = [
       const count = (g: string) => manual.filter((i) => i.group === g).length;
       const coverage = dashboard(2026, null, null, null).coverage;
       return HttpResponse.json({ readiness: coverage.map((c) => ({ framework: c.framework, version: c.version, percent: c.percent })), due: { due: count("due"), sent_back: count("sent_back"), done: count("done") }, period });
+    }),
+  ),
+
+  // Wave E: the ESG dashboard (Manager, Admin, Superadmin; a User gets KPI_FORBIDDEN on the server)
+  http.get(
+    "*/kpi/esg",
+    gated(({ request }) => {
+      const q = new URL(request.url).searchParams;
+      const p = q.get("pillar");
+      return HttpResponse.json<KpiEsg>(esg(Number(q.get("year") ?? 2026), q.get("site") ? Number(q.get("site")) : null, isPillar(p) ? p : null));
     }),
   ),
 

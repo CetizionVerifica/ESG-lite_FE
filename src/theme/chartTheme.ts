@@ -67,6 +67,8 @@ export function chartTheme(t: ThemeTokens) {
     },
     /** Not read by ECharts: colours for Scope 1/2/3 series. */
     scopes: { s1: t.s1, s2: t.s2, s3: t.s3 } as ScopeColors,
+    /** Not read by ECharts: ESG pillar colours (wave E), for marks only. */
+    pillars: { environment: t["pillar-e"], social: t["pillar-s"], governance: t["pillar-g"] },
   };
 }
 

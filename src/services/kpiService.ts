@@ -54,8 +54,18 @@ import {
   type SubmitKpiValuesResult,
   MY_KPI_GROUPS,
   isKpiErrorCode,
+  type DirectionGood,
+  KPI_PILLARS,
+  type KpiEsg,
+  type KpiEsgCounts,
+  type KpiEsgMover,
+  type KpiEsgPillar,
+  type KpiEsgSite,
+  type KpiEsgTrend,
+  type KpiPillar,
+  TOPIC_PILLAR,
 } from "../lib/kpi/contracts";
-import { ERROR_MESSAGE } from "../lib/kpi/labels";
+import { ERROR_MESSAGE, PILLAR_LABEL, TOPIC_LABEL } from "../lib/kpi/labels";
 import { type ValueSuggestions, readValueSuggestions } from "../lib/kpi/ai";
 
 /**
@@ -248,6 +258,7 @@ function readMyItem(raw: Loose): MyKpiItem {
     help: pick(raw.help, kpi.help, null),
     topic: pick(raw.topic, kpi.topic, "governance"),
     topic_label: pick(raw.topic_label, kpi.topic_label, undefined),
+    pillar: pick(raw.pillar, kpi.pillar, undefined),
     source: pick(raw.source, kpi.source, "manual"),
     value_type: pick(raw.value_type, kpi.value_type, "number"),
     canonical_unit: pick(raw.canonical_unit, kpi.canonical_unit, kpi.unit, null),
@@ -460,6 +471,7 @@ export function readDashboard(data: unknown, year: number): KpiDashboard {
       link: typeof g.link === "string" && g.link ? g.link : null,
       frameworks: fws.map((f) => String(f).toUpperCase()).filter(isFramework),
       pending: g.pending === true,
+      ...((KPI_PILLARS as readonly unknown[]).includes(pick(g.pillar, kpi.pillar)) ? { pillar: pick<KpiPillar>(g.pillar, kpi.pillar) } : {}),
     };
   });
   const cards: KpiDashboardCard[] = asList<Loose>(root, "cards").map((c) => {
@@ -473,6 +485,7 @@ export function readDashboard(data: unknown, year: number): KpiDashboard {
       code: String(pick(c.code, kpi.code, "") ?? ""),
       name: String(pick(c.name, kpi.name, "") ?? ""),
       topic: pick(c.topic, kpi.topic, "governance"),
+      pillar: pick(c.pillar, kpi.pillar, undefined),
       source: (pick(c.source, kpi.source, null) ?? null) as KpiDashboardCard["source"],
       unit: (pick(c.unit, kpi.unit, kpi.canonical_unit, null) ?? null) as string | null,
       decimals: num(pick(c.decimals, kpi.decimals)),
@@ -495,6 +508,99 @@ export function readDashboard(data: unknown, year: number): KpiDashboard {
         ? { count: num(pendingObj.count) ?? num(pendingObj.kpi) ?? (Array.isArray(pendingObj.value_ids) ? pendingObj.value_ids.length : 0), value_ids: Array.isArray(pendingObj.value_ids) ? pendingObj.value_ids.map(Number) : undefined, emissions: num(pendingObj.emissions) ?? undefined }
         : { count: num(root.pending_count) ?? 0 };
   return { year: num(root.year) ?? year, coverage, gaps, cards, pending_not_in };
+}
+
+// Wave E: the ESG dashboard
+export type EsgQuery = { year: number; site?: number | null; pillar?: KpiPillar | null; topic?: string | null };
+export async function getKpiEsg(q: EsgQuery, companyId?: number | null): Promise<KpiEsg> {
+  const params = { year: q.year, ...(q.site ? { site: q.site } : {}), ...(q.pillar ? { pillar: q.pillar } : {}), ...(q.topic ? { topic: q.topic } : {}), ...companyParams(companyId) };
+  return readEsg((await api.get("/kpi/esg", { params })).data, q.year);
+}
+
+const isPillarValue = (v: unknown): v is KpiPillar => (KPI_PILLARS as readonly unknown[]).includes(v);
+const isTopicValue = (v: unknown): v is KpiTopic => (KPI_TOPICS as readonly unknown[]).includes(v);
+const asDirection = (v: unknown): DirectionGood => (v === "down" || v === "up" ? v : null);
+const pct = (v: unknown): number | null => {
+  const n = num(v);
+  return n === null ? null : Math.max(0, Math.min(100, n));
+};
+function readCounts(c: Loose): KpiEsgCounts {
+  return { kpis: num(c.kpis) ?? num(c.total) ?? 0, approved: num(c.approved) ?? 0, pending: num(c.pending) ?? 0, missing: num(c.missing) ?? 0, coverage_pct: pct(pick(c.coverage_pct, c.coverage, c.percent)) };
+}
+
+/**
+ * `GET /kpi/esg` as wave E words it, read tolerantly: wrapped as `{esg}` or
+ * bare; unknown pillars and topics dropped; counts default to 0; a series
+ * point may be a bare number. The figures are shown as they come.
+ */
+export function readEsg(data: unknown, year: number): KpiEsg {
+  const root = obj(asRow<unknown>(data, "esg"));
+  const f = obj(root.filters);
+  const y = num(root.year) ?? year;
+  const pillars: KpiEsgPillar[] = asList<Loose>(root, "pillars")
+    .filter((p) => isPillarValue(p.pillar))
+    .map((p) => ({
+      ...readCounts(p),
+      pillar: p.pillar as KpiPillar,
+      label: typeof p.label === "string" && p.label ? p.label : PILLAR_LABEL[p.pillar as KpiPillar],
+      not_due: num(p.not_due) ?? 0,
+      change: { approved_pct_vs_last_year: num(obj(p.change).approved_pct_vs_last_year ?? p.change_pct) },
+      topics: asList<Loose>(p, "topics")
+        .filter((t) => isTopicValue(t.topic))
+        .map((t) => ({ ...readCounts(t), topic: t.topic as KpiTopic, label: typeof t.label === "string" && t.label ? t.label : TOPIC_LABEL[t.topic as KpiTopic] })),
+    }));
+  const trends: KpiEsgTrend[] = asList<Loose>(root, "trends")
+    .filter((t) => isTopicValue(t.topic) || isPillarValue(t.pillar))
+    .map((t) => {
+      const topic = (isTopicValue(t.topic) ? t.topic : "governance") as KpiTopic;
+      const target = t.target && typeof t.target === "object" ? obj(t.target) : null;
+      const series = (Array.isArray(t.series) ? t.series : []).map((p: unknown, i: number) => {
+        const o = obj(p);
+        const period = String(pick(o.period, o.label, i + 1));
+        return p && typeof p === "object" ? { period, period_start: (o.period_start as string | undefined) ?? null, label: String(pick(o.label, period)), value: num(o.value) } : { period: String(i + 1), period_start: null, label: String(i + 1), value: num(p) };
+      });
+      return {
+        pillar: isPillarValue(t.pillar) ? t.pillar : TOPIC_PILLAR[topic],
+        topic,
+        kpi_definition_id: Number(t.kpi_definition_id),
+        code: String(t.code ?? ""),
+        name: String(t.name ?? ""),
+        unit: (t.unit as string | null | undefined) ?? null,
+        decimals: num(t.decimals),
+        direction_good: asDirection(t.direction_good),
+        series,
+        value: num(t.value),
+        previous: num(t.previous),
+        change_pct: num(t.change_pct),
+        target: target ? { progress_pct: num(target.progress_pct), status: asStatus(target.status), label: (target.label as string | null | undefined) ?? null, value: num(pick(target.value, target.target_value, target.line)) } : null,
+      };
+    });
+  const sites: KpiEsgSite[] = asList<Loose>(root, "sites").map((s) => {
+    const p = obj(s.pillars);
+    return { site_id: Number(pick(s.site_id, s.id)), name: String(s.name ?? ""), pillars: { environment: pct(p.environment), social: pct(p.social), governance: pct(p.governance) } };
+  });
+  const movers: KpiEsgMover[] = asList<Loose>(root, "movers")
+    .filter((m) => num(m.change_pct) !== null)
+    .map((m) => {
+      const direction_good = asDirection(m.direction_good);
+      const change = num(m.change_pct) as number;
+      const good = typeof m.good === "boolean" ? m.good : direction_good === "down" ? change < 0 : direction_good === "up" ? change > 0 : false;
+      return { kpi_definition_id: Number(m.kpi_definition_id), name: String(m.name ?? ""), pillar: isPillarValue(m.pillar) ? m.pillar : "governance", change_pct: change, direction_good, good };
+    });
+  const pendingRaw = root.pending_not_in;
+  const pendingObj = obj(pendingRaw);
+  const pending_not_in = typeof pendingRaw === "number" ? { count: pendingRaw, link: null } : { count: num(pendingObj.count) ?? 0, link: typeof pendingObj.link === "string" && pendingObj.link ? pendingObj.link : null };
+  return {
+    year: y,
+    year_type: root.year_type === "FY" ? "FY" : "CY",
+    label: typeof root.label === "string" && root.label ? root.label : String(y),
+    filters: { site: num(f.site), pillar: isPillarValue(f.pillar) ? f.pillar : null, topic: isTopicValue(f.topic) ? f.topic : null },
+    pillars,
+    trends,
+    sites,
+    movers,
+    pending_not_in,
+  };
 }
 
 /** `POST /kpi/dashboard/remind {kpi, site}` (Manager+): asks the owner for the missing values; at most once a day per item. */

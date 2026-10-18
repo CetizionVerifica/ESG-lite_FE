@@ -1,4 +1,5 @@
 import ReactECharts from "echarts-for-react";
+import type { KpiPillar } from "../../../lib/kpi/contracts";
 import { formatWithUnit } from "../../../lib/kpi/units";
 import { useChartTheme } from "../../../theme";
 import { cn } from "../../../ui";
@@ -9,9 +10,9 @@ import { type SparkPoint, sparkSummary } from "./spark";
  * approach, coloured from the theme): no axes, a tooltip per point on hover,
  * and an accessible summary for screen readers.
  */
-export function Sparkline({ name, points, unit, height = 44, className }: { name: string; points: SparkPoint[]; unit: string | null; height?: number; className?: string }) {
+export function Sparkline({ name, points, unit, height = 44, className, pillar }: { name: string; points: SparkPoint[]; unit: string | null; height?: number; className?: string; /** Wave E: draw in the pillar's colour. */ pillar?: KpiPillar }) {
   const theme = useChartTheme();
-  const color = theme.color[0];
+  const color = pillar ? theme.pillars[pillar] : theme.color[0];
   if (points.filter((p) => p.value !== null).length < 2) return <p className={cn("text-xs text-muted", className)}>Not enough values for a trend yet.</p>;
   return (
     <div role="img" aria-label={sparkSummary(name, points, unit)} className={className} style={{ height }}>

@@ -70,7 +70,7 @@ const kpiAudit = (url: URL) =>
  * `keepState` leaves the KPI mocks as an earlier page in the same test left
  * them (a Manager rejects, then the contributor opens My KPIs).
  */
-export async function kpiApp(page: Page, opts: { role: string; user: object; enabled?: boolean; freshSetup?: boolean; keepState?: boolean; other?: (url: URL) => unknown; /** A Superadmin's chosen client at the start (D18). */ clientId?: number; /** KPI-12: the AI service is down. */ aiDown?: boolean }) {
+export async function kpiApp(page: Page, opts: { role: string; user: object; enabled?: boolean; freshSetup?: boolean; keepState?: boolean; other?: (url: URL) => unknown; /** A Superadmin's chosen client at the start (D18). */ clientId?: number; /** KPI-12: the AI service is down. */ aiDown?: boolean; /** Wave E: the theme to render in (`/brands/mine` and the saved appearance). */ brand?: object; appearance?: "light" | "dark" }) {
   if (!opts.keepState) resetKpiMocks();
   if (opts.enabled === false) setKpiMockEnabled(false);
   if (opts.freshSetup) startKpiSetupFresh();
@@ -105,8 +105,8 @@ export async function kpiApp(page: Page, opts: { role: string; user: object; ena
       }
 
       if (path.endsWith("/auth/me")) return json({ role: opts.role, user });
-      if (path.endsWith("/auth/me/appearance")) return json({ appearance: "light" });
-      if (path.endsWith("/brands/mine")) return json({});
+      if (path.endsWith("/auth/me/appearance")) return json({ appearance: opts.appearance ?? "light" });
+      if (path.endsWith("/brands/mine")) return json(opts.brand ?? {});
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       if (path.endsWith("/user/audit-logs")) return json(kpiAudit(url));

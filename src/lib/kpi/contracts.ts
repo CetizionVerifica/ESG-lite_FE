@@ -41,6 +41,30 @@ export const KPI_TOPICS = [
 ] as const;
 export type KpiTopic = (typeof KPI_TOPICS)[number];
 
+/** D19 (wave E): every topic and KPI belongs to one ESG pillar. */
+export const KPI_PILLARS = ["environment", "social", "governance"] as const;
+export type KpiPillar = (typeof KPI_PILLARS)[number];
+
+/** D19: each topic's default pillar (ESG-lite `src/kpi/contracts/` `TOPIC_PILLAR`). A KPI's own `pillar` wins. */
+export const TOPIC_PILLAR: Record<KpiTopic, KpiPillar> = {
+  climate: "environment",
+  energy: "environment",
+  water: "environment",
+  waste: "environment",
+  pollution: "environment",
+  biodiversity: "environment",
+  materials: "environment",
+  workforce: "social",
+  health_safety: "social",
+  diversity: "social",
+  training: "social",
+  human_rights: "social",
+  community: "social",
+  customers: "social",
+  governance: "governance",
+  ethics: "governance",
+};
+
 export const KPI_VALUE_TYPES = ["number", "percent", "integer", "currency", "yes_no", "choice", "text"] as const;
 export type KpiValueType = (typeof KPI_VALUE_TYPES)[number];
 
@@ -118,6 +142,8 @@ export interface KpiDefinition {
   /** Markdown: what counts and what to leave out. */
   help: string | null;
   topic: KpiTopic;
+  /** D19: the KPI's ESG pillar, the topic's unless a Superadmin overrode it. Read through `pillarOf`; an older server leaves it out. */
+  pillar?: KpiPillar;
   value_type: KpiValueType;
   unit_dimension: UnitDimension;
   canonical_unit: string | null;
@@ -243,6 +269,8 @@ export interface KpiTopicAssignment {
 export interface KpiTopicInUse {
   topic: KpiTopic;
   kpi_count: number;
+  /** D19: `TOPIC_PILLAR[topic]`. */
+  pillar?: KpiPillar;
 }
 
 /** `GET /kpi/people/:user_id/topics` (D17): the topics a person owns, overall and per site. */
@@ -323,6 +351,8 @@ export interface KpiValue {
   kpi_code?: string;
   canonical_unit?: string | null;
   evidence?: KpiEvidenceOut[];
+  /** D19: on value rows that carry the KPI's name. */
+  pillar?: KpiPillar;
   /** Assumed (KPI-8 FE): read when the server adds them to a pending value; the review list falls back to the catalogue, the setup and last year's value. */
   kpi_name?: string | null;
   site_name?: string | null;
@@ -459,7 +489,12 @@ export type PutKpiSetupBody = Partial<{
 export type CustomKpiBody = Pick<
   KpiDefinition,
   "name" | "question" | "topic" | "value_type" | "unit_dimension" | "canonical_unit" | "allowed_units" | "aggregation" | "level" | "default_frequency" | "decimals"
-> & { help?: string | null; mappings?: Pick<KpiDisclosureMap, "disclosure_id" | "fit" | "note">[] };
+> & {
+  help?: string | null;
+  mappings?: Pick<KpiDisclosureMap, "disclosure_id" | "fit" | "note">[];
+  /** D19: left out = the topic's pillar. */
+  pillar?: KpiPillar;
+};
 
 /** Where an item sits on My KPIs (05-ux S3). Mock shape. */
 export const MY_KPI_GROUPS = ["due", "sent_back", "done"] as const;
@@ -475,6 +510,8 @@ export interface MyKpiItem {
   topic: KpiTopic;
   /** D17: the topic's plain name ("Water"); `TOPIC_LABEL` when the server leaves it out. */
   topic_label?: string;
+  /** D19: the KPI's pillar. */
+  pillar?: KpiPillar;
   source: KpiSource;
   value_type: KpiValueType;
   canonical_unit: string | null;
@@ -648,6 +685,8 @@ export interface KpiTargetWithProgress extends KpiTarget {
   kpi_code?: string | null;
   unit?: string | null;
   site_name?: string | null;
+  /** D19: the KPI's pillar. */
+  pillar?: KpiPillar;
 }
 /** `PUT /kpi/targets` body: an upsert (with `id`) or a new target. Answers `{target}` (a bare row is read too). `DELETE /kpi/targets/:id` removes one. */
 export type PutKpiTargetBody = Omit<KpiTarget, "id" | "company_id" | "created_by"> & { id?: number };
@@ -702,6 +741,8 @@ export interface KpiGap {
   frameworks: FrameworkCode[];
   /** The values aren't missing but waiting for review. */
   pending?: boolean;
+  /** D19: the KPI's pillar. */
+  pillar?: KpiPillar;
 }
 
 export interface KpiDashboardCard {
@@ -709,6 +750,8 @@ export interface KpiDashboardCard {
   code: string;
   name: string;
   topic: KpiTopic;
+  /** D19: the KPI's pillar (`pillarOf` when left out). */
+  pillar?: KpiPillar;
   source: KpiSource | null;
   unit: string | null;
   decimals: number | null;
@@ -726,6 +769,85 @@ export interface KpiRemindResult {
   reminded: boolean;
   owner_name?: string | null;
   message?: string | null;
+}
+
+/**
+ * `GET /kpi/esg?year=&site=&pillar=&topic=` (wave E, plans/kpi/wave-e.md):
+ * the ESG dashboard, approved values only, D17's expected sites. Manager,
+ * Admin and Superadmin. Every figure is the server's; the page never adds
+ * them up. `kpiService.readEsg` reads it tolerantly.
+ */
+export interface KpiEsg {
+  year: number;
+  year_type: YearType;
+  /** "2026" or "FY 2026–27". */
+  label: string;
+  filters: { site: number | null; pillar: KpiPillar | null; topic: KpiTopic | null };
+  pillars: KpiEsgPillar[];
+  trends: KpiEsgTrend[];
+  sites: KpiEsgSite[];
+  movers: KpiEsgMover[];
+  pending_not_in: { count: number; link: string | null };
+}
+
+export interface KpiEsgCounts {
+  kpis: number;
+  approved: number;
+  pending: number;
+  missing: number;
+  /** 0–100, the server's; null when nothing is expected. */
+  coverage_pct: number | null;
+}
+
+export interface KpiEsgTopic extends KpiEsgCounts {
+  topic: KpiTopic;
+  label: string;
+}
+
+export interface KpiEsgPillar extends KpiEsgCounts {
+  pillar: KpiPillar;
+  label: string;
+  not_due: number;
+  /** Assumed: percentage points of coverage against last year; null without last year. */
+  change: { approved_pct_vs_last_year: number | null };
+  topics: KpiEsgTopic[];
+}
+
+export type DirectionGood = "down" | "up" | null;
+
+export interface KpiEsgTrend {
+  pillar: KpiPillar;
+  topic: KpiTopic;
+  kpi_definition_id: number;
+  code: string;
+  name: string;
+  unit: string | null;
+  decimals: number | null;
+  direction_good: DirectionGood;
+  /** 12 months of the year, or the last 5 years for annual KPIs; oldest first. */
+  series: { period: string; period_start: string | null; label: string; value: number | null }[];
+  value: number | null;
+  previous: number | null;
+  change_pct: number | null;
+  /** `value` is assumed: the target in the series' unit, drawn as a dashed line when sent. */
+  target: { progress_pct: number | null; status: TargetStatus | null; label: string | null; value?: number | null } | null;
+}
+
+export interface KpiEsgSite {
+  site_id: number;
+  name: string;
+  /** Coverage % per pillar; null when nothing is expected at the site. */
+  pillars: Record<KpiPillar, number | null>;
+}
+
+export interface KpiEsgMover {
+  kpi_definition_id: number;
+  name: string;
+  pillar: KpiPillar;
+  change_pct: number;
+  direction_good: DirectionGood;
+  /** The change goes the good way for the KPI. */
+  good: boolean;
 }
 
 /**
@@ -914,7 +1036,7 @@ export type KpiCheckId = (typeof KPI_CHECK_IDS)[number];
 // §6 FE routes (ids in src/features/shell/routeMap.ts)
 // ---------------------------------------------------------------------------
 
-export const KPI_ROUTE_IDS = ["kpi-setup", "kpi-my", "kpi-review", "kpi-targets", "kpi-dashboard", "kpi-reports", "kpi-library"] as const;
+export const KPI_ROUTE_IDS = ["kpi-setup", "kpi-my", "kpi-review", "kpi-targets", "kpi-dashboard", "kpi-esg", "kpi-reports", "kpi-library"] as const;
 export type KpiRouteId = (typeof KPI_ROUTE_IDS)[number];
 
 /** Paths per route id. `kpi-review` is a tab of Approvals, not a route of its own. */
@@ -924,6 +1046,7 @@ export const KPI_PATHS: Record<KpiRouteId, string> = {
   "kpi-review": "/data/approvals?view=kpi",
   "kpi-targets": "/kpi/targets",
   "kpi-dashboard": "/kpi/dashboard",
+  "kpi-esg": "/kpi/esg",
   "kpi-reports": "/reports/kpi/:framework",
   "kpi-library": "/setup/kpi-library",
 };

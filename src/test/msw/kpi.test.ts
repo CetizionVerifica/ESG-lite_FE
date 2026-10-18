@@ -10,6 +10,7 @@ import {
   KPI_FREQUENCIES,
   KPI_LEVELS,
   KPI_SOURCES,
+  KPI_PILLARS,
   KPI_TOPICS,
   KPI_VALUE_STATUSES,
   KPI_VALUE_TYPES,
@@ -181,6 +182,34 @@ describe("KPI mock handlers: shapes match the contract types", () => {
     all(await list<unknown>("/kpi/targets"), TARGET, "targets");
   });
 
+  it("GET /kpi/esg answers wave E's shape for every pillar, and its counts add up", async () => {
+    const esg = await get<{ year: number; year_type: string; label: string; pillars: Record<string, unknown>[]; trends: Record<string, unknown>[]; sites: Record<string, unknown>[]; movers: Record<string, unknown>[]; pending_not_in: unknown }>("/kpi/esg?year=2026");
+    expect(esg).toMatchObject({ year: 2026, year_type: "CY", label: "2026" });
+    all(esg.pillars, { pillar: KPI_PILLARS, label: "string", kpis: "number", approved: "number", pending: "number", missing: "number", not_due: "number", coverage_pct: "number?", change: "object?", topics: "array" }, "esg.pillars");
+    expect(esg.pillars.map((p) => p.pillar)).toEqual(["environment", "social", "governance"]);
+    for (const p of esg.pillars as { kpis: number; approved: number; pending: number; missing: number; not_due: number; topics: { kpis: number }[] }[]) {
+      expect(p.approved + p.pending + p.missing + p.not_due).toBe(p.kpis);
+      expect(p.topics.reduce((n, t) => n + t.kpis, 0)).toBe(p.kpis);
+    }
+    // By hand: Environment 18 KPIs, Scope 3 not due yet, 12 of 17 due approved = 71 %; Social 7 of 10 = 70 %, Governance 3 of 3 (board diversity moved there).
+    expect(esg.pillars.map((p) => [p.approved, p.kpis, p.coverage_pct])).toEqual([
+      [12, 18, 71],
+      [7, 10, 70],
+      [3, 3, 100],
+    ]);
+    all(esg.trends, { pillar: KPI_PILLARS, topic: KPI_TOPICS, kpi_definition_id: "number", code: "string", name: "string", unit: "string?", direction_good: { nullable: ["down", "up"] }, series: "array", value: "number?", previous: "number?", change_pct: "number?", target: "object?" }, "esg.trends");
+    for (const p of KPI_PILLARS) expect(esg.trends.filter((t) => t.pillar === p).length).toBeLessThanOrEqual(4);
+    expect(esg.trends.find((t) => t.code === "WOMEN_ON_BOARD")?.pillar).toBe("governance");
+    all(esg.sites, { site_id: "number", name: "string", pillars: "object?" }, "esg.sites");
+    expect((esg.sites[0].pillars as Record<string, unknown>).governance).toBeNull();
+    all(esg.movers, { kpi_definition_id: "number", name: "string", pillar: KPI_PILLARS, change_pct: "number", good: "boolean" }, "esg.movers");
+    expect(esg.movers.length).toBeLessThanOrEqual(5);
+    check(esg.pending_not_in, { count: "number", link: "string?" }, "esg.pending_not_in");
+    const social = await get<{ trends: { pillar: string }[]; pillars: unknown[] }>("/kpi/esg?year=2026&pillar=social");
+    expect(social.pillars).toHaveLength(3);
+    expect(new Set(social.trends.map((t) => t.pillar))).toEqual(new Set(["social"]));
+  });
+
   it("GET /kpi/periods/lock, /kpi/dashboard and /kpi/reports/:framework", async () => {
     const lock = await get<{ year: number; sites: unknown[]; left: unknown[] }>("/kpi/periods/lock?year=2026&period=9");
     all(lock.sites, { site_id: "number?", name: "string", locked: "boolean", lock: "object?", kpis: "array" }, "lock.sites");
@@ -327,7 +356,7 @@ describe("KPI mock handlers: behaviour", () => {
     expect(before.map((i) => i.code)).toContain("WATER_DISCHARGE");
     expect(before.find((i) => i.code === "WATER_DISCHARGE")?.topic_label).toBe("Water");
     const setup = await get<{ topic_assignments: { site_id: number | null; topic: string; owner_user_id: number }[]; suggested_topic_assignments: unknown[]; topics_in_use: { topic: string; kpi_count: number }[] }>("/kpi/setup");
-    expect(setup.topics_in_use[0]).toEqual({ topic: "climate", kpi_count: 4 });
+    expect(setup.topics_in_use[0]).toEqual({ topic: "climate", kpi_count: 4, pillar: "environment" });
     expect(setup.suggested_topic_assignments.length).toBeGreaterThan(0);
     // Water at Bahrain plant to Mia: Ravi no longer owes it.
     const rows = setup.topic_assignments.map((t) => (t.site_id === 1 && t.topic === "water" ? { ...t, owner_user_id: 12 } : t));

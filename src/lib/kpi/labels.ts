@@ -15,6 +15,7 @@ import type {
   KpiLevel,
   KpiLockLeftReason,
   KpiOmissionKind,
+  KpiPillar,
   KpiSource,
   KpiTopic,
   KpiValueStatus,
@@ -65,6 +66,20 @@ export const TOPIC_LABEL: Record<KpiTopic, string> = {
   customers: "Customers",
   governance: "Governance",
   ethics: "Business ethics",
+};
+
+/** D19 pillar names and letters (wave E). */
+export const PILLAR_LABEL: Record<KpiPillar, string> = { environment: "Environment", social: "Social", governance: "Governance" };
+export const PILLAR_LETTER: Record<KpiPillar, "E" | "S" | "G"> = { environment: "E", social: "S", governance: "G" };
+
+/**
+ * The pillar's identity colour (`--t-pillar-e/s/g`, validated in both modes):
+ * marks only, never text. Full class names so Tailwind keeps them.
+ */
+export const PILLAR_COLOR: Record<KpiPillar, { bg: string; stroke: string; border: string; token: "pillar-e" | "pillar-s" | "pillar-g" }> = {
+  environment: { bg: "bg-pillar-e", stroke: "stroke-pillar-e", border: "border-pillar-e", token: "pillar-e" },
+  social: { bg: "bg-pillar-s", stroke: "stroke-pillar-s", border: "border-pillar-s", token: "pillar-s" },
+  governance: { bg: "bg-pillar-g", stroke: "stroke-pillar-g", border: "border-pillar-g", token: "pillar-g" },
 };
 
 export const VALUE_TYPE_LABEL: Record<KpiValueType, string> = {

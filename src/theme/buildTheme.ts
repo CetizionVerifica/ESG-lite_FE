@@ -35,6 +35,31 @@ export const STATUS = {
   },
 } as const;
 
+/**
+ * ESG pillar colours (wave E, plans/kpi/wave-e.md): validated with the dataviz
+ * palette validator in both modes; the same in every pack. Marks only.
+ */
+export const PILLAR = {
+  light: { "pillar-e": "#00927a", "pillar-s": "#6e56cf", "pillar-g": "#c2621a" },
+  dark: { "pillar-e": "#1fa68c", "pillar-s": "#8a74e0", "pillar-g": "#c87533" },
+} as const;
+
+/**
+ * The heat table's sequential ramp (wave E): one blue hue, low → high,
+ * validated as an ordinal ramp on the light and dark panels. In dark the
+ * low end sits next to the surface. `on-heat-n` is the cell text (≥ 4.5:1).
+ */
+export const HEAT = {
+  light: {
+    "heat-1": "#86b6ef", "heat-2": "#5598e7", "heat-3": "#256abf", "heat-4": "#184f95", "heat-5": "#0d366b",
+    "on-heat-1": "#16202e", "on-heat-2": "#16202e", "on-heat-3": "#ffffff", "on-heat-4": "#ffffff", "on-heat-5": "#ffffff",
+  },
+  dark: {
+    "heat-1": "#184f95", "heat-2": "#256abf", "heat-3": "#3987e5", "heat-4": "#6da7ec", "heat-5": "#9ec5f4",
+    "on-heat-1": "#ffffff", "on-heat-2": "#ffffff", "on-heat-3": "#0b1222", "on-heat-4": "#0b1222", "on-heat-5": "#0b1222",
+  },
+} as const;
+
 const SURFACE_DARK = {
   page: "#0b1222",
   panel: "#121b30",
@@ -245,6 +270,8 @@ export function buildTheme(
     ...chrome,
     s1, s2, s3,
     ...STATUS[dark ? "dark" : "light"],
+    ...PILLAR[dark ? "dark" : "light"],
+    ...HEAT[dark ? "dark" : "light"],
     "cover-from": normalizeHex(pack.coverFrom),
     "cover-to": normalizeHex(pack.coverTo),
   } as Partial<ThemeTokens>;
@@ -282,11 +309,13 @@ const TEXT_PAIRS: [TokenName, TokenName][] = [
   ["chrome-muted", "chrome-active"],
   ["good", "panel"], ["warn", "panel"], ["bad", "panel"], ["info", "panel"],
   ["good", "good-soft"], ["warn", "warn-soft"], ["bad", "bad-soft"], ["info", "info-soft"],
+  ...Array.from({ length: 5 }, (_, i) => [`on-heat-${i + 1}` as TokenName, `heat-${i + 1}` as TokenName] as [TokenName, TokenName]),
 ];
 const UI_PAIRS: [TokenName, TokenName][] = [
   ["brand", "panel"], ["brand", "page"],
   ["s1", "panel"], ["s2", "panel"], ["s3", "panel"],
   ...Array.from({ length: 8 }, (_, i) => [`series-${i + 1}` as TokenName, "panel" as TokenName] as [TokenName, TokenName]),
+  ["pillar-e", "panel"], ["pillar-s", "panel"], ["pillar-g", "panel"],
 ];
 
 /** Contrast of every checked pair; the gate passes when each ratio ≥ min. */
