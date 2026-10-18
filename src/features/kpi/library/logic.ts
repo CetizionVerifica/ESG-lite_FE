@@ -2,7 +2,9 @@
 // formula check). No React here. Counts are of library rows, not reported
 // figures, so the FE may work them out.
 import type { FrameworkCode, KpiDefinition, KpiDisclosure, KpiDisclosureMap, KpiFramework, KpiSource, KpiTopic, MappingFit } from "../../../lib/kpi/contracts";
-import { FRAMEWORK_CODES } from "../../../lib/kpi/contracts";
+import type { KpiPillar } from "../../../lib/kpi/contracts";
+import { FRAMEWORK_CODES, KPI_TOPICS } from "../../../lib/kpi/contracts";
+import { pillarOf, pillarRank } from "../../../lib/kpi/pillars";
 
 export interface Library {
   frameworks: KpiFramework[];
@@ -48,8 +50,10 @@ export function libraryRows(lib: Library): LibraryRow[] {
     byKpi.set(m.kpi_definition_id, list);
   }
   const order = (f: FrameworkCode) => FRAMEWORK_CODES.indexOf(f);
+  // D19: rows sit under their pillar (E, S, G), then in the library's topic order.
   return lib.definitions
     .filter((d) => d.company_id === null)
+    .sort((a, b) => pillarRank(pillarOf(a)) - pillarRank(pillarOf(b)) || KPI_TOPICS.indexOf(a.topic) - KPI_TOPICS.indexOf(b.topic))
     .map((def) => {
       const usedIn = (byKpi.get(def.id) ?? []).sort((a, b) => order(a.framework) - order(b.framework) || compareCodes(a.code, b.code));
       return { def, usedIn, frameworks: [...new Set(usedIn.map((u) => u.framework))] };
@@ -61,6 +65,8 @@ export interface LibraryFilter {
   framework: string[];
   topic: string[];
   source: string[];
+  /** D19: one pillar, or every pillar. */
+  pillar?: KpiPillar | null;
 }
 
 /**
@@ -73,6 +79,7 @@ export function filterLibrary(rows: LibraryRow[], f: LibraryFilter): LibraryRow[
     if (f.framework.length && !r.frameworks.some((fw) => f.framework.includes(fw))) return false;
     if (f.topic.length && !f.topic.includes(r.def.topic)) return false;
     if (f.source.length && !f.source.includes(r.def.source)) return false;
+    if (f.pillar && pillarOf(r.def) !== f.pillar) return false;
     if (!q) return true;
     const hay = [r.def.name, r.def.code, r.def.question, ...r.usedIn.map((u) => u.code)].join(" ").toLowerCase();
     return hay.includes(q);
@@ -87,6 +94,13 @@ export function countBySource(rows: LibraryRow[]): Record<KpiSource, number> {
 }
 
 export const topicsIn = (rows: LibraryRow[]): KpiTopic[] => [...new Set(rows.map((r) => r.def.topic))];
+
+/** D19: KPIs per pillar, for the chips ("E 17"). */
+export function countByPillar(rows: LibraryRow[]): Record<KpiPillar, number> {
+  const out: Record<KpiPillar, number> = { environment: 0, social: 0, governance: 0 };
+  for (const r of rows) out[pillarOf(r.def)] += 1;
+  return out;
+}
 
 export interface CoverageDisclosure {
   disclosure: KpiDisclosure;

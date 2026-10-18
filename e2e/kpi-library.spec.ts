@@ -162,3 +162,45 @@ test("other roles can't open the library", async ({ page }) => {
   await page.goto("/setup/kpi-library");
   await expect(page.getByRole("heading", { name: "You don't have access to this page" })).toBeVisible();
 });
+
+test("D19 · KPIs carry a pillar badge, filter by pillar, topics sit under pillar headings, and a Superadmin can override a KPI's pillar", async ({ page }) => {
+  const calls = await signIn(page);
+  await page.goto("/setup/kpi-library");
+  await expect(bodyRows(page)).toHaveCount(32);
+  const byPillar = page.getByTestId("library-topics-by-pillar");
+  await expect(byPillar.getByRole("heading")).toHaveText([/Environment/, /Social/, /Governance/]);
+  await expect(byPillar.getByRole("heading", { name: /Governance/ }).locator("..")).toContainText("Business ethics");
+  // A topic under its pillar filters the table.
+  await byPillar.getByRole("button", { name: /^Water/ }).click();
+  await expect(page).toHaveURL(/topic=water/);
+  await expect(bodyRows(page)).toHaveCount(3);
+  await byPillar.getByRole("button", { name: /^Water/ }).click();
+  await expect(bodyRows(page)).toHaveCount(32);
+
+  const chips = page.getByTestId("library-pillar-chips");
+  await chips.getByRole("button", { name: /Governance/ }).click();
+  await expect(page).toHaveURL(/pillar=governance/);
+  await expect(bodyRows(page)).toHaveCount(3);
+  await expect(bodyRows(page).first()).toContainText("Women on the board");
+  await expect(bodyRows(page).first().getByTestId("pillar-badge")).toContainText("G");
+
+  // Board diversity was moved to Governance: the drawer says it differs from its topic.
+  await bodyRows(page).first().click();
+  const board = page.getByRole("dialog", { name: "Women on the board" });
+  await expect(board.getByTestId("pillar-override-note")).toHaveText("Differs from its topic (Diversity → Social)");
+  await page.keyboard.press("Escape");
+  await chips.getByRole("button", { name: "All pillars" }).click();
+
+  // Water withdrawn: Environment by default; move it to Social and save.
+  await bodyRows(page).filter({ hasText: "Water withdrawn" }).click();
+  const drawer = page.getByRole("dialog", { name: "Water withdrawn" });
+  await expect(drawer.getByTestId("pillar-override-note")).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Edit" }).click();
+  await expect(drawer.getByLabel("Pillar")).toHaveValue("environment");
+  await drawer.getByLabel("Pillar").selectOption("social");
+  await expect(drawer.getByTestId("pillar-override-note")).toHaveText("Differs from its topic (Water → Environment)");
+  await drawer.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Water withdrawn saved")).toBeVisible();
+  expect(calls.find((c) => c.method === "PUT" && c.path.endsWith("/kpi/library/definitions/13"))?.body).toEqual({ question: expect.any(String), help: expect.any(String), pillar: "social" });
+  await expect(drawer.getByTestId("pillar-override-note")).toHaveText("Differs from its topic (Water → Environment)");
+});

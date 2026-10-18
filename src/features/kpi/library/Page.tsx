@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { FRAMEWORK_CODES, KPI_SOURCES } from "../../../lib/kpi/contracts";
-import { FREQUENCY_LABEL, FRAMEWORK_LABEL, LEVEL_LABEL, SOURCE_LABEL, TOPIC_LABEL } from "../../../lib/kpi/labels";
+import { FRAMEWORK_CODES, KPI_PILLARS, KPI_SOURCES } from "../../../lib/kpi/contracts";
+import { FREQUENCY_LABEL, FRAMEWORK_LABEL, LEVEL_LABEL, PILLAR_LABEL, SOURCE_LABEL, TOPIC_LABEL } from "../../../lib/kpi/labels";
+import { pillarOf, pillarParam, pillarRank, topicsByPillar } from "../../../lib/kpi/pillars";
 import {
   Badge,
   Button,
@@ -14,13 +15,17 @@ import {
   SkeletonText,
   TabPanel,
   Tabs,
+  cn,
+  focusRing,
+  panel,
   useFilterParams,
 } from "../../../ui";
+import { PillarBadge } from "../components/PillarBadge";
 import { FrameworkBadges } from "../components/FrameworkBadges";
 import { kpiErrorMessage, useLibrary } from "./api";
 import { DisclosuresView } from "./components/DisclosuresView";
 import { KpiDrawer } from "./components/KpiDrawer";
-import { type LibraryRow, countBySource, filterLibrary, libraryRows, topicsIn } from "./logic";
+import { type LibraryRow, countByPillar, countBySource, filterLibrary, libraryRows, topicsIn } from "./logic";
 
 type Tab = "kpis" | "disclosures";
 const FILTER_KEYS = ["framework", "topic", "source"];
@@ -38,6 +43,16 @@ const COLUMNS: Column<LibraryRow>[] = [
     ),
     sortable: true,
     hideable: false,
+    info: false,
+  },
+  {
+    id: "pillar",
+    header: "Pillar",
+    // Sorts E, S, G; exports the full name.
+    value: (r) => `${pillarRank(pillarOf(r.def))} ${PILLAR_LABEL[pillarOf(r.def)]}`,
+    cell: (r) => <PillarBadge pillar={pillarOf(r.def)} />,
+    sortable: true,
+    width: "5rem",
     info: false,
   },
   { id: "topic", header: "Topic", value: (r) => TOPIC_LABEL[r.def.topic], sortable: true, width: "9rem", info: false },
@@ -84,20 +99,25 @@ export default function LibraryPage() {
   const tab: Tab = params.get("tab") === "disclosures" ? "disclosures" : "kpis";
   const openId = Number(params.get("kpi")) || null;
   const frameworkId = Number(params.get("fw")) || null;
+  const pillar = pillarParam(params.get("pillar"));
 
   const rows = useMemo(() => (library.data ? libraryRows(library.data) : []), [library.data]);
   const shown = useMemo(
-    () => filterLibrary(rows, { q: filters.q, framework: filters.filters.framework ?? [], topic: filters.filters.topic ?? [], source: filters.filters.source ?? [] }),
-    [rows, filters],
+    () => filterLibrary(rows, { q: filters.q, framework: filters.filters.framework ?? [], topic: filters.filters.topic ?? [], source: filters.filters.source ?? [], pillar }),
+    [rows, filters, pillar],
   );
   const counts = countBySource(rows);
+  const pillarCounts = countByPillar(rows);
+  const topicGroups = topicsByPillar(topicsIn(rows));
+  const topicCount = (t: string) => rows.filter((r) => r.def.topic === t).length;
+  const chip = (on: boolean) => cn("inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm font-medium", on ? "border-brand bg-tint text-ink" : "border-line bg-panel text-muted hover:bg-tint hover:text-ink", focusRing);
   const knownCodes = useMemo(() => rows.map((r) => r.def.code), [rows]);
   const open = rows.find((r) => r.def.id === openId) ?? null;
   const error = library.error ? kpiErrorMessage(library.error, "Couldn't load the KPI library.") : null;
 
   const filterDefs = [
     { key: "framework", label: "Framework", options: FRAMEWORK_CODES.map((f) => ({ value: f, label: FRAMEWORK_LABEL[f] })) },
-    { key: "topic", label: "Topic", options: topicsIn(rows).map((t) => ({ value: t, label: TOPIC_LABEL[t] })) },
+    { key: "topic", label: "Topic", options: topicGroups.flatMap((g) => g.items.map((t) => ({ value: t, label: `${TOPIC_LABEL[t]} (${PILLAR_LABEL[g.pillar]})` }))) },
     { key: "source", label: "How it's filled", options: KPI_SOURCES.map((s) => ({ value: s, label: SOURCE_LABEL[s] })) },
   ];
 
@@ -123,6 +143,51 @@ export default function LibraryPage() {
               {rows.length} KPIs · {counts.auto} filled from data · {counts.formula} calculated · {counts.manual} entered
             </p>
           )}
+          {library.data && (
+            <>
+              <div role="group" aria-label="Pillar" className="flex flex-wrap gap-1.5" data-testid="library-pillar-chips">
+                <button type="button" aria-pressed={!pillar} className={chip(!pillar)} onClick={() => setParam("pillar", null)}>
+                  All pillars
+                </button>
+                {KPI_PILLARS.map((p) => (
+                  <button key={p} type="button" aria-pressed={pillar === p} className={chip(pillar === p)} onClick={() => setParam("pillar", pillar === p ? null : p)}>
+                    <PillarBadge pillar={p} className="border-0 bg-transparent px-0" />
+                    <span aria-hidden>{PILLAR_LABEL[p]}</span>
+                    <span className="font-num text-xs text-muted">{pillarCounts[p]}</span>
+                  </button>
+                ))}
+              </div>
+              <section aria-label="Topics by pillar" className={cn(panel, "grid gap-4 p-4 md:grid-cols-3")} data-testid="library-topics-by-pillar">
+                {topicGroups
+                  .filter((g) => !pillar || g.pillar === pillar)
+                  .map((g) => (
+                    <div key={g.pillar} className="space-y-1.5">
+                      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                        <PillarBadge pillar={g.pillar} />
+                        {g.label}
+                      </h3>
+                      <ul className="flex flex-wrap gap-1.5">
+                        {g.items.map((t) => {
+                          const on = (filters.filters.topic ?? []).length === 1 && filters.filters.topic?.[0] === t;
+                          return (
+                            <li key={t}>
+                              <button
+                                type="button"
+                                aria-pressed={on}
+                                onClick={() => setFilters({ ...filters, filters: { ...filters.filters, topic: on ? [] : [t] } })}
+                                className={cn("rounded-chip border px-2 py-1 text-xs", on ? "border-brand bg-tint text-ink" : "border-line text-ink hover:bg-tint", focusRing)}
+                              >
+                                {TOPIC_LABEL[t]} <span className="font-num text-muted">{topicCount(t)}</span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+              </section>
+            </>
+          )}
           <DataTable<LibraryRow>
             label="KPI library"
             rows={shown}
@@ -143,7 +208,13 @@ export default function LibraryPage() {
                 title="No KPIs match these filters."
                 description="Clear a filter or search for a disclosure code such as 303-3."
                 action={
-                  <Button variant="secondary" onClick={() => setFilters(EMPTY_FILTERS)}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setFilters(EMPTY_FILTERS);
+                      setParam("pillar", null);
+                    }}
+                  >
                     Clear filters
                   </Button>
                 }

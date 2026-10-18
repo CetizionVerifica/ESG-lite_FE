@@ -8,13 +8,17 @@ import {
   FREQUENCY_LABEL,
   FRAMEWORK_LABEL,
   LEVEL_LABEL,
+  PILLAR_LABEL,
   SOURCE_DESCRIPTION,
   SOURCE_LABEL,
   TOPIC_LABEL,
   VALUE_TYPE_LABEL,
 } from "../../../../lib/kpi/labels";
-import { Badge, Button, Callout, Drawer, TextField, Textarea, Tooltip, cn, focusRing, useToast } from "../../../../ui";
+import { KPI_PILLARS, type KpiPillar, TOPIC_PILLAR } from "../../../../lib/kpi/contracts";
+import { pillarOf, topicPillarNote } from "../../../../lib/kpi/pillars";
+import { Badge, Button, Callout, Drawer, Select, TextField, Textarea, Tooltip, cn, focusRing, useToast } from "../../../../ui";
 import { FrameworkBadges } from "../../components/FrameworkBadges";
+import { PillarBadge } from "../../components/PillarBadge";
 import { kpiErrorMessage, useUpdateDefinition } from "../api";
 import { type LibraryRow, checkFormula, formulaCheckText } from "../logic";
 
@@ -30,7 +34,7 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
   );
 }
 
-type Draft = { question: string; help: string; formula: string };
+type Draft = { question: string; help: string; formula: string; pillar: KpiPillar };
 
 /**
  * KPI-2 · One KPI of the library: its definition, where it's used (the
@@ -39,7 +43,7 @@ type Draft = { question: string; help: string; formula: string };
  */
 export function KpiDrawer({ row, knownCodes, onClose }: { row: LibraryRow | null; knownCodes: string[]; onClose: () => void }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Draft>({ question: "", help: "", formula: "" });
+  const [draft, setDraft] = useState<Draft>({ question: "", help: "", formula: "", pillar: "environment" });
   const [error, setError] = useState<string | null>(null);
   const update = useUpdateDefinition();
   const { toast } = useToast();
@@ -57,7 +61,7 @@ export function KpiDrawer({ row, knownCodes, onClose }: { row: LibraryRow | null
   if (!row || !def) return <Drawer open={false} onClose={close} title="" />;
 
   const startEdit = () => {
-    setDraft({ question: def.question, help: def.help ?? "", formula: def.formula ?? "" });
+    setDraft({ question: def.question, help: def.help ?? "", formula: def.formula ?? "", pillar: pillarOf(def) });
     setError(null);
     setEditing(true);
   };
@@ -72,6 +76,8 @@ export function KpiDrawer({ row, knownCodes, onClose }: { row: LibraryRow | null
       question: draft.question.trim(),
       help: draft.help.trim() || null,
       ...(def.source === "formula" ? { formula: draft.formula.trim() } : {}),
+      // D19: only a change of pillar is sent (the override).
+      ...(draft.pillar !== pillarOf(def) ? { pillar: draft.pillar } : {}),
     };
     update.mutate(
       { id: def.id, patch },
@@ -96,6 +102,7 @@ export function KpiDrawer({ row, knownCodes, onClose }: { row: LibraryRow | null
           <span className="font-mono text-xs">{def.code}</span>
           <span aria-hidden>·</span>
           <span>{TOPIC_LABEL[def.topic]}</span>
+          <PillarBadge pillar={pillarOf(def)} withLabel />
           <Badge tone={def.source === "manual" ? "neutral" : "info"}>{SOURCE_LABEL[def.source]}</Badge>
         </span>
       }
@@ -145,7 +152,35 @@ export function KpiDrawer({ row, knownCodes, onClose }: { row: LibraryRow | null
               <Row term="Help line">{def.help ? def.help : <span className="text-muted">Not written yet</span>}</Row>
             </dl>
           )}
+          {editing ? (
+            <div className="space-y-1">
+              <Select<KpiPillar>
+                label="Pillar"
+                value={draft.pillar}
+                onChange={(v) => v && setDraft((d) => ({ ...d, pillar: v }))}
+                options={KPI_PILLARS.map((p) => ({ value: p, label: `${PILLAR_LABEL[p]}${p === TOPIC_PILLAR[def.topic] ? ` (${TOPIC_LABEL[def.topic]}'s pillar)` : ""}` }))}
+                help={`Defaults to the topic's pillar. Change it only when this KPI belongs elsewhere, for example board diversity under Governance.`}
+              />
+              {draft.pillar !== TOPIC_PILLAR[def.topic] && (
+                <p className="text-xs text-warn" data-testid="pillar-override-note">
+                  {topicPillarNote(def.topic)}
+                </p>
+              )}
+            </div>
+          ) : null}
           <dl className="divide-y divide-line">
+            {!editing && (
+              <Row term="Pillar">
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <PillarBadge pillar={pillarOf(def)} withLabel />
+                  {pillarOf(def) !== TOPIC_PILLAR[def.topic] && (
+                    <span className="text-xs text-muted" data-testid="pillar-override-note">
+                      {topicPillarNote(def.topic)}
+                    </span>
+                  )}
+                </span>
+              </Row>
+            )}
             <Row term="How it's filled">
               {SOURCE_LABEL[def.source]}. {SOURCE_DESCRIPTION[def.source]}
               {def.auto_source && <span className="mt-1 block text-muted">From: {AUTO_SOURCE_LABEL[def.auto_source]}</span>}

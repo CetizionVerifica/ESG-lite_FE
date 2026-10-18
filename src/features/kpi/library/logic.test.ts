@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { KPI_DEFINITIONS, KPI_DISCLOSURES, KPI_FRAMEWORKS, KPI_MAPPINGS } from "../../../test/msw/kpiData";
 import type { Library } from "./logic";
-import { checkFormula, compareCodes, countBySource, coverageText, filterLibrary, formulaCheckText, frameworkCoverage, libraryRows, topicsIn } from "./logic";
+import { checkFormula, compareCodes, countByPillar, countBySource, coverageText, filterLibrary, formulaCheckText, frameworkCoverage, libraryRows, topicsIn } from "./logic";
 
 const lib: Library = { frameworks: KPI_FRAMEWORKS, definitions: KPI_DEFINITIONS, disclosures: KPI_DISCLOSURES, mappings: KPI_MAPPINGS };
 const rows = libraryRows(lib);
@@ -114,5 +114,19 @@ describe("compareCodes", () => {
   it("sorts disclosure codes numerically", () => {
     expect(["2-25", "302-1", "2-7"].sort(compareCodes)).toEqual(["2-7", "2-25", "302-1"]);
     expect(["S1-13", "S1-9", "S1-14"].sort(compareCodes)).toEqual(["S1-9", "S1-13", "S1-14"]);
+  });
+});
+
+describe("D19 · pillars in the library", () => {
+  const none = { q: "", framework: [], topic: [], source: [] };
+  it("lists rows Environment first, then Social, then Governance", () => {
+    const order = rows.map((r) => r.def.pillar);
+    expect(order.indexOf("social")).toBeGreaterThan(order.lastIndexOf("environment"));
+    expect(order.indexOf("governance")).toBeGreaterThan(order.lastIndexOf("social"));
+  });
+  it("filters by pillar and counts each", () => {
+    expect(countByPillar(rows)).toEqual({ environment: 19, social: 10, governance: 3 });
+    expect(codes(filterLibrary(rows, { ...none, pillar: "governance" }))).toEqual(["WOMEN_ON_BOARD", "REVENUE", "COMPLAINTS_RECEIVED"]);
+    expect(filterLibrary(rows, { ...none, pillar: null })).toHaveLength(rows.length);
   });
 });
