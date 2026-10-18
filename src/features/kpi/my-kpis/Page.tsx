@@ -142,6 +142,7 @@ export default function MyKpisPage() {
   // KPI-7 part 3: the fast lane, a keyboard table of what's still to enter (`?view=table`).
   const view: View = params.get("view") === "table" ? "table" : "list";
   const todo = workOrder(shown);
+  const filledShown = groupItems(shown).filled;
   const download = useDownloadTemplate();
   const [uploading, setUploading] = useState(false);
   const openKey = params.get("entry");
@@ -357,13 +358,22 @@ export default function MyKpisPage() {
           </div>
 
           {view === "table" ? (
-            todo.length ? (
-              <TableView items={todo} listKey={listKey} showSite={multiSite} onOpen={openEntry} />
-            ) : (
-              <section className={panel}>
-                <EmptyState icon={PartyPopper} title="Nothing due. You're all caught up." compact />
-              </section>
-            )
+            <div className="space-y-4">
+              {todo.length ? (
+                <TableView items={todo} listKey={listKey} showSite={multiSite} onOpen={openEntry} />
+              ) : (
+                <section className={panel}>
+                  <EmptyState icon={PartyPopper} title="Nothing due. You're all caught up." compact />
+                </section>
+              )}
+              {/* Auto and calculated KPIs aren't typed, so they sit under the table, read-only: the topic counts include them. */}
+              {filledShown.length > 0 && (
+                <section className={panel} data-testid="kpi-table-filled">
+                  <h3 className="px-4 pt-3 text-xs font-medium uppercase tracking-wide text-muted">Filled in for you</h3>
+                  {list(filledShown)}
+                </section>
+              )}
+            </div>
           ) : (
           <div className="space-y-0">
               <Tabs<Tab>

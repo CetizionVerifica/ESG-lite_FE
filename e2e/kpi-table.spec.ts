@@ -51,6 +51,16 @@ test("table view by keyboard: Enter saves and moves down, a wrong value is caugh
   await expect(card.getByLabel("Amount")).toHaveValue("11");
 });
 
+test("auto and calculated KPIs show read-only under the table, so every topic count has its rows", async ({ page }) => {
+  await kpiApp(page, { role: "User", user: RAVI });
+  await open(page);
+  const filled = page.getByTestId("kpi-table-filled");
+  await expect(filled).toContainText("Filled in for you");
+  await expect(filled.getByTestId("kpi-row").first()).toBeVisible();
+  // Nothing in it is an input: it's never typed.
+  await expect(filled.locator("input")).toHaveCount(0);
+});
+
 test("template: download what's due, upload it filled, review the issues, save the rest as drafts", async ({ page }) => {
   const calls = await kpiApp(page, { role: "User", user: RAVI });
   await open(page);

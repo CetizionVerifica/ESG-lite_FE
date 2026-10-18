@@ -34,7 +34,9 @@ export function KpiRow({ item, today, showSite, onOpen, target, aiCount = 0 }: {
           {item.source === "formula" && item.formula ? (
             <FormulaExplainer name={item.name} formula={item.formula} inputs={item.inputs ?? []} unit={item.canonical_unit} decimals={item.decimals} serverValue={value} className="text-muted" />
           ) : (
-            <p className="text-sm text-muted">{[site, "Filled in from approved data. Nothing to enter."].filter(Boolean).join(" · ")}</p>
+            <p className="text-sm text-muted">
+              {[site, value !== null ? "Filled in from approved data. Nothing to enter." : "No approved data for this period yet. It fills in by itself once there is."].filter(Boolean).join(" · ")}
+            </p>
           )}
           {target && (
             <TargetProgress

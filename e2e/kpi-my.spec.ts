@@ -14,7 +14,7 @@ test("a contributor sees progress, Due / Sent back / Done and read-only auto and
   await kpiApp(page, { role: "User", user: RAVI });
   await open(page);
   await expect(page.getByRole("heading", { name: "My KPIs", level: 1 })).toBeVisible();
-  await expect(page.getByTestId("kpi-progress")).toContainText("8 of 13 done");
+  await expect(page.getByTestId("kpi-progress")).toContainText("7 of 12 done");
   await expect(page.getByRole("tab", { name: /Due/ })).toHaveAttribute("aria-selected", "true");
 
   // Sent back on top with the reviewer's note; plain names, never disclosure codes.
@@ -137,7 +137,7 @@ test("fix a sent-back value, Save and next through the list topic by topic, then
   await page.getByRole("dialog").getByRole("button", { name: "Send 1" }).click();
   await expect(page.getByText("1 value sent for review.")).toBeVisible();
   expect(calls.filter((c) => c.path.endsWith("/kpi/values/submit")).map((c) => (c.body as { ids: number[] }).ids.length)).toEqual([4, 1]);
-  await expect(page.getByTestId("kpi-progress")).toContainText("12 of 13 done");
+  await expect(page.getByTestId("kpi-progress")).toContainText("11 of 12 done");
 });
 
 test("rows sit under topic headings with counts and progress; a topic chip filters and stays in the URL (D17)", async ({ page }) => {
@@ -146,7 +146,7 @@ test("rows sit under topic headings with counts and progress; a topic chip filte
   const groups = page.getByRole("tabpanel").getByTestId("kpi-topic-group");
   await expect(groups.getByRole("heading")).toHaveText(["Water · 2", "Waste · 1", "Pollution · 1", "Health and safety · 1", "Climate · 2", "Energy · 2", "Water · 1"]);
   const water = groups.first();
-  await expect(water).toContainText("1 of 3 done");
+  await expect(water).toContainText("0 of 2 done");
   await expect(water.getByTestId("kpi-row").first()).toContainText("Water withdrawn");
 
   const chips = page.getByTestId("kpi-topic-chips");

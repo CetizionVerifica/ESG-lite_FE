@@ -75,8 +75,14 @@ describe("My KPIs grouping and progress", () => {
     expect(g.filled.map((i) => i.name)).toEqual(["Scope 1 emissions", "Water consumed"]);
   });
 
-  it("counts auto and calculated as done (05-ux: 7 of 12 done)", () => {
-    expect(progressOf(ITEMS)).toEqual({ done: 3, total: 7, pct: 43 });
+  it("counts auto and calculated as done only once they have a value; empty ones are left out", () => {
+    // The sample's calculated Water item has no value yet: it is neither done nor counted.
+    expect(progressOf(ITEMS)).toEqual({ done: 2, total: 6, pct: 33 });
+    const filled = ITEMS.filter((i) => i.source !== "manual").map((i) => ({ ...i, value: { ...(i.value ?? {}), value_numeric: 42 } as NonNullable<typeof i.value> }));
+    const manual = ITEMS.filter((i) => i.source === "manual");
+    const all = progressOf([...manual, ...filled]);
+    expect(all.total - progressOf(manual).total).toBe(filled.length);
+    expect(all.done - progressOf(manual).done).toBe(filled.length);
     expect(progressOf([])).toEqual({ done: 0, total: 0, pct: 0 });
   });
 
@@ -90,7 +96,7 @@ describe("My KPIs grouping and progress", () => {
     const todo = ITEMS.filter((i) => i.group !== "done");
     const groups = topicGroups(todo, ITEMS);
     expect(groups.map((g) => [g.label, g.items.length, g.done, g.total])).toEqual([
-      ["Water", 2, 1, 3],
+      ["Water", 2, 0, 2],
       ["Waste", 1, 1, 2],
       ["Air and pollution", 1, 0, 1],
     ]);

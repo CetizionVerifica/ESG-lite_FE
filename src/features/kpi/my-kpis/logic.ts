@@ -38,10 +38,15 @@ export function groupItems(items: MyKpiItem[]): Groups {
   };
 }
 
-/** "7 of 12 done": auto and calculated items need nothing from the contributor, so they count as done. */
+/**
+ * "7 of 12 done". Auto and calculated items need nothing from the contributor:
+ * they count (as done) only once they have a value. One with no data yet for
+ * the period is left out, so it never reads as done when it's empty.
+ */
 export function progressOf(items: MyKpiItem[]): { done: number; total: number; pct: number } {
-  const total = items.length;
-  const done = items.filter((i) => isReadOnlySource(i) || i.group === "done").length;
+  const counted = items.filter((i) => !isReadOnlySource(i) || hasAnswer(i.value));
+  const total = counted.length;
+  const done = counted.filter((i) => isReadOnlySource(i) || i.group === "done").length;
   return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
 }
 
@@ -80,7 +85,7 @@ export function topicGroups(rows: MyKpiItem[], all: MyKpiItem[] = rows): TopicGr
 }
 
 /** Topics on the list, for the chip filter, with how many items each has. */
-export const topicChips = (items: MyKpiItem[]) => topicGroups(items).map((g) => ({ topic: g.topic, label: g.label, count: g.total }));
+export const topicChips = (items: MyKpiItem[]) => topicGroups(items).map((g) => ({ topic: g.topic, label: g.label, count: g.items.length }));
 
 /** `?topic=` read safely: a topic that isn't on the list means all topics. */
 export const topicFilter = (param: string | null, items: MyKpiItem[]): KpiTopic | null => (param && items.some((i) => i.topic === param) ? (param as KpiTopic) : null);
