@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { KpiTopicsField } from "../../../lib/kpi/KpiTopicsField";
+import type { TopicsDraft } from "../../../lib/kpi/personTopics";
 import { Button, Callout, Drawer, Select, TextField, Toggle, cn, focusRing } from "../../../ui";
 import {
   type CompanySite,
@@ -25,13 +27,15 @@ export function PersonDrawer(props: {
   /** Server error from the last save. */
   error: string | null;
   onClose: () => void;
-  onSubmit: (draft: PersonDraft) => void;
+  /** `topics` is the KPI topics field (D17) when it was changed, else null. */
+  onSubmit: (draft: PersonDraft, topics: TopicsDraft | null) => void;
   /** Clears the server error once the form changes. */
   onEdit: () => void;
 }) {
   const creating = props.user === null;
   const [draft, setDraft] = useState<PersonDraft>(() => (props.user ? draftFromUser(props.user) : EMPTY_DRAFT));
   const [shown, setShown] = useState<DraftErrors>({});
+  const [topics, setTopics] = useState<TopicsDraft | null>(null);
   const sitesId = useId();
   const errorRef = useRef<HTMLDivElement>(null);
   // Focus moves to the error so Esc still works after the Save button was disabled.
@@ -49,7 +53,7 @@ export function PersonDrawer(props: {
   const submit = () => {
     const errors = validate(draft, creating, !!props.user?.name?.trim());
     setShown(errors);
-    if (Object.keys(errors).length === 0) props.onSubmit(draft);
+    if (Object.keys(errors).length === 0) props.onSubmit(draft, topics);
   };
 
   return (
@@ -125,6 +129,16 @@ export function PersonDrawer(props: {
           )}
           {!creating && <p className="text-xs text-muted">Changing sites resets their category access to every category on the chosen sites.</p>}
         </fieldset>
+        <KpiTopicsField
+          userId={props.user?.user_id ?? null}
+          companyId={null}
+          sites={props.sites.filter((s) => draft.siteIds.includes(s.site_id))}
+          value={topics}
+          onChange={(t) => {
+            setTopics(t);
+            props.onEdit();
+          }}
+        />
         {creating && (
           <>
             <TextField

@@ -17,6 +17,12 @@ import {
   type KpiReportOmission,
   type KpiReportRow,
   type KpiTargetWithProgress,
+  type KpiPersonTopics,
+  type KpiTopic,
+  type KpiTopicMove,
+  KPI_TOPICS,
+  type PutKpiPersonTopicsBody,
+  type PutKpiPersonTopicsResult,
   type KpiUnlockBody,
   type PutKpiTargetBody,
   type ReportFormat,
@@ -62,6 +68,10 @@ const asList = <T>(data: unknown, key: string): T[] => {
 };
 const asRow = <T>(data: unknown, key: string): T =>
   (data && typeof data === "object" && key in (data as object) ? (data as Record<string, unknown>)[key] : data) as T;
+
+type Loose = Record<string, unknown>;
+const obj = (v: unknown): Loose => (v && typeof v === "object" && !Array.isArray(v) ? (v as Loose) : {});
+const pick = <T>(...vals: unknown[]): T => vals.find((v) => v !== undefined) as T;
 
 // KPI-1
 /** `GET /kpi/status`: answers even when the switch is off. A body without `enabled` (an older server) reads as unknown. */
@@ -137,6 +147,31 @@ export async function getSetupPeople(setup: KpiSetup): Promise<{ sites: KpiSetup
   return { sites: siteRows, people };
 }
 
+// D17: a person's KPI topics (company users drawer; Admin, Superadmin, a Manager for their sites)
+const topicList = (v: unknown): KpiTopic[] => (Array.isArray(v) ? v.filter((t): t is KpiTopic => (KPI_TOPICS as readonly string[]).includes(t as string)) : []);
+/** `GET /kpi/people/:user_id/topics` → `{topics, by_site}` (also read when wrapped as `{person_topics}` or `{topics: {…}}`). */
+export async function getPersonTopics(userId: number, companyId?: number | null): Promise<KpiPersonTopics> {
+  const data = obj(asRow<unknown>((await api.get(`/kpi/people/${userId}/topics`, { params: companyParams(companyId) })).data, "person_topics"));
+  const bySite = asList<Loose>(data, "by_site").map((r) => ({ site_id: (r.site_id ?? null) as number | null, site_name: (r.site_name ?? null) as string | null, topics: topicList(r.topics) }));
+  const topics = topicList(data.topics);
+  return { topics: topics.length ? topics : KPI_TOPICS.filter((t) => bySite.some((b) => b.topics.includes(t))), by_site: bySite };
+}
+/** `PUT /kpi/people/:user_id/topics {company_id?, topics, site_ids?}` → `{topics, site_ids, moved}`; `moved` is read as a list, missing = none. */
+export async function putPersonTopics(userId: number, body: PutKpiPersonTopicsBody, companyId?: number | null): Promise<PutKpiPersonTopicsResult> {
+  const sent = companyId ? { company_id: companyId, ...body } : body;
+  const data = obj(asRow<unknown>((await api.put(`/kpi/people/${userId}/topics`, sent, { params: companyParams(companyId) })).data, "person_topics"));
+  const moved = asList<Loose>(data, "moved").map(
+    (m): KpiTopicMove => ({
+      site_id: (m.site_id ?? null) as number | null,
+      site_name: (m.site_name ?? null) as string | null,
+      topic: m.topic as KpiTopic,
+      from_user_id: (m.from_user_id ?? null) as number | null,
+      from_name: (m.from_name ?? null) as string | null,
+    }),
+  );
+  return { topics: topicList(data.topics ?? body.topics), site_ids: Array.isArray(data.site_ids) ? (data.site_ids as number[]) : (body.site_ids ?? []), moved: moved.filter((m) => (KPI_TOPICS as readonly string[]).includes(m.topic)) };
+}
+
 // KPI-7: what the caller owes
 /**
  * `GET /kpi/my?period=YYYY-MM&site=`. Items may come flat (the KPI-0 mock
@@ -148,9 +183,6 @@ export async function getMyKpis(period: string, siteId?: number | null, companyI
   return readMyKpis((await api.get("/kpi/my", { params })).data, period);
 }
 
-type Loose = Record<string, unknown>;
-const obj = (v: unknown): Loose => (v && typeof v === "object" && !Array.isArray(v) ? (v as Loose) : {});
-const pick = <T>(...vals: unknown[]): T => vals.find((v) => v !== undefined) as T;
 
 export function readMyKpis(data: unknown, period: string): MyKpis {
   const root = obj(asRow<unknown>(data, "my"));

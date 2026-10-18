@@ -18,6 +18,9 @@ import {
   withoutParams,
   writeFilterParams,
 } from "../../ui";
+import { type TopicsDraft, movedNotes, topicsBody } from "../../lib/kpi/personTopics";
+import { useSavePersonTopics } from "../../lib/kpi/usePersonTopics";
+import { kpiErrorMessage } from "../../services/kpiService";
 import { errorMessage, useCompanies, useRemoveUser, useSaveUser, useSendResetLink, useSites, useUsers } from "./api";
 import { UserDrawer } from "./components/UserDrawer";
 import { userColumns } from "./components/columns";
@@ -38,6 +41,7 @@ export default function UsersGlobalPage() {
   const sites = useSites();
   const companies = useCompanies();
   const save = useSaveUser();
+  const saveTopics = useSavePersonTopics();
   const remove = useRemoveUser();
   const reset = useSendResetLink();
 
@@ -72,17 +76,38 @@ export default function UsersGlobalPage() {
     [setParams, save],
   );
 
-  const onSave = (draft: UserDraft) => {
+  const onSave = (draft: UserDraft, topics: TopicsDraft | null = null) => {
     setSaveErr(null);
     const payload = toPayload(draft, openRow);
     const name = personName({ name: draft.name.trim(), last_name: draft.last_name.trim(), email: draft.email.trim() });
+    const userId = openRow?.user_id ?? null;
+    // D17: the KPI topics go after the person, so new sites count.
+    const afterTopics = async (detailsSaved: boolean): Promise<{ ok: boolean; notes?: string }> => {
+      if (!topics || userId === null) return { ok: true };
+      try {
+        return { ok: true, notes: movedNotes((await saveTopics.mutateAsync({ userId, body: topicsBody(topics), companyId: draft.company_id })).moved, name) };
+      } catch (e) {
+        setSaveErr(detailsSaved ? `Their details were saved, but not their KPI topics. ${kpiErrorMessage(e, "Try again.")}` : kpiErrorMessage(e, "Their KPI topics weren't changed. Try again."));
+        return { ok: false };
+      }
+    };
+    if (userId !== null && topics && Object.keys(payload).length === 0) {
+      void afterTopics(false).then((r) => {
+        if (!r.ok) return;
+        setOpen(null);
+        toast({ title: `${name} saved`, description: r.notes, tone: "good" });
+      });
+      return;
+    }
     save.mutate(
-      { id: openRow?.user_id ?? null, payload },
+      { id: userId, payload },
       {
-        onSuccess: (res) => {
+        onSuccess: async (res) => {
+          const t = await afterTopics(true);
+          if (!t.ok) return;
           setOpen(null);
           if (creating && res?.temporary_password) setCreated({ name, email: draft.email.trim(), password: res.temporary_password });
-          else toast({ title: creating ? `${name} added` : `${name} saved`, tone: "good" });
+          else toast({ title: creating ? `${name} added` : `${name} saved`, description: t.notes, tone: "good" });
         },
         onError: (e) => setSaveErr(errorMessage(e, "Nothing was saved. Try again.")),
       },
@@ -201,7 +226,7 @@ export default function UsersGlobalPage() {
         defaultCompanyId={defaultCompanyId}
         companies={{ data: companies.data ?? [], loading: companies.isPending }}
         sites={{ data: sites.data ?? [], loading: sites.isPending }}
-        saving={save.isPending}
+        saving={save.isPending || saveTopics.isPending}
         error={saveErr}
         onClose={() => setOpen(null)}
         onSave={onSave}
