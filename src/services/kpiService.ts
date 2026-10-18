@@ -206,6 +206,7 @@ function readMyItem(raw: Loose): MyKpiItem {
     question: pick(raw.question, kpi.question, ""),
     help: pick(raw.help, kpi.help, null),
     topic: pick(raw.topic, kpi.topic, "governance"),
+    topic_label: pick(raw.topic_label, kpi.topic_label, undefined),
     source: pick(raw.source, kpi.source, "manual"),
     value_type: pick(raw.value_type, kpi.value_type, "number"),
     canonical_unit: pick(raw.canonical_unit, kpi.canonical_unit, kpi.unit, null),

@@ -2,7 +2,8 @@
  * KPI-7 · My KPIs logic (pure): grouping, progress, the order "Save and
  * next" walks, what "Submit all" sends, and the draft ↔ value mapping.
  */
-import type { KpiValue, KpiValueInput, MyKpiItem } from "../../../lib/kpi/contracts";
+import { KPI_TOPICS, type KpiTopic, type KpiValue, type KpiValueInput, type MyKpiItem } from "../../../lib/kpi/contracts";
+import { TOPIC_LABEL } from "../../../lib/kpi/labels";
 import { dueText, fillQuestion, lastPeriodText, periodText } from "../../../lib/kpi/entry";
 import type { EntryDraft, QuestionCardItem } from "../components/KpiQuestionCard";
 
@@ -42,10 +43,50 @@ export function progressOf(items: MyKpiItem[]): { done: number; total: number; p
   return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
 }
 
-/** What "Save and next" walks through: sent back first, then due. */
+const topicRank = (t: string) => {
+  const i = (KPI_TOPICS as readonly string[]).indexOf(t);
+  return i < 0 ? KPI_TOPICS.length : i;
+};
+
+/** The topic's plain name: the server's `topic_label`, else ours. */
+export const topicLabelOf = (i: Pick<MyKpiItem, "topic" | "topic_label">) => i.topic_label || TOPIC_LABEL[i.topic] || i.topic;
+
+export interface TopicGroup {
+  topic: KpiTopic;
+  label: string;
+  items: MyKpiItem[];
+  /** Over every item of the topic for the period, not only the rows shown. */
+  done: number;
+  total: number;
+}
+
+/**
+ * D17: rows under topic headings ("Water", "Waste"…) in topic order, each
+ * with a count and progress over all of the topic's items (`all`). Inside a
+ * topic: sent back first, then by due date and name.
+ */
+export function topicGroups(rows: MyKpiItem[], all: MyKpiItem[] = rows): TopicGroup[] {
+  const topics = [...new Set(rows.map((i) => i.topic))].sort((a, b) => topicRank(a) - topicRank(b));
+  return topics.map((topic) => {
+    const mine = all.filter((i) => i.topic === topic);
+    const p = progressOf(mine);
+    const items = rows
+      .filter((i) => i.topic === topic)
+      .sort((a, b) => Number(b.group === "sent_back") - Number(a.group === "sent_back") || a.due_date.localeCompare(b.due_date) || a.name.localeCompare(b.name));
+    return { topic, label: topicLabelOf(items[0] ?? mine[0]), items, done: p.done, total: p.total };
+  });
+}
+
+/** Topics on the list, for the chip filter, with how many items each has. */
+export const topicChips = (items: MyKpiItem[]) => topicGroups(items).map((g) => ({ topic: g.topic, label: g.label, count: g.total }));
+
+/** `?topic=` read safely: a topic that isn't on the list means all topics. */
+export const topicFilter = (param: string | null, items: MyKpiItem[]): KpiTopic | null => (param && items.some((i) => i.topic === param) ? (param as KpiTopic) : null);
+
+/** What "Save and next" walks through: the to-do rows in the order shown (by topic, sent back first). */
 export const workOrder = (items: MyKpiItem[]): MyKpiItem[] => {
   const g = groupItems(items);
-  return [...g.sentBack, ...g.due];
+  return topicGroups([...g.sentBack, ...g.due]).flatMap((t) => t.items);
 };
 
 /** The next item to enter after `key` in the work order; null at the end of the list. */

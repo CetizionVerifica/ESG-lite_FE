@@ -13,6 +13,9 @@ import {
   readyToSubmit,
   submitQuestion,
   toValueInput,
+  topicChips,
+  topicFilter,
+  topicGroups,
   withValue,
   workOrder,
 } from "./logic";
@@ -48,12 +51,12 @@ const item = (over: Partial<MyKpiItem> = {}): MyKpiItem =>
   }) as MyKpiItem;
 
 const ITEMS: MyKpiItem[] = [
-  item({ kpi_definition_id: 1, name: "Scope 1 emissions", source: "auto", group: "done", value: value({ status: "approved" }) }),
+  item({ kpi_definition_id: 1, name: "Scope 1 emissions", topic: "climate", source: "auto", group: "done", value: value({ status: "approved" }) }),
   item({ kpi_definition_id: 13, name: "Water withdrawn", group: "sent_back", value: value({ status: "rejected", review_comment: "Split it" }) }),
   item({ kpi_definition_id: 14, name: "Water discharged", group: "due", value: value({ id: 2 }) }),
-  item({ kpi_definition_id: 15, name: "Waste generated", group: "due", due_date: "2026-10-15" }),
-  item({ kpi_definition_id: 18, name: "NOx emitted", group: "due", due_date: "2026-10-15" }),
-  item({ kpi_definition_id: 16, name: "Waste recovered", group: "done", value: value({ id: 3, status: "pending" }) }),
+  item({ kpi_definition_id: 15, name: "Waste generated", topic: "waste", group: "due", due_date: "2026-10-15" }),
+  item({ kpi_definition_id: 18, name: "NOx emitted", topic: "pollution", topic_label: "Air and pollution", group: "due", due_date: "2026-10-15" }),
+  item({ kpi_definition_id: 16, name: "Waste recovered", topic: "waste", group: "done", value: value({ id: 3, status: "pending" }) }),
   item({ kpi_definition_id: 11, name: "Water consumed", source: "formula", group: "done" }),
 ];
 
@@ -71,10 +74,24 @@ describe("My KPIs grouping and progress", () => {
     expect(progressOf([])).toEqual({ done: 0, total: 0, pct: 0 });
   });
 
-  it("walks sent back first, then due; Save and next stops at the end", () => {
-    expect(workOrder(ITEMS).map((i) => i.name)).toEqual(["Water withdrawn", "NOx emitted", "Waste generated", "Water discharged"]);
-    expect(nextItem(ITEMS, itemKey(ITEMS[1]))?.name).toBe("NOx emitted");
-    expect(nextItem(ITEMS, itemKey(ITEMS[2]))).toBeNull();
+  it("walks the to-do rows in the order shown: by topic, sent back first; Save and next stops at the end", () => {
+    expect(workOrder(ITEMS).map((i) => i.name)).toEqual(["Water withdrawn", "Water discharged", "Waste generated", "NOx emitted"]);
+    expect(nextItem(ITEMS, itemKey(ITEMS[1]))?.name).toBe("Water discharged");
+    expect(nextItem(ITEMS, itemKey(ITEMS[4]))).toBeNull();
+  });
+
+  it("groups rows under topic headings with progress over the whole topic, and reads ?topic= safely (D17)", () => {
+    const todo = ITEMS.filter((i) => i.group !== "done");
+    const groups = topicGroups(todo, ITEMS);
+    expect(groups.map((g) => [g.label, g.items.length, g.done, g.total])).toEqual([
+      ["Water", 2, 1, 3],
+      ["Waste", 1, 1, 2],
+      ["Air and pollution", 1, 0, 1],
+    ]);
+    expect(topicChips(ITEMS).map((c) => `${c.label} ${c.count}`)).toEqual(["Climate 1", "Water 3", "Waste 2", "Air and pollution 1"]);
+    expect(topicFilter("waste", ITEMS)).toBe("waste");
+    expect(topicFilter("biodiversity", ITEMS)).toBeNull();
+    expect(topicFilter(null, ITEMS)).toBeNull();
   });
 
   it("submits drafts that have an answer, and says to whom", () => {

@@ -18,6 +18,7 @@ import {
   TabPanel,
   Tabs,
   cn,
+  focusRing,
   panel,
   periodLabel,
   serializePeriod,
@@ -27,7 +28,7 @@ import {
 import { keys, kpiErrorMessage, useMyKpis, useSubmitValues, useTargetsFor } from "./api";
 import { EntryDrawer } from "./components/EntryDrawer";
 import { KpiRow } from "./components/KpiRow";
-import { defaultPeriod, groupItems, itemKey, nextDueDate, progressOf, readyToSubmit, submitQuestion, workOrder } from "./logic";
+import { defaultPeriod, groupItems, itemKey, nextDueDate, progressOf, readyToSubmit, submitQuestion, topicChips, topicFilter, topicGroups, workOrder } from "./logic";
 import { useKpiCompanyId } from "../../../lib/kpi/switch";
 
 type Tab = "due" | "sent_back" | "done";
@@ -80,12 +81,16 @@ export default function MyKpisPage() {
   const [sequence, setSequence] = useState<string[] | null>(null);
 
   const items = useMemo(() => (my.data?.items ?? []).filter((i) => siteId === null || i.site_id === siteId || i.site_id === null), [my.data, siteId]);
-  const groups = useMemo(() => groupItems(items), [items]);
+  // D17: a topic chip narrows the list (`?topic=`); progress and Submit stay for the whole period.
+  const topic = topicFilter(params.get("topic"), items);
+  const shown = useMemo(() => (topic ? items.filter((i) => i.topic === topic) : items), [items, topic]);
+  const chips = useMemo(() => topicChips(items), [items]);
+  const groups = useMemo(() => groupItems(shown), [shown]);
   const progress = progressOf(items);
   const ready = readyToSubmit(items);
   const due = nextDueDate(items);
   const multiSite = new Set(items.map((i) => i.site_id)).size > 1;
-  const order = sequence ?? workOrder(items).map(itemKey);
+  const order = sequence ?? workOrder(shown).map(itemKey);
 
   const setParam = (key: string, value: string | null) =>
     setParams(
@@ -105,7 +110,7 @@ export default function MyKpisPage() {
   const nextKey = at >= 0 ? order.slice(at + 1).find((k) => items.some((i) => itemKey(i) === k)) : undefined;
   const next = nextKey ? (items.find((i) => itemKey(i) === nextKey) ?? null) : null;
   const openEntry = (key: string) => {
-    setSequence(workOrder(items).map(itemKey));
+    setSequence(workOrder(shown).map(itemKey));
     setParam("entry", key);
   };
 
@@ -128,12 +133,33 @@ export default function MyKpisPage() {
 
   if (my.error && isKpiTrackingOff(my.error)) return <KpiNotAvailable home="/my-month" />;
 
+  // Rows under topic headings, each with how much of the topic is done.
   const list = (rows: MyKpiItem[], extra?: MyKpiItem[]) => (
-    <ul className="divide-y divide-line">
-      {[...rows, ...(extra ?? [])].map((i) => (
-        <KpiRow key={itemKey(i)} item={i} today={today} showSite={multiSite} onOpen={() => openEntry(itemKey(i))} target={i.source === "manual" ? null : targetFor(i)} />
-      ))}
-    </ul>
+    <div className="divide-y divide-line">
+      {topicGroups([...rows, ...(extra ?? [])], items).map((g) => {
+        const pct = g.total ? Math.round((g.done / g.total) * 100) : 0;
+        return (
+          <section key={g.topic} aria-labelledby={`kpi-topic-${g.topic}`} data-testid="kpi-topic-group">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 bg-tint/40 px-4 py-2">
+              <h3 id={`kpi-topic-${g.topic}`} className="text-sm font-semibold text-ink">
+                {g.label} <span className="font-normal text-muted">· {g.items.length}</span>
+              </h3>
+              <span className="flex items-center gap-2 text-xs text-muted">
+                <span aria-hidden className="block h-1.5 w-16 overflow-hidden rounded-full bg-tint">
+                  <span className="block h-full rounded-full bg-brand" style={{ width: `${pct}%` }} />
+                </span>
+                {g.done} of {g.total} done
+              </span>
+            </div>
+            <ul className="divide-y divide-line">
+              {g.items.map((i) => (
+                <KpiRow key={itemKey(i)} item={i} today={today} showSite={multiSite} onOpen={() => openEntry(itemKey(i))} target={i.source === "manual" ? null : targetFor(i)} />
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
   );
 
   const tabBody = (t: Tab) => {
@@ -227,6 +253,30 @@ export default function MyKpisPage() {
                 ))}
               </ul>
             </Callout>
+          )}
+
+          {chips.length > 1 && (
+            <div role="group" aria-label="Show topic" className="flex flex-wrap gap-1.5" data-testid="kpi-topic-chips">
+              {[{ topic: null, label: "All topics", count: items.length }, ...chips].map((c) => {
+                const on = (c.topic ?? null) === topic;
+                return (
+                  <button
+                    key={c.topic ?? "all"}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setParam("topic", c.topic)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-chip border px-2.5 py-1 text-xs font-medium",
+                      on ? "border-brand bg-tint text-brand-text" : "border-line text-muted hover:text-ink",
+                      focusRing,
+                    )}
+                  >
+                    {c.label}
+                    <span className="font-num text-muted">{c.count}</span>
+                  </button>
+                );
+              })}
+            </div>
           )}
 
           <div className="space-y-0">
