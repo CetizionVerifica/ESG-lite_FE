@@ -64,6 +64,7 @@ import { getKpiValues } from "../../services/kpiService";
 import { hasModuleSlot } from "../../routes/moduleSlots";
 import { ModuleSlot } from "../../routes/ModuleSlot";
 import { ReportMenu } from "./components/ReportMenu";
+import { StaffKpiApprovals } from "./components/StaffKpiApprovals";
 import { RecordDrawer } from "./components/RecordDrawer";
 import { ledgerColumns } from "./components/columns";
 import {
@@ -119,8 +120,16 @@ const describe = (r: LedgerRow) => `${r.category?.category_name ?? "Entry"} · $
 /** `close`: S3-15 Close month, only with the company's review workflow on. `kpi`: KPI-8, only with KPI tracking on. */
 type View = Tab | "batches" | "close" | "kpi";
 
-/** P07: `/data/approvals` (Approvals; `?view=batches` Upload batches, `?view=close` Close month) and `/data/ledger`. */
+/**
+ * P07: `/data/approvals` (Approvals; `?view=batches` Upload batches, `?view=close` Close month) and `/data/ledger`.
+ * D18: a Superadmin gets the KPIs tab only, for the chosen client.
+ */
 export default function EmissionsPage({ tab }: { tab: Tab }) {
+  const { role } = useAuth();
+  return role === "Superadmin" ? <StaffKpiApprovals /> : <ManagerEmissionsPage tab={tab} />;
+}
+
+function ManagerEmissionsPage({ tab }: { tab: Tab }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const sites = useManagerSites();

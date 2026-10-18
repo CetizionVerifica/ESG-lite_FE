@@ -45,10 +45,10 @@ export function gapsFor(gaps: KpiGap[], framework: FrameworkCode | null, framewo
   return gaps.filter((g) => (g.frameworks.length ? g.frameworks : frameworksOf(g.kpi_definition_id)).includes(framework));
 }
 
-/** Where "Open" goes: the server's link, else (for a Manager) the period's close view for the site. */
+/** Where "Open" goes: the server's link, else (for a reviewer: a Manager or Superadmin) the period's close view for the site. */
 export function gapLink(g: KpiGap, role: string | null): string | null {
   if (g.link) return g.link;
-  if (role !== "Manager") return null;
+  if (role !== "Manager" && role !== "Superadmin") return null;
   const month = [...g.periods_missing].reverse().find((p) => /^\d{4}-\d{2}$/.test(p));
   const q = new URLSearchParams({ view: "kpi", step: "close" });
   if (month) q.set("period", month);

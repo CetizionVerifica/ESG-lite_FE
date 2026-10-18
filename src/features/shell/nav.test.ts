@@ -72,13 +72,26 @@ describe("switch-aware nav (KPI-1)", () => {
     expect(show(navFor("User", { kpi: true }))).toEqual(["Current Month", "My KPIs", "Add data", "My entries", "Production"]);
     expect(show(navFor("Manager", { kpi: true }))).toEqual([
       "Overview",
-      "Data ▾ (Approvals, KPIs, Emissions ledger, Production data, Suppliers, Bulk upload)",
+      "Data ▾ (Approvals, Emissions ledger, Production data, Suppliers, Bulk upload)",
       "Reports ▾ (GHG report, EDE report, Framework reports, Scope 3 boundary)",
+      "KPIs ▾ (Dashboard, Targets)",
       "Targets (SBTi)",
       "Products (PCF)",
       "Team",
     ]);
-    expect(show(navFor("Admin", { kpi: true }))).toEqual(["Users", "Bulk upload", "Brand theme", "Scope 3 boundary", "Suppliers", "KPIs", "KPI setup"]);
+    expect(show(navFor("Admin", { kpi: true }))).toEqual(["Users", "Bulk upload", "Brand theme", "Scope 3 boundary", "Suppliers", "KPIs ▾ (Dashboard, Targets, Framework reports, KPI setup)"]);
+  });
+
+  it("gives a Superadmin every KPI page an Admin has, plus the KPI review, behind the client's switch (D18)", () => {
+    const kpi = navLinks("Superadmin", { kpi: true }).filter((l) => l.group === "KPIs");
+    expect(kpi.map((l) => [l.label, l.to])).toEqual([
+      ["Dashboard", "/kpi/dashboard"],
+      ["Targets", "/kpi/targets"],
+      ["Approvals", "/data/approvals?view=kpi"],
+      ["Framework reports", "/reports/kpi/GRI"],
+      ["KPI setup", "/kpi/setup"],
+    ]);
+    expect(navLinks("Superadmin", {}).some((l) => l.group === "KPIs")).toBe(false);
   });
 
   it("keeps the Superadmin's KPI library whatever the switch: the library is global", () => {

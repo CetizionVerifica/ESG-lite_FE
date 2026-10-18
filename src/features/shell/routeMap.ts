@@ -54,7 +54,8 @@ export const SHELL_ROUTES = [
 
   // Manager
   { id: "overview", path: "/overview", title: "Overview", crumb: ["Overview"], roles: ["Manager"], spec: "P06" },
-  { id: "approvals", path: "/data/approvals", title: "Approvals", crumb: ["Data", "Approvals"], roles: ["Manager"], spec: "P07" },
+  // D18: a Superadmin opens only the KPIs tab (`?view=kpi`), for the chosen client.
+  { id: "approvals", path: "/data/approvals", title: "Approvals", crumb: ["Data", "Approvals"], roles: ["Manager", "Superadmin"], spec: "P07", clientContext: true },
   { id: "ledger", path: "/data/ledger", title: "Emissions ledger", crumb: ["Data", "Emissions ledger"], roles: ["Manager"], spec: "P07" },
   { id: "production-review", path: "/data/production", title: "Production data", crumb: ["Data", "Production data"], roles: ["Manager"], spec: "P08" },
   { id: "team", path: "/team", title: "Team", crumb: ["Team"], roles: ["Manager"], spec: "P09" },
@@ -121,7 +122,7 @@ export const SHELL_ROUTES = [
   // kpi-review is a tab of Approvals (/data/approvals?view=kpi), not a route of its own.
   { id: "kpi-my", path: "/kpi", title: "My KPIs", crumb: ["My KPIs"], roles: ["User", "Manager", "Admin"], spec: "KPI-7", requires: "kpi" },
   { id: "kpi-setup", path: "/kpi/setup", title: "KPI setup", crumb: ["Settings", "KPI setup"], roles: ["Admin", "Superadmin"], spec: "KPI-3", clientContext: true, requires: "kpi" },
-  { id: "kpi-targets", path: "/kpi/targets", title: "KPI targets", crumb: ["KPIs", "Targets"], roles: ["Manager", "Admin"], spec: "KPI-9", requires: "kpi" },
+  { id: "kpi-targets", path: "/kpi/targets", title: "KPI targets", crumb: ["KPIs", "Targets"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-9", clientContext: true, requires: "kpi" },
   { id: "kpi-dashboard", path: "/kpi/dashboard", title: "KPIs", crumb: ["Data", "KPIs"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-10", clientContext: true, requires: "kpi" },
   { id: "kpi-reports", path: "/reports/kpi/:framework", title: "Framework reports", crumb: ["Reports", "Framework reports"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-11", clientContext: true, requires: "kpi" },
   { id: "kpi-library", path: "/setup/kpi-library", title: "KPI library", crumb: ["Setup", "KPI library"], roles: ["Superadmin"], spec: "KPI-2" },

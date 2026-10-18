@@ -8,7 +8,7 @@ import { kpiHandlers, resetKpiMocks, setKpiMockEnabled, startKpiSetupFresh } fro
  * mocks and the specs can't drift apart. Other calls get the shell's basics.
  */
 
-export type Call = { method: string; path: string; body: unknown };
+export type Call = { method: string; path: string; body: unknown; /** The query string, e.g. `?company_id=1` (D18). */ search: string };
 
 export const RAVI = {
   user_id: 11,
@@ -44,6 +44,11 @@ export const MIA = {
   ],
 };
 
+/** Sam, ESGLite staff (Superadmin): works on ACME once it's the chosen client (D18). */
+export const SAM = { user_id: 1, name: "Sam Staff", email: "sam@esglite.example" };
+/** The Superadmin's client list (`/admin/companies`). */
+export const CLIENTS = [ACME_ON, { company_id: 2, name: "Beta Steel", kpi_tracking_enabled: false }];
+
 /** One history entry for any KPI value (`/user/audit-logs?entity_type=kpi_value`). */
 const kpiAudit = (url: URL) =>
   url.searchParams.get("entity_type") === "kpi_value"
@@ -65,19 +70,20 @@ const kpiAudit = (url: URL) =>
  * `keepState` leaves the KPI mocks as an earlier page in the same test left
  * them (a Manager rejects, then the contributor opens My KPIs).
  */
-export async function kpiApp(page: Page, opts: { role: string; user: object; enabled?: boolean; freshSetup?: boolean; keepState?: boolean; other?: (url: URL) => unknown }) {
+export async function kpiApp(page: Page, opts: { role: string; user: object; enabled?: boolean; freshSetup?: boolean; keepState?: boolean; other?: (url: URL) => unknown; /** A Superadmin's chosen client at the start (D18). */ clientId?: number }) {
   if (!opts.keepState) resetKpiMocks();
   if (opts.enabled === false) setKpiMockEnabled(false);
   if (opts.freshSetup) startKpiSetupFresh();
   const calls: Call[] = [];
   const user = opts.enabled === false ? JSON.parse(JSON.stringify(opts.user).replace(/"kpi_tracking_enabled":true/g, '"kpi_tracking_enabled":false')) : opts.user;
   await page.addInitScript(
-    ([r, u]) => {
+    ([r, u, c]) => {
       localStorage.setItem("token", "test-token");
       localStorage.setItem("role", r);
       localStorage.setItem("user", u);
+      if (c) localStorage.setItem("esglite.clientId", c);
     },
-    [opts.role, JSON.stringify(user)],
+    [opts.role, JSON.stringify(user), opts.clientId ? String(opts.clientId) : ""],
   );
   await page.route(
     (url) => url.port !== "4173",
@@ -94,7 +100,7 @@ export async function kpiApp(page: Page, opts: { role: string; user: object; ena
         } catch {
           body = "(multipart)";
         }
-        calls.push({ method, path, body });
+        calls.push({ method, path, body, search: url.search });
       }
 
       if (path.endsWith("/auth/me")) return json({ role: opts.role, user });
@@ -103,6 +109,7 @@ export async function kpiApp(page: Page, opts: { role: string; user: object; ena
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       if (path.endsWith("/user/audit-logs")) return json(kpiAudit(url));
+      if (path.endsWith("/admin/companies") && opts.role === "Superadmin") return json(CLIENTS.map((c) => (c.company_id === 1 && opts.enabled === false ? { ...c, kpi_tracking_enabled: false } : c)));
       if (/\/kpi(\/|$)/.test(path)) {
         const headers = new Headers(req.headers());
         const body = method === "GET" || method === "HEAD" ? undefined : (req.postDataBuffer() ?? undefined);

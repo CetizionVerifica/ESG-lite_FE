@@ -26,6 +26,16 @@ describe("command registry", () => {
     expect(routeCommands("Admin", null, { kpi: true }).map((c) => c.label)).toContain("KPI setup");
   });
 
+  it("names KPI pages plainly in the palette and follows role and switch (wave D)", () => {
+    const labels = (role: "Manager" | "Admin" | "Superadmin" | "User", kpi: boolean) => routeCommands(role, 3, { kpi }).filter((c) => c.group === "KPIs" || c.to.includes("kpi")).map((c) => c.label);
+    expect(labels("Admin", true)).toEqual(["KPI dashboard", "KPI targets", "Framework reports", "KPI setup"]);
+    expect(labels("Manager", true)).toEqual(["Framework reports", "KPI dashboard", "KPI targets"]);
+    expect(labels("Superadmin", true)).toEqual(["KPI library", "KPI dashboard", "KPI targets", "KPI approvals", "Framework reports", "KPI setup"]);
+    expect(labels("User", true)).toEqual(["My KPIs"]);
+    expect(labels("Admin", false)).toEqual([]);
+    expect(routeCommands("Superadmin", 3, { kpi: true }).find((c) => c.label === "KPI dashboard")?.keywords).toContain("kpis dashboard");
+  });
+
   it("keeps recent items unique, newest first, capped", () => {
     expect(pushRecent(["a", "b"], "b")).toEqual(["b", "a"]);
     expect(pushRecent(["a", "b", "c"], "d", 3)).toEqual(["d", "a", "b"]);

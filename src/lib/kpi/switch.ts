@@ -80,3 +80,25 @@ export function useKpiCompanyId(): number | null {
   const { clientId } = useClientContext();
   return role === "Superadmin" ? clientId : null;
 }
+
+/** D18: a Superadmin on a KPI page with no client chosen yet: the page asks for one instead of saying "off". */
+export function useKpiNeedsClient(): boolean {
+  const { role } = useAuth();
+  const { clientId } = useClientContext();
+  return role === "Superadmin" && clientId === null;
+}
+
+/**
+ * D18: whether KPI nav items and palette entries show. For a company's own
+ * people, the switch. For a Superadmin, the chosen client's switch, and also
+ * while no client is chosen (the pages then ask for one).
+ */
+export function useKpiNavOn(): boolean {
+  const on = useKpiTracking();
+  const needsClient = useKpiNeedsClient();
+  return on || needsClient;
+}
+
+/** Who reviews KPI values (D11, D18): a site's Managers and a Superadmin. Admins don't approve. */
+export const KPI_REVIEWERS = ["Manager", "Superadmin"] as const;
+export const canReviewKpis = (role: string | null | undefined) => !!role && (KPI_REVIEWERS as readonly string[]).includes(role);

@@ -19,10 +19,10 @@ export function routeCommands(role: Role | null, clientId: number | null, flags:
   if (!role) return [];
   const pages = navLinks(role, flags).map((l) => ({
     id: `route:${l.to}`,
-    label: l.label,
+    label: l.palette ?? l.label,
     group: l.group ?? "Pages",
     to: resolveNavTo(l.to, clientId),
-    keywords: `${l.group ?? ""} ${l.label}`.toLowerCase(),
+    keywords: `${l.group ?? ""} ${l.label} ${l.palette ?? ""}`.toLowerCase().trim(),
   }));
   return [
     ...pages,

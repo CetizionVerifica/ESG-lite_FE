@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { BarChart3, FileSpreadsheet, Target } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
+import { canReviewKpis } from "../../../lib/kpi/switch";
 import { FRAMEWORK_CODES, type FrameworkCode, KPI_TOPICS, type KpiTopic } from "../../../lib/kpi/contracts";
 import { KpiNotAvailable } from "../../../lib/kpi/KpiNotAvailable";
 import { TOPIC_LABEL } from "../../../lib/kpi/labels";
@@ -105,7 +106,7 @@ export default function DashboardPage() {
               tone="info"
               title={`${pending} ${pending === 1 ? "value" : "values"} pending review ${pending === 1 ? "isn't" : "aren't"} counted yet.`}
               action={
-                role === "Manager" ? (
+                canReviewKpis(role) ? (
                   <Link to="/data/approvals?view=kpi" className={cn("text-sm font-medium text-brand-text underline", focusRing)}>
                     Review them
                   </Link>

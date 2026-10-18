@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
+import { canReviewKpis } from "../../../lib/kpi/switch";
 import { FRAMEWORK_CODES, type FrameworkCode, type KpiReportRow } from "../../../lib/kpi/contracts";
 import { KpiNotAvailable } from "../../../lib/kpi/KpiNotAvailable";
 import { FRAMEWORK_LABEL } from "../../../lib/kpi/labels";
@@ -133,7 +134,7 @@ export default function ReportsPage() {
               tone="warn"
               title={pending}
               action={
-                role === "Manager" ? (
+                canReviewKpis(role) ? (
                   <Link to="/data/approvals?view=kpi" className={cn("text-sm font-medium text-brand-text underline", focusRing)}>
                     See them
                   </Link>
