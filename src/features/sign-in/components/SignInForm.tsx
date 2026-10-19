@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Button, TextField, cn, focusRing } from "../../../ui";
 import { useSignIn } from "../hooks/useSignIn";
 import { DOOR_PATH, type Door, errorMessage, errorStatus, wrongDoorMessage } from "../logic";
+import { CodePanel } from "./CodePanel";
 import { ForgotPanel } from "./ForgotPanel";
 import { FormError, FormHeading } from "./FormBits";
 import { PasswordField } from "./PasswordField";
@@ -22,17 +23,20 @@ export interface SignInFormProps {
   lead: string;
 }
 
-/** Email + password form for one door, with the forgot-password panel swap. */
+/** Email + password form for one door, with the forgot-password and email-code panel swaps. */
 export function SignInForm({ door, title, lead }: SignInFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [forgot, setForgot] = useState(false);
+  const [panel, setPanel] = useState<"password" | "forgot" | "code">("password");
   const signIn = useSignIn(door);
   const location = useLocation();
   const turnedAway = signIn.data && !signIn.data.ok ? signIn.data.rightDoor : null;
 
-  if (forgot) {
-    return <ForgotPanel initialEmail={email} onBack={() => setForgot(false)} />;
+  if (panel === "forgot") {
+    return <ForgotPanel initialEmail={email} onBack={() => setPanel("password")} onUseCode={() => setPanel("code")} />;
+  }
+  if (panel === "code") {
+    return <CodePanel door={door} initialEmail={email} onBack={() => setPanel("password")} />;
   }
 
   const onSubmit = (e: FormEvent) => {
@@ -70,9 +74,14 @@ export function SignInForm({ door, title, lead }: SignInFormProps) {
           {signIn.isPending ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-      <button type="button" onClick={() => setForgot(true)} className={cn("mt-4 text-sm", linkClass)}>
-        Forgot password?
-      </button>
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+        <button type="button" onClick={() => setPanel("forgot")} className={linkClass}>
+          Forgot password?
+        </button>
+        <button type="button" onClick={() => setPanel("code")} className={linkClass}>
+          Email me a sign-in code
+        </button>
+      </div>
     </div>
   );
 }

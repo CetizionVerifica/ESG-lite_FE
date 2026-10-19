@@ -1,6 +1,6 @@
 import axios from "axios";
 import type { MyBrand } from "../../services/brandService";
-export { forgotPassword, resetPassword, verifyResetToken } from "../../services/authService";
+export { forgotPassword, requestLoginCode, resetPassword, verifyResetToken } from "../../services/authService";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
