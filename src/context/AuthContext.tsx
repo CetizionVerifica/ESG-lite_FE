@@ -86,7 +86,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Both sign-in endpoints answer { token, role, user }.
-  const startSession = (data: { token: string; role: string; user: any }) => {
+  const startSession = (data: { token: string; role: string; user: AuthContextType["user"] }) => {
     const { token, role, user } = data;
 
     localStorage.setItem("token", token);
