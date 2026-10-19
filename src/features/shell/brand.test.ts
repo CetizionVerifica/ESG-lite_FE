@@ -17,6 +17,11 @@ describe("logo slot", () => {
     expect(pickLogo({ name: "Glochem", logoUrl: "light.png" }, "classic")).toEqual({ kind: "name", name: "Glochem" });
     expect(pickLogo({ name: "Glochem" }, "light")).toEqual({ kind: "name", name: "Glochem" });
   });
+  it("shows the ESGLite wordmark for the platform brand only", () => {
+    expect(pickLogo(PLATFORM_BRAND, "light")).toEqual({ kind: "platform" });
+    expect(pickLogo(PLATFORM_BRAND, "night")).toEqual({ kind: "platform" });
+    expect(pickLogo({ name: "ESGLite" }, "light")).toEqual({ kind: "name", name: "ESGLite" });
+  });
   it("shows the user's company, and ESGLite for staff", () => {
     expect(brandForUser("Manager", { sites: [{ company: null }, { company: { name: "Midal Cables" } }] }, PLANETPULSE)).toEqual({ name: "Midal Cables" });
     expect(brandForUser("User", { site: { company: { name: "Chieron" } } }, PLANETPULSE)).toEqual({ name: "Chieron" });

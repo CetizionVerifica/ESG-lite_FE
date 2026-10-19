@@ -1,5 +1,5 @@
-import { Leaf } from "lucide-react";
 import { cn } from "./cn";
+import { EsgLiteMark } from "./EsgLiteLogo";
 import { POWERED_BY_TEXT } from "./poweredByText";
 
 /**
@@ -17,7 +17,7 @@ export function PoweredBy({ onDark, size = "sm", className }: { onDark?: boolean
         className,
       )}
     >
-      <Leaf aria-hidden className={cn(size === "sm" ? "size-3.5" : "size-4", onDark ? "text-on-brand" : "text-brand-text")} />
+      <EsgLiteMark className={cn("h-3", size === "md" && "h-3.5", onDark ? "text-on-brand" : "text-brand")} />
       <span>
         Powered by <span className={cn("font-semibold", onDark ? "text-on-brand" : "text-ink")}>PlanetPulse ESGLite</span>
       </span>

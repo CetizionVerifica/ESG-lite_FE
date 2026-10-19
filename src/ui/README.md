@@ -52,5 +52,6 @@ Shared UI components for the redesign. Spec: `CLAUDE.md` in this folder (copied 
 | `DynamicField` | `DynamicField.tsx` | one ColumnConfig column (dependent select, number or text) from a `FormModel` in `src/lib/emissions`; used by Add data and the My entries edit drawer |
 | Review kit | `RejectReasonModal.tsx`, `review.ts`, `hooks/useUndoableApprove.ts`, `hooks/useRowKeys.ts` | shared by the approval lists (P07, P08): reject dialog with required reason + suggested reasons (`noun` for "record"), approve with an 8 s undo window (`UNDO_MS`), J/K/A/R/Space row keys |
 | `PoweredBy` | `PoweredBy.tsx` | "Powered by PlanetPulse ESGLite"; `onDark` on cover/brand fills; `POWERED_BY_TEXT` for emails and PDFs |
+| `EsgLiteLogo`, `EsgLiteMark` | `EsgLiteLogo.tsx` | ESGLite wordmark (the Reporting E + "SG" + "Lite"); `tone="brand"` on light surfaces, `"inherit"` on dark chrome and covers; font size sets the size. Static copies: `public/logo*.svg`, `favicon.svg`, `apple-touch-icon.png` |
 
 The legacy `components/DocumentViewerModal.tsx`, `AuditTrailTimeline.tsx` and `UnitSelector.tsx` were deleted in the M3 switch PR; the versions here reuse their services and conversion rules.
