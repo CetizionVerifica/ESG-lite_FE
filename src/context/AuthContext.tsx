@@ -16,6 +16,8 @@ interface AuthContextType {
   role: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<string>;
+  /** Signs in with a one-time code sent by email (POST /auth/login-otp/verify). */
+  loginWithCode: (email: string, code: string) => Promise<string>;
   logout: () => void;
   user: any;
   loading: boolean;
@@ -75,8 +77,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email,
       password,
     });
+    return startSession(res.data);
+  };
 
-    const { token, role, user } = res.data;
+  const loginWithCode = async (email: string, code: string) => {
+    const res = await axios.post(`${baseUrl}/auth/login-otp/verify`, { email, code });
+    return startSession(res.data);
+  };
+
+  // Both sign-in endpoints answer { token, role, user }.
+  const startSession = (data: { token: string; role: string; user: any }) => {
+    const { token, role, user } = data;
 
     localStorage.setItem("token", token);
     localStorage.setItem("role", role);
@@ -118,6 +129,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user,
         isAuthenticated: !!token,
         login,
+        loginWithCode,
         logout,
       }}
     >

@@ -29,6 +29,10 @@ interface Mocks {
   timezone?: string | null;
   /** Bodies of PUT /notifications/preferences. */
   preferenceBodies?: unknown[];
+  codeRequestBodies?: unknown[];
+  codeVerifyBodies?: unknown[];
+  /** The code POST /auth/login-otp/verify accepts; "123456" by default. */
+  validCode?: string;
 }
 
 async function mockApi(page: Page, mocks: Mocks = {}) {
@@ -49,6 +53,16 @@ async function mockApi(page: Page, mocks: Mocks = {}) {
       if (path.endsWith("/auth/forgot-password")) {
         mocks.forgotBodies?.push(request.postDataJSON());
         return json({ message: "sent" });
+      }
+      if (path.endsWith("/auth/login-otp/request")) {
+        mocks.codeRequestBodies?.push(request.postDataJSON());
+        return json({ message: "sent", expires_in_minutes: 10 });
+      }
+      if (path.endsWith("/auth/login-otp/verify")) {
+        const body = request.postDataJSON();
+        mocks.codeVerifyBodies?.push(body);
+        if (body.code !== (mocks.validCode ?? "123456")) return json({ message: "That code is wrong or has expired. Check the email or ask for a new code." }, 401);
+        return json({ token: "test-token", role, user });
       }
       if (path.includes("/auth/verify-reset-token/")) return json({ valid: mocks.tokenValid ?? true, message: "" });
       if (path.endsWith("/auth/reset-password")) {
@@ -200,4 +214,45 @@ test("signing out and back in as another role lands on that role's home, not a 4
   await fillAndSubmit(page, "uma@midal.com");
   await expect(page).toHaveURL(/\/my-month$/);
   await expect(page.getByText("You don't have access to this page")).toHaveCount(0);
+});
+
+test("forgot password offers a one-time email code that signs in to the role's home", async ({ page }) => {
+  const codeRequestBodies: unknown[] = [];
+  const codeVerifyBodies: unknown[] = [];
+  await mockApi(page, { codeRequestBodies, codeVerifyBodies });
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("mia@midal.com");
+  await page.getByRole("button", { name: "Forgot password?" }).click();
+  await page.getByRole("button", { name: "Email me a sign-in code" }).click();
+  await expect(page.getByRole("heading", { name: "Sign in with a code" })).toBeVisible();
+  await expect(page.getByLabel("Email")).toHaveValue("mia@midal.com");
+  await page.getByRole("button", { name: "Send code" }).click();
+  await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+  expect(codeRequestBodies).toEqual([{ email: "mia@midal.com" }]);
+  const signIn = page.getByRole("button", { name: "Sign in", exact: true });
+  await page.getByLabel(/Sign-in code/).fill("000 000");
+  await signIn.click();
+  await expect(page.getByRole("alert")).toContainText("wrong or has expired");
+
+  await page.getByRole("button", { name: "Send a new code" }).click();
+  await expect(page.getByRole("status")).toContainText("We've sent a new code");
+  expect(codeRequestBodies).toHaveLength(2);
+
+  await page.getByLabel(/Sign-in code/).fill("123-456");
+  await expect(page.getByLabel(/Sign-in code/)).toHaveValue("123456");
+  await signIn.click();
+  await expect(page).toHaveURL(/\/overview$/);
+  expect(codeVerifyBodies.at(-1)).toEqual({ email: "mia@midal.com", code: "123456" });
+});
+
+test("an email code for a staff account on the company sign-in is turned away", async ({ page }) => {
+  await mockApi(page, { role: "Superadmin" });
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Email me a sign-in code" }).click();
+  await page.getByLabel("Email").fill("staff@planetpulse.example");
+  await page.getByRole("button", { name: "Send code" }).click();
+  await page.getByLabel(/Sign-in code/).fill("123456");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Go to staff sign-in" })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("token"))).toBeNull();
 });

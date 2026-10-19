@@ -5,6 +5,14 @@ export const MIN_PASSWORD_LENGTH = 8;
 
 export const STAFF_ROLE = "Superadmin";
 
+/** Digits in a one-time sign-in code sent by email. */
+export const LOGIN_CODE_LENGTH = 6;
+
+/** A typed or pasted sign-in code reduced to its digits, at most LOGIN_CODE_LENGTH ("123 456" → "123456"). */
+export function cleanLoginCode(value: string): string {
+  return value.replace(/\D/g, "").slice(0, LOGIN_CODE_LENGTH);
+}
+
 /** Which sign-in page the person used. */
 export type Door = "client" | "staff";
 
