@@ -195,18 +195,22 @@ export default function MyEntriesPage() {
         </div>
       ),
     },
-    {
-      // S3-3: hidden by default; the column picker shows it.
-      id: "dq",
-      header: "Data quality",
-      defaultHidden: true,
-      addedLater: true,
-      value: (r) => {
-        const dq = readDq(r.dq);
-        return dq ? dqLabel(dq.overall) : "";
-      },
-      cell: (r) => <DataQualityBadge dq={r.dq} />,
-    },
+    // S3-3: hidden by default; the column picker shows it. SE-1: only with calculation detail.
+    ...(detail
+      ? [
+          {
+            id: "dq",
+            header: "Data quality",
+            defaultHidden: true,
+            addedLater: true,
+            value: (r: EntryRow) => {
+              const dq = readDq(r.dq);
+              return dq ? dqLabel(dq.overall) : "";
+            },
+            cell: (r: EntryRow) => <DataQualityBadge dq={r.dq} />,
+          } satisfies Column<EntryRow>,
+        ]
+      : []),
     { id: "submitted", header: "Submitted", sortable: true, value: (r) => r.created_at, cell: (r) => <span className="whitespace-nowrap">{formatDate(r.created_at)}</span> },
     {
       id: "documents",
