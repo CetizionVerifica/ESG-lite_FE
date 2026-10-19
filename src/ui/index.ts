@@ -55,6 +55,7 @@ export { documentKind, fromEmissionDocument, type ViewerFile, type DocumentKind 
 export { AuditTimeline, EntityAuditTimeline, type AuditTimelineProps } from "./AuditTimeline";
 export { CommandPalette, type CommandPaletteProps } from "./CommandPalette";
 export { filterPalette, type PaletteCommand } from "./paletteFilter";
+export { EsgLiteLogo, EsgLiteMark } from "./EsgLiteLogo";
 export { PoweredBy } from "./PoweredBy";
 export { POWERED_BY_TEXT } from "./poweredByText";
 export { DynamicField } from "./DynamicField";

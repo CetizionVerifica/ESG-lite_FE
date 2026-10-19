@@ -190,6 +190,18 @@ test("superadmin switches client and jumps with Ctrl+K", async ({ page }) => {
   await expect(page).toHaveURL(/\/factors\/thresholds$/);
 });
 
+test("staff see the ESGLite wordmark in the logo slot", async ({ page }) => {
+  await signIn(page, "Superadmin");
+  await page.goto("/clients/3");
+  await expect(page.getByRole("link", { name: "ESGLite home" }).getByRole("img", { name: "ESGLite" })).toBeVisible();
+});
+
+test("client users see their company name in the logo slot", async ({ page }) => {
+  await signIn(page, "Manager");
+  await page.goto("/overview");
+  await expect(page.getByRole("link", { name: "Glochem home" })).toHaveText("Glochem");
+});
+
 for (const width of [1280, 1024, 768, 390]) {
   test(`fits ${width}px without horizontal scroll`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
