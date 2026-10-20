@@ -33,6 +33,10 @@ const ENDPOINTS: [string, string, unknown?][] = [
   ["POST", "/studio/resolve", { kind: "ghg", year: 2025, yearType: "CY", sites: "all", bindings: [], tokens: [] }],
   ["GET", "/studio/docs/1/inputs"],
   ["PATCH", "/studio/docs/1/inputs", { rev: 1, inputs: {} }],
+  ["GET", "/studio/inputs/prefill?kind=ghg&year=2025"], // DS-2
+  ["GET", "/studio/data?kind=ghg&year=2025"], // DS-2
+  ["GET", "/studio/materiality"], // DS-2
+  ["PUT", "/studio/materiality", { scores: [{ esrs_topic: "S1", impact_score: 5, financial_score: 4 }] }], // DS-2
   ["GET", "/studio/docs?kind=ghg"],
   ["POST", "/studio/docs", { kind: "ghg", templateId: 1, year: 2025, yearType: "CY", sites: "all", frameworks: ["GHGP"], inputs: {}, ai: false }],
   ["GET", "/studio/docs/1"],
@@ -146,7 +150,7 @@ describe("studio mocks (01-contracts §4)", () => {
       tokens: [],
     });
     expect(res.body.values.map((v) => v.display)).toEqual(["1,000", "Not reported", "Unlinked data"]);
-    expect(res.body.unavailable).toEqual([{ bindingIdx: 1, reason: expect.stringContaining("Market-based") }]);
+    expect(res.body.unavailable).toEqual([{ bindingIdx: 1, reason: "NOT_RECORDED" }]); // DS-2: a reason code
   });
 
   it("makes a final as a version and freezes the doc", async () => {
