@@ -40,6 +40,9 @@ import {
   type YearType,
   inputKeysFor,
   type BrandKit,
+  type BrandKitUpdate,
+  FONT_IDS,
+  type PaletteContrast,
   type ChatReply,
   type Check,
   type ChecksResponse,
@@ -153,10 +156,68 @@ const ELEMENTS: ElementTemplate[] = [
   { id: 5, companyId: null, group: "sdg", name: "SDG 13", tags: ["climate"], license: "UN SDG guidelines", payload: { id: "tpl-sdg13", type: "sdg", frame: { x: 0, y: 0, w: 20, h: 20, rotation: 0 }, z: 0, source: "user", props: { goal: 13, variant: "full" } } },
 ];
 
+// DS-3: the shape GET /studio/styles answers for the mock brand kit (ESG-lite brandkit/styles.ts).
 const STYLES: StylePreset[] = [
-  { id: "brand-classic", name: "Brand classic", palette: ["#0F5132", "#F59E0B", "#111827", "#FFFFFF", "#6B7280"], fonts: { heading: "fraunces", body: "source-sans-3" } },
-  { id: "plex", name: "Plex", palette: ["#1D4ED8", "#0EA5E9", "#0F172A", "#F8FAFC", "#64748B"], fonts: { heading: "ibm-plex-serif", body: "ibm-plex-sans" } },
+  { id: "brand", name: "ACME · Fraunces", palette: ["#0f5132", "#f59e0b", "#111827", "#ffffff", "#5f6b7c"], fonts: { heading: "fraunces", body: "source-sans-3" } },
+  { id: "brand-alt-1", name: "ACME · DM Serif Display", palette: ["#0f5132", "#f59e0b", "#111827", "#ffffff", "#5f6b7c"], fonts: { heading: "dm-serif-display", body: "source-sans-3" } },
+  { id: "brand-alt-2", name: "ACME · Archivo", palette: ["#0f5132", "#f59e0b", "#111827", "#ffffff", "#5f6b7c"], fonts: { heading: "archivo", body: "ibm-plex-sans" } },
+  { id: "look-classic", name: "Classic · Fraunces", palette: ["#0f5132", "#f59e0b", "#16202e", "#ffffff", "#5f6b7c"], fonts: { heading: "fraunces", body: "source-sans-3" } },
+  { id: "look-light", name: "Light · Fraunces", palette: ["#0f5132", "#f59e0b", "#1f2937", "#f8fafc", "#64748b"], fonts: { heading: "fraunces", body: "source-sans-3" } },
+  { id: "look-night", name: "Night · Fraunces", palette: ["#5c8c75", "#f59e0b", "#f1f5f9", "#0d1526", "#94a3b8"], fonts: { heading: "fraunces", body: "source-sans-3" } },
+  { id: "neutral-graphite", name: "Graphite", palette: ["#1f2937", "#0f766e", "#111827", "#ffffff", "#4b5563"], fonts: { heading: "ibm-plex-serif", body: "ibm-plex-sans" } },
 ];
+
+/** WCAG ratio of a pair (the mock's own copy; the app uses src/theme/color.ts). */
+const mockRatio = (a: string, b: string): number => {
+  const lum = (hex: string) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
+};
+const mockPaletteContrast = (colors: string[]): PaletteContrast[] =>
+  colors.flatMap((a, i) => colors.slice(i + 1).map((b) => {
+    const ratio = mockRatio(a, b);
+    return { a, b, ratio, text: ratio >= 4.5, graphic: ratio >= 3 };
+  }));
+const mockBrandKit = (): BrandKit => {
+  const colors = ["#0f5132", "#f59e0b", "#111827", "#ffffff"];
+  return {
+    name: "ACME",
+    logos: { primary: "/brand/logo.svg", onDark: "/brand/logo-white.svg" },
+    colors: { primary: "#0f5132", accent: "#f59e0b", coverFrom: "#0d1526", coverTo: "#0f5132" },
+    defaultLook: "classic",
+    fonts: { heading: "fraunces", body: "source-sans-3" },
+    voice: "",
+    palettes: [{ id: 1, name: "Primary", colors, sort: 0, contrast: mockPaletteContrast(colors) }],
+    canEdit: true,
+    brandControls: false,
+    updatedAt: null,
+  };
+};
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const brandKitIssues = (b: Partial<BrandKitUpdate>): { path: string; message: string }[] => {
+  const out: { path: string; message: string }[] = [];
+  if (typeof b.voice === "string" && b.voice.length > 3000) out.push({ path: "voice", message: "At most 3,000 characters" });
+  if (b.fonts) for (const k of ["heading", "body"] as const) if (b.fonts[k] !== null && !(FONT_IDS as readonly unknown[]).includes(b.fonts[k])) out.push({ path: `fonts.${k}`, message: "Pick a font from the list" });
+  if (b.palettes && b.palettes.length > 20) out.push({ path: "palettes", message: "At most 20 palettes" });
+  (b.palettes ?? []).forEach((p, i) => {
+    if (!p.name?.trim()) out.push({ path: `palettes.${i}.name`, message: "Name the palette" });
+    if (!p.colors?.length || p.colors.length > 10) out.push({ path: `palettes.${i}.colors`, message: "1 to 10 colours" });
+    (p.colors ?? []).forEach((c, j) => { if (!HEX.test(c)) out.push({ path: `palettes.${i}.colors.${j}`, message: "Use a hex colour like #1A2B3C" }); });
+  });
+  return out;
+};
+
+/** DS-3: the mock caller's role (`canEdit` false = an Admin: PUT answers DS_ROLE) and DS-13's brand controls. */
+export function setStudioMockBrandKit(patch: Partial<BrandKit>): void {
+  state.brandKit = { ...state.brandKit, ...patch };
+}
+/** DS-3: the stored brand kit (tests read back what PUT saved). */
+export function studioMockBrandKit(): BrandKit {
+  return state.brandKit;
+}
 
 interface State {
   enabled: boolean;
@@ -178,6 +239,7 @@ interface State {
   templates: ReportTemplate[];
   layouts: ReportLayout[];
   aiCalls: number;
+  nextPalette: number; // DS-3
 }
 
 const docRow = (id: number, doc: ReportDoc, inputs: ReportInputs = {}): DocRow => ({
@@ -212,12 +274,7 @@ const initialState = (): State => ({
     { esrs_topic: "S1", name: "Own workforce", material: true, impact_score: null, financial_score: null },
     { esrs_topic: "E3", name: "Water and marine resources", material: false, impact_score: null, financial_score: null },
   ], // DS-2
-  brandKit: {
-    fonts: { heading: "fraunces", body: "source-sans-3" },
-    voice: "",
-    palettes: [{ id: 1, name: "Brand", colors: ["#0F5132", "#F59E0B", "#111827"], sort: 0 }],
-    logos: { primary: "/brand/logo.svg", mark: null },
-  },
+  brandKit: mockBrandKit(), // DS-3
   assets: [
     { id: "a-plant", kind: "image", w: 2400, h: 1600, alt: "The Bahrain plant at dawn", folder: "Photos", url: "/mock/a-plant.jpg", bytes: 420000, mime: "image/jpeg" },
     { id: "a-logo", kind: "logo", w: 600, h: 300, alt: "ACME logo", folder: null, url: "/mock/a-logo.png", bytes: 12000, mime: "image/png" },
@@ -234,6 +291,7 @@ const initialState = (): State => ({
   templates: clone(TEMPLATES),
   layouts: clone(LAYOUTS),
   aiCalls: 0,
+  nextPalette: 2, // DS-3
 });
 
 let state = initialState();
@@ -262,6 +320,7 @@ const MESSAGES: Partial<Record<DsErrorCode, string>> = {
   DS_DOC_NOT_FOUND: "Not found.",
   DS_VERSION_CONFLICT: "Someone else changed this design. Reload to see their changes.",
   DS_VALIDATION: "The request isn't valid.",
+  DS_ROLE: "Your role can't do this.", // DS-3
 };
 /** Typed as a plain Response so a handler may answer an error or its own typed body. */
 const error = (code: DsErrorCode, details?: unknown): Response =>
@@ -479,12 +538,27 @@ export const studioHandlers = [
   http.put("*/studio/brand-kit", async ({ request }) => {
     const off = gate();
     if (off) return off;
-    const b = await body<BrandKit>(request);
-    if (typeof b.voice === "string" && b.voice.length > 3000) return error("DS_VALIDATION", { issues: [{ path: "voice", message: "At most 3,000 characters" }] });
-    state.brandKit = { ...state.brandKit, ...b, logos: state.brandKit.logos };
+    if (!state.brandKit.canEdit) return error("DS_ROLE");
+    const b = await body<BrandKitUpdate>(request);
+    const issues = brandKitIssues(b);
+    if (issues.length) return error("DS_VALIDATION", { issues });
+    let palettes = state.brandKit.palettes;
+    if (b.palettes) {
+      const owned = new Set(palettes.map((p) => p.id));
+      if (b.palettes.some((p) => p.id !== undefined && !owned.has(p.id))) return error("DS_DOC_NOT_FOUND");
+      palettes = b.palettes.map((p, sort) => {
+        const colors = p.colors.map((c) => c.toLowerCase());
+        return { id: p.id ?? state.nextPalette++, name: p.name.trim(), colors, sort, contrast: mockPaletteContrast(colors) };
+      });
+    }
+    state.brandKit = { ...state.brandKit, fonts: b.fonts ?? state.brandKit.fonts, voice: b.voice ?? state.brandKit.voice, palettes, updatedAt: NOW };
     return HttpResponse.json<BrandKit>(state.brandKit);
   }),
-  http.get("*/studio/styles", ({ request }) => gate(new URL(request.url).searchParams.get("kind")) ?? HttpResponse.json<StylePreset[]>(STYLES)),
+  http.get("*/studio/styles", ({ request }) => {
+    const kind = new URL(request.url).searchParams.get("kind");
+    if (!kind) return gate() ?? error("DS_VALIDATION", { issues: [{ path: "kind", message: "kind must be ghg or sustainability" }] });
+    return gate(kind) ?? HttpResponse.json<StylePreset[]>(STYLES);
+  }),
 
   // DS-4 library
   http.get("*/studio/templates", ({ request }) => {
