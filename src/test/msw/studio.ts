@@ -456,6 +456,7 @@ const resolveOne = (b: Binding, i: number): ResolvedBinding => {
     source: b.source,
     approvedAt: "2026-04-12T00:00:00.000Z",
     series: [{ label: "2025", values: [{ key: "2025", value }] }],
+    ...(b.source === "ghg" ? { approvedEntries: 42 } : { evidenceCount: 3 }), // DS-7: chip hover card
   };
 };
 
