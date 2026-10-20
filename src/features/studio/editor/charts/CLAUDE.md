@@ -93,5 +93,5 @@ Any GHG or KPI figure can be shown as a chart or table and edited from the toolb
 - Renderer goldens use made-up seed-shaped data (`ghg-charts.cjs`); the API test draws every default kind from the API fixture's approved rows. DS-14's seed companies don't exist yet.
 
 ### Tests run
-- ESG-lite: `npm run build`, `npm run test:unit` (all pass), `ci/api` DS tests on a throwaway DB (59 pass), `test-lane.sh ds-8-be` (see below).
+- ESG-lite: `npm run build`, `npm run test:unit` (all pass), `ci/api` DS tests on a throwaway DB (59 pass), `test-lane.sh ds-8-be`: build ok, unit ok, scope3-golden 32/32, calculation snapshot matches, API 716 pass / 0 fail, workflow 48 + 29 pass with 1 fail (K9 KPI audit probes: "fetch failed" while other lanes ran); the workflow step re-run alone passed (55 + 29 pass, 0 fail).
 - ESG-lite_FE: `test-lane.sh ds-8-fe` typecheck ok, lint:new ok, vitest ok; Playwright `ds-0`, `ds-3`, `ds-5`, `ds-6`, `ds-8` specs pass.
