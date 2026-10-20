@@ -75,11 +75,14 @@ interface Stored<T> {
   h: Pick<History<T>, "past" | "present" | "label" | "future">;
 }
 
-/** Writes the stack for a doc at `rev`. Fails quietly (private mode, quota). */
-export function saveHistory<T>(docId: number | string, rev: number, h: History<T>, store: Pick<Storage, "setItem"> | null = safeSession()): void {
+/** Steps written to sessionStorage (whole docs are big; the in-memory stack keeps 100). */
+export const STORED_STEPS = 30;
+
+/** Writes the stack for a doc at `rev` (the last `limit` steps each way). Fails quietly (private mode, quota). */
+export function saveHistory<T>(docId: number | string, rev: number, h: History<T>, store: Pick<Storage, "setItem"> | null = safeSession(), limit = STORED_STEPS): void {
   if (!store) return;
   try {
-    const body: Stored<T> = { v: 1, rev, h: { past: h.past.slice(-HISTORY_LIMIT), present: h.present, label: h.label, future: h.future } };
+    const body: Stored<T> = { v: 1, rev, h: { past: h.past.slice(-limit), present: h.present, label: h.label, future: h.future.slice(0, limit) } };
     store.setItem(KEY(docId), JSON.stringify(body));
   } catch {
     // Too big or storage blocked: undo just doesn't survive a reload.

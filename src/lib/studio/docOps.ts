@@ -217,6 +217,31 @@ export function duplicateElements(doc: ReportDoc, pageId: string, ids: string[],
 
 const structuredCopy = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
+/**
+ * Pastes copied elements onto a page (⌘V): new ids, on top, `offset` mm
+ * down-right (0 on another page), groups kept together under new group ids,
+ * kept inside the page. Returns the new ids.
+ */
+export function pasteElements(doc: ReportDoc, pageId: string, els: Element[], opts: { newId?: IdFn; offset?: number } = {}): { doc: ReportDoc; ids: string[] } {
+  const page = freeformPage(doc, pageId);
+  if (!page || !els.length) return { doc, ids: [] };
+  const make = opts.newId ?? newId;
+  const off = opts.offset ?? 5;
+  const size = pageSize(doc);
+  const groups = new Map<string, string>();
+  let z = topZ(page);
+  const copies = [...els]
+    .sort((a, b) => a.z - b.z)
+    .map((e) => {
+      const c = { ...structuredCopy(e), id: make("el"), frame: clampIntoPage(moveFrame(e.frame, off, off), size), z: (z += 1), source: "user" } as Element;
+      delete (c as Partial<Element>).templateLocked;
+      delete (c as Partial<Element>).locked;
+      if (e.groupId) c.groupId = groups.get(e.groupId) ?? (groups.set(e.groupId, make("grp")), groups.get(e.groupId) as string);
+      return c;
+    });
+  return { doc: mapPage(doc, pageId, (p) => ({ ...p, elements: [...p.elements, ...copies] })), ids: copies.map((c) => c.id) };
+}
+
 /** Groups ≥ 2 elements under one new group id. */
 export function groupElements(doc: ReportDoc, pageId: string, ids: string[], opts: { newId?: IdFn } = {}): { doc: ReportDoc; groupId: string | null } {
   const page = freeformPage(doc, pageId);

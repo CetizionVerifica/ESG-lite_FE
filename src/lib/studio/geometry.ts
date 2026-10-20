@@ -334,3 +334,22 @@ export function zoomCrop(c: Crop, factor: number, w: number, h: number): Crop {
   const ny = cy - (cy - c.y) * factor;
   return clampCrop({ x: nx, y: ny, w: nw, h: nh }, w, h);
 }
+
+/** Cell boxes of a grid element, relative to its frame (as the renderer lays them out). */
+export function gridCells(w: number, h: number, columns: number, gap: number, count: number): Box[] {
+  const cols = Math.max(1, Math.min(6, Math.floor(columns)));
+  const rows = Math.max(1, Math.ceil(count / cols));
+  const g = Math.max(0, gap);
+  const cw = (w - g * (cols - 1)) / cols;
+  const ch = (h - g * (rows - 1)) / rows;
+  return Array.from({ length: count }, (_, i) => ({ x: (i % cols) * (cw + g), y: Math.floor(i / cols) * (ch + g), w: cw, h: ch }));
+}
+
+/** The point in an element's own (unrotated) coordinates, relative to its top-left. */
+export function toLocal(f: Frame, p: Point): Point {
+  const c = centreOf(f);
+  const a = (-f.rotation * Math.PI) / 180;
+  const dx = p.x - c.x;
+  const dy = p.y - c.y;
+  return { x: dx * Math.cos(a) - dy * Math.sin(a) + f.w / 2, y: dx * Math.sin(a) + dy * Math.cos(a) + f.h / 2 };
+}
