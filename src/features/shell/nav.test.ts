@@ -123,3 +123,20 @@ describe("Design Studio nav item (DS-0)", () => {
     expect(studioLinks("User", { studio: true, kpi: true })).toEqual([]);
   });
 });
+
+describe("Insights nav item (IN-0, I5)", () => {
+  const insightsLinks = (role: "User" | "Manager" | "Admin" | "Superadmin", flags: { kpi?: boolean; studio?: boolean; insights?: boolean }) => navLinks(role, flags).filter((l) => l.to === "/insights");
+
+  it("is hidden while the Insights switch is off, whatever KPI tracking or the studio say", () => {
+    for (const role of ["User", "Manager", "Admin", "Superadmin"] as const) {
+      for (const flags of [{}, { kpi: true }, { kpi: true, studio: true }, { insights: false }]) expect(insightsLinks(role, flags), role).toEqual([]);
+    }
+  });
+
+  it("is the Manager's second item (under Overview), the Admin's first, in the Superadmin's Reports; never for Users", () => {
+    expect(navLinks("Manager", { insights: true }).slice(0, 2).map((l) => l.to)).toEqual(["/overview", "/insights"]);
+    expect(navLinks("Admin", { insights: true })[0]).toEqual({ label: "Insights", to: "/insights" });
+    expect(insightsLinks("Superadmin", { insights: true })).toEqual([{ label: "Insights", to: "/insights", group: "Reports" }]);
+    expect(insightsLinks("User", { insights: true, kpi: true })).toEqual([]);
+  });
+});

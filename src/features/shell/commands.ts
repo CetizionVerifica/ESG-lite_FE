@@ -14,6 +14,9 @@ function studioCommands(role: Role, flags: FeatureFlags): Command[] {
   return out;
 }
 
+/** IN-0: the Insights entry carries words people search for (the nav link gives the route). */
+const INSIGHTS_KEYWORDS = "insights story dashboard esg emissions pathway decoupling targets readiness";
+
 /**
  * ⌘K registry. Today it holds the routes a role can open; entity search
  * (sites, categories, emission factors) plugs in later as more providers.
@@ -35,7 +38,7 @@ export function routeCommands(role: Role | null, clientId: number | null, flags:
     label: l.palette ?? l.label,
     group: l.group ?? "Pages",
     to: resolveNavTo(l.to, clientId),
-    keywords: `${l.group ?? ""} ${l.label} ${l.palette ?? ""}`.toLowerCase().trim(),
+    keywords: `${l.group ?? ""} ${l.label} ${l.palette ?? ""}${l.to === "/insights" ? ` ${INSIGHTS_KEYWORDS}` : ""}`.toLowerCase().trim(), // IN-0
   }));
   return [
     ...pages,

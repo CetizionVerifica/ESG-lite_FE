@@ -15,6 +15,7 @@
     "test:ui-snapshots": "playwright test -c playwright.ui.config.ts",
     "preview": "vite preview",
     "check:studio-contracts": "node scripts/check-studio-contracts.mjs",
+    "check:insights-contracts": "node scripts/check-insights-contracts.mjs",
     "sync:studio-render": "node scripts/sync-studio-render.mjs",
     "check:studio-render": "node scripts/sync-studio-render.mjs check",
     "sync:studio-resize": "node scripts/sync-studio-resize.mjs"

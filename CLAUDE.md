@@ -89,3 +89,11 @@ Run after `npm ci`:
 - Numbers on pages come from `/studio/resolve` and data chips. The FE never computes a reported figure.
 - Every AI result is a suggestion card with Accept / Try again / Discard. Nothing AI-written lands on a page without a click.
 - `docs/design-studio/05-ux.md` is binding (Canva-style rail, drawers, contextual toolbar, page strip). Never use "Magic" or Canva's names, icons or look. The editor needs ≥1280 px.
+
+## Insights — see docs/insights/ (in ESG-lite)
+- Page lives in `src/features/insights/`; shared logic in `src/lib/insights/`. Nothing is visible unless `insightsOn(user)`. KPI panels hide themselves on `availability: 'kpi_off'`.
+- Charts: ECharts 6 via `ChartFrame` and `useChartTheme()` only. No new chart library, no hex colours, no `isDark`. Scope, pillar, heat and status colours are fixed tokens.
+- Every number comes from an `/insights` endpoint. The FE never computes a reported figure, index, share or driver — it only formats.
+- Each panel loads, fails and retries on its own. Every chart has a table view and an aria label; colour is never the only signal.
+- Motion goes through `src/lib/insights/motion.ts` and is off under `prefers-reduced-motion`.
+- `docs/insights/05-ux.md` is binding.

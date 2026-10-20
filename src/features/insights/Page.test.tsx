@@ -1,0 +1,113 @@
+// @vitest-environment jsdom
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { RouterProvider, createMemoryRouter } from "react-router-dom";
+import { setupServer } from "msw/node";
+import { ToastProvider } from "../../ui";
+import { handlers, resetInsightsMocks, setInsightsMockEnabled, setInsightsMockKpi, setInsightsMockPanel } from "../../test/msw";
+import InsightsPage from "./Page";
+
+const auth = vi.hoisted(() => ({ role: "Manager" as string, user: {} as Record<string, unknown> }));
+vi.mock("../../context/AuthContext", () => ({ useAuth: () => ({ role: auth.role, user: auth.user }) }));
+
+const server = setupServer(...handlers);
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeEach(() => {
+  resetInsightsMocks();
+  auth.role = "Manager";
+  auth.user = { sites: [{ site_id: 11, company: { company_id: 1, insights_enabled: true, kpi_tracking_enabled: true } }] };
+});
+afterEach(() => {
+  cleanup();
+  server.resetHandlers();
+});
+afterAll(() => server.close());
+
+function renderPage(url = "/insights") {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createMemoryRouter([{ path: "/insights", element: <InsightsPage /> }], { initialEntries: [url] });
+  render(
+    <QueryClientProvider client={client}>
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
+    </QueryClientProvider>,
+  );
+  return router;
+}
+
+const slot = (id: string) => screen.findByTestId(`panel-${id}`);
+const settled = async (id: string) => {
+  const el = await slot(id);
+  // A 5xx is retried twice (api.ts) before the shell shows its error.
+  await waitFor(() => expect(el.getAttribute("data-state")).not.toBe("loading"), { timeout: 8000 });
+  return el;
+};
+
+describe("InsightsPage (IN-0 shell on mocks)", () => {
+  it("renders the header, filters and every slot, each in its own state", async () => {
+    renderPage();
+    expect(screen.getByRole("heading", { name: "Insights", level: 1 })).toBeTruthy();
+    expect((screen.getByRole("button", { name: /Present/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /Export/ }) as HTMLButtonElement).disabled).toBe(true);
+    for (const id of ["stripes", "hero", "decoupling", "ring", "pathway", "wall", "cards", "flow"]) {
+      const el = await settled(id);
+      expect(el.getAttribute("data-state"), id).toBe("ok");
+      // No module has filled the slot yet: the shell says which one will.
+      expect(within(el).getByTestId("panel-placeholder").textContent, id).toMatch(/This panel is built in IN-\d/);
+    }
+    // Lazy tabs: Materiality and Completeness haven't loaded.
+    expect(screen.queryByTestId("panel-materiality")).toBeNull();
+    expect(screen.queryByTestId("panel-completeness")).toBeNull();
+    const sites = await screen.findByRole("button", { name: "Pune plant" });
+    expect(sites).toBeTruthy();
+  });
+
+  it("KPI tracking off: the ring and the Materiality tab are hidden, and there are no pillar chips", async () => {
+    setInsightsMockKpi(false);
+    auth.user = { sites: [{ site_id: 11, company: { company_id: 1, insights_enabled: true, kpi_tracking_enabled: false } }] };
+    renderPage();
+    await settled("decoupling");
+    await waitFor(() => expect(screen.queryByTestId("panel-ring")).toBeNull());
+    expect(screen.queryByRole("tab", { name: "Materiality" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Pillar" })).toBeNull();
+  });
+
+  it("one panel's empty state and error don't touch the others; Retry reloads it", async () => {
+    setInsightsMockPanel("decoupling", { availability: "no_data", reason: "Add production data for 2024 and 2025 to see decoupling." });
+    setInsightsMockPanel("target_wall", { error: 500 });
+    renderPage();
+    const d = await settled("decoupling");
+    expect(d.getAttribute("data-state")).toBe("empty");
+    expect(d.textContent).toContain("Add production data for 2024 and 2025 to see decoupling.");
+    const wall = await settled("wall");
+    expect(wall.getAttribute("data-state")).toBe("error");
+    expect((await settled("hero")).getAttribute("data-state")).toBe("ok");
+    setInsightsMockPanel("target_wall", null);
+    await userEvent.click(within(wall).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.getByTestId("panel-wall").getAttribute("data-state")).toBe("ok"));
+  }, 15000);
+
+  it("a server IN_OFF turns the page into the 'not turned on' state", async () => {
+    setInsightsMockEnabled(false);
+    renderPage();
+    expect(await screen.findByText("Insights isn't turned on for your company.")).toBeTruthy();
+    expect(screen.queryByTestId("insights-page")).toBeNull();
+  });
+
+  it("filters go to the URL; ?panel= targets a slot and opens its tab", async () => {
+    const router = renderPage("/insights?panel=completeness");
+    expect((await settled("completeness")).className).toContain("ring-2");
+    await userEvent.click(await screen.findByRole("button", { name: "Social" }));
+    await waitFor(() => expect(router.state.location.search).toContain("pillar=social"));
+    await userEvent.click(screen.getByRole("radio", { name: "Base year" }));
+    await waitFor(() => expect(router.state.location.search).toContain("compare=base"));
+    await userEvent.click(screen.getByRole("button", { name: "Chennai plant" }));
+    await waitFor(() => expect(router.state.location.search).toContain("sites=11"));
+    await waitFor(() => expect(screen.getByTestId("panel-hero").textContent).toContain("Chennai plant"));
+    await userEvent.click(screen.getByRole("button", { name: "All sites" }));
+    await waitFor(() => expect(router.state.location.search).not.toContain("sites="));
+  });
+});

@@ -72,7 +72,7 @@ describe("route map", () => {
 
 describe("nav per role", () => {
   // With every switch off and with KPI tracking on (KPI-1).
-  const FLAGS = [{}, { kpi: true }, { kpi: true, studio: true }]; // DS-0: and the studio on
+  const FLAGS = [{}, { kpi: true }, { kpi: true, studio: true }, { kpi: true, studio: true, insights: true }]; // DS-0: and the studio on; IN-0: and Insights
 
   it("only links to pages the role may open", () => {
     for (const flags of FLAGS)
@@ -220,5 +220,28 @@ describe("Design Studio routes (DS-0, 01-contracts §9)", () => {
     expect(meetsRequirement("studio", {})).toBe(false);
     expect(meetsRequirement("studio", { kpi: true })).toBe(false);
     expect(meetsRequirement("studio", { studio: true })).toBe(true);
+  });
+});
+
+describe("Insights routes (IN-0, 01-contracts §9)", () => {
+  it("registers /insights and /insights/present behind the Insights switch, for Managers, Admins and the Superadmin", () => {
+    const insights = SHELL_ROUTES.filter((r) => r.id.startsWith("insights"));
+    expect(insights.map((r) => [r.id, r.path])).toEqual([
+      ["insights", "/insights"],
+      ["insights-present", "/insights/present"],
+    ]);
+    for (const r of insights) {
+      expect((r as { requires?: string }).requires, r.id).toBe("insights");
+      expect(r.roles, r.id).toEqual(["Manager", "Admin", "Superadmin"]);
+      expect(canAccess("User", r), r.id).toBe(false);
+    }
+    expect(routeFor("/insights?year=2025&panel=bridge")?.id).toBe("insights");
+    expect(routeFor("/insights/present")?.id).toBe("insights-present");
+  });
+
+  it("meets the insights requirement only when its switch is on", () => {
+    expect(meetsRequirement("insights", {})).toBe(false);
+    expect(meetsRequirement("insights", { kpi: true, studio: true })).toBe(false);
+    expect(meetsRequirement("insights", { insights: true })).toBe(true);
   });
 });

@@ -25,6 +25,8 @@ export type Company = {
   kpi_tracking_enabled?: boolean;
   /** "Design Studio" (DS-0, D4); absent on servers without migrate:ds-0-switch = off. */
   design_studio_enabled?: boolean;
+  /** "Insights" (IN-0, I2); absent on servers without migrate:in-switch = off. */
+  insights_enabled?: boolean;
 };
 export type Site = { site_id: number; name: string; address?: string | null; company?: { company_id: number } | null; country?: { name: string } | null };
 export type AdminUser = {
