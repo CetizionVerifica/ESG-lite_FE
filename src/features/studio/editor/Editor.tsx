@@ -11,6 +11,7 @@ import { ensureStudioFonts } from "../../../lib/studio/renderHost";
 import { Button, Callout, EmptyState, Loading, Modal, Skeleton } from "../../../ui";
 import { conflictRev, dsCode, editorErrorMessage, getStudioDoc, useSaveStudioDoc, useStudioDoc } from "./api";
 import { Canvas } from "./Canvas";
+import { ChartsHost } from "./charts/ChartsHost"; // DS-8
 import { ContextMenu } from "./ContextMenu";
 import { ContextToolbar } from "./ContextToolbar";
 import { EditorContext, useEditorApi, useEditorStore, type EditorApi } from "./EditorContext";
@@ -130,6 +131,8 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
           </section>
         </div>
         {menuAt && <ContextMenu at={menuAt} onClose={() => setMenuAt(null)} run={(c) => void run(c)} />}
+        {/* DS-8: figure choice and the chart / table dialogs. */}
+        <ChartsHost />
         <Modal open={help} onClose={() => setHelp(false)} title="Keyboard shortcuts" cancelLabel="Close">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
             {SHORTCUT_HELP.map((s) => (

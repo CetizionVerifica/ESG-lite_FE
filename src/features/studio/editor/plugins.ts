@@ -6,6 +6,7 @@ import { BrandPanel } from "../panels/BrandPanel";
 import { PagesPanel } from "../panels/PagesPanel";
 import { AiSoon, BasicElementsPanel, BasicUploadsPanel, ChartsSoon, DataDrawer, TemplatesSoon, TextSoon } from "./fallbacks";
 import { registerDrawer, registerToolbar } from "./registry";
+import { registerChartsPlugins } from "./charts/register"; // DS-8
 import { DataToolbar, MediaToolbar, MultiToolbar, PageToolbar, ShapeToolbar, TextToolbar } from "./toolbars";
 
 let done = false;
@@ -29,6 +30,9 @@ export function registerEditorPlugins(): void {
 
   // DS-3: the Brand drawer (logos, palettes, fonts, Styles).
   registerDrawer("brand", BrandPanel);
+
+  // DS-8: the Charts drawer, the Data drawer with binding editing and drag to page, chart and table toolbars.
+  registerChartsPlugins();
 }
 
 /** Registers the shell's toolbars (fallbacks: real ones from DS-7/DS-8 win). */

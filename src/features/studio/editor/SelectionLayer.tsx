@@ -28,7 +28,7 @@ import {
 import { guideAt, neighbourBoxes, snapMove, snapResize, snapTargets, thresholdFor, type SnapGuide } from "../../../lib/studio/snapping";
 import { cn } from "../../../ui";
 import { useEditor } from "./EditorContext";
-import { DND_ASSET, hasStudioPayload, imageFromAsset, readAsset, readElement } from "./dnd";
+import { DND_ASSET, DND_DATA, getFigureDrop, hasStudioPayload, imageFromAsset, readAsset, readElement, readFigure } from "./dnd";
 import { getCommentHandler } from "./registry";
 import { bindingOf, linkMarkText } from "./renderInputs";
 import { hitElements, liveFrame, scaleOf } from "./canvasUtil";
@@ -344,17 +344,28 @@ export function SelectionLayer({ page, wMm, hMm, safeMm, bleedMm, zoom }: Select
 
   // ---------------------------------------------------------------- drops
   const imageTarget = (p: Point) => hitElements(page, p, 0).find(takesImage);
+  // DS-8: the data element a dropped figure lands on.
+  const figureTarget = (p: Point) => hitElements(page, p, 0).find((x) => !x.locked && !x.templateLocked && ["chart", "table", "big_number", "kpi_tile", "progress"].includes(x.type));
   const onDragOver = (e: DragEvent) => {
     if (readOnly || !hasStudioPayload(e.dataTransfer)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
     const isAsset = Array.from(e.dataTransfer.types).includes(DND_ASSET);
-    setDropTarget(isAsset ? (imageTarget(toMm(e))?.id ?? null) : null);
+    // DS-8: a figure over a data element highlights it (the drop replaces its binding).
+    const isFigure = Array.from(e.dataTransfer.types).includes(DND_DATA);
+    setDropTarget(isAsset ? (imageTarget(toMm(e))?.id ?? null) : isFigure ? (figureTarget(toMm(e))?.id ?? null) : null);
   };
   const onDrop = (e: DragEvent) => {
     if (readOnly) return;
     const p = toMm(e);
     setDropTarget(null);
+    // DS-8: a figure from the Data drawer.
+    const figure = readFigure(e.dataTransfer);
+    if (figure) {
+      e.preventDefault();
+      getFigureDrop()?.({ editor: ed, pageId: page.id, at: p, client: { x: e.clientX, y: e.clientY }, target: figureTarget(p), figure });
+      return;
+    }
     const asset = readAsset(e.dataTransfer);
     const el = asset ? null : readElement(e.dataTransfer);
     if (!asset && !el) return;

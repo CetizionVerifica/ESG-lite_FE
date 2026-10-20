@@ -456,8 +456,39 @@ const resolveOne = (b: Binding, i: number): ResolvedBinding => {
     source: b.source,
     approvedAt: "2026-04-12T00:00:00.000Z",
     series: [{ label: "2025", values: [{ key: "2025", value }] }],
+    // DS-8: GHG breakdowns and year ranges in DS-2's series shapes, so the GHG charts draw.
+    ...(b.source === "ghg" ? mockGhgShape(b, value) : {}),
   };
 };
+
+/** DS-8 · made-up series in DS-2's shapes: one series per year keyed by the breakdown (top n folds into Other), months stacked by scope. */
+const MOCK_BREAKDOWN: Record<string, [string, number][]> = {
+  scope: [["Scope 1", 3410], ["Scope 2", 5800], ["Scope 3", 3270]],
+  scope3_category: [["1 · Purchased goods and services", 1290], ["4 · Upstream transportation and distribution", 620], ["6 · Business travel", 410], ["7 · Employee commuting", 300], ["5 · Waste generated in operations", 210], ["3 · Fuel- and energy-related activities", 180], ["2 · Capital goods", 140], ["9 · Downstream transportation and distribution", 70], ["12 · End-of-life treatment of sold products", 50]],
+  site: [["Bahrain plant", 6900], ["Sitra warehouse", 2380], ["Head office", 1200]],
+  gas: [["CO₂", 8350], ["CH₄", 19.8], ["N₂O", 2.9]],
+  source_category: [["Stationary combustion", 2100], ["Mobile combustion", 900], ["Fugitive", 410]],
+  fuel: [["Diesel", 1500], ["Natural gas", 1200], ["Petrol", 300]],
+  quarter: [["Q1", 3000], ["Q2", 3100], ["Q3", 3300], ["Q4", 3080]],
+  month: Array.from({ length: 12 }, (_, m) => [`2025-${String(m + 1).padStart(2, "0")}`, 950 + ((m * 37) % 160)] as [string, number]),
+};
+function mockGhgShape(b: GhgBinding, value: number): Partial<ResolvedBinding> {
+  const yr = b.years;
+  const years = Array.isArray(yr) ? [...yr].sort((x, y) => x - y) : Array.from({ length: yr.last }, (_, k) => 2025 - yr.last + 1 + k);
+  const scale = (y: number) => 1 + (2025 - y) * 0.04;
+  if (b.breakdown && MOCK_BREAKDOWN[b.breakdown]) {
+    let pts = MOCK_BREAKDOWN[b.breakdown];
+    if (b.top && pts.length > b.top) pts = [...pts.slice(0, b.top), ["Other", pts.slice(b.top).reduce((a, p) => a + p[1], 0)]];
+    const series = years.map((y) => ({ label: String(y), values: pts.map(([key, v]) => ({ key: b.breakdown === "month" ? `${y}-${key.slice(5)}` : key, value: Math.round(v * scale(y) * 10) / 10 })) }));
+    const stacks =
+      b.breakdown === "month" || b.breakdown === "quarter"
+        ? ["Scope 1", "Scope 2", "Scope 3"].filter((s) => b.metric === "total" || (b.metric === "scope1" && s === "Scope 1") || (b.metric === "scope2_location" && s === "Scope 2") || (b.metric === "scope3" && s === "Scope 3")).map((label, k) => ({ label, values: series[series.length - 1].values.map((p) => ({ key: p.key, value: Math.round(((p.value ?? 0) * [0.27, 0.46, 0.27][k]) * 10) / 10 })) }))
+        : undefined;
+    return { series, total: value, ...(stacks ? { stacks } : {}) };
+  }
+  if (years.length > 1) return { series: [{ label: "Total", values: years.map((y) => ({ key: String(y), value: Math.round(value * scale(y)) })) }] };
+  return {};
+}
 
 /** DS-2: matrix points only when every material topic is scored (as src/studio/sources/materiality.ts). */
 const materialityPoints = (topics: MaterialTopic[]): MaterialityResponse["points"] => {

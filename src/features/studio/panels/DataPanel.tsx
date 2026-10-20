@@ -34,9 +34,11 @@ export interface DataPanelProps {
   onInsert?: (binding: GhgBinding | KpiBinding, item: DataItem) => void;
   /** Which tab opens first. */
   initialTab?: "data" | "details";
+  /** DS-8: rows can be dragged onto the page; this fills the drag payload. */
+  onDragItem?: (e: React.DragEvent, binding: GhgBinding | KpiBinding, item: DataItem) => void;
 }
 
-export function DataPanel({ scope, docId, inputs, onInputsChange, onInsert, initialTab = "data" }: DataPanelProps) {
+export function DataPanel({ scope, docId, inputs, onInputsChange, onInsert, initialTab = "data", onDragItem }: DataPanelProps) {
   const [tab, setTab] = useState<"data" | "details">(initialTab);
   const docInputs = useDocInputs(docId ?? null);
   const prefill = useInputsPrefill(docId ? null : scope);
@@ -65,9 +67,9 @@ export function DataPanel({ scope, docId, inputs, onInputsChange, onInsert, init
       />
       {tab === "data" ? (
         scope.kind === "ghg" ? (
-          <GhgList scope={scope} onInsert={onInsert} />
+          <GhgList scope={scope} onInsert={onInsert} onDragItem={onDragItem} />
         ) : (
-          <KpiList scope={scope} onInsert={onInsert} />
+          <KpiList scope={scope} onInsert={onInsert} onDragItem={onDragItem} />
         )
       ) : docId ? (
         <DocReportDetails docId={docId} kind={scope.kind} />
@@ -78,14 +80,14 @@ export function DataPanel({ scope, docId, inputs, onInputsChange, onInsert, init
   );
 }
 
-function GhgList({ scope, onInsert }: { scope: StudioScope; onInsert?: DataPanelProps["onInsert"] }) {
+function GhgList({ scope, onInsert, onDragItem }: { scope: StudioScope; onInsert?: DataPanelProps["onInsert"]; onDragItem?: DataPanelProps["onDragItem"] }) {
   const [query, setQuery] = useState("");
   const catalog = useDataCatalog(scope);
   const groups = useMemo(() => filterGroups(catalog.data?.groups ?? [], query), [catalog.data, query]);
   return (
     <div className="flex min-h-0 flex-col gap-3">
       <TextField label="Search data" hideLabel placeholder="Search data" value={query} onChange={setQuery} />
-      <Body state={catalog} empty={query ? `Nothing matches “${query}”.` : "No data for this year yet."} groups={groups} onInsert={onInsert} search={query} />
+      <Body state={catalog} empty={query ? `Nothing matches “${query}”.` : "No data for this year yet."} groups={groups} onInsert={onInsert} onDragItem={onDragItem} search={query} />
       {catalog.data && (
         <p className="text-xs text-muted">
           tCO₂e · approved entries only{lastApproval(catalog.data.groups) ? ` · last approval ${lastApproval(catalog.data.groups)}` : ""}
@@ -96,7 +98,7 @@ function GhgList({ scope, onInsert }: { scope: StudioScope; onInsert?: DataPanel
   );
 }
 
-function KpiList({ scope, onInsert }: { scope: StudioScope; onInsert?: DataPanelProps["onInsert"] }) {
+function KpiList({ scope, onInsert, onDragItem }: { scope: StudioScope; onInsert?: DataPanelProps["onInsert"]; onDragItem?: DataPanelProps["onDragItem"] }) {
   const [query, setQuery] = useState("");
   const [topic, setTopic] = useState<string>("");
   const catalog = useDataCatalog(scope, { q: query.trim() || undefined, topic: topic || undefined });
@@ -116,7 +118,7 @@ function KpiList({ scope, onInsert }: { scope: StudioScope; onInsert?: DataPanel
           </button>
         ))}
       </div>
-      <Body state={catalog} empty={query || topic ? "No selected KPI matches." : "No KPIs are selected for this company."} groups={catalog.data?.groups ?? []} onInsert={onInsert} search={query} />
+      <Body state={catalog} empty={query || topic ? "No selected KPI matches." : "No KPIs are selected for this company."} groups={catalog.data?.groups ?? []} onInsert={onInsert} onDragItem={onDragItem} search={query} />
       <p className="text-xs text-muted">Approved KPI values only. Click a KPI to add it to the page.</p>
     </div>
   );
@@ -127,12 +129,14 @@ function Body({
   groups,
   empty,
   onInsert,
+  onDragItem,
   search,
 }: {
   state: { isPending: boolean; isError: boolean; error: unknown };
   groups: DataGroup[];
   empty: string;
   onInsert?: DataPanelProps["onInsert"];
+  onDragItem?: DataPanelProps["onDragItem"];
   search: string;
 }) {
   if (state.isPending) return <SkeletonText lines={8} />;
@@ -141,13 +145,13 @@ function Body({
   return (
     <div className="min-h-0 space-y-4 overflow-y-auto">
       {groups.map((g) => (
-        <Group key={g.id} group={g} onInsert={onInsert} expanded={!!search} />
+        <Group key={g.id} group={g} onInsert={onInsert} onDragItem={onDragItem} expanded={!!search} />
       ))}
     </div>
   );
 }
 
-function Group({ group, onInsert, expanded }: { group: DataGroup; onInsert?: DataPanelProps["onInsert"]; expanded: boolean }) {
+function Group({ group, onInsert, onDragItem, expanded }: { group: DataGroup; onInsert?: DataPanelProps["onInsert"]; onDragItem?: DataPanelProps["onDragItem"]; expanded: boolean }) {
   const short = SHORT_GROUPS[group.id];
   const [open, setOpen] = useState(false);
   // Scope 3 categories: the ones with figures first, then the rest (05-ux: "+ n more · n not addressed").
@@ -163,7 +167,7 @@ function Group({ group, onInsert, expanded }: { group: DataGroup; onInsert?: Dat
       <ul className="divide-y divide-line rounded-control border border-line">
         {shown.map((item) => (
           <li key={item.id}>
-            <Row item={item} onInsert={onInsert} />
+            <Row item={item} onInsert={onInsert} onDragItem={onDragItem} />
           </li>
         ))}
       </ul>
@@ -176,7 +180,7 @@ function Group({ group, onInsert, expanded }: { group: DataGroup; onInsert?: Dat
   );
 }
 
-function Row({ item, onInsert }: { item: DataItem; onInsert?: DataPanelProps["onInsert"] }) {
+function Row({ item, onInsert, onDragItem }: { item: DataItem; onInsert?: DataPanelProps["onInsert"]; onDragItem?: DataPanelProps["onDragItem"] }) {
   const r = item.resolved;
   const note = dataNote(r);
   const multi = (r.series?.[0]?.values.length ?? 0) > 1 && item.binding.source === "ghg" && !!(item.binding as GhgBinding).breakdown;
@@ -185,6 +189,8 @@ function Row({ item, onInsert }: { item: DataItem; onInsert?: DataPanelProps["on
       type="button"
       onClick={() => onInsert?.(item.binding, item)}
       disabled={!onInsert}
+      draggable={!!onDragItem && !r.unavailable}
+      onDragStart={onDragItem ? (e) => onDragItem(e, item.binding, item) : undefined}
       className={cn("flex w-full items-start justify-between gap-3 px-3 py-2 text-left hover:bg-tint disabled:cursor-default disabled:hover:bg-transparent", focusRing)}
       data-testid={`data-item-${item.id}`}
     >
