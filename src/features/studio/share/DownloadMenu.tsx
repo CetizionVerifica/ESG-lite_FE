@@ -6,11 +6,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Download, Eye, FileImage, FileText, Lock, Printer } from "lucide-react";
-import { Button, Callout, NumberField, Popover, SegmentedControl, Textarea, Toggle, cn, focusRing } from "../../../ui";
+import { Button, Callout, NumberField, Popover, SegmentedControl, Toggle, cn, focusRing } from "../../../ui";
 import type { JobKind, PngDpi } from "../../../lib/studio/contracts";
 import { finalBlockedReason, finalRefusal, jobStatusText, pngPages, type PageRange } from "../../../lib/studio/outputs";
 import { useSafeToast } from "./useSafeToast";
-import { dsError, useRenderJob, useVersions } from "./api";
+import { dsError, useRenderJob } from "./api";
+import { FinalForm } from "../checks/FinalForm"; // DS-12
+import { useChecksState } from "../checks/store"; // DS-12
+import { finalBlock } from "../../../lib/studio/checks"; // DS-12
 
 type Panel = "print" | "png" | "final" | null;
 
@@ -55,12 +58,11 @@ export function DownloadMenu({ docId, pageCount = null, canFinal, variant = "pri
   const [from, setFrom] = useState<number | null>(1);
   const [to, setTo] = useState<number | null>(pageCount ?? 1);
   const [dpi, setDpi] = useState<PngDpi>(144);
-  const [note, setNote] = useState("");
   const toast = useSafeToast();
   const run = useRenderJob(docId);
-  const versions = useVersions(docId, panel === "final");
-  const hasFinal = (versions.data ?? []).some((v) => v.kind === "final");
+  const checksData = useChecksState(docId).data; // DS-12: the item says why the final is blocked
   const blocked = finalBlockedReason({ canFinal });
+  const checksBlocked = finalBlock(checksData?.checks, { canFinal });
 
   // Tell the person when a job ends, even with the menu closed.
   const told = useRef<number | null>(null);
@@ -156,7 +158,7 @@ export function DownloadMenu({ docId, pageCount = null, canFinal, variant = "pri
           <Item
             icon={<Lock className="size-4" />}
             title="Final PDF"
-            sub={blocked ?? "Frozen version with a data snapshot"}
+            sub={blocked ?? (checksBlocked ? `Blocked: ${checksBlocked}` : "Frozen version with a data snapshot")}
             disabled={!!blocked}
             active={panel === "final"}
             onClick={() => setPanel(panel === "final" ? null : "final")}
@@ -164,11 +166,8 @@ export function DownloadMenu({ docId, pageCount = null, canFinal, variant = "pri
           />
           {panel === "final" && !blocked && (
             <div className="mx-2.5 mb-1 flex flex-col gap-2 rounded-control border border-line p-2.5">
-              <p className="text-xs text-muted">The final uses approved data only and can't be changed afterwards. Later edits go into a new version.</p>
-              {hasFinal && <Textarea label="What changed since the last final?" value={note} onChange={setNote} rows={2} required />}
-              <Button size="sm" variant="primary" loading={run.busy} disabled={hasFinal && !note.trim()} onClick={() => start("final", { note: note.trim() || undefined })} data-testid="dl-final-go">
-                Generate final PDF
-              </Button>
+              {/* DS-12: the checks decide; warnings are acknowledged here. */}
+              <FinalForm docId={docId} canFinal={canFinal} compact />
             </div>
           )}
           {(run.job || refusal) && (

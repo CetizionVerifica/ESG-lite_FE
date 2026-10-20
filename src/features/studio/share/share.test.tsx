@@ -94,14 +94,19 @@ describe("DownloadMenu", () => {
     renderAt(<DownloadMenu docId={1} canFinal pageCount={5} />);
     await user.click(screen.getByTestId("download-menu"));
     await user.click(screen.getByTestId("dl-final"));
-    await user.click(screen.getByTestId("dl-final-go"));
+    // DS-12: the final form runs the checks; the mock's market-based warning is ticked first.
+    const go = await screen.findByTestId("final-go");
+    await screen.findByTestId("final-warnings", undefined, { timeout: 4000 });
+    expect((go as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(go);
     expect(await screen.findByText("Pending entries: 4. Approve them in Review before the final.")).toBeTruthy();
     setStudioMockFinalBlocked(false);
-    await user.click(screen.getByTestId("dl-final-go"));
+    await user.click(go);
     await waitFor(() => expect(clicks).toContain("ACME-GHG-Report-2025-v1.pdf"), { timeout: 4000 });
     // A second final asks what changed.
     await waitFor(() => expect(screen.getByLabelText(/What changed since the last final/)).toBeTruthy());
-    expect((screen.getByTestId("dl-final-go") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId("final-go") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("an Admin can't make the final", async () => {

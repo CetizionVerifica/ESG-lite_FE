@@ -1192,7 +1192,22 @@ export const CHECK_RULES: Record<CheckId, { severity: CheckSeverity; kinds: read
   TEXT_TRUNCATED: { severity: "info", kinds: BOTH }, // DS-10
 };
 
-export const CHECK_FIXES = ["replace_with_token", "shrink_text", "move_inside", "open_values", "open_inputs"] as const;
+export const CHECK_FIXES = [
+  "replace_with_token",
+  "shrink_text",
+  "move_inside",
+  "open_values",
+  "open_inputs",
+  // DS-12: GHG fixes and links (ESG-lite contracts/checks.ts).
+  "mark_excluded",
+  "open_pending",
+  "add_market_note",
+  "add_gas_chart",
+  "add_biogenic",
+  "add_factor_table",
+  "open_link",
+] as const;
+export type CheckFix = (typeof CHECK_FIXES)[number];
 export interface Check {
   id: CheckId;
   severity: CheckSeverity;
@@ -1205,7 +1220,32 @@ export interface Check {
 /** POST /docs/:id/checks. */
 export interface ChecksResponse {
   checks: Check[];
+  /** An error check is open: a final is refused. */
   blocking: boolean;
+  /** DS-12: the warning ids a final must list in `acknowledgedWarnings`. */
+  warnings: CheckId[];
+  /** DS-12: where the layout checks came from. */
+  layout: "live" | "render" | "none";
+  rev: number;
+}
+/** DS-12: one element's browser measurement (render/measure.ts `Measurement`). */
+export interface CheckMeasurement {
+  pageId: string;
+  elementId: string;
+  type: string;
+  rectMm: { x: number; y: number; w: number; h: number };
+  overflowMm: number;
+  outsideSafe: boolean;
+  outsidePage: boolean;
+  minFontPt: number | null;
+  contrast: number | null;
+  onImage: boolean;
+  bleed: boolean;
+}
+/** DS-12: `{rev, measurements?}` (the mounted sheets' live measurements). */
+export interface ChecksBody {
+  rev: number;
+  measurements?: CheckMeasurement[];
 }
 
 // ---------------------------------------------------------------------------

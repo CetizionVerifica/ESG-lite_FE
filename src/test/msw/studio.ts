@@ -278,6 +278,7 @@ interface State {
   templates: ReportTemplate[];
   layouts: ReportLayout[];
   aiCalls: number;
+  checkCalls: number; // DS-12
   nextPalette: number; // DS-3
 }
 
@@ -334,6 +335,7 @@ const initialState = (): State => ({
   layouts: clone(LAYOUTS),
   aiCalls: 0,
   nextPalette: 2, // DS-3
+  checkCalls: 0, // DS-12
 });
 
 let state = initialState();
@@ -346,6 +348,7 @@ export function resetStudioMocks(): void {
   JOB_POLLS = 1; // DS-11
   finalBlocked = false; // DS-11
   resizeDataVersion = 1; // DS-10
+  mockChecks = null; // DS-12
 }
 // DS-10: the mock's approved data version; bumping it makes every resized copy's source "changed".
 let resizeDataVersion = 1;
@@ -419,6 +422,14 @@ interface MockShare extends ReportShare {
 }
 let JOB_POLLS = 1;
 let finalBlocked = false;
+// DS-12: the checks the mock answers (and enforces on finals) when set; null = the defaults.
+let mockChecks: Check[] | null = null;
+/** DS-12: sets the checks POST /docs/:id/checks answers; finals then need them fixed and acknowledged. */
+export function setStudioMockChecks(checks: Check[] | null): void {
+  mockChecks = checks ? clone(checks) : null;
+}
+/** DS-12: how many times the checks were asked for. */
+export const studioMockCheckCalls = (): number => state.checkCalls;
 const JOB_FILES: Record<JobKind, string> = { proof: "proof.pdf", print: "print.pdf", png: "pages.zip", thumbnail: "thumbnail.png", final: "final.pdf" };
 const mockVersion = (row: DocRow, kind: ReportVersion["kind"], note: string | null): ReportVersion => {
   const n = row.versions.reduce((m, v) => Math.max(m, v.n), 0) + 1;
@@ -1111,6 +1122,14 @@ export const studioHandlers = [
     if (b.rev !== row.rev) return error("DS_VERSION_CONFLICT", { rev: row.rev });
     if (b.kind === "final") {
       if (finalBlocked) return error("DS_CHECKS_BLOCKING", { checks: [{ id: "GHG_PENDING_ENTRIES", severity: "error", count: 4, message: "Pending entries: 4. Approve them in Review before the final.", link: "/data/approvals" }] });
+      // DS-12: with mock checks set, the gate refuses errors, then unacknowledged warnings.
+      if (mockChecks) {
+        const errors = mockChecks.filter((c) => c.severity === "error");
+        if (errors.length) return error("DS_CHECKS_BLOCKING", { reason: "errors", checks: errors });
+        const ack = new Set(b.acknowledgedWarnings ?? []);
+        const missing = [...new Set(mockChecks.filter((c) => c.severity === "warning").map((c) => c.id))].filter((id) => !ack.has(id));
+        if (missing.length) return error("DS_CHECKS_BLOCKING", { reason: "warnings", unacknowledged: missing, checks: mockChecks.filter((c) => missing.includes(c.id)) });
+      }
       if (row.versions.some((v) => v.kind === "final") && !b.note) return error("DS_VALIDATION", { issues: [{ path: "note", message: "Say what changed since the last final" }] });
     }
     const id = state.nextJob++;
@@ -1301,17 +1320,28 @@ export const studioHandlers = [
   }),
 
   // DS-12 checks
-  http.post("*/studio/docs/:id/checks", ({ params }) => {
+  http.post("*/studio/docs/:id/checks", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    const checks: Check[] =
-      row.doc.kind === "ghg"
+    const b = await body<{ rev?: number }>(request);
+    if (typeof b.rev !== "number") return error("DS_VALIDATION", { issues: [{ path: "rev", message: "Required" }] });
+    if (b.rev !== row.rev) return error("DS_VERSION_CONFLICT", { rev: row.rev });
+    state.checkCalls++;
+    const checks: Check[] = mockChecks
+      ? clone(mockChecks)
+      : row.doc.kind === "ghg"
         ? [
             { id: "SCOPE2_MARKET_MISSING", severity: "warning", pageId: "p-summary", elementId: "p-summary.market", message: "Market-based Scope 2 isn't reported." },
             { id: "UNLINKED_DATA", severity: "info", pageId: "p-scope3", elementId: "p-scope3.custom", message: "Typed data, not linked." },
           ]
         : [{ id: "YEAR_NOT_LOCKED", severity: "error", message: "Lock the year's KPI values before making a final." }];
-    return HttpResponse.json<ChecksResponse>({ checks, blocking: checks.some((c) => c.severity === "error") });
+    return HttpResponse.json<ChecksResponse>({
+      checks,
+      blocking: checks.some((c) => c.severity === "error"),
+      warnings: [...new Set(checks.filter((c) => c.severity === "warning").map((c) => c.id))],
+      layout: "none",
+      rev: row.rev,
+    });
   }),
 
   // DS-13 drift, comments, tasks, approvals

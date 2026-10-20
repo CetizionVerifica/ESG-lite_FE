@@ -9,6 +9,7 @@ import { registerDrawer, registerToolbar } from "./registry";
 import { registerTextPlugins } from "./text/register"; // DS-7
 import { registerChartsPlugins } from "./charts/register"; // DS-8
 import { registerAiPlugins } from "../ai/register"; // DS-9
+import { registerChecksPlugins } from "../checks/register"; // DS-12
 import { DataToolbar, MediaToolbar, MultiToolbar, PageToolbar, ShapeToolbar, TextToolbar } from "./toolbars";
 
 let done = false;
@@ -41,6 +42,9 @@ export function registerEditorPlugins(): void {
 
   // DS-9: the AI drawer (chat, suggestion cards), "AI ▾" on text, chart title suggestions, ghost preview.
   registerAiPlugins();
+
+  // DS-12: check markers on the pages (mismatched numbers, AI text, other open checks).
+  registerChecksPlugins();
 }
 
 /** Registers the shell's toolbars (fallbacks: real ones from DS-7/DS-8 win). */

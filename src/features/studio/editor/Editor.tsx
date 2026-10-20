@@ -20,6 +20,8 @@ import { registerEditorPlugins } from "./plugins";
 import { useRenderInputs } from "./renderInputs";
 import { commandFor, isTypingTarget, runCommand, SHORTCUT_HELP, type Command } from "./shortcuts";
 import { DrawerHost, SideRail } from "./SideRail";
+import { ChecksPanelHost } from "../checks/ChecksPanel"; // DS-12
+import { STUDIO_REV_EVENT } from "../panels/data/api"; // DS-12
 import { StatusBar } from "./StatusBar";
 import { TopBar, type SaveState } from "./TopBar";
 import { useStudioCompanyId } from "../../../lib/studio/switch";
@@ -108,6 +110,7 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
         <div className="flex min-h-0 flex-1">
           <SideRail />
           <DrawerHost />
+          <ChecksPanelHost /> {/* DS-12: the checks panel */}
           <section className="flex min-w-0 flex-1 flex-col" aria-label="Pages">
             {state.ui.view === "grid" ? (
               <GridView />
@@ -220,6 +223,18 @@ function useAutosave(docId: number, initial: StudioDocResponse, doc: ReportDoc, 
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, readOnly]);
+
+  // DS-12: report details saved elsewhere (Data drawer, "Mark as excluded…") moved the rev from ours: follow it.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ docId: number; from: number; rev: number }>).detail;
+      if (!d || d.docId !== docId || d.from !== rev.current) return;
+      rev.current = d.rev;
+      setRevState(d.rev);
+    };
+    window.addEventListener(STUDIO_REV_EVENT, on);
+    return () => window.removeEventListener(STUDIO_REV_EVENT, on);
+  }, [docId]);
 
   useEffect(() => {
     if (state !== "error") return;
