@@ -40,7 +40,7 @@ export function ContextToolbar() {
   const single = selected.length === 1 ? selected[0] : null;
   const binding = single ? bindingOf(single) : undefined;
   const value = binding ? ed.render.resolved.find((r) => JSON.stringify(r.binding) === JSON.stringify(binding))?.value : undefined;
-  const link = linkMarkText(binding, value);
+  const link = linkMarkText(binding, value, ed.render.status);
   const opacity = selected.length ? Math.round((selected[0].opacity ?? 1) * 100) : 100;
   const label = key === "page" ? "Page" : key === "multi" ? "Selection" : `${key.replace(/_/g, " ")}`;
 

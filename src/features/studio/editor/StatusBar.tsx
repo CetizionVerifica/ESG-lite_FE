@@ -158,7 +158,7 @@ function ThumbStrip() {
           className={cn("flex flex-none flex-col items-center gap-1 rounded-control p-1 text-[11px] text-muted", ui.pageId === p.id && "bg-brand-50 text-brand-text", focusRing)}
         >
           <span className={cn("block overflow-hidden rounded-[2px] border border-line shadow-sm", p.hidden && "opacity-50")}>
-            <Sheet page={p} doc={doc} wMm={spec.wMm} hMm={spec.hMm} zoom={zoom} data={ed.render.data} assets={ed.render.assets} brand={ed.render.brand} thumbnail />
+            <Sheet page={p} doc={doc} wMm={spec.wMm} hMm={spec.hMm} zoom={zoom} data={ed.render.data} figures={ed.render.status} assets={ed.render.assets} brand={ed.render.brand} thumbnail />
           </span>
           <span className="font-num">{i + 1}</span>
         </button>

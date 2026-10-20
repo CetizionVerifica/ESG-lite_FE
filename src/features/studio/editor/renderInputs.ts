@@ -2,7 +2,7 @@
 // POST /studio/resolve for every binding and data chip in the doc, layer
 // rule 5), asset URLs (company assets and the brand logos) and the brand side
 // of the theme. The FE formats nothing: the renderer prints `display`.
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { Binding, DataToken, ReportDoc, TextDoc, TextNode } from "../../../lib/studio/contracts";
 import { renderData, type RenderAssets, type RenderBinding, type RenderBrand, type RenderData, type RenderValue } from "../../../lib/studio/render";
 import { BRAND_LOGO_ASSETS } from "../../../lib/studio/brandOps";
@@ -62,14 +62,31 @@ export function collectBindings(doc: ReportDoc): { bindings: Binding[]; tokens: 
 /** The doc's scope for data calls. */
 export const scopeOf = (doc: ReportDoc) => ({ kind: doc.kind, year: doc.meta.year, yearType: doc.meta.yearType, sites: doc.meta.sites });
 
+/**
+ * Where the figures are: "loading" until the first /resolve answer for the
+ * doc's bindings (and while new bindings resolve), "error" when /resolve
+ * failed, "ready" otherwise. While loading, bound values the sheet has no
+ * figure for read "Loading…", never "Not reported" (Sheet.tsx).
+ */
+export type FiguresStatus = "loading" | "error" | "ready";
+
 export interface RenderInputs {
+  /** The figures: the latest /resolve answer, or the previous one while the doc re-resolves. */
   data: RenderData | null;
   assets: RenderAssets;
   brand: RenderBrand | null;
   /** The values in request order (link marks: approval dates). */
   resolved: { binding: Binding; value: RenderValue }[];
+  /** /resolve has not answered for the current bindings yet. */
   loading: boolean;
+  status: FiguresStatus;
+  /** The doc has at least one binding or data chip. */
+  hasFigures: boolean;
+  /** Asks /resolve again (the error state's Try again). */
+  retry: () => void;
 }
+
+const NO_RESOLVED: { binding: Binding; value: RenderValue }[] = [];
 
 export function useRenderInputs(doc: ReportDoc, docId: number): RenderInputs {
   const { bindings, tokens } = useMemo(() => collectBindings(doc), [doc]);
@@ -78,7 +95,14 @@ export function useRenderInputs(doc: ReportDoc, docId: number): RenderInputs {
   const assets = useStudioAssets();
   const kit = useBrandKit();
 
-  const data = useMemo(() => (resolve.data ? renderData(bindings as RenderBinding[], tokens as unknown as Parameters<typeof renderData>[1], resolve.data as unknown as Parameters<typeof renderData>[2]) : null), [resolve.data, bindings, tokens]);
+  const fresh = useMemo(() => (resolve.data ? renderData(bindings as RenderBinding[], tokens as unknown as Parameters<typeof renderData>[1], resolve.data as unknown as Parameters<typeof renderData>[2]) : null), [resolve.data, bindings, tokens]);
+  const freshResolved = useMemo(() => (resolve.data ? bindings.map((binding, i) => ({ binding, value: resolve.data.values[i] as unknown as RenderValue })).filter((r) => !!r.value) : null), [resolve.data, bindings]);
+  // While the doc re-resolves (a binding added or changed), the sheets keep the
+  // last answer: it is keyed by binding, so figures that didn't change stay put.
+  const last = useRef<{ data: RenderData; resolved: { binding: Binding; value: RenderValue }[] } | null>(null);
+  if (fresh && freshResolved && last.current?.data !== fresh) last.current = { data: fresh, resolved: freshResolved };
+  const data = fresh ?? last.current?.data ?? null;
+  const status: FiguresStatus = fresh ? "ready" : resolve.isError ? "error" : "loading";
   const urls = useMemo(() => {
     const u: Record<string, string> = {};
     for (const a of assets.data ?? []) u[a.id] = a.url;
@@ -93,19 +117,24 @@ export function useRenderInputs(doc: ReportDoc, docId: number): RenderInputs {
         : null,
     [kit.data],
   );
-  const resolved = useMemo(() => (resolve.data ? bindings.map((binding, i) => ({ binding, value: resolve.data.values[i] as unknown as RenderValue })).filter((r) => !!r.value) : []), [resolve.data, bindings]);
+  const resolved = freshResolved ?? last.current?.resolved ?? NO_RESOLVED;
   const assetsOut = useMemo(() => ({ urls }), [urls]);
-  return useMemo(() => ({ data, assets: assetsOut, brand, resolved, loading: resolve.isPending }), [data, assetsOut, brand, resolved, resolve.isPending]);
+  const { refetch } = resolve;
+  const retry = useMemo(() => () => void refetch(), [refetch]);
+  const hasFigures = bindings.length + tokens.length > 0;
+  return useMemo(() => ({ data, assets: assetsOut, brand, resolved, loading: status === "loading", status, hasFigures, retry }), [data, assetsOut, brand, resolved, status, hasFigures, retry]);
 }
 
 /** The binding of an element, if it has one. */
 export const bindingOf = (el: { type: string; props: unknown }): Binding | undefined => (BOUND_TYPES.has(el.type) ? (el.props as { binding?: Binding }).binding : undefined);
 
 /** "Linked to approved data · 12 Apr 2026" / "Typed data, not linked" (05-ux copy). */
-export function linkMarkText(binding: Binding | undefined, value: RenderValue | undefined): { linked: boolean; text: string } | null {
+export function linkMarkText(binding: Binding | undefined, value: RenderValue | undefined, status: FiguresStatus = "ready"): { linked: boolean; text: string } | null {
   if (!binding) return null;
   if (binding.source === "custom") return { linked: false, text: "Typed data, not linked" };
   if (binding.source === "input") return { linked: true, text: "Linked to report details" };
+  if (!value && status === "loading") return { linked: true, text: "Linked · loading the figure…" };
+  if (!value && status === "error") return { linked: true, text: "Linked · the figure couldn't load" };
   if (value?.unavailable) return { linked: true, text: `Linked · not reported (${value.unavailable.reason.replace(/_/g, " ").toLowerCase()})` };
   const at = value?.approvedAt ? new Date(value.approvedAt) : null;
   const day = at && !Number.isNaN(at.getTime()) ? at.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : null;

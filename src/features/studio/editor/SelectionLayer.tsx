@@ -410,7 +410,7 @@ export function SelectionLayer({ page, wMm, hMm, safeMm, bleedMm, zoom }: Select
   const single = selected.length === 1 ? selected[0] : null;
   const multiBox = selected.length > 1 ? boundsOf(selected.map(frameOf)) : null;
   const hoverEl = hover && !selection.includes(hover) ? page.elements.find((x) => x.id === hover) : undefined;
-  const link = single && !frames ? linkMarkText(bindingOf(single), ed.render.resolved.find((r) => JSON.stringify(r.binding) === JSON.stringify(bindingOf(single)))?.value) : null;
+  const link = single && !frames ? linkMarkText(bindingOf(single), ed.render.resolved.find((r) => JSON.stringify(r.binding) === JSON.stringify(bindingOf(single)))?.value, ed.render.status) : null;
   const shownCrop = liveCrop ?? cropInfo?.crop ?? null;
 
   return (

@@ -9,7 +9,10 @@ import { closeChecks, openChecks, useChecksState } from "./store";
 
 export function ChecksButton() {
   const ed = useEditor();
-  useChecksRunner(ed.docId, ed.doc);
+  // The run sends the sheets' live measurements: wait for the figures, so a
+  // sheet still loading them isn't measured (or counted) as "not reported".
+  const figuresLoading = ed.render.status === "loading";
+  useChecksRunner(ed.docId, ed.doc, !figuresLoading);
   const { data, open } = useChecksState(ed.docId);
   const checks = data?.checks;
   const errors = (checks ?? []).filter((c) => c.severity === "error").length;
