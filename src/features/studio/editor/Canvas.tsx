@@ -29,7 +29,7 @@ export function Canvas() {
     const el = scroller.current;
     if (!el || !ui.fit) return;
     const apply = () => {
-      if (el.clientWidth > 0) ed.setZoom(fitZoom(el.clientWidth, spec.wMm), true);
+      if (el.clientWidth > 0) ed.setZoom(fitZoom(el.clientWidth, el.clientHeight, spec.wMm, spec.hMm), true);
     };
     apply();
     if (typeof ResizeObserver === "undefined") return;
@@ -38,7 +38,7 @@ export function Canvas() {
     return () => ro.disconnect();
     // ed.setZoom is stable through dispatch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ui.fit, spec.wMm]);
+  }, [ui.fit, spec.wMm, spec.hMm]);
 
   // Which pages are on screen (live sheets for those ±2; the page counter follows when nothing is selected).
   const selectionEmpty = ui.selection.length === 0;

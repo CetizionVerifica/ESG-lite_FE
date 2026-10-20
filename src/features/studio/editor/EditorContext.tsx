@@ -119,7 +119,10 @@ export function useEditorApi(state: EditorState, dispatch: Dispatch<EditorAction
         if (readOnly) return null;
         const pageId = o.pageId ?? (page ? page.id : doc.pages.find((p) => p.kind === "freeform")?.id);
         if (!pageId) return null;
-        const r = addElement(doc, pageId, template, { at: o.at, newId: ids });
+        // A new shape without colours takes the report's accent colour, so it shows.
+        const primary = doc.design.theme.colors?.accent ?? render.brand?.accent ?? doc.design.theme.colors?.primary ?? render.brand?.primary;
+        const t = template.type === "shape" && !template.props.fill && !template.props.stroke && primary ? ({ ...template, props: { ...template.props, fill: primary } } as Element) : template;
+        const r = addElement(doc, pageId, t, { at: o.at, newId: ids });
         if (!r.id) return null;
         commit(r.doc, o.label ?? "Add element", { select: [r.id], pageId });
         return r.id;

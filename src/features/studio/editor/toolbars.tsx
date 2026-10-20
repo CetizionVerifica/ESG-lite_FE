@@ -152,7 +152,7 @@ export function MediaToolbar({ pageId, elements, editor }: ToolbarProps) {
   return (
     <>
       {el.type === "grid" && (
-        <Select label="Cell" hideLabel value={String(cell)} onChange={(v) => setCell(Number(v ?? 0))} options={el.props.cells.map((_, i) => ({ value: String(i), label: `Cell ${i + 1}` }))} />
+        <Select label="Cell" hideLabel className="w-28" value={String(cell)} onChange={(v) => setCell(Number(v ?? 0))} options={el.props.cells.map((_, i) => ({ value: String(i), label: `Cell ${i + 1}` }))} />
       )}
       <Popover
         label="Replace picture"
@@ -176,15 +176,15 @@ export function MediaToolbar({ pageId, elements, editor }: ToolbarProps) {
       </TbButton>
       <Sep />
       {el.type === "image" && (
-        <NumberField label="Corner radius" hideLabel value={el.props.radius ?? 0} unit="mm" min={0} onChange={(v) => v !== null && editor.commit(updateProps(editor.doc, pageId, [el.id], "image", { radius: Math.max(0, v) }), "Corner radius", { mergeKey: `radius:${el.id}` })} disabled={locked} />
+        <NumberField label="Corner radius" hideLabel className="w-24" value={el.props.radius ?? 0} unit="mm" min={0} onChange={(v) => v !== null && editor.commit(updateProps(editor.doc, pageId, [el.id], "image", { radius: Math.max(0, v) }), "Corner radius", { mergeKey: `radius:${el.id}` })} disabled={locked} />
       )}
       {el.type === "frame" && (
-        <Select label="Shape" hideLabel value={el.props.mask} disabled={locked} onChange={(v) => v && editor.commit(updateProps(editor.doc, pageId, [el.id], "frame", { mask: v as FrameMask }), "Frame shape")} options={FRAME_MASKS.map((m) => ({ value: m, label: m[0].toUpperCase() + m.slice(1) }))} />
+        <Select label="Shape" hideLabel className="w-28" value={el.props.mask} disabled={locked} onChange={(v) => v && editor.commit(updateProps(editor.doc, pageId, [el.id], "frame", { mask: v as FrameMask }), "Frame shape")} options={FRAME_MASKS.map((m) => ({ value: m, label: m[0].toUpperCase() + m.slice(1) }))} />
       )}
       {el.type === "grid" && (
         <>
-          <NumberField label="Columns" hideLabel value={el.props.columns} min={1} max={6} onChange={(v) => v && editor.commit(updateProps(editor.doc, pageId, [el.id], "grid", { columns: Math.max(1, Math.min(6, Math.round(v))) }), "Grid columns", { mergeKey: `cols:${el.id}` })} disabled={locked} />
-          <NumberField label="Gap" hideLabel value={el.props.gap} unit="mm" min={0} onChange={(v) => v !== null && editor.commit(updateProps(editor.doc, pageId, [el.id], "grid", { gap: Math.max(0, v) }), "Grid gap", { mergeKey: `gap:${el.id}` })} disabled={locked} />
+          <NumberField label="Columns" hideLabel className="w-24" value={el.props.columns} min={1} max={6} onChange={(v) => v && editor.commit(updateProps(editor.doc, pageId, [el.id], "grid", { columns: Math.max(1, Math.min(6, Math.round(v))) }), "Grid columns", { mergeKey: `cols:${el.id}` })} disabled={locked} />
+          <NumberField label="Gap" hideLabel className="w-24" value={el.props.gap} unit="mm" min={0} onChange={(v) => v !== null && editor.commit(updateProps(editor.doc, pageId, [el.id], "grid", { gap: Math.max(0, v) }), "Grid gap", { mergeKey: `gap:${el.id}` })} disabled={locked} />
         </>
       )}
       <Popover
@@ -223,16 +223,16 @@ export function ShapeToolbar({ doc, pageId, elements, editor }: ToolbarProps) {
         <>
           <ColourButton label="Fill" value={el.props.fill} swatches={sw} allowNone onChange={(c) => set("shape", { fill: c }, "Fill")} />
           <ColourButton label="Border" value={el.props.stroke} swatches={sw} allowNone onChange={(c) => set("shape", { stroke: c, strokeWidth: el.props.strokeWidth ?? 0.5 }, "Border")} />
-          <NumberField label="Border width" hideLabel value={el.props.strokeWidth ?? 0} unit="mm" min={0} onChange={(v) => v !== null && set("shape", { strokeWidth: Math.max(0, v) }, "Border width", "sw")} />
-          {el.props.shape === "rect" && <NumberField label="Corner radius" hideLabel value={el.props.radius ?? 0} unit="mm" min={0} onChange={(v) => v !== null && set("shape", { radius: Math.max(0, v) }, "Corner radius", "radius")} />}
+          <NumberField label="Border width" hideLabel className="w-24" value={el.props.strokeWidth ?? 0} unit="mm" min={0} onChange={(v) => v !== null && set("shape", { strokeWidth: Math.max(0, v) }, "Border width", "sw")} />
+          {el.props.shape === "rect" && <NumberField label="Corner radius" hideLabel className="w-24" value={el.props.radius ?? 0} unit="mm" min={0} onChange={(v) => v !== null && set("shape", { radius: Math.max(0, v) }, "Corner radius", "radius")} />}
         </>
       );
     case "line":
       return (
         <>
           <ColourButton label="Colour" value={el.props.stroke} swatches={sw} allowNone onChange={(c) => set("line", { stroke: c }, "Line colour")} />
-          <NumberField label="Weight" hideLabel value={el.props.strokeWidth} unit="mm" min={0.1} onChange={(v) => v && set("line", { strokeWidth: Math.max(0.1, v) }, "Line weight", "lw")} />
-          <Select label="Style" hideLabel value={el.props.dash} onChange={(v) => v && set("line", { dash: v }, "Line style")} options={["solid", "dashed", "dotted"].map((d) => ({ value: d, label: d[0].toUpperCase() + d.slice(1) }))} />
+          <NumberField label="Weight" hideLabel className="w-24" value={el.props.strokeWidth} unit="mm" min={0.1} onChange={(v) => v && set("line", { strokeWidth: Math.max(0.1, v) }, "Line weight", "lw")} />
+          <Select label="Style" hideLabel className="w-28" value={el.props.dash} onChange={(v) => v && set("line", { dash: v }, "Line style")} options={["solid", "dashed", "dotted"].map((d) => ({ value: d, label: d[0].toUpperCase() + d.slice(1) }))} />
           <TbButton active={!!el.props.endArrow} onClick={() => set("line", { endArrow: !el.props.endArrow }, "Arrow")}>
             Arrow
           </TbButton>
@@ -242,7 +242,7 @@ export function ShapeToolbar({ doc, pageId, elements, editor }: ToolbarProps) {
       return (
         <>
           <ColourButton label="Colour" value={el.props.color} swatches={sw} allowNone onChange={(c) => set("divider", { color: c }, "Divider colour")} />
-          <Select label="Style" hideLabel value={el.props.style ?? "solid"} onChange={(v) => v && set("divider", { style: v }, "Divider style")} options={["solid", "dashed", "dotted"].map((d) => ({ value: d, label: d[0].toUpperCase() + d.slice(1) }))} />
+          <Select label="Style" hideLabel className="w-28" value={el.props.style ?? "solid"} onChange={(v) => v && set("divider", { style: v }, "Divider style")} options={["solid", "dashed", "dotted"].map((d) => ({ value: d, label: d[0].toUpperCase() + d.slice(1) }))} />
         </>
       );
     case "icon":

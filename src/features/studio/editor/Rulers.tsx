@@ -101,7 +101,7 @@ export function Rulers({ scroller }: { scroller: RefObject<HTMLDivElement | null
       >
         {left.map((t) => (
           <span key={t.mm} className={tick} style={{ top: origin.y + t.mm * k, right: 0, height: 1, width: t.major ? 8 : 4 }}>
-            {t.major && <span className="absolute left-[-14px] top-0.5 text-muted">{t.mm}</span>}
+            {t.major && <span className="absolute -left-[11px] top-0.5 text-[8px] leading-none text-muted">{t.mm}</span>}
           </span>
         ))}
       </div>

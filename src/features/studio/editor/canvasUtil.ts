@@ -11,8 +11,15 @@ export function scrollToPage(pageId: string): void {
   el?.scrollIntoView?.({ block: "start", behavior: "smooth" });
 }
 
-/** Zoom that fits the page width into the canvas, 10–200 %. */
-export const fitZoom = (canvasW: number, pageWmm: number): number => Math.max(0.1, Math.min(2, Math.floor(((canvasW - GUTTER * 2) / mmToPx(pageWmm)) * 100) / 100));
+/** Room above a page for its title row (px). */
+const TITLE_ROW = 40;
+
+/** Zoom that fits a whole page into the canvas (width and height), 10–200 %. */
+export const fitZoom = (canvasW: number, canvasH: number, pageWmm: number, pageHmm: number): number => {
+  const byW = (canvasW - GUTTER * 2) / mmToPx(pageWmm);
+  const byH = canvasH > 0 ? (canvasH - GUTTER - TITLE_ROW) / mmToPx(pageHmm) : byW;
+  return Math.max(0.1, Math.min(2, Math.floor(Math.min(byW, byH) * 100) / 100));
+};
 
 
 const roots = new Map<string, ShadowRoot>();
