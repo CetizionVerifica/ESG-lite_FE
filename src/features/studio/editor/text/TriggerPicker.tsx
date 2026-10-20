@@ -8,6 +8,7 @@ import { DataPicker } from "./DataPicker";
 import { dismissTrigger, type TriggerState } from "./extensions";
 import type { PickerItem } from "./picker";
 import { insertChip } from "./useStudioText";
+import { portalRoot } from "../../../../ui";
 
 export function TriggerPicker({ editor, trigger, keyRef, scope }: { editor: Editor | null; trigger: TriggerState; keyRef: React.MutableRefObject<(e: KeyboardEvent) => boolean>; scope: ChipScope }) {
   const [active, setActive] = useState(0);
@@ -66,6 +67,6 @@ export function TriggerPicker({ editor, trigger, keyRef, scope }: { editor: Edit
       <p className="px-2 pb-1 text-xs text-muted">{scope.kind === "ghg" ? "Emissions data" : "KPIs"} · ↑↓ to choose, Enter to insert</p>
       <DataPicker scope={scope} query={trigger.query} active={active} onActive={setActive} onPick={pick} onItems={onItems} />
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

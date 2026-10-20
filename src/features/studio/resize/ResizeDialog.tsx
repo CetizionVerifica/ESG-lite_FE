@@ -7,7 +7,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Link2, X } from "lucide-react";
-import { Button, Callout, SegmentedControl, Toggle, cn, focusRing } from "../../../ui";
+import { Button, Callout, cn, focusRing, portalRoot, SegmentedControl, Toggle } from "../../../ui";
 import { useFocusTrap } from "../../../ui/hooks/useFocusTrap";
 import { useLockBodyScroll } from "../../../ui/hooks/useLockBodyScroll";
 import type { FreeformPage, PageFormat, ReportDoc } from "../../../lib/studio/contracts";
@@ -316,6 +316,6 @@ export function ResizeDialog({ open, onClose, docId, doc, data, brand, assets, a
         </footer>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

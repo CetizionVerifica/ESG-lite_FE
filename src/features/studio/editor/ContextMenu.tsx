@@ -5,7 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { groupElements, reorderZ, setLocked, takesImage, ungroupElements } from "../../../lib/studio/docOps";
-import { cn } from "../../../ui";
+import { cn, portalRoot } from "../../../ui";
 import { moreItems } from "./actions";
 import { useEditor } from "./EditorContext";
 import type { Command } from "./shortcuts";
@@ -106,7 +106,7 @@ export function ContextMenu({ at, onClose, run }: { at: { x: number; y: number }
         ),
       )}
     </div>,
-    document.body,
+    portalRoot(),
   );
 }
 

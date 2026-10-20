@@ -11,6 +11,7 @@ export { Skeleton, Loading, SkeletonText, SkeletonTableRows, SkeletonKpi, Skelet
 export { Modal, type ModalProps, type ModalAction } from "./Modal";
 export { Drawer, type DrawerProps } from "./Drawer";
 export * from "./fields";
+export { portalRoot } from "./portalRoot";
 export { Popover, PopoverLayer, type PopoverProps, type PopoverStrategy } from "./Popover";
 export { layerPosition } from "./popoverPosition";
 export { PageHeader, type PageHeaderProps, type HeaderAction } from "./PageHeader";

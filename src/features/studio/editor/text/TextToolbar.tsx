@@ -13,7 +13,7 @@ import { freeformPage, updateProps } from "../../../../lib/studio/docOps";
 import { Button, Popover, Select, TextField, cn } from "../../../../ui";
 import { themeSwatches } from "../actions";
 import type { ToolbarProps } from "../registry";
-import { ColourButton, Sep, TbButton } from "../toolbars";
+import { ColourButton, Sep, TbButton, TbLabel } from "../toolbars";
 import { scopeOf } from "../renderInputs";
 import { ChipDataProvider } from "./ChipDataProvider";
 import { TEXT_STYLE_LABELS, textToolbarItems } from "./toolbarSlots";
@@ -51,7 +51,7 @@ function FootnoteButton({ editor, onAll, disabled }: { editor: Editor | null; on
       label="Footnote"
       trigger={(t) => (
         <TbButton {...t} disabled={disabled} active={!!current} icon={<Superscript aria-hidden className="size-4" />} aria-label="Footnote" title="Footnote: a numbered note at the foot of the page">
-          <span className="sr-only xl:not-sr-only">Footnote</span>
+          <TbLabel>Footnote</TbLabel>
         </TbButton>
       )}
     >
@@ -155,8 +155,8 @@ export function InsertDataButton({ props, editor, label = "Insert data value" }:
     <Popover
       label={label}
       trigger={(t) => (
-        <TbButton {...t} disabled={ed.readOnly} icon={<Database aria-hidden className="size-4" />}>
-          <span className="sr-only xl:not-sr-only">{label}</span>
+        <TbButton {...t} title={label} disabled={ed.readOnly} icon={<Database aria-hidden className="size-4" />}>
+          <TbLabel>{label}</TbLabel>
         </TbButton>
       )}
     >
@@ -215,7 +215,7 @@ export function TextToolbar(props: ToolbarProps) {
         <Select
           label="Text style"
           hideLabel
-          className="w-36"
+          className="w-36 flex-none"
           value={el.props.style}
           disabled={locked}
           onChange={(v) => v && ed.commit(updateProps(ed.doc, pageId, ids, "text", { style: v }), "Text style")}

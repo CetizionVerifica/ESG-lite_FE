@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { cn } from "./cn";
 import { focusableIn } from "./hooks/useFocusTrap";
 import { layerPosition } from "./popoverPosition";
+import { portalRoot } from "./portalRoot";
 
 export type PopoverProps = {
   /** Renders the trigger; spread the props onto a button. */
@@ -56,11 +57,11 @@ export function Popover({ trigger, children, label, align = "start", className }
       if (!root || !panel) return;
       const p = layerPosition(
         root.getBoundingClientRect(),
-        { width: panel.offsetWidth, height: panel.offsetHeight },
+        { width: panel.offsetWidth, height: panel.scrollHeight },
         { width: window.innerWidth, height: window.innerHeight },
         align,
       );
-      setPos({ top: p.top, left: p.left });
+      setPos({ top: p.top, left: p.left, maxHeight: p.maxHeight });
     };
     place();
     window.addEventListener("resize", place);
@@ -110,13 +111,14 @@ export function Popover({ trigger, children, label, align = "start", className }
               position: "fixed",
               top: pos?.top ?? 0,
               left: pos?.left ?? 0,
+              maxHeight: pos?.maxHeight,
               visibility: pos ? undefined : "hidden",
             }
           : undefined
       }
       className={cn(
         "min-w-56 rounded-control border border-line bg-panel p-3 text-ink shadow-lg focus:outline-none",
-        layered ? "z-50 max-h-[calc(100vh-16px)] overflow-y-auto" : cn("absolute z-30 mt-1", align === "end" ? "right-0" : "left-0"),
+        layered ? "z-50 overflow-y-auto" : cn("absolute z-30 mt-1", align === "end" ? "right-0" : "left-0"),
         className,
       )}
     >
@@ -135,7 +137,7 @@ export function Popover({ trigger, children, label, align = "start", className }
           setOpen((o) => !o);
         },
       })}
-      {layered ? panel && createPortal(panel, document.body) : panel}
+      {layered ? panel && createPortal(panel, portalRoot()) : panel}
     </div>
   );
 }

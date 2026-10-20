@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { cn } from "./cn";
 import { menuPosition } from "./menuPosition";
 import { focusRing } from "./styles";
+import { portalRoot } from "./portalRoot";
 
 export type MenuItem = {
   label: string;
@@ -77,11 +78,11 @@ export function Menu({ trigger, items, align = "end", label }: MenuProps) {
       const root = document.documentElement;
       const pos = menuPosition(
         t.getBoundingClientRect(),
-        { width: p.offsetWidth, height: p.offsetHeight },
+        { width: p.offsetWidth, height: p.scrollHeight },
         { width: root.clientWidth || window.innerWidth, height: root.clientHeight || window.innerHeight },
         align,
       );
-      setStyle({ top: pos.top, left: pos.left });
+      setStyle({ top: pos.top, left: pos.left, maxHeight: pos.maxHeight });
     };
     place();
     // Capture: a scroll in any ancestor (the table, a drawer body) moves the trigger.
@@ -151,7 +152,7 @@ export function Menu({ trigger, items, align = "end", label }: MenuProps) {
             }}
             style={style}
             // Above drawers and modals (z-50) a menu can open from; below toasts (z-60).
-            className="fixed z-[55] max-h-[calc(100vh-1rem)] min-w-44 overflow-y-auto rounded-control border border-line bg-panel py-1 shadow-lg"
+            className="fixed z-[55] min-w-44 overflow-y-auto rounded-control border border-line bg-panel py-1 shadow-lg"
           >
             {items.map((it, i) => {
               if (!isItem(it)) {
@@ -200,7 +201,7 @@ export function Menu({ trigger, items, align = "end", label }: MenuProps) {
               );
             })}
           </div>,
-          document.body,
+          portalRoot(),
         )}
     </div>
   );

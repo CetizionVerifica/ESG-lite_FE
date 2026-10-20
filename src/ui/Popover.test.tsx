@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Popover, PopoverLayer } from "./Popover";
 import { layerPosition } from "./popoverPosition";
+import { portalRoot } from "./portalRoot";
 
 afterEach(cleanup);
 
@@ -13,15 +14,20 @@ const viewport = { width: 1280, height: 800 };
 
 describe("layerPosition", () => {
   it("puts the panel under the trigger, aligned to its start", () => {
-    expect(layerPosition(rect(100, 50, 120, 32), { width: 320, height: 300 }, viewport, "start")).toEqual({ top: 86, left: 100 });
+    expect(layerPosition(rect(100, 50, 120, 32), { width: 320, height: 300 }, viewport, "start")).toMatchObject({ top: 86, left: 100 });
   });
 
   it("aligns to the trigger's end", () => {
-    expect(layerPosition(rect(900, 50, 120, 32), { width: 320, height: 300 }, viewport, "end")).toEqual({ top: 86, left: 700 });
+    expect(layerPosition(rect(900, 50, 120, 32), { width: 320, height: 300 }, viewport, "end")).toMatchObject({ top: 86, left: 700 });
   });
 
   it("keeps the panel on screen at the right edge", () => {
     expect(layerPosition(rect(1200, 50, 60, 32), { width: 320, height: 300 }, viewport, "start").left).toBe(1280 - 320 - 8);
+  });
+
+  it("caps a panel taller than the room below to that room, so it scrolls inside", () => {
+    // The page toolbar's Layout list: 1,200 px of layouts under a trigger at the top of a 900 px window.
+    expect(layerPosition(rect(300, 100, 80, 32), { width: 320, height: 1200 }, { width: 1440, height: 900 }, "start")).toEqual({ top: 136, left: 300, maxHeight: 900 - 8 - 136 });
   });
 
   it("opens above when there is no room below", () => {
@@ -101,5 +107,30 @@ describe("Popover without a layer", () => {
     const panel = screen.getByRole("dialog", { name: "Filter panel" });
     expect(panel.parentElement?.parentElement).toBe(document.body.firstElementChild);
     expect(panel.className).toContain("absolute");
+  });
+});
+
+describe("portalRoot in full screen", () => {
+  afterEach(() => {
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => null });
+  });
+
+  it("attaches a layered panel inside the element in full screen, so it stays visible", async () => {
+    const stage = document.createElement("div");
+    document.body.appendChild(stage);
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => stage });
+    expect(portalRoot()).toBe(stage);
+    render(
+      <PopoverLayer>
+        <Picker name="Insert data value" />
+      </PopoverLayer>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Insert data value" }));
+    expect(screen.getByRole("dialog", { name: "Insert data value panel" }).parentElement).toBe(stage);
+    stage.remove();
+  });
+
+  it("uses document.body when nothing is in full screen", () => {
+    expect(portalRoot()).toBe(document.body);
   });
 });

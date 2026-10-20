@@ -19,9 +19,12 @@ import { themeSwatches } from "./actions";
 export const Sep = () => <span aria-hidden className="mx-1 h-5 w-px bg-line" />;
 
 /** A ghost toolbar button. */
+/** A toolbar button label that hides (stays for screen readers) when the toolbar is compact (ContextToolbar). */
+export const TbLabel = ({ children }: { children: ReactNode }) => <span className="in-data-[tb-compact=true]:sr-only">{children}</span>;
+
 export function TbButton({ children, icon, active, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: ReactNode; active?: boolean }) {
   return (
-    <button type="button" {...rest} aria-pressed={active} className={cn("inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-[13px] font-medium text-ink hover:bg-tint disabled:opacity-50", active && "bg-brand-50 text-brand-text", focusRing, rest.className)}>
+    <button type="button" {...rest} aria-pressed={active} className={cn("inline-flex h-8 flex-none items-center gap-1.5 whitespace-nowrap rounded-control px-2.5 text-[13px] font-medium text-ink hover:bg-tint disabled:opacity-50", active && "bg-brand-50 text-brand-text", focusRing, rest.className)}>
       {icon}
       {children}
     </button>
@@ -36,7 +39,7 @@ export function ColourButton({ label, value, swatches, onChange, allowNone }: { 
       trigger={(t) => (
         <TbButton {...t} aria-label={label} title={label}>
           <span aria-hidden className="size-4 rounded-[3px] border border-line" style={{ background: value ?? "transparent" }} />
-          <span className="sr-only xl:not-sr-only">{label}</span>
+          <TbLabel>{label}</TbLabel>
         </TbButton>
       )}
     >
