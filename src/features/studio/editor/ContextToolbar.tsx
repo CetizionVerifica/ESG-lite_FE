@@ -46,7 +46,19 @@ function useToolbarFit(resetKey: string): [React.RefObject<HTMLDivElement | null
       }
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    // A type toolbar can grow without this row re-rendering (starting to edit text adds the list
+    // buttons), so re-measure whenever its content changes.
+    const mo = new MutationObserver(() => {
+      if (el.scrollWidth > el.clientWidth + 1) {
+        steppedAt.current = el.clientWidth;
+        setFit((f) => (f < 2 ? ((f + 1) as ToolbarFit) : f));
+      }
+    });
+    mo.observe(el, { childList: true, subtree: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
   }, []);
   return [ref, fit];
 }
