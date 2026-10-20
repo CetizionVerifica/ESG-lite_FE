@@ -1019,6 +1019,47 @@ export interface PublicShareMeta {
 // end DS-11
 
 // ---------------------------------------------------------------------------
+// DS-10 · Resize and convert (ESG-lite src/studio/contracts/resize.ts)
+// ---------------------------------------------------------------------------
+
+/** `POST /studio/docs/:id/resize`. `ai` asks for AI summaries (DS-9); off = text cut to fit. */
+export interface ResizeBody {
+  format: PageFormat;
+  purpose: DocPurpose;
+  pageIds?: string[];
+  title?: string;
+  ai?: boolean;
+}
+
+/** 201 answer: the new design and what the copy left out. */
+export interface ResizeResponse {
+  id: number;
+  title: string;
+  pageCount: number;
+  dropped: number;
+  truncated: number;
+  summarised: number;
+}
+
+/** `GET /studio/docs/:id/source` (`source` null for a design that isn't a resized copy). */
+export interface LinkedSource {
+  docId: number;
+  /** False when the source was deleted or can't be read any more. */
+  exists: boolean;
+  title: string | null;
+  rev: number;
+  dataHash: string;
+  currentRev: number | null;
+  currentDataHash: string | null;
+  /** "Source data changed". */
+  dataChanged: boolean;
+}
+export interface LinkedSourceResponse {
+  source: LinkedSource | null;
+}
+// end DS-10
+
+// ---------------------------------------------------------------------------
 // §5 Error codes
 // ---------------------------------------------------------------------------
 
@@ -1102,6 +1143,7 @@ export const CHECK_IDS = [
   "TOTAL_MISMATCH",
   "YOY_UNEXPLAINED",
   "UNLINKED_DATA",
+  "TEXT_TRUNCATED", // DS-10
 ] as const;
 export type CheckId = (typeof CHECK_IDS)[number];
 
@@ -1147,6 +1189,7 @@ export const CHECK_RULES: Record<CheckId, { severity: CheckSeverity; kinds: read
   TOTAL_MISMATCH: { severity: "error", kinds: GHG },
   YOY_UNEXPLAINED: { severity: "info", kinds: GHG },
   UNLINKED_DATA: { severity: "info", kinds: BOTH },
+  TEXT_TRUNCATED: { severity: "info", kinds: BOTH }, // DS-10
 };
 
 export const CHECK_FIXES = ["replace_with_token", "shrink_text", "move_inside", "open_values", "open_inputs"] as const;

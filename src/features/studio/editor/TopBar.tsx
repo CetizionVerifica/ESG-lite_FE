@@ -1,16 +1,18 @@
 // DS-6 · the editor top bar (48 px, 05-ux): ← Designs, File ▾ (view toggles,
 // shortcuts), Resize, undo/redo, the title and save state, comments, Present,
-// Share ▾ and Download ▾ (DS-11). Resize (DS-10), checks (DS-12) and version
+// Share ▾ and Download ▾ (DS-11), Resize and the "Made from" chip (DS-10). Checks (DS-12) and version
 // history (DS-13) plug in here when they land; until then they say so.
 import { Link } from "react-router-dom";
 import { ChevronLeft, MessageSquare, Play, Redo2, Undo2 } from "lucide-react";
-import { Menu, Tooltip, cn, focusRing } from "../../../ui";
+import { Menu, cn, focusRing } from "../../../ui";
 import { useEditor } from "./EditorContext";
 import { TbButton } from "./toolbars";
 import { DownloadMenu } from "../share/DownloadMenu"; // DS-11
 import { ShareMenu } from "../share/ShareMenu"; // DS-11
 import { SelectFromLink } from "../share/SelectFromLink"; // DS-11
 import { useCanManage } from "../share/useCanManage"; // DS-11
+import { ResizeButton } from "../resize/ResizeButton"; // DS-10
+import { LinkedSourceChip } from "../resize/LinkedSourceChip"; // DS-10
 
 export type SaveState = "saved" | "unsaved" | "saving" | "error" | "conflict";
 
@@ -29,7 +31,8 @@ export function TopBar({ save, status, onHelp }: { save: SaveState; status: stri
   const canManage = useCanManage(); // DS-11
   const statusWord = status === "final" ? "Final" : status === "in_review" ? "In review" : status === "approved" ? "Approved" : "Draft";
   return (
-    <header className="flex h-12 flex-none items-center gap-1.5 border-b border-line bg-panel px-3" aria-label="Design">
+    // DS-10: buttons keep one line (the title and the "Made from" chip shrink instead).
+    <header className="flex h-12 flex-none items-center gap-1.5 border-b border-line bg-panel px-3 [&_a]:whitespace-nowrap [&_button]:whitespace-nowrap" aria-label="Design">
       <Link to="/studio" className={cn("inline-flex h-8 items-center gap-1 rounded-control px-2.5 text-[13px] font-medium text-ink hover:bg-tint", focusRing)}>
         <ChevronLeft aria-hidden className="size-4" /> Designs
       </Link>
@@ -53,15 +56,12 @@ export function TopBar({ save, status, onHelp }: { save: SaveState; status: stri
           { label: "Keyboard shortcuts  ⌘/", onSelect: onHelp },
         ]}
       />
-      <Tooltip content="Resize arrives with the resize module">
-        <TbButton aria-disabled disabled>
-          Resize
-        </TbButton>
-      </Tooltip>
+      <ResizeButton /> {/* DS-10 */}
       <TbButton aria-label={ed.undoLabel ? `Undo ${ed.undoLabel}` : "Undo"} title={ed.undoLabel ? `Undo ${ed.undoLabel} (⌘Z)` : "Undo (⌘Z)"} disabled={!ed.canUndo} onClick={ed.undo} icon={<Undo2 aria-hidden className="size-4" />} />
       <TbButton aria-label={ed.redoLabel ? `Redo ${ed.redoLabel}` : "Redo"} title={ed.redoLabel ? `Redo ${ed.redoLabel} (⇧⌘Z)` : "Redo (⇧⌘Z)"} disabled={!ed.canRedo} onClick={ed.redo} icon={<Redo2 aria-hidden className="size-4" />} />
       <span aria-hidden className="mx-1 h-5 w-px bg-line" />
       <h1 className="min-w-0 truncate px-1.5 text-sm font-semibold text-ink">{ed.doc.meta.title}</h1>
+      <LinkedSourceChip docId={ed.docId} doc={ed.doc} /> {/* DS-10 */}
       <span className={cn("whitespace-nowrap text-xs", save === "error" || save === "conflict" ? "text-bad" : "text-muted")} role="status" aria-live="polite" data-testid="save-state">
         {statusWord} · {readOnly ? "View only" : SAVE_TEXT[save]}
       </span>
