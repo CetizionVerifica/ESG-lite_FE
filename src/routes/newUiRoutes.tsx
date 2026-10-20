@@ -12,6 +12,8 @@ import { Loading } from "../ui";
 
 // C06: the supplier's upload page, reached by emailed link, no account.
 const SupplierPage = lazy(() => import("../features/supplier-requests/SupplierPage"));
+// DS-11: a Design Studio view link (read-only PDF), reached by a shared link, no account.
+const StudioShareViewer = lazy(() => import("../features/studio/share/PublicViewerPage"));
 
 /**
  * Routes of the app.
@@ -46,6 +48,14 @@ const newUiRoutes: RouteObject[] = [
     element: (
       <Suspense fallback={<Loading label="Opening the request">{null}</Loading>}>
         <SupplierPage />
+      </Suspense>
+    ),
+  },
+  {
+    path: "/s/:token", // DS-11
+    element: (
+      <Suspense fallback={<Loading label="Opening the report">{null}</Loading>}>
+        <StudioShareViewer />
       </Suspense>
     ),
   },

@@ -64,6 +64,11 @@ import {
   type ReportDoc,
   type ReportInputs,
   type ReportJob,
+  type CreateJobBody, // DS-11
+  type CreateShareBody, // DS-11
+  type PublicShareMeta, // DS-11
+  SHARE_DAYS_DEFAULT, // DS-11
+  SHARE_DAYS_MAX, // DS-11
   type ReportKind,
   type ReportLayout,
   type ReportShare,
@@ -255,9 +260,9 @@ interface State {
   brandKit: BrandKit;
   assets: StudioAsset[];
   nextAsset: number;
-  jobs: Map<number, ReportJob>;
+  jobs: Map<number, MockJob>;
   nextJob: number;
-  shares: (ReportShare & { docId: number })[];
+  shares: MockShare[];
   nextShare: number;
   comments: ReportComment[];
   nextComment: number;
@@ -331,6 +336,8 @@ export function resetStudioMocks(): void {
   state = initialState();
   imageGen = false; // DS-4
   BUILD_POLLS = 2; // DS-5
+  JOB_POLLS = 1; // DS-11
+  finalBlocked = false; // DS-11
 }
 // DS-4: whether POST /studio/assets/generate has an image provider (off by default, as in CI).
 let imageGen = false;
@@ -388,6 +395,63 @@ const loadDoc = (rawId: unknown): DocRow | Response => {
   return kindOff ?? row;
 };
 const isResponse = (v: unknown): v is Response => v instanceof Response;
+
+// DS-11: render jobs finish after JOB_POLLS polls of GET /jobs/:id (0 = at once).
+interface MockJob extends ReportJob {
+  pollsLeft: number;
+  note: string | null;
+}
+interface MockShare extends ReportShare {
+  token: string;
+}
+let JOB_POLLS = 1;
+let finalBlocked = false;
+const JOB_FILES: Record<JobKind, string> = { proof: "proof.pdf", print: "print.pdf", png: "pages.zip", thumbnail: "thumbnail.png", final: "final.pdf" };
+const mockVersion = (row: DocRow, kind: ReportVersion["kind"], note: string | null): ReportVersion => {
+  const n = row.versions.reduce((m, v) => Math.max(m, v.n), 0) + 1;
+  return { id: row.id * 1000 + n, n, kind, rev: row.rev, note, createdAt: NOW, createdBy: "Maya Manager", pageCount: row.doc.pages.length, pdfUrl: kind === "final" ? `/studio/docs/${row.id}/versions/${n}/pdf` : null, pdfSha256: kind === "final" ? "c".repeat(64) : null, dataHash: "sha256:mock", rendererHash: "mock", superseded: false };
+};
+function finishJob(job: MockJob): void {
+  const row = state.docs.get(job.docId);
+  job.status = "done";
+  job.startedAt = NOW;
+  job.finishedAt = NOW;
+  job.pageCount = job.kind === "png" && job.options?.pages ? job.options.pages[1] - job.options.pages[0] + 1 : (row?.doc.pages.length ?? 1);
+  job.bytes = 120_000;
+  job.downloadUrl = `/studio/jobs/${job.id}/file`;
+  if (job.kind === "final" && row) {
+    row.versions.forEach((v) => {
+      if (v.kind === "final") v.superseded = true;
+    });
+    const v = { ...mockVersion(row, "final", job.note), rev: job.rev };
+    row.versions.push(v);
+    job.versionId = v.id;
+    job.versionN = v.n;
+    job.fileName = `ACME-GHG-Report-${row.doc.meta.year}-v${v.n}.pdf`;
+  } else {
+    job.expiresAt = new Date(Date.parse(NOW) + 7 * 86_400_000).toISOString();
+    job.fileName = `ACME-GHG-Report-${row?.doc.meta.year ?? 2025}-${JOB_FILES[job.kind]}`;
+  }
+}
+const publicJob = ({ pollsLeft: _p, note: _n, ...job }: MockJob): ReportJob => job;
+const publicShare = ({ token: _t, ...share }: MockShare): ReportShare => share;
+/** How many GET /jobs/:id polls a render job takes (0 = done at once). */
+export function setStudioMockJobPolls(n: number): void {
+  JOB_POLLS = n;
+}
+/** A final answers DS_CHECKS_BLOCKING (pending entries) while on. */
+export function setStudioMockFinalBlocked(on: boolean): void {
+  finalBlocked = on;
+}
+/** A job's state (tests make one fail). */
+export function setStudioMockJobFailed(id: number, reason: string): void {
+  const job = state.jobs.get(id);
+  if (job) Object.assign(job, { status: "failed", errorCode: "DS_JOB_FAILED", errorReason: reason, downloadUrl: null, pollsLeft: 0 });
+}
+/** The view links made so far, with their tokens (tests open them). */
+export function studioMockShares(): { id: number; docId: number; token: string; state: ReportShare["state"]; views: number }[] {
+  return state.shares.map((s) => ({ id: s.id, docId: s.docId, token: s.token, state: s.state, views: s.views }));
+}
 
 const summary = (row: DocRow): StudioDocSummary => ({
   id: row.id,
@@ -985,62 +1049,104 @@ export const studioHandlers = [
     return HttpResponse.json({ id: addDoc(doc, clone(row.inputs), row.id).id }, { status: 201 });
   }),
 
-  // DS-11 preview, jobs, versions, shares
-  http.get("*/studio/docs/:id/preview.html", ({ params }) => {
+  // DS-11 preview, jobs, versions, shares (and the public /s/:token)
+  http.get("*/studio/docs/:id/preview.html", ({ params, request }) => {
     const row = loadDoc(params.id);
-    return isResponse(row) ? row : HttpResponse.text(PREVIEW_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
+    if (isResponse(row)) return row;
+    const mode = new URL(request.url).searchParams.get("mode") ?? "paged";
+    const pages = row.doc.pages.map((p) => `<section class="${p.kind === "flow" ? "ds-flow" : "ds-sheet"}" data-page-id="${p.id}"><h1>${p.name}</h1></section>`).join("");
+    return HttpResponse.text(PREVIEW_HTML.replace('data-mock="studio-preview"', `data-mock="studio-preview" data-mode="${mode}"`).replace(/<section.*<\/section>/, pages), {
+      headers: { "content-type": "text/html; charset=utf-8", "x-doc-rev": String(row.rev) },
+    });
   }),
   http.post("*/studio/docs/:id/jobs", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    const b = await body<{ kind: JobKind; rev: number; options?: ReportJob["options"] }>(request);
+    const b = await body<CreateJobBody>(request);
     if (b.rev !== row.rev) return error("DS_VERSION_CONFLICT", { rev: row.rev });
-    const id = state.nextJob++;
-    let versionId: number | null = null;
     if (b.kind === "final") {
-      const n = row.versions.length + 1;
-      row.versions.push({ n, kind: "final", note: null, createdAt: NOW, createdBy: "Maya Manager", pageCount: row.doc.pages.length, pdfUrl: `/mock/docs/${row.id}/versions/${n}.pdf`, dataHash: "sha256:mock" });
-      row.status = "final";
-      versionId = n;
+      if (finalBlocked) return error("DS_CHECKS_BLOCKING", { checks: [{ id: "GHG_PENDING_ENTRIES", severity: "error", count: 4, message: "Pending entries: 4. Approve them in Review before the final.", link: "/data/approvals" }] });
+      if (row.versions.some((v) => v.kind === "final") && !b.note) return error("DS_VALIDATION", { issues: [{ path: "note", message: "Say what changed since the last final" }] });
     }
-    const job: ReportJob = {
+    const id = state.nextJob++;
+    const kind = (b.kind ?? "proof") as JobKind;
+    const job: MockJob = {
       id,
       docId: row.id,
-      versionId,
-      kind: b.kind ?? "proof",
-      status: "done",
+      versionId: null,
+      versionN: null,
+      kind,
+      status: "queued",
       errorCode: null,
+      errorReason: null,
       requestedBy: 2,
-      startedAt: NOW,
-      finishedAt: NOW,
-      downloadUrl: `/mock/jobs/${id}.${b.kind === "png" ? "zip" : "pdf"}`,
+      rev: row.rev,
+      createdAt: NOW,
+      startedAt: null,
+      finishedAt: null,
+      downloadUrl: null,
+      fileName: null,
+      bytes: null,
+      pageCount: null,
+      expiresAt: null,
       ...(b.options ? { options: b.options } : {}),
+      pollsLeft: JOB_POLLS,
+      note: b.note ?? null,
     };
     state.jobs.set(id, job);
-    return HttpResponse.json<ReportJob>(job, { status: 202 });
+    if (job.pollsLeft <= 0) finishJob(job);
+    return HttpResponse.json<ReportJob>(publicJob(job), { status: 202 });
+  }),
+  http.get("*/studio/docs/:id/jobs", ({ params, request }) => {
+    const row = loadDoc(params.id);
+    if (isResponse(row)) return row;
+    const kind = new URL(request.url).searchParams.get("kind");
+    const list = [...state.jobs.values()].filter((j) => j.docId === row.id && (!kind || j.kind === kind)).reverse();
+    return HttpResponse.json<ReportJob[]>(list.map(publicJob));
   }),
   http.get("*/studio/jobs/:id", ({ params }) => {
     const off = gate();
     if (off) return off;
     const job = state.jobs.get(Number(params.id));
-    return job ? HttpResponse.json<ReportJob>(job) : error("DS_DOC_NOT_FOUND");
+    if (!job) return error("DS_DOC_NOT_FOUND");
+    if (job.status === "queued" || job.status === "running") {
+      job.pollsLeft -= 1;
+      if (job.pollsLeft <= 0) finishJob(job);
+      else job.status = "running";
+    }
+    return HttpResponse.json<ReportJob>(publicJob(job));
   }),
-  http.get("*/studio/docs/:id/versions", ({ params }) => {
+  http.get("*/studio/jobs/:id/file", ({ params }) => {
+    const off = gate();
+    if (off) return off;
+    const job = state.jobs.get(Number(params.id));
+    if (!job || job.status !== "done") return error("DS_DOC_NOT_FOUND");
+    const zip = job.kind === "png";
+    return new HttpResponse(new TextEncoder().encode(zip ? "PK\u0005\u0006mock" : "%PDF-1.7\n% mock\n"), {
+      headers: { "content-type": zip ? "application/zip" : "application/pdf", "content-disposition": `attachment; filename="${job.fileName}"` },
+    });
+  }),
+  http.get("*/studio/docs/:id/versions", ({ params, request }) => {
     const row = loadDoc(params.id);
-    return isResponse(row) ? row : HttpResponse.json<ReportVersion[]>(row.versions);
+    if (isResponse(row)) return row;
+    const kind = new URL(request.url).searchParams.get("kind");
+    return HttpResponse.json<ReportVersion[]>(row.versions.filter((v) => !kind || v.kind === kind).slice().reverse());
   }),
   http.post("*/studio/docs/:id/versions", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
     const b = await body<{ note: string }>(request);
-    const version: ReportVersion = { n: row.versions.length + 1, kind: "snapshot", note: b.note ?? null, createdAt: NOW, createdBy: "Maya Manager", pageCount: row.doc.pages.length, pdfUrl: null, dataHash: null };
+    if (!b.note) return error("DS_VALIDATION", { issues: [{ path: "note", message: "Required" }] });
+    const version = mockVersion(row, "snapshot", b.note);
     row.versions.push(version);
     return HttpResponse.json<ReportVersion>(version, { status: 201 });
   }),
-  http.post("*/studio/docs/:id/versions/:n/restore", ({ params }) => {
+  http.post("*/studio/docs/:id/versions/:n/restore", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
+    const b = await body<{ rev: number }>(request);
     if (!row.versions.some((v) => v.n === Number(params.n))) return error("DS_DOC_NOT_FOUND");
+    if (b.rev !== undefined && b.rev !== row.rev) return error("DS_VERSION_CONFLICT", { rev: row.rev });
     row.status = "draft";
     row.rev += 1;
     return HttpResponse.json<StudioDocResponse>(docResponse(row));
@@ -1055,17 +1161,38 @@ export const studioHandlers = [
   http.post("*/studio/docs/:id/shares", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    const b = await body<{ versionId: number; expiresInDays: number }>(request);
-    const days = b.expiresInDays ?? 14;
-    if (days < 1 || days > 90) return error("DS_VALIDATION", { issues: [{ path: "expiresInDays", message: "1 to 90 days" }] });
-    const share = { id: state.nextShare++, docId: row.id, versionId: Number(b.versionId), expiresAt: new Date(Date.parse(NOW) + days * 86_400_000).toISOString(), revokedAt: null, views: 0 };
+    const b = await body<CreateShareBody>(request);
+    const days = b.expiresInDays ?? SHARE_DAYS_DEFAULT;
+    if (days < 1 || days > SHARE_DAYS_MAX) return error("DS_VALIDATION", { issues: [{ path: "expiresInDays", message: "1 to 90 days" }] });
+    const version = b.versionId ? row.versions.find((v) => v.id === b.versionId) : undefined;
+    const proof = b.jobId ? state.jobs.get(b.jobId) : undefined;
+    if ((b.versionId && !version) || (b.jobId && (!proof || proof.docId !== row.id))) return error("DS_DOC_NOT_FOUND");
+    if (!version && !proof) return error("DS_VALIDATION", { issues: [{ path: "versionId", message: "Pick a final version or a proof" }] });
+    const id = state.nextShare++;
+    const token = `mock-token-${id}`.padEnd(43, "x");
+    const share: MockShare = {
+      id,
+      docId: row.id,
+      versionId: version?.id ?? null,
+      versionN: version?.n ?? null,
+      jobId: proof?.id ?? null,
+      label: version ? `Final v${version.n}` : "Proof · 20 Oct 2026",
+      expiresAt: new Date(Date.parse(NOW) + days * 86_400_000).toISOString(),
+      revokedAt: null,
+      views: 0,
+      lastViewedAt: null,
+      createdAt: NOW,
+      createdBy: "Maya Manager",
+      state: "active",
+      token,
+    };
     state.shares.push(share);
-    return HttpResponse.json<ReportShare>({ ...share, url: `https://app.example/s/mock-token-${share.id}` }, { status: 201 });
+    return HttpResponse.json<ReportShare>({ ...publicShare(share), url: `https://app.example/s/${token}` }, { status: 201 });
   }),
   http.get("*/studio/docs/:id/shares", ({ params }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    return HttpResponse.json<ReportShare[]>(state.shares.filter((s) => s.docId === row.id).map(({ docId: _docId, ...s }) => s));
+    return HttpResponse.json<ReportShare[]>(state.shares.filter((s) => s.docId === row.id).reverse().map(publicShare));
   }),
   http.delete("*/studio/shares/:id", ({ params }) => {
     const off = gate();
@@ -1073,7 +1200,22 @@ export const studioHandlers = [
     const share = state.shares.find((s) => s.id === Number(params.id));
     if (!share) return error("DS_DOC_NOT_FOUND");
     share.revokedAt = NOW;
+    share.state = "revoked";
     return new HttpResponse(null, { status: 204 });
+  }),
+  http.get("*/s/:token/meta", ({ params }) => {
+    const share = state.shares.find((s) => s.token === params.token);
+    if (!share) return error("DS_DOC_NOT_FOUND");
+    if (share.state !== "active" || !state.enabled) return error("DS_SHARE_EXPIRED");
+    share.views += 1;
+    const row = state.docs.get(share.docId);
+    return HttpResponse.json<PublicShareMeta>({ title: row?.doc.meta.title ?? "Report", company: "ACME Metals", logoUrl: null, label: share.label, expiresAt: share.expiresAt, pageCount: row?.doc.pages.length ?? null, fileUrl: `/s/${share.token}/file` });
+  }),
+  http.get("*/s/:token/file", ({ params }) => {
+    const share = state.shares.find((s) => s.token === params.token);
+    if (!share) return error("DS_DOC_NOT_FOUND");
+    if (share.state !== "active" || !state.enabled) return error("DS_SHARE_EXPIRED");
+    return new HttpResponse(new TextEncoder().encode("%PDF-1.7\n% mock\n"), { headers: { "content-type": "application/pdf" } });
   }),
 
   // DS-9 AI

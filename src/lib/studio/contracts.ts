@@ -912,39 +912,111 @@ export interface PatchDocBody {
 }
 // end DS-5 designs
 
-/** POST /docs/:id/jobs and GET /jobs/:id (RS ReportJob plus kinds and options). */
+// DS-11 · preview, render jobs, versions and view links (ESG-lite src/studio/contracts/jobs.ts)
+export const PREVIEW_MODES = ["sheet", "paged", "present", "print"] as const;
+export type PreviewMode = (typeof PREVIEW_MODES)[number];
+/** PNG resolution: 144 dpi (2×, screen) or 300 dpi (print). */
+export const PNG_DPIS = [144, 300] as const;
+export type PngDpi = (typeof PNG_DPIS)[number];
+export interface JobOptions {
+  /** print: crop marks around the trim box (bleed is always 3 mm on print formats). */
+  cropMarks?: boolean;
+  bleed?: boolean;
+  /** png: a 1-based inclusive page range. */
+  pages?: [number, number];
+  dpi?: PngDpi;
+  /** thumbnail: the page to draw. */
+  pageId?: string;
+}
+/** POST /docs/:id/jobs body. A final needs `note` when a final already exists. */
+export interface CreateJobBody {
+  kind: JobKind;
+  rev: number;
+  options?: JobOptions;
+  acknowledgedWarnings?: string[];
+  note?: string;
+}
+/** POST /docs/:id/jobs and GET /jobs/:id. The storage key is never part of it. */
 export interface ReportJob {
   id: number;
   docId: number;
   versionId: number | null;
+  /** n of the final version the job made. */
+  versionN: number | null;
   kind: JobKind;
   status: JobStatus;
   errorCode: DsErrorCode | null;
-  requestedBy: number;
+  /** timeout | font | chromium | measure | storage | data */
+  errorReason: string | null;
+  requestedBy: number | null;
+  rev: number;
+  createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  /** API path of the file once done (GET with the session). */
   downloadUrl: string | null;
-  options?: { bleed?: boolean; cropMarks?: boolean; pages?: [number, number] };
+  fileName: string | null;
+  bytes: number | null;
+  pageCount: number | null;
+  /** Proofs, prints and PNGs are kept 7 days; finals never expire (null). */
+  expiresAt: string | null;
+  options?: JobOptions;
 }
 export interface ReportVersion {
+  id: number;
   n: number;
   kind: VersionKind;
+  rev: number | null;
   note: string | null;
   createdAt: string;
   createdBy: string | null;
   pageCount: number | null;
+  /** API path of the stored PDF (finals). */
   pdfUrl: string | null;
+  pdfSha256: string | null;
   dataHash: string | null;
+  rendererHash: string | null;
+  /** A final with a newer final after it. */
+  superseded: boolean;
 }
-/** POST /docs/:id/shares returns the url once; GET lists without it. */
+export const SHARE_DAYS_DEFAULT = 14;
+export const SHARE_DAYS_MAX = 90;
+/** POST /docs/:id/shares body: a final version or a finished proof job. */
+export interface CreateShareBody {
+  versionId?: number;
+  jobId?: number;
+  expiresInDays: number;
+}
+/** POST /docs/:id/shares returns `url` once; GET lists without it. */
 export interface ReportShare {
   id: number;
-  versionId: number;
+  docId: number;
+  versionId: number | null;
+  versionN: number | null;
+  jobId: number | null;
+  /** "Final v2" or "Proof · 21 Oct 2026". */
+  label: string;
   expiresAt: string;
   revokedAt: string | null;
   views: number;
+  lastViewedAt: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  state: "active" | "expired" | "revoked";
   url?: string;
 }
+/** GET /s/:token/meta (public, no session). */
+export interface PublicShareMeta {
+  title: string;
+  company: string;
+  logoUrl: string | null;
+  label: string;
+  expiresAt: string;
+  pageCount: number | null;
+  /** API path of the stored PDF. */
+  fileUrl: string;
+}
+// end DS-11
 
 // ---------------------------------------------------------------------------
 // §5 Error codes

@@ -49,7 +49,7 @@ const ENDPOINTS: [string, string, unknown?][] = [
   ["GET", "/studio/jobs/1"],
   ["GET", "/studio/docs/1/versions"],
   ["POST", "/studio/docs/1/versions", { note: "Before review" }],
-  ["POST", "/studio/docs/1/shares", { versionId: 1, expiresInDays: 14 }],
+  ["POST", "/studio/docs/1/shares", { jobId: 1, expiresInDays: 14 }], // DS-11: a link to the proof above
   ["GET", "/studio/docs/1/shares"],
   ["POST", "/studio/docs/1/ai", { action: "ghg_exec_summary", target: { pageId: "p-summary" } }],
   ["POST", "/studio/docs/1/ai/chat", { messages: [{ role: "user", text: "Shorter" }] }],
@@ -153,12 +153,17 @@ describe("studio mocks (01-contracts §4)", () => {
     expect(res.body.unavailable).toEqual([{ bindingIdx: 1, reason: "NOT_RECORDED" }]); // DS-2: a reason code
   });
 
-  it("makes a final as a version and freezes the doc", async () => {
-    const job = await json<{ versionId: number; status: string }>("POST", "/studio/docs/1/jobs", { kind: "final", rev: 1 });
-    expect(job.body).toMatchObject({ status: "done", versionId: 1 });
-    expect((await json<{ code: string }>("PATCH", "/studio/docs/1", { rev: 1, doc: studioMockDoc(1)?.doc })).body.code).toBe("DS_FINAL_IMMUTABLE");
+  it("makes a final as a version through a render job; the draft stays editable (DS-11)", async () => {
+    const job = await json<{ id: number; status: string }>("POST", "/studio/docs/1/jobs", { kind: "final", rev: 1 });
+    expect(job.status).toBe(202);
+    expect(job.body.status).toBe("queued");
+    const done = await json<{ status: string; versionN: number; downloadUrl: string }>("GET", `/studio/jobs/${job.body.id}`);
+    expect(done.body).toMatchObject({ status: "done", versionN: 1, downloadUrl: `/studio/jobs/${job.body.id}/file` });
+    expect((await json("PATCH", "/studio/docs/1", { rev: 1, doc: studioMockDoc(1)?.doc })).status).toBe(200);
     const pdf = await send("GET", `/studio/docs/1/versions/1/pdf`);
     expect(pdf.headers.get("content-type")).toBe("application/pdf");
+    // A second final needs a note.
+    expect((await json<{ code: string }>("POST", "/studio/docs/1/jobs", { kind: "final", rev: 2 })).body.code).toBe("DS_VALIDATION");
   });
 
   it("an unknown doc is 404 DS_DOC_NOT_FOUND", async () => {
