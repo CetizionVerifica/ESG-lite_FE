@@ -6,6 +6,7 @@ import { useDesignStudio } from "../../../lib/studio/switch";
 import { Badge, Button, Callout, EmptyState, Menu, Modal, PageHeader, SegmentedControl, Skeleton, SkeletonText, TextField, cn, focusRing, panel, useToast } from "../../../ui";
 import { docErrorMessage, useDeleteDoc, useDocs, useDuplicateDoc, useReadiness, useRenameDoc } from "../docs/api";
 import { periodLabel } from "../../../lib/studio/docData";
+import { BriefButton } from "../ai/BriefButton"; // DS-9
 import { FORMAT_ASPECT, KIND_LABEL, START_OPTIONS, editedLine, formatLine, latestClosedYear, startLink, statusLabel, type StartOption } from "./logic";
 
 const START_ICONS: Record<StartOption["id"], typeof FileText> = { ghg: FileText, sustainability: Leaf, deck: Presentation, summary: ScrollText, social: Image };
@@ -38,7 +39,8 @@ export function StudioHomePage() {
           </Link>
         }
       />
-      <div className="flex justify-end -mt-14 max-sm:mt-0">
+      <div className="flex justify-end gap-2 -mt-14 max-sm:mt-0">
+        <BriefButton /> {/* DS-9: design from a brief */}
         <Link to="/studio/new?kind=ghg" className={cn("inline-flex h-9 items-center gap-2 rounded-control bg-brand px-3.5 text-sm font-medium text-on-brand hover:opacity-90", focusRing)} data-testid="studio-new-design">
           <Plus aria-hidden className="size-4" /> New design
         </Link>
