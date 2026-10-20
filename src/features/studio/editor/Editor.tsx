@@ -3,7 +3,7 @@
 // history, autosaves 1 s after idle (409 → the conflict dialog), and lays out
 // the top bar, rail + drawer, contextual toolbar, canvas (scroll, strip or
 // grid view) and status bar. Below 1280 px it is view-only (RS R16).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { FontId, ReportDoc, StudioDocResponse } from "../../../lib/studio/contracts";
 import { loadHistory, saveHistory } from "../../../lib/studio/history";
@@ -45,6 +45,34 @@ function useWindowWidth(): number {
   return w;
 }
 
+/**
+ * The editor ends at the bottom of the window, wherever the app shell puts its top
+ * (headers, banners, the page's bottom padding), so the status bar is never cut off.
+ * In full screen the browser sizes it (100%).
+ */
+function useFitHeight(): [React.RefObject<HTMLDivElement | null>, number | null] {
+  const ref = useRef<HTMLDivElement>(null);
+  const [h, setH] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = ref.current;
+      if (!el || document.fullscreenElement === el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const main = el.closest("main");
+      const below = main ? parseFloat(getComputedStyle(main).paddingBottom) || 0 : 0;
+      setH(Math.max(560, Math.floor(window.innerHeight - top - below)));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    document.addEventListener("fullscreenchange", fit);
+    return () => {
+      window.removeEventListener("resize", fit);
+      document.removeEventListener("fullscreenchange", fit);
+    };
+  }, []);
+  return [ref, h];
+}
+
 export function Editor({ docId }: { docId: number }) {
   registerEditorPlugins();
   const q = useStudioDoc(docId);
@@ -66,6 +94,7 @@ export function Editor({ docId }: { docId: number }) {
 
 function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocResponse }) {
   const width = useWindowWidth();
+  const [fitRef, fitH] = useFitHeight();
   const readOnly = width < EDIT_MIN_WIDTH || initial.status === "final";
   const [state, dispatch] = useEditorStore(initial.doc, useMemo(() => loadHistory<ReportDoc>(docId, initial.rev), [docId, initial.rev]));
   const shown = state.ui.preview ?? state.history.present;
@@ -106,7 +135,7 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
     <EditorContext.Provider value={ed}>
       {/* The editor and its toolbars clip (overflow-hidden), so popovers draw on a layer. */}
       <PopoverLayer>
-      <div data-testid="studio-editor" className="flex h-[calc(100vh-4rem)] min-h-[560px] flex-col overflow-hidden rounded-card border border-line bg-page text-ink">
+      <div ref={fitRef} style={fitH ? { height: fitH } : undefined} data-testid="studio-editor" className="flex h-[calc(100dvh-7.5rem)] min-h-[560px] flex-col overflow-hidden rounded-card border border-line bg-page text-ink">
         <TopBar save={save.state} status={initial.status} onHelp={() => setHelp(true)} />
         <ApprovalBar /> {/* DS-13: approval requested / approved / changes requested */}
         <DriftBanner /> {/* DS-13: texts written before the data changed */}
