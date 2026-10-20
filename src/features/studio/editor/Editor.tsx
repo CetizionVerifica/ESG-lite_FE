@@ -14,7 +14,7 @@ import { Canvas } from "./Canvas";
 import { ChartsHost } from "./charts/ChartsHost"; // DS-8
 import { ContextMenu } from "./ContextMenu";
 import { ContextToolbar } from "./ContextToolbar";
-import { EditorContext, useEditorApi, useEditorStore, type EditorApi } from "./EditorContext";
+import { EditorContext, useEditor, useEditorApi, useEditorStore, type EditorApi } from "./EditorContext";
 import { GridView } from "./GridView";
 import { registerEditorPlugins } from "./plugins";
 import { useRenderInputs } from "./renderInputs";
@@ -126,7 +126,7 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
               <>
                 <ContextToolbar />
                 <div
-                  className="flex min-h-0 flex-1 flex-col"
+                  className="relative flex min-h-0 flex-1 flex-col"
                   onContextMenu={(e) => {
                     if (!(e.target as HTMLElement).closest("[data-overlay-page]")) return;
                     e.preventDefault();
@@ -135,6 +135,7 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
                   }}
                 >
                   <Canvas />
+                  <FiguresNotice />
                 </div>
               </>
             )}
@@ -168,6 +169,33 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
         </Modal>
       </div>
     </EditorContext.Provider>
+  );
+}
+
+/** While /studio/resolve hasn't answered: "Loading figures…"; when it failed: an error with Try again. */
+function FiguresNotice() {
+  const { render } = useEditor();
+  if (!render.hasFigures || render.status === "ready") return null;
+  if (render.status === "loading")
+    return (
+      <div role="status" data-testid="figures-loading" className="pointer-events-none absolute left-1/2 top-3 z-20 inline-flex -translate-x-1/2 items-center gap-2 rounded-chip border border-line bg-panel px-3 py-1 text-xs text-muted shadow-sm">
+        <Skeleton className="size-2 rounded-full" />
+        Loading figures…
+      </div>
+    );
+  return (
+    <Callout
+      tone="warn"
+      title="The figures couldn't load."
+      className="absolute left-1/2 top-3 z-20 w-[420px] max-w-[90%] -translate-x-1/2 shadow-md"
+      action={
+        <Button size="sm" variant="secondary" onClick={render.retry}>
+          Try again
+        </Button>
+      }
+    >
+      Linked values show "Couldn't load" until they do. Nothing in the design changed.
+    </Callout>
   );
 }
 

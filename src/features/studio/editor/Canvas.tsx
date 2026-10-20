@@ -157,7 +157,7 @@ function PageSlot({ page, index, live }: { page: Page; index: number; live: bool
         }}
       >
         {live ? (
-          <Sheet page={page} doc={doc} wMm={spec.wMm} hMm={spec.hMm} zoom={zoom} data={ed.render.data} assets={ed.render.assets} brand={ed.render.brand} />
+          <Sheet page={page} doc={doc} wMm={spec.wMm} hMm={spec.hMm} zoom={zoom} data={ed.render.data} figures={ed.render.status} assets={ed.render.assets} brand={ed.render.brand} />
         ) : (
           <div aria-hidden className="size-full" style={{ background: page.kind === "freeform" ? (page as FreeformPage).background.color : undefined }} />
         )}

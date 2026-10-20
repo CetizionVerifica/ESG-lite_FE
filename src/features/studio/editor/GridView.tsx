@@ -156,7 +156,7 @@ export function GridView() {
                       data-testid={`grid-page-${id}`}
                       className={cn("relative overflow-hidden rounded-[2px] bg-panel shadow", on && "outline outline-[3px] outline-offset-2 outline-brand", p.hidden && "opacity-50", focusRing)}
                     >
-                      <Sheet page={p} doc={doc} wMm={spec.wMm} hMm={spec.hMm} zoom={zoom} data={ed.render.data} assets={ed.render.assets} brand={ed.render.brand} thumbnail />
+                      <Sheet page={p} doc={doc} wMm={spec.wMm} hMm={spec.hMm} zoom={zoom} data={ed.render.data} figures={ed.render.status} assets={ed.render.assets} brand={ed.render.brand} thumbnail />
                       {p.kind === "flow" && (
                         <span className="absolute left-1 top-1">
                           <Badge tone="info">Flow</Badge>

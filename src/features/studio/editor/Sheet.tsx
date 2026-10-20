@@ -3,12 +3,18 @@
 // restyles report content; while a drag runs, SelectionLayer moves the
 // rendered element boxes directly (liveFrame) and the next render puts them
 // back from the doc.
+//
+// While the figures load (or when /resolve failed) the sheet relabels the
+// renderer's NOT_RESOLVED "Not reported" marks as "Loading…" / "Couldn't load"
+// (pendingFigures.ts); a real "Not reported" from /resolve keeps its words.
 import { memo, useLayoutEffect, useRef } from "react";
 import type { FlowSection, FreeformPage, ReportDoc } from "../../../lib/studio/contracts";
 import { mountFlow, mountSheet } from "../../../lib/studio/renderHost";
 import { mmToPx } from "../../../lib/studio/geometry";
 import { clearSheetRoot, setSheetRoot } from "./canvasUtil";
 import type { RenderAssets, RenderBrand, RenderData, RenderDoc, RenderFlowSection, RenderFreeformPage } from "../../../lib/studio/render";
+import type { FiguresStatus } from "./renderInputs";
+import { markPendingFigures } from "./pendingFigures";
 
 export interface SheetProps {
   page: FreeformPage | FlowSection;
@@ -20,6 +26,8 @@ export interface SheetProps {
   data: RenderData | null;
   assets: RenderAssets;
   brand: RenderBrand | null;
+  /** Whether the figures have arrived (renderInputs.ts); "ready" when omitted. */
+  figures?: FiguresStatus;
   /** Thumbnails don't register their roots for live drags. */
   thumbnail?: boolean;
 }
@@ -27,7 +35,7 @@ export interface SheetProps {
 /** Stable deps: the parts of the doc a sheet render reads besides its page. */
 const docKey = (doc: ReportDoc) => `${doc.kind}|${doc.format}|${JSON.stringify(doc.meta)}|${JSON.stringify(doc.design.theme)}|${doc.pages.map((p) => `${p.id}:${p.hidden ? 1 : 0}:${p.name}:${p.bookmark ?? ""}`).join(",")}|${doc.assets.length}`;
 
-function SheetImpl({ page, doc, wMm, hMm, zoom, data, assets, brand, thumbnail }: SheetProps) {
+function SheetImpl({ page, doc, wMm, hMm, zoom, data, assets, brand, figures = "ready", thumbnail }: SheetProps) {
   const host = useRef<HTMLDivElement>(null);
   const key = docKey(doc);
   useLayoutEffect(() => {
@@ -38,13 +46,14 @@ function SheetImpl({ page, doc, wMm, hMm, zoom, data, assets, brand, thumbnail }
       page.kind === "freeform"
         ? mountSheet(el, page as unknown as RenderFreeformPage, rdoc, data, { assets, brand })
         : mountFlow(el, page as unknown as RenderFlowSection, rdoc, data, { assets, brand });
+    markPendingFigures(root, figures);
     if (!thumbnail) setSheetRoot(page.id, root);
     return () => {
       if (!thumbnail) clearSheetRoot(page.id, root);
     };
     // `key` stands for the doc parts the renderer reads (page numbers, theme, meta).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, key, data, assets, brand, thumbnail]);
+  }, [page, key, data, assets, brand, figures, thumbnail]);
 
   // Flow sections paginate in print; the editor shows their first page's worth.
   return (
