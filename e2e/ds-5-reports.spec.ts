@@ -173,14 +173,14 @@ test("GHG report → Design this report → Inventory → build → the editor s
   await expect(page.getByTestId("build-progress")).toBeVisible();
 
   await expect(page).toHaveURL(/\/studio\/41$/);
-  await expect(page.getByTestId("studio-editor-shell")).toBeVisible();
-  const pages = page.getByTestId("studio-page");
+  await expect(page.getByTestId("studio-editor")).toBeVisible();
+  const pages = page.locator("[data-page-slot]");
   await expect(pages).toHaveCount(22);
   // The cover total and the Scope 1 page show the GHG report's figures, drawn by the renderer in shadow roots.
-  await expect(page.getByTestId("sheet-p-cover")).toContainText("100");
-  await page.getByTestId("sheet-p-5").scrollIntoViewIfNeeded();
-  await expect(page.getByTestId("sheet-p-5")).toContainText("30");
-  await expect(page.getByTestId("studio-page-counter")).toContainText("/ 22");
+  await expect(page.locator('[data-sheet-host="p-cover"]')).toContainText("100");
+  await page.locator('[data-page-slot="p-5"]').scrollIntoViewIfNeeded();
+  await expect(page.locator('[data-sheet-host="p-5"]')).toContainText("30");
+  await expect(page.getByTestId("page-counter")).toContainText("/ 22");
 
   const create = calls.find((c) => c.method === "POST" && c.path.endsWith("/studio/docs"));
   expect(create?.query.get("wait")).toBe("0");

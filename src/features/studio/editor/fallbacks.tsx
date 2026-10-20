@@ -9,8 +9,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { LayoutTemplate, Sparkles, BarChart3, Type } from "lucide-react";
 import api from "../../../api/axios";
-import type { Element, ElementTemplate } from "../../../lib/studio/contracts";
+import type { Element, ElementGroupPayload, ElementTemplate } from "../../../lib/studio/contracts";
 import { fillFrame, takesImage } from "../../../lib/studio/docOps";
+import { insertElement as insertLibraryElement } from "../../../lib/studio/libraryOps";
 import { useStudioCompanyId } from "../../../lib/studio/switch";
 import { EmptyState, SkeletonText, cn, focusRing } from "../../../ui";
 import { useStudioAssets } from "./api";
@@ -34,12 +35,14 @@ function useElementTemplates() {
   });
 }
 
-function Tile({ name, payload, onAdd, disabled }: { name: string; payload: Element; onAdd: () => void; disabled: boolean }) {
+function Tile({ name, payload, onAdd, disabled }: { name: string; payload: Element | ElementGroupPayload; onAdd: () => void; disabled: boolean }) {
+  // A DS-4 group (ESG graphic) has no frame of its own: click adds it, drag is for single elements.
+  const draggable = !disabled && payload.type !== "group";
   return (
     <button
       type="button"
       disabled={disabled}
-      draggable={!disabled}
+      draggable={draggable}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "copy";
         e.dataTransfer.setData(DND_ELEMENT, JSON.stringify(payload));
@@ -55,7 +58,14 @@ function Tile({ name, payload, onAdd, disabled }: { name: string; payload: Eleme
 export function BasicElementsPanel({ editor: ed }: DrawerProps) {
   const lib = useElementTemplates();
   const disabled = ed.readOnly || !ed.page;
-  const groups = new Map<string, { name: string; payload: Element }[]>();
+  const groups = new Map<string, { name: string; payload: Element | ElementGroupPayload }[]>();
+  const add = (name: string, payload: Element | ElementGroupPayload) => {
+    const label = `Add ${name.toLowerCase()}`;
+    if (payload.type !== "group") return void ed.insertElement(payload, { label });
+    if (!ed.page) return;
+    const r = insertLibraryElement(ed.doc, ed.page.id, payload);
+    if (r.ids.length) ed.commit(r.doc, label, { select: r.ids, pageId: ed.page.id });
+  };
   for (const b of BASIC_ELEMENTS) groups.set(b.group, [...(groups.get(b.group) ?? []), b]);
   for (const t of lib.data ?? []) {
     const g = GROUP_LABEL[t.group] ?? t.group;
@@ -69,7 +79,7 @@ export function BasicElementsPanel({ editor: ed }: DrawerProps) {
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">{g}</h3>
           <div className="grid grid-cols-3 gap-2">
             {items.map((it, i) => (
-              <Tile key={`${it.name}-${i}`} name={it.name} payload={it.payload} disabled={disabled} onAdd={() => ed.insertElement(it.payload, { label: `Add ${it.name.toLowerCase()}` })} />
+              <Tile key={`${it.name}-${i}`} name={it.name} payload={it.payload} disabled={disabled} onAdd={() => add(it.name, it.payload)} />
             ))}
           </div>
         </section>
