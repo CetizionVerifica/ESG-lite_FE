@@ -12,6 +12,7 @@ import { CustomKpiDrawer } from "./components/CustomKpiDrawer";
 import { FrameworksStep, type YearSettings } from "./components/FrameworksStep";
 import { KpisStep } from "./components/KpisStep";
 import { MaterialityStep } from "./components/MaterialityStep";
+import { MaterialityScores } from "./components/MaterialityScores"; // DS-2
 import { TopicOwnersStep } from "./components/TopicOwnersStep";
 import {
   type KpiChoice,
@@ -265,7 +266,10 @@ function Wizard({ setup, catalogue }: { setup: KpiSetup; catalogue: KpiCatalogue
     if (s === "frameworks") return <FrameworksStep frameworks={frameworks} ids={frameworkIds} onIds={setFrameworkIds} year={year} onYear={setYear} />;
     if (s === "topics")
       return esrs ? (
-        <MaterialityStep value={material} onChange={setMaterial} errors={topicErrors} />
+        <>
+          <MaterialityStep value={material} onChange={setMaterial} errors={topicErrors} />
+          <MaterialityScores /> {/* DS-2: matrix scores, only with Design Studio on */}
+        </>
       ) : (
         <EmptyState title="Only needed for CSRD (ESRS)." description="You didn't pick CSRD (ESRS), so there's nothing to answer here." compact />
       );
