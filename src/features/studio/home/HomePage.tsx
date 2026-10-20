@@ -7,6 +7,7 @@ import { Badge, Button, Callout, EmptyState, Menu, Modal, PageHeader, SegmentedC
 import { docErrorMessage, useDeleteDoc, useDocs, useDuplicateDoc, useReadiness, useRenameDoc } from "../docs/api";
 import { periodLabel } from "../../../lib/studio/docData";
 import { BriefButton } from "../ai/BriefButton"; // DS-9
+import { ReviewSettingsCard } from "../review/ReviewSettingsCard"; // DS-13
 import { FORMAT_ASPECT, KIND_LABEL, START_OPTIONS, editedLine, formatLine, latestClosedYear, startLink, statusLabel, type StartOption } from "./logic";
 
 const START_ICONS: Record<StartOption["id"], typeof FileText> = { ghg: FileText, sustainability: Leaf, deck: Presentation, summary: ScrollText, social: Image };
@@ -170,6 +171,7 @@ export function StudioHomePage() {
           </Link>
         </Callout>
       </section>
+      <ReviewSettingsCard /> {/* DS-13: require approval before finals, brand controls */}
     </div>
   );
 }

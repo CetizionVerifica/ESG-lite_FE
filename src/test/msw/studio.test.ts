@@ -61,9 +61,15 @@ const ENDPOINTS: [string, string, unknown?][] = [
   ["POST", "/studio/comments/1/task", { assigneeId: 2 }],
   ["PATCH", "/studio/comments/1/task", { done: true }],
   ["PATCH", "/studio/comments/1", { resolved: true }],
-  ["POST", "/studio/docs/1/approvals", { reviewerId: 2 }],
-  ["POST", "/studio/approvals/1/decide", { decision: "approved" }],
+  ["POST", "/studio/docs/1/approvals", { reviewerId: 2, rev: 3 }], // DS-13: tied to the rev
+  ["POST", "/studio/approvals/1/decide", { decision: "approve" }],
   ["DELETE", "/studio/approvals/1"],
+  ["GET", "/studio/docs/1/people"], // DS-13
+  ["GET", "/studio/docs/1/approvals"], // DS-13
+  ["GET", "/studio/review-settings"], // DS-13
+  ["PUT", "/studio/review-settings", { requireReview: true }], // DS-13
+  ["GET", "/studio/docs/1/versions/1/preview.html?mode=paged"], // DS-13
+  ["DELETE", "/studio/comments/1"], // DS-13
   ["DELETE", "/studio/shares/1"],
   ["POST", "/studio/docs/1/versions/1/restore"],
   ["POST", "/studio/templates/from-doc", { docId: 1, name: "Our inventory" }],

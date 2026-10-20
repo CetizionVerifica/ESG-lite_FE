@@ -125,6 +125,14 @@ export function finalBlockedReason(opts: { canFinal: boolean; readOnly?: boolean
 }
 
 /** The plain-words reasons of a refused final (DS_CHECKS_BLOCKING details, DS_YEAR_NOT_LOCKED, …). */
+// DS-13: DS_APPROVAL_PENDING reasons, in words.
+const APPROVAL_REASON: Record<string, string> = {
+  none: "This company needs an approval before a final. Request approval first.",
+  requested: "Waiting for approval. The final can be made once it's approved.",
+  changes_requested: "Changes were requested. Request approval again when they're done.",
+  stale: "The design changed since it was approved. Request approval again.",
+};
+
 export function finalRefusal(code: DsErrorCode | string | undefined, details: unknown, message?: string): string[] {
   if (code === "DS_CHECKS_BLOCKING") {
     const checks = (details as { checks?: Array<{ message?: unknown }> } | undefined)?.checks;
@@ -133,7 +141,8 @@ export function finalRefusal(code: DsErrorCode | string | undefined, details: un
   }
   if (code === "DS_YEAR_NOT_LOCKED") return ["Lock the year's KPI values before making a final."];
   if (code === "DS_JOB_RUNNING") return ["A final is already being made for this design."];
-  if (code === "DS_APPROVAL_PENDING") return ["This design is waiting for approval."];
+  // DS-13: the gate says why (details.reason: none | requested | changes_requested | stale).
+  if (code === "DS_APPROVAL_PENDING") return [APPROVAL_REASON[String((details as { reason?: unknown } | undefined)?.reason ?? "")] ?? "This design is waiting for approval."];
   if (code === "DS_ROLE") return ["Only a Manager can make the final."];
   return [message || "The final couldn't be started. Try again."];
 }

@@ -1144,6 +1144,7 @@ export const CHECK_IDS = [
   "YOY_UNEXPLAINED",
   "UNLINKED_DATA",
   "TEXT_TRUNCATED", // DS-10
+  "OPEN_TASK", // DS-13
 ] as const;
 export type CheckId = (typeof CHECK_IDS)[number];
 
@@ -1190,6 +1191,7 @@ export const CHECK_RULES: Record<CheckId, { severity: CheckSeverity; kinds: read
   YOY_UNEXPLAINED: { severity: "info", kinds: GHG },
   UNLINKED_DATA: { severity: "info", kinds: BOTH },
   TEXT_TRUNCATED: { severity: "info", kinds: BOTH }, // DS-10
+  OPEN_TASK: { severity: "info", kinds: BOTH }, // DS-13
 };
 
 export const CHECK_FIXES = [
@@ -1372,39 +1374,141 @@ export interface BriefReply {
 }
 
 // ---------------------------------------------------------------------------
-// DS-13 collaboration shapes (mock shapes; DS-13 confirms)
+// DS-13 collaboration (ESG-lite src/studio/contracts/collab.ts)
 // ---------------------------------------------------------------------------
+
+export const COMMENT_BODY_MAX = 4000;
+export const MENTIONS_MAX = 20;
+
+/** POST /docs/:id/comments. Mentions and the assignee must be people from GET /docs/:id/people. */
+export interface CreateCommentBody {
+  pageId: string;
+  elementId?: string | null;
+  /** The pin in page mm (C + click). */
+  x?: number | null;
+  y?: number | null;
+  parentId?: number | null;
+  body: string;
+  mentions?: number[];
+  taskAssigneeId?: number | null;
+}
 
 export interface ReportComment {
   id: number;
   docId: number;
   pageId: string;
   elementId: string | null;
+  x: number | null;
+  y: number | null;
   parentId: number | null;
   body: string;
   authorId: number;
   authorName: string;
   mentions: number[];
+  mentionNames: string[];
   taskAssigneeId: number | null;
+  taskAssigneeName: string | null;
   taskDoneAt: string | null;
   resolvedAt: string | null;
+  resolvedByName: string | null;
   createdAt: string;
+  updatedAt: string;
 }
+
+/** GET /docs/:id/people: Managers and Admins who can open the design. */
+export interface StudioPerson {
+  id: number;
+  name: string;
+  role: "Manager" | "Admin";
+  canApprove: boolean;
+}
+
+export const APPROVAL_DECISIONS = ["approve", "request_changes"] as const;
+export type ApprovalDecision = (typeof APPROVAL_DECISIONS)[number];
+
+export interface RequestApprovalBody {
+  reviewerId: number;
+  /** YYYY-MM-DD. */
+  dueAt?: string | null;
+  note?: string | null;
+  rev: number;
+}
+
 export interface ReportApproval {
   id: number;
   docId: number;
   rev: number;
   requestedBy: number;
+  requestedByName: string;
   reviewerId: number;
+  reviewerName: string;
   dueAt: string | null;
+  /** `none` = withdrawn. */
   state: ApprovalState;
   note: string | null;
+  decisionNote: string | null;
   decidedAt: string | null;
+  createdAt: string;
 }
-/** GET /docs/:id/drift (RS). */
+
+/** GET /docs/:id/approvals. */
+export interface ApprovalsResponse {
+  approvals: ReportApproval[];
+  current: ReportApproval | null;
+  /** Approved, but the design changed since ("Approved an earlier version"). */
+  stale: boolean;
+  rev: number;
+  requireReview: boolean;
+}
+
+/** GET/PUT /review-settings. */
+export interface ReviewSettings {
+  requireReview: boolean;
+  brandControls: boolean;
+  canEditRequireReview: boolean;
+  canEditBrandControls: boolean;
+}
+
+export interface DriftFigure {
+  elementId: string;
+  label: string;
+  before: string | null;
+  after: string;
+}
+export interface DriftItem {
+  elementId: string;
+  pageId: string;
+  pageName: string;
+  text: string;
+  basedOnHash: string;
+  before: string | null;
+  after: string;
+  figures: DriftFigure[];
+}
+/** GET /docs/:id/drift: "Mark as checked" stamps `dataHash` on the element's basedOnHash. */
 export interface DriftResponse {
-  changed: { elementId: string; before: string; after: string }[];
+  dataHash: string;
+  changed: DriftItem[];
 }
+
+/** POST /templates/from-doc. */
+export interface TemplateFromDocBody {
+  docId: number;
+  name: string;
+  description?: string;
+  tags?: string[];
+  lockLocked?: boolean;
+  replaceTemplateId?: number;
+}
+/** POST /layouts/from-page. */
+export interface LayoutFromPageBody {
+  docId: number;
+  pageId: string;
+  name: string;
+  lockLocked?: boolean;
+}
+
+export const STUDIO_NOTIFICATION_TYPES = ["studio_mention", "studio_task", "studio_approval_requested", "studio_approval_decided"] as const;
 
 // ---------------------------------------------------------------------------
 // §9 FE routes

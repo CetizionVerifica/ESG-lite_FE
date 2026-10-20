@@ -12,6 +12,8 @@ import { dsError, useRenderJob, useVersions } from "../share/api";
 import { useSafeToast } from "../share/useSafeToast";
 import { useChecksOnce } from "./api";
 import { refreshChecks, useChecksState } from "./store";
+import { useApprovals } from "../review/api"; // DS-13
+import { approvalBlock } from "../review/logic"; // DS-13
 
 export interface FinalFormProps {
   docId: number;
@@ -31,7 +33,11 @@ export function FinalForm({ docId, canFinal, compact, onStarted }: FinalFormProp
   const [ack, setAck] = useState<Set<string>>(new Set());
   const hasFinal = (versions.data ?? []).some((v) => v.kind === "final");
   const nextN = (versions.data ?? []).reduce((m, v) => Math.max(m, v.n), 0) + 1;
-  const blocked = finalBlock(checks, { canFinal });
+  const checksBlocked = finalBlock(checks, { canFinal });
+  // DS-13: with review required, a final also needs an approval for the current rev.
+  const approvals = useApprovals(canFinal ? docId : 0);
+  const reviewBlocked = approvalBlock(approvals.data);
+  const blocked = checksBlocked ?? reviewBlocked;
   const warnings = useMemo(() => {
     const byId = new Map<string, Check[]>();
     for (const c of checks ?? []) if (c.severity === "warning") byId.set(c.id, [...(byId.get(c.id) ?? []), c]);
@@ -75,6 +81,7 @@ export function FinalForm({ docId, canFinal, compact, onStarted }: FinalFormProp
       {blocked ? (
         <Callout tone="warn" title="The final is blocked">
           <span className="text-xs" data-testid="final-blocked">{blocked}</span>
+          {checksBlocked && reviewBlocked && <span className="mt-1 block text-xs" data-testid="final-blocked-review">{reviewBlocked}</span>}
           {checks?.some((c) => c.id === "GHG_PENDING_ENTRIES") && (
             <Link to="/data/approvals" className={cn("ml-1 text-xs font-medium text-brand-text underline", focusRing)}>
               Open Review
