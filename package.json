@@ -13,7 +13,9 @@
     "test:e2e": "playwright test",
     "test:ui-snapshots": "playwright test -c playwright.ui.config.ts",
     "preview": "vite preview",
-    "check:studio-contracts": "node scripts/check-studio-contracts.mjs"
+    "check:studio-contracts": "node scripts/check-studio-contracts.mjs",
+    "sync:studio-render": "node scripts/sync-studio-render.mjs",
+    "check:studio-render": "node scripts/sync-studio-render.mjs check"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8",
