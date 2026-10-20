@@ -65,7 +65,7 @@ Backend, endpoint, the gate and the check rules: ESG-lite `src/studio/checks/CLA
 - **Keys:** a marker focuses the panel row `checkKey(check, index in its group)`.
 
 ### Tests run
-- `test-lane.sh ds-12-fe`: typecheck ok, lint:new ok, vitest (see the lane log; 1927+ tests).
+- `test-lane.sh ds-12-fe`: typecheck ok, lint:new ok; vitest 1927 pass (203 files) on a clean run. One lane run had DS-7's "adds a heading ready to type over" time out at 5 s under machine load (other lanes running); it passes alone and in the full rerun.
 - Playwright (port 4173, CI=1): `ds-12-checks` 2/2; `ds-11-outputs`, `ds-6-editor`, `ds-7-text`, `ds-8-charts`, `ds-5-reports`, `ds-0-switch` pass.
 
 ### Not done
