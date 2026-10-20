@@ -144,7 +144,8 @@ export function SelectionLayer({ page, wMm, hMm, safeMm, bleedMm, zoom }: Select
       const pin = { docId: ed.docId, pageId: page.id, x: p.x, y: p.y, elementId: hit?.id ?? null };
       const handler = getCommentHandler();
       if (handler) handler(pin, ed);
-      setPins((x) => [...x, p]);
+      // DS-13 draws saved pins itself; the shell's own marker stays for the stub only.
+      if (!handler || (handler as { fallback?: boolean }).fallback) setPins((x) => [...x, p]);
       ed.setCommentMode(false);
       return;
     }
