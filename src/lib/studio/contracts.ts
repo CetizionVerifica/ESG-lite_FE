@@ -524,28 +524,61 @@ export interface StudioStatus {
   kinds: Record<ReportKind, boolean>;
 }
 
-/** GET /readiness?kind=ghg (mock shape for `gaps`). */
+// DS-5 · readiness (confirmed; ESG-lite src/studio/contracts/docs.ts)
+export const GHG_GAP_KINDS = ["pending_entries", "rejected_entries", "site_no_data", "months_missing", "scope3_unaddressed", "no_data"] as const;
+export type GhgGapKind = (typeof GHG_GAP_KINDS)[number];
+export type ReadinessState = "ready" | "almost" | "not_ready";
+/** One thing to fix before a final, with the app route that fixes it. */
+export interface ReadinessGap {
+  kind: GhgGapKind | "kpi_missing" | "kpi_pending" | "year_not_locked" | "kpi_setup";
+  severity: CheckSeverity;
+  message: string;
+  link: string | null;
+  linkLabel: string | null;
+  siteId?: number;
+  months?: string[];
+  categories?: number[];
+  count?: number;
+}
+/** GET /readiness?kind=ghg&year=&yearType=&sites=. */
 export interface GhgReadiness {
   kind: "ghg";
+  year: number;
+  yearType: YearType;
+  /** "FY 2025–26" / "2025". */
+  periodLabel: string;
   approvedRows: number;
   pendingRows: number;
+  rejectedRows: number;
   sitesCovered: number;
+  sitesTotal: number;
+  sitesMissing: { id: number; name: string }[];
   monthsCovered: number;
+  monthsExpected: number;
+  monthsMissing: { siteId: number; siteName: string; months: string[] }[];
   /** "n/15" */
   scope3Addressed: string;
-  gaps: { siteId?: number; month?: string; category?: number; message: string }[];
+  scope3: { reported: number[]; excluded: number[]; unaddressed: number[] };
+  state: ReadinessState;
+  gaps: ReadinessGap[];
 }
 /** GET /readiness?kind=sustainability: the RS readiness. */
 export interface SustainabilityReadiness {
   kind: "sustainability";
   year: number;
+  yearType: YearType;
+  periodLabel: string;
+  setupDone: boolean;
   locked: boolean;
   lockedAt: string | null;
-  coverage: { framework: FrameworkCode; pct: number }[];
-  missing: { kpi: string; sites: number[]; periods: string[] }[];
+  coverage: { framework: string; pct: number }[];
+  missing: { kpi: string; name: string; sites: number[]; periods: string[] }[];
   pendingCount: number;
+  state: ReadinessState;
+  gaps: ReadinessGap[];
 }
 export type Readiness = GhgReadiness | SustainabilityReadiness;
+// end DS-5 readiness
 
 // DS-3 · brand kit (confirmed; ESG-lite src/studio/contracts/brandkit.ts)
 export const BRAND_VOICE_MAX = 3000;
@@ -767,7 +800,27 @@ export interface MaterialityResponse {
   points: { topic: string; label: string; impact: number; financial: number }[] | null;
 }
 
-/** GET /docs list item (mock shape; DS-5 confirms). */
+// DS-5 · designs (confirmed; ESG-lite src/studio/contracts/docs.ts)
+export const BUILD_STEP_IDS = ["template", "data", "layout", "inputs", "ai", "save"] as const;
+export type BuildStepId = (typeof BUILD_STEP_IDS)[number];
+export type BuildState = "running" | "done" | "failed";
+export interface BuildStep {
+  id: BuildStepId;
+  label: string;
+  state: "pending" | "running" | "done" | "skipped" | "failed";
+  note?: string;
+}
+/** `report_doc.build`: the auto-build progress, polled with GET /docs/:id?build=1. */
+export interface BuildProgress {
+  state: BuildState;
+  steps: BuildStep[];
+  dropped: { pageId: string; name: string; reason: string }[];
+  pageCount: number | null;
+  startedAt: string;
+  finishedAt: string | null;
+  error?: { code: string; message: string };
+}
+/** GET /docs list item. */
 export interface StudioDocSummary {
   id: number;
   kind: ReportKind;
@@ -778,29 +831,61 @@ export interface StudioDocSummary {
   yearType: YearType;
   status: ReportStatus;
   rev: number;
+  pageCount: number;
+  templateId: number | null;
+  sourceDocId: number | null;
+  /** n of the newest final version ("Final v2"). */
+  finalVersion: number | null;
+  buildState: BuildState | null;
+  createdAt: string;
   updatedAt: string;
   updatedBy: string | null;
+  /** null until DS-11 renders thumbnails. */
   thumbnailUrl: string | null;
-  sourceDocId: number | null;
 }
-/** POST /docs body. */
+/** `templateId: "blank"` makes a one-page blank design in `format`. */
+export const BLANK_TEMPLATE = "blank" as const;
+/** POST /docs body (`?wait=0` answers 202 `{id, build}` and builds in the background). `inputs` is an InputsPatch. */
 export interface CreateDocBody {
   kind: ReportKind;
-  templateId: number;
+  templateId: number | typeof BLANK_TEMPLATE;
   year: number;
   yearType: YearType;
   sites: Sites;
   frameworks: FrameworkCode[];
-  inputs: ReportInputs;
+  compareYear?: number;
+  title?: string;
+  /** Blank designs only. */
+  format?: PageFormat;
+  inputs: InputsPatch;
   ai: boolean;
 }
-/** GET/PATCH /docs/:id and POST /docs. */
+/** GET/PATCH /docs/:id, POST /docs (201), POST /docs/:id/rebuild. */
 export interface StudioDocResponse {
   id: number;
   doc: ReportDoc;
   rev: number;
   status: ReportStatus;
+  title: string;
+  dataHash: string | null;
+  updatedAt: string;
+  build: BuildProgress | null;
 }
+/** POST /docs?wait=0 (202) and GET /docs/:id?build=1. */
+export interface StudioDocBuild {
+  id: number;
+  rev: number;
+  status: ReportStatus;
+  title: string;
+  build: BuildProgress | null;
+}
+/** PATCH /docs/:id body: the whole doc (autosave), a rename, or both. */
+export interface PatchDocBody {
+  rev: number;
+  doc?: ReportDoc;
+  title?: string;
+}
+// end DS-5 designs
 
 /** POST /docs/:id/jobs and GET /jobs/:id (RS ReportJob plus kinds and options). */
 export interface ReportJob {

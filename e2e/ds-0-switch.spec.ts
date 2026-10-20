@@ -94,9 +94,10 @@ test("with the switch on, a manager finds Design Studio under Reports and opens 
   await expect(page).toHaveURL(/\/studio$/);
   await expect(page.getByRole("heading", { name: "Design Studio", level: 1 })).toBeVisible();
   // GHG is available; sustainability needs KPI tracking (05-ux S10).
-  await expect(page.getByTestId("studio-kind-ghg").getByRole("link")).toHaveAttribute("href", "/studio/new?kind=ghg");
-  await expect(page.getByTestId("studio-kind-sustainability")).toContainText("Needs KPI tracking");
-  await expect(page.getByTestId("studio-kind-sustainability").getByRole("link")).toHaveCount(0);
+  // DS-5 home: the "What will you design?" cards.
+  await expect(page.getByTestId("studio-start-ghg").getByRole("link")).toHaveAttribute("href", "/studio/new?kind=ghg&format=a4&purpose=report");
+  await expect(page.getByTestId("studio-start-sustainability")).toContainText("Needs KPI tracking");
+  await expect(page.getByTestId("studio-start-sustainability").getByRole("link")).toHaveCount(0);
 
   await page.keyboard.press("Control+k");
   await page.getByRole("combobox", { name: "Search pages" }).fill("design");
