@@ -1,0 +1,127 @@
+// DS-6 · the contextual toolbar (44 px above the page). The left part is the
+// toolbar registered for the selection's type (registry.ts); the common tail
+// is always there: Position, Transparency, the link mark, Lock and ⋯ (copy
+// style, paste style, duplicate, comment, Ask AI, delete). Below 1440 px the
+// type part folds into a "Tools" popover so the row never wraps.
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { Droplet, Link2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal, Unlink } from "lucide-react";
+import { setLocked, setOpacity } from "../../../lib/studio/docOps";
+import { moreItems } from "./actions";
+import { Menu, Popover, Tooltip, cn } from "../../../ui";
+import { useEditor } from "./EditorContext";
+import { getToolbar, registryVersion, subscribeRegistry, toolbarKeyFor } from "./registry";
+import { bindingOf, linkMarkText } from "./renderInputs";
+import { Sep, TbButton } from "./toolbars";
+
+/** Width below which the type tools fold into the overflow (05-ux). */
+export const TOOLBAR_FOLD_PX = 1440;
+
+function useWindowWidth(): number {
+  const [w, setW] = useState(() => (typeof window === "undefined" ? 1600 : window.innerWidth));
+  useEffect(() => {
+    const on = () => setW(window.innerWidth);
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return w;
+}
+
+export function ContextToolbar() {
+  const ed = useEditor();
+  useSyncExternalStore(subscribeRegistry, registryVersion, registryVersion);
+  const width = useWindowWidth();
+  const { page, selected, ui, readOnly } = ed;
+  const pageId = ui.pageId ?? "";
+  const key = toolbarKeyFor(selected);
+  const Tools = getToolbar(key);
+  const fold = width < TOOLBAR_FOLD_PX && key !== "page";
+  const ids = selected.map((e) => e.id);
+  const locked = selected.length > 0 && selected.every((e) => e.locked);
+  const single = selected.length === 1 ? selected[0] : null;
+  const binding = single ? bindingOf(single) : undefined;
+  const value = binding ? ed.render.resolved.find((r) => JSON.stringify(r.binding) === JSON.stringify(binding))?.value : undefined;
+  const link = linkMarkText(binding, value);
+  const opacity = selected.length ? Math.round((selected[0].opacity ?? 1) * 100) : 100;
+  const label = key === "page" ? "Page" : key === "multi" ? "Selection" : `${key.replace(/_/g, " ")}`;
+
+  return (
+    <div role="toolbar" aria-label={`${label[0].toUpperCase()}${label.slice(1)} tools`} data-testid="context-toolbar" data-toolbar={key} className="flex h-11 flex-none items-center gap-1 overflow-hidden border-b border-line bg-panel px-2.5">
+      {Tools && !fold && <Tools doc={ed.doc} pageId={pageId} elements={selected} editor={ed} />}
+      {Tools && fold && (
+        <Popover
+          label="Tools"
+          trigger={(t) => (
+            <TbButton {...t} icon={<SlidersHorizontal aria-hidden className="size-4" />}>
+              Tools
+            </TbButton>
+          )}
+        >
+          {() => (
+            <div className="flex max-w-[90vw] flex-wrap items-center gap-1 p-1">
+              <Tools doc={ed.doc} pageId={pageId} elements={selected} editor={ed} compact />
+            </div>
+          )}
+        </Popover>
+      )}
+      <div className="flex-1" />
+      {selected.length > 0 && page && (
+        <>
+          <TbButton active={!!ui.position} onClick={() => ed.openPosition(ui.position ? null : "arrange")}>
+            Position
+          </TbButton>
+          <Popover
+            label="Transparency"
+            align="end"
+            trigger={(t) => (
+              <TbButton {...t} aria-label={`Transparency ${opacity}%`} title="Transparency" disabled={readOnly || locked} icon={<Droplet aria-hidden className="size-4" />}>
+                <span className="font-num text-xs">{opacity}%</span>
+              </TbButton>
+            )}
+          >
+            {() => (
+              <label className="flex w-56 items-center gap-3 p-2 text-sm text-ink">
+                <span>Transparency</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={opacity}
+                  aria-label="Transparency"
+                  onChange={(e) => ed.commit(setOpacity(ed.doc, page.id, ids, Number(e.target.value) / 100), "Transparency", { mergeKey: `opacity:${ids.join(",")}` })}
+                  className="flex-1 accent-brand"
+                />
+                <span className="w-9 text-right font-num text-xs">{opacity}%</span>
+              </label>
+            )}
+          </Popover>
+          {link && (
+            <Tooltip content={link.text}>
+              <button type="button" onClick={() => ed.openDrawer("data")} className={cn("inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-[13px] font-medium hover:bg-tint", link.linked ? "text-good" : "text-warn")} data-testid="toolbar-link">
+                {link.linked ? <Link2 aria-hidden className="size-4" /> : <Unlink aria-hidden className="size-4" />}
+                {link.linked ? "Linked" : "Unlinked"}
+              </button>
+            </Tooltip>
+          )}
+          <TbButton
+            aria-label={locked ? "Unlock" : "Lock"}
+            title={locked ? "Unlock" : "Lock"}
+            active={locked}
+            disabled={readOnly || selected.every((e) => e.templateLocked)}
+            onClick={() => ed.commit(setLocked(ed.doc, page.id, ids, !locked), locked ? "Unlock" : "Lock")}
+            icon={locked ? <Lock aria-hidden className="size-4" /> : <LockOpen aria-hidden className="size-4" />}
+          />
+          <Sep />
+          <Menu
+            label="More"
+            trigger={(t) => (
+              <button {...t} type="button" aria-label="More" className="inline-flex h-8 items-center rounded-control px-2 text-ink hover:bg-tint">
+                <MoreHorizontal aria-hidden className="size-4" />
+              </button>
+            )}
+            items={moreItems(ed)}
+          />
+        </>
+      )}
+    </div>
+  );
+}
