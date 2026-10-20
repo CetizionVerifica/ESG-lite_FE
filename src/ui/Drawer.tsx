@@ -8,6 +8,7 @@ import { cn } from "./cn";
 import { useFocusTrap } from "./hooks/useFocusTrap";
 import { useLockBodyScroll } from "./hooks/useLockBodyScroll";
 import { focusRing } from "./styles";
+import { portalRoot } from "./portalRoot";
 
 export type DrawerProps = {
   open: boolean;
@@ -107,6 +108,6 @@ export function Drawer({
         )}
       </aside>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

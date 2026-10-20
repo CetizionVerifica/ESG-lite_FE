@@ -1,9 +1,11 @@
 // DS-6 · the contextual toolbar (44 px above the page). The left part is the
 // toolbar registered for the selection's type (registry.ts); the common tail
 // is always there: Position, Transparency, the link mark, Lock and ⋯ (copy
-// style, paste style, duplicate, comment, Ask AI, delete). Below 1440 px the
-// type part folds into a "Tools" popover so the row never wraps.
-import { useEffect, useState, useSyncExternalStore } from "react";
+// style, paste style, duplicate, comment, Ask AI, delete). The row never wraps:
+// it measures its own width (drawers, full screen and the window all change it)
+// and first drops button labels to icons, then folds the type part into a
+// "Tools" popover.
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Droplet, Link2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal, Unlink } from "lucide-react";
 import { setLocked, setOpacity } from "../../../lib/studio/docOps";
 import { moreItems } from "./actions";
@@ -13,29 +15,52 @@ import { getToolbar, registryVersion, subscribeRegistry, toolbarKeyFor } from ".
 import { bindingOf, linkMarkText } from "./renderInputs";
 import { Sep, TbButton } from "./toolbars";
 
-/** Width below which the type tools fold into the overflow (05-ux). */
-export const TOOLBAR_FOLD_PX = 1440;
+/** How much the row shows: 0 full labels, 1 icons only, 2 the type tools folded into "Tools". */
+export type ToolbarFit = 0 | 1 | 2;
 
-function useWindowWidth(): number {
-  const [w, setW] = useState(() => (typeof window === "undefined" ? 1600 : window.innerWidth));
+/**
+ * Steps the toolbar down while its content is wider than the row, before paint.
+ * When the row gets wider again, or the selection changes, it starts from full labels.
+ */
+function useToolbarFit(resetKey: string): [React.RefObject<HTMLDivElement | null>, ToolbarFit] {
+  const ref = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<ToolbarFit>(0);
+  const steppedAt = useRef(0);
+  useLayoutEffect(() => setFit(0), [resetKey]);
+  // No deps on purpose: content can grow at the same width (editing adds buttons), so it
+  // re-measures after every render; it stops at 2, so it can't loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || fit === 2 || el.scrollWidth <= el.clientWidth + 1) return;
+    steppedAt.current = el.clientWidth;
+    setFit((f) => (f < 2 ? ((f + 1) as ToolbarFit) : f));
+  });
   useEffect(() => {
-    const on = () => setW(window.innerWidth);
-    window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (steppedAt.current && el.clientWidth > steppedAt.current + 8) {
+        steppedAt.current = 0;
+        setFit(0);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
-  return w;
+  return [ref, fit];
 }
 
 export function ContextToolbar() {
   const ed = useEditor();
   useSyncExternalStore(subscribeRegistry, registryVersion, registryVersion);
-  const width = useWindowWidth();
   const { page, selected, ui, readOnly } = ed;
   const pageId = ui.pageId ?? "";
   const key = toolbarKeyFor(selected);
   const Tools = getToolbar(key);
-  const fold = width < TOOLBAR_FOLD_PX && key !== "page";
   const ids = selected.map((e) => e.id);
+  const [rowRef, fit] = useToolbarFit(`${key}:${ids.join(",")}`);
+  const fold = fit === 2 && key !== "page";
   const locked = selected.length > 0 && selected.every((e) => e.locked);
   const single = selected.length === 1 ? selected[0] : null;
   const binding = single ? bindingOf(single) : undefined;
@@ -45,7 +70,7 @@ export function ContextToolbar() {
   const label = key === "page" ? "Page" : key === "multi" ? "Selection" : `${key.replace(/_/g, " ")}`;
 
   return (
-    <div role="toolbar" aria-label={`${label[0].toUpperCase()}${label.slice(1)} tools`} data-testid="context-toolbar" data-toolbar={key} className="flex h-11 flex-none items-center gap-1 overflow-hidden border-b border-line bg-panel px-2.5">
+    <div role="toolbar" aria-label={`${label[0].toUpperCase()}${label.slice(1)} tools`} data-testid="context-toolbar" data-toolbar={key} data-tb-compact={fit > 0} data-tb-fit={fit} ref={rowRef} className="flex h-11 flex-none items-center gap-1 overflow-hidden border-b border-line bg-panel px-2.5">
       {Tools && !fold && <Tools doc={ed.doc} pageId={pageId} elements={selected} editor={ed} />}
       {Tools && fold && (
         <Popover

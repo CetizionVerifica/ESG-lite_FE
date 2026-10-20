@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { cn } from "./cn";
 import { menuPosition } from "./menuPosition";
 import { focusRing } from "./styles";
+import { portalRoot } from "./portalRoot";
 
 export type MenuItem = {
   label: string;
@@ -200,7 +201,7 @@ export function Menu({ trigger, items, align = "end", label }: MenuProps) {
               );
             })}
           </div>,
-          document.body,
+          portalRoot(),
         )}
     </div>
   );

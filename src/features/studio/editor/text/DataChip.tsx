@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { Link2, Trash2 } from "lucide-react";
 import { NUMBER_FORMATS, type Measure, type NumberFormat } from "../../../../lib/studio/contracts";
-import { Button, Select, cn } from "../../../../ui";
+import { Button, cn, portalRoot, Select } from "../../../../ui";
 import { MEASURE_LABELS, chipCard, chipText, useChipData, withMeasure } from "./chipData";
 import { cleanChipAttrs } from "./convert";
 
@@ -121,7 +121,7 @@ export function DataChipView({ node, updateAttributes, deleteNode, selected, edi
               </div>
             )}
           </div>,
-          document.body,
+          portalRoot(),
         )}
     </NodeViewWrapper>
   );

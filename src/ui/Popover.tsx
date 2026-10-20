@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { cn } from "./cn";
 import { focusableIn } from "./hooks/useFocusTrap";
 import { layerPosition } from "./popoverPosition";
+import { portalRoot } from "./portalRoot";
 
 export type PopoverProps = {
   /** Renders the trigger; spread the props onto a button. */
@@ -135,7 +136,7 @@ export function Popover({ trigger, children, label, align = "start", className }
           setOpen((o) => !o);
         },
       })}
-      {layered ? panel && createPortal(panel, document.body) : panel}
+      {layered ? panel && createPortal(panel, portalRoot()) : panel}
     </div>
   );
 }

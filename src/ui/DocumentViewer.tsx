@@ -10,6 +10,7 @@ import { formatBytes } from "./fileRules";
 import { useFocusTrap } from "./hooks/useFocusTrap";
 import { useLockBodyScroll } from "./hooks/useLockBodyScroll";
 import { focusRing } from "./styles";
+import { portalRoot } from "./portalRoot";
 
 export type DocumentViewerProps = {
   open: boolean;
@@ -127,6 +128,6 @@ export function DocumentViewer({ open, onClose, file, files = [], onNavigate }: 
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }
