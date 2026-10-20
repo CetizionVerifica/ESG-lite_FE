@@ -44,15 +44,27 @@ export function docTokens(doc: ReportDoc): DataToken[] {
   return out;
 }
 
+/** Flow sections the server fills with rows: the factor table and the Scope 3 categories. */
+const SERVER_FLOWS = new Set(["ghg_factor_table", "scope3_categories"]);
+
+/** The doc's flow sections whose rows /resolve returns (`flows` in the request). */
+export function docFlows(doc: ReportDoc): NonNullable<ResolveRequest["flows"]> {
+  return doc.pages.flatMap((p) => (p.kind === "flow" && SERVER_FLOWS.has(p.flowType) ? [{ id: p.id, flowType: p.flowType }] : []));
+}
+
 /** The /resolve request for a whole design in its own scope. */
 export function resolveRequestFor(doc: ReportDoc): ResolveRequest & { docId?: number } {
-  return { kind: doc.kind, year: doc.meta.year, yearType: doc.meta.yearType, sites: doc.meta.sites, bindings: docBindings(doc), tokens: docTokens(doc) };
+  const flows = docFlows(doc);
+  return { kind: doc.kind, year: doc.meta.year, yearType: doc.meta.yearType, sites: doc.meta.sites, bindings: docBindings(doc), tokens: docTokens(doc), ...(flows.length ? { flows } : {}) };
 }
+
+/** The flow rows of a /resolve answer, as the renderer's extras. */
+export const flowExtras = (res: ResolveResponse): Pick<RenderData, "flow" | "scope3"> => ({ flow: res.flow as RenderData["flow"], scope3: res.scope3 as RenderData["scope3"] });
 
 /** RenderData for the renderer from the request's bindings and tokens and the /resolve answer (index-aligned). */
 export function docRenderData(doc: ReportDoc, res: ResolveResponse | null | undefined): RenderData | null {
   if (!res) return null;
-  return renderData(docBindings(doc) as unknown as RenderBinding[], docTokens(doc) as unknown as DataTokenNode[], res as never);
+  return renderData(docBindings(doc) as unknown as RenderBinding[], docTokens(doc) as unknown as DataTokenNode[], res as never, flowExtras(res));
 }
 
 /** The brand side of a theme: brand colours and logo, the kit's fonts, the default look. */

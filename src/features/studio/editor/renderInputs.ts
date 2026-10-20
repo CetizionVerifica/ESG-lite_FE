@@ -7,6 +7,7 @@ import type { Binding, DataToken, ReportDoc, TextDoc, TextNode } from "../../../
 import { renderData, type RenderAssets, type RenderBinding, type RenderBrand, type RenderData, type RenderValue } from "../../../lib/studio/render";
 import { BRAND_LOGO_ASSETS } from "../../../lib/studio/brandOps";
 import { useResolve } from "../panels/data/api";
+import { docFlows, flowExtras } from "../../../lib/studio/docData";
 import { useBrandKit } from "../brand-kit/api";
 import { useStudioAssets } from "./api";
 
@@ -90,12 +91,14 @@ const NO_RESOLVED: { binding: Binding; value: RenderValue }[] = [];
 
 export function useRenderInputs(doc: ReportDoc, docId: number): RenderInputs {
   const { bindings, tokens } = useMemo(() => collectBindings(doc), [doc]);
-  const body = useMemo(() => ({ ...scopeOf(doc), bindings, tokens, docId }), [doc, bindings, tokens, docId]);
+  const flows = useMemo(() => docFlows(doc), [doc]);
+  // Flow sections the server fills (factor table, Scope 3 categories) come back as `flow` / `scope3`.
+  const body = useMemo(() => ({ ...scopeOf(doc), bindings, tokens, docId, ...(flows.length ? { flows } : {}) }), [doc, bindings, tokens, docId, flows]);
   const resolve = useResolve(body);
   const assets = useStudioAssets();
   const kit = useBrandKit();
 
-  const fresh = useMemo(() => (resolve.data ? renderData(bindings as RenderBinding[], tokens as unknown as Parameters<typeof renderData>[1], resolve.data as unknown as Parameters<typeof renderData>[2]) : null), [resolve.data, bindings, tokens]);
+  const fresh = useMemo(() => (resolve.data ? renderData(bindings as RenderBinding[], tokens as unknown as Parameters<typeof renderData>[1], resolve.data as unknown as Parameters<typeof renderData>[2], flowExtras(resolve.data)) : null), [resolve.data, bindings, tokens]);
   const freshResolved = useMemo(() => (resolve.data ? bindings.map((binding, i) => ({ binding, value: resolve.data.values[i] as unknown as RenderValue })).filter((r) => !!r.value) : null), [resolve.data, bindings]);
   // While the doc re-resolves (a binding added or changed), the sheets keep the
   // last answer: it is keyed by binding, so figures that didn't change stay put.

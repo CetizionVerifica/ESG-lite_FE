@@ -739,6 +739,8 @@ export interface ResolveRequest {
   sites: Sites;
   bindings: Binding[];
   tokens: DataToken[];
+  /** Flow sections whose rows the server fills (the factor table, the Scope 3 categories), by section id. */
+  flows?: { id: string; flowType: FlowType }[];
 }
 /**
  * DS-2: why a binding has no value (`unavailable.reason`), as ESG-lite
@@ -772,6 +774,10 @@ export interface ResolveResponse {
   tokens: ResolvedBinding[];
   dataHash: string;
   unavailable: { bindingIdx: number; reason: UnavailableReason; token?: boolean }[];
+  /** Rows of the requested `ghg_factor_table` sections, by section id (only when `flows` were asked for). */
+  flow?: Record<string, unknown>;
+  /** Rows of the requested `scope3_categories` sections, by section id. */
+  scope3?: Record<string, unknown>;
 }
 
 /** A prefilled input: what the company's data already says (DS-2 inputs.ts). `note` is a unit or the GWP sets behind MIXED. */

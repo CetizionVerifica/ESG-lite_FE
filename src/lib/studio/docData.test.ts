@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import ghg from "../../test/fixtures/studio/ghg-doc.json";
 import sustainability from "../../test/fixtures/studio/sustainability-doc.json";
 import type { BrandKit, ReportDoc, ResolveResponse } from "./contracts";
-import { brandFromKit, docBindings, docRenderData, docTokens, periodLabel, resolveRequestFor } from "./docData";
+import { brandFromKit, docBindings, docFlows, docRenderData, docTokens, periodLabel, resolveRequestFor } from "./docData";
 import { designThisReportLink } from "./designLink";
 import { bindingKey, tokenKey } from "./render";
 
@@ -48,5 +48,33 @@ describe("docData", () => {
     expect(periodLabel("CY", 2025)).toBe("2025");
     expect(designThisReportLink({ year: 2026, yearType: "FY", compareYear: 2025, siteIds: [2, 1, 2] })).toBe("/studio/new?kind=ghg&format=a4&purpose=report&year=2026&yearType=FY&compareYear=2025&siteIds=1%2C2");
     expect(designThisReportLink({ year: 2025, yearType: "CY", compareYear: 2025 })).toBe("/studio/new?kind=ghg&format=a4&purpose=report&year=2025&yearType=CY");
+  });
+});
+
+describe("server-filled flow sections", () => {
+  const doc = ghg as unknown as ReportDoc;
+
+  it("asks /resolve for the factor table and the Scope 3 categories by section id", () => {
+    expect(docFlows(doc)).toEqual([
+      { id: "p-categories", flowType: "scope3_categories" },
+      { id: "p-factors", flowType: "ghg_factor_table" },
+    ]);
+    expect(resolveRequestFor(doc).flows).toEqual(docFlows(doc));
+    expect(resolveRequestFor(sustainability as unknown as ReportDoc).flows).toBeUndefined();
+  });
+
+  it("passes the returned rows to the renderer, so the sections aren't 'Not reported'", () => {
+    const req = resolveRequestFor(doc);
+    const res = {
+      values: req.bindings.map(() => ({ display: "1", value: 1 })),
+      tokens: req.tokens.map(() => ({ display: "1", value: 1 })),
+      dataHash: "sha256:x",
+      unavailable: [],
+      flow: { "p-factors": { columns: ["Factor"], rows: [{ cells: ["Diesel"] }] } },
+      scope3: { "p-categories": [{ n: 6, name: "Business travel", status: "reported", display: "3.25" }] },
+    } as unknown as ResolveResponse;
+    const data = docRenderData(doc, res);
+    expect(data?.flow?.["p-factors"]?.rows).toHaveLength(1);
+    expect(data?.scope3?.["p-categories"]?.[0]).toMatchObject({ n: 6, status: "reported" });
   });
 });
