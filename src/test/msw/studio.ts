@@ -63,6 +63,14 @@ import {
   type JobKind,
   type ReportApproval,
   type ReportComment,
+  type ApprovalDecision, // DS-13
+  type ApprovalsResponse, // DS-13
+  type CreateCommentBody, // DS-13
+  type DriftItem, // DS-13
+  type RequestApprovalBody, // DS-13
+  type ReviewSettings, // DS-13
+  type StudioPerson, // DS-13
+  type TemplateFromDocBody, // DS-13
   type ReportDoc,
   type ReportInputs,
   type ReportJob,
@@ -280,6 +288,8 @@ interface State {
   aiCalls: number;
   checkCalls: number; // DS-12
   nextPalette: number; // DS-3
+  drift: Map<number, DriftItem[]>; // DS-13
+  reviewSettings: Omit<ReviewSettings, "brandControls">; // DS-13
 }
 
 const docRow = (id: number, doc: ReportDoc, inputs: ReportInputs = {}): DocRow => ({
@@ -336,6 +346,8 @@ const initialState = (): State => ({
   aiCalls: 0,
   nextPalette: 2, // DS-3
   checkCalls: 0, // DS-12
+  drift: new Map(), // DS-13
+  reviewSettings: { requireReview: false, canEditRequireReview: true, canEditBrandControls: false }, // DS-13
 });
 
 let state = initialState();
@@ -350,6 +362,32 @@ export function resetStudioMocks(): void {
   resizeDataVersion = 1; // DS-10
   mockChecks = null; // DS-12
 }
+// DS-13: the people a design's collaborators can be (the mock caller is Maya, a Manager).
+export const MOCK_ME = 2;
+/** Approval requests in the mock are made as Sam (an Admin), so Maya is a valid reviewer. */
+const MOCK_ME_REQUESTER = 3;
+export const MOCK_PEOPLE: StudioPerson[] = [
+  { id: 4, name: "Asha Rao", role: "Manager", canApprove: true },
+  { id: 2, name: "Maya Manager", role: "Manager", canApprove: true },
+  { id: 3, name: "Sam Admin", role: "Admin", canApprove: false },
+];
+const personName = (id: number) => MOCK_PEOPLE.find((p) => p.id === id)?.name ?? "Someone";
+export const MOCK_DATA_HASH = "sha256:mock-now";
+/** A drift item counts as checked once its element carries the current hash. */
+const driftChecked = (row: DocRow, d: DriftItem) => row.doc.pages.some((p) => p.kind === "freeform" && p.elements.some((e) => e.id === d.elementId && e.basedOnHash === MOCK_DATA_HASH));
+/** DS-13: drifted texts GET /docs/:id/drift answers (until their element is stamped with MOCK_DATA_HASH). */
+export function setStudioMockDrift(docId: number, items: DriftItem[]): void {
+  state.drift.set(docId, items);
+}
+/** DS-13: review settings (require review; whether the caller may change brand controls). */
+export function setStudioMockReviewSettings(patch: Partial<ReviewSettings>): void {
+  const { brandControls, ...rest } = patch;
+  state.reviewSettings = { ...state.reviewSettings, ...rest };
+  if (brandControls !== undefined) state.brandKit.brandControls = brandControls;
+}
+export const studioMockComments = (): ReportComment[] => clone(state.comments);
+export const studioMockApprovals = (): ReportApproval[] => clone(state.approvals);
+
 // DS-10: the mock's approved data version; bumping it makes every resized copy's source "changed".
 let resizeDataVersion = 1;
 export function setStudioMockSourceDataChanged(): void {
@@ -803,12 +841,14 @@ export const studioHandlers = [
   http.post("*/studio/templates/from-doc", async ({ request }) => {
     const off = gate();
     if (off) return off;
-    const b = await body<{ docId: number; name: string }>(request);
+    const b = await body<TemplateFromDocBody>(request);
     const row = state.docs.get(Number(b.docId));
     if (!row) return error("DS_DOC_NOT_FOUND");
-    const t: ReportTemplate = { id: state.templates.length + 1, companyId: 1, kind: row.doc.kind, purpose: row.doc.purpose, format: row.doc.format, name: b.name ?? "My template", tags: [], version: 1, thumbnailUrl: null, pageCount: row.doc.pages.length };
+    if (!b.name?.trim()) return error("DS_VALIDATION", { issues: [{ path: "name", message: "Name the template" }] }); // DS-13
+    const slug = `c1-mock-${state.templates.length + 1}`;
+    const t: ReportTemplate = { id: Math.max(0, ...state.templates.map((x) => x.id)) + 1, companyId: 1, kind: row.doc.kind, purpose: row.doc.purpose, format: row.doc.format, name: b.name, tags: (b.tags ?? []).map((x) => x.toLowerCase()), version: 1, thumbnailUrl: null, pageCount: row.doc.pages.length, slug, family: slug, look: null, description: b.description ?? "" };
     state.templates.push(t);
-    return HttpResponse.json(t, { status: 201 });
+    return HttpResponse.json<ReportTemplateDetail>({ ...t, doc: clone(row.doc) }, { status: 201 });
   }),
   http.get("*/studio/templates/:id", ({ params }) => {
     const t = state.templates.find((x) => x.id === Number(params.id));
@@ -1121,6 +1161,11 @@ export const studioHandlers = [
     const b = await body<CreateJobBody>(request);
     if (b.rev !== row.rev) return error("DS_VERSION_CONFLICT", { rev: row.rev });
     if (b.kind === "final") {
+      // DS-13: with review required, a final needs an approval for this rev.
+      if (state.reviewSettings.requireReview) {
+        const cur = state.approvals.filter((a) => a.docId === row.id && a.state !== "none").pop();
+        if (!cur || cur.state !== "approved" || cur.rev !== b.rev) return error("DS_APPROVAL_PENDING", { reason: !cur ? "none" : cur.state === "approved" ? "stale" : cur.state, approvalId: cur?.id ?? null });
+      }
       if (finalBlocked) return error("DS_CHECKS_BLOCKING", { checks: [{ id: "GHG_PENDING_ENTRIES", severity: "error", count: 4, message: "Pending entries: 4. Approve them in Review before the final.", link: "/data/approvals" }] });
       // DS-12: with mock checks set, the gate refuses errors, then unacknowledged warnings.
       if (mockChecks) {
@@ -1344,34 +1389,63 @@ export const studioHandlers = [
     });
   }),
 
-  // DS-13 drift, comments, tasks, approvals
+  // DS-13 people, comments, tasks, approvals, drift, review settings (ESG-lite src/studio/collab)
+  http.get("*/studio/docs/:id/people", ({ params }) => {
+    const row = loadDoc(params.id);
+    return isResponse(row) ? row : HttpResponse.json<StudioPerson[]>(MOCK_PEOPLE);
+  }),
   http.get("*/studio/docs/:id/drift", ({ params }) => {
     const row = loadDoc(params.id);
-    return isResponse(row) ? row : HttpResponse.json<DriftResponse>({ changed: [] });
+    return isResponse(row) ? row : HttpResponse.json<DriftResponse>({ dataHash: MOCK_DATA_HASH, changed: (state.drift.get(row.id) ?? []).filter((d) => !driftChecked(row, d)) });
   }),
-  http.get("*/studio/docs/:id/comments", ({ params }) => {
+  http.get("*/studio/docs/:id/comments", ({ params, request }) => {
     const row = loadDoc(params.id);
-    return isResponse(row) ? row : HttpResponse.json<ReportComment[]>(state.comments.filter((c) => c.docId === row.id));
+    if (isResponse(row)) return row;
+    const url = new URL(request.url);
+    const resolved = url.searchParams.get("resolved") === "1";
+    const tasks = url.searchParams.get("tasks");
+    const rootResolved = new Set(state.comments.filter((c) => c.resolvedAt).map((c) => c.id));
+    return HttpResponse.json<ReportComment[]>(
+      state.comments.filter(
+        (c) =>
+          c.docId === row.id &&
+          (resolved || (!c.resolvedAt && !(c.parentId && rootResolved.has(c.parentId)))) &&
+          (tasks !== "mine" || (c.taskAssigneeId === MOCK_ME && !c.taskDoneAt)) &&
+          (tasks !== "open" || (c.taskAssigneeId !== null && !c.taskDoneAt)),
+      ),
+    );
   }),
   http.post("*/studio/docs/:id/comments", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    const b = await body<{ pageId: string; elementId?: string; parentId?: number; body: string; mentions?: number[] }>(request);
-    if (!b.body?.trim() || !b.pageId) return error("DS_VALIDATION", { issues: [{ path: "body", message: "Required" }] });
+    const b = await body<CreateCommentBody>(request);
+    if (!b.body?.trim() || !b.pageId) return error("DS_VALIDATION", { issues: [{ path: "body", message: "Write a comment" }] });
+    const parent = b.parentId ? state.comments.find((c) => c.id === b.parentId && c.docId === row.id) : null;
+    if (b.parentId && !parent) return error("DS_DOC_NOT_FOUND");
+    const root = parent ? (parent.parentId ? state.comments.find((c) => c.id === parent.parentId) ?? parent : parent) : null;
+    const mentions = [...new Set(b.mentions ?? [])].filter((m) => m !== MOCK_ME && MOCK_PEOPLE.some((p) => p.id === m));
+    const assignee = b.taskAssigneeId ? MOCK_PEOPLE.find((p) => p.id === b.taskAssigneeId) : null;
+    if (b.taskAssigneeId && !assignee) return error("DS_VALIDATION", { issues: [{ path: "taskAssigneeId", message: "Assign the task to someone who can open this design" }] });
     const comment: ReportComment = {
       id: state.nextComment++,
       docId: row.id,
-      pageId: b.pageId,
-      elementId: b.elementId ?? null,
-      parentId: b.parentId ?? null,
-      body: b.body,
-      authorId: 2,
-      authorName: "Maya Manager",
-      mentions: b.mentions ?? [],
-      taskAssigneeId: null,
+      pageId: root ? root.pageId : b.pageId,
+      elementId: root ? root.elementId : (b.elementId ?? null),
+      x: root ? null : (b.x ?? null),
+      y: root ? null : (b.y ?? null),
+      parentId: root ? root.id : null,
+      body: b.body.trim(),
+      authorId: MOCK_ME,
+      authorName: personName(MOCK_ME),
+      mentions,
+      mentionNames: mentions.map(personName),
+      taskAssigneeId: assignee?.id ?? null,
+      taskAssigneeName: assignee?.name ?? null,
       taskDoneAt: null,
       resolvedAt: null,
+      resolvedByName: null,
       createdAt: NOW,
+      updatedAt: NOW,
     };
     state.comments.push(comment);
     return HttpResponse.json(comment, { status: 201 });
@@ -1381,6 +1455,7 @@ export const studioHandlers = [
     if (off) return off;
     const c = state.comments.find((x) => x.id === Number(params.id));
     if (!c) return error("DS_DOC_NOT_FOUND");
+    if (!c.taskAssigneeId) return error("DS_VALIDATION", { issues: [{ path: "done", message: "This comment isn't a task" }] });
     const b = await body<{ done: boolean }>(request);
     c.taskDoneAt = b.done ? NOW : null;
     return HttpResponse.json(c);
@@ -1390,8 +1465,12 @@ export const studioHandlers = [
     if (off) return off;
     const c = state.comments.find((x) => x.id === Number(params.id));
     if (!c) return error("DS_DOC_NOT_FOUND");
-    const b = await body<{ assigneeId: number }>(request);
-    c.taskAssigneeId = Number(b.assigneeId);
+    const b = await body<{ assigneeId: number | null }>(request);
+    const p = b.assigneeId === null ? null : MOCK_PEOPLE.find((x) => x.id === Number(b.assigneeId));
+    if (b.assigneeId !== null && !p) return error("DS_VALIDATION", { issues: [{ path: "assigneeId", message: "Assign the task to someone who can open this design" }] });
+    c.taskAssigneeId = p?.id ?? null;
+    c.taskAssigneeName = p?.name ?? null;
+    c.taskDoneAt = null;
     return HttpResponse.json(c);
   }),
   http.patch("*/studio/comments/:id", async ({ params, request }) => {
@@ -1399,17 +1478,55 @@ export const studioHandlers = [
     if (off) return off;
     const c = state.comments.find((x) => x.id === Number(params.id));
     if (!c) return error("DS_DOC_NOT_FOUND");
-    const b = await body<{ resolved: boolean }>(request);
-    c.resolvedAt = b.resolved ? NOW : null;
+    const b = await body<{ resolved?: boolean; body?: string }>(request);
+    if (b.body !== undefined) {
+      if (c.authorId !== MOCK_ME) return error("DS_ROLE", { reason: "Only the author can edit a comment" });
+      c.body = b.body;
+    }
+    if (b.resolved !== undefined) {
+      c.resolvedAt = b.resolved ? NOW : null;
+      c.resolvedByName = b.resolved ? personName(MOCK_ME) : null;
+    }
     return HttpResponse.json(c);
+  }),
+  http.delete("*/studio/comments/:id", ({ params }) => {
+    const off = gate();
+    if (off) return off;
+    const before = state.comments.length;
+    state.comments = state.comments.filter((c) => c.id !== Number(params.id));
+    return before === state.comments.length ? error("DS_DOC_NOT_FOUND") : new HttpResponse(null, { status: 204 });
+  }),
+  http.get("*/studio/docs/:id/approvals", ({ params }) => {
+    const row = loadDoc(params.id);
+    if (isResponse(row)) return row;
+    const approvals = state.approvals.filter((a) => a.docId === row.id).slice().reverse();
+    const current = approvals.find((a) => a.state !== "none") ?? null;
+    return HttpResponse.json<ApprovalsResponse>({ approvals, current, stale: current?.state === "approved" && current.rev !== row.rev, rev: row.rev, requireReview: state.reviewSettings.requireReview });
   }),
   http.post("*/studio/docs/:id/approvals", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    const b = await body<{ reviewerId: number; dueAt?: string; note?: string }>(request);
-    const approval: ReportApproval = { id: state.nextApproval++, docId: row.id, rev: row.rev, requestedBy: 3, reviewerId: Number(b.reviewerId), dueAt: b.dueAt ?? null, state: "requested", note: b.note ?? null, decidedAt: null };
+    const b = await body<RequestApprovalBody>(request);
+    if (b.rev !== row.rev) return error("DS_VERSION_CONFLICT", { rev: row.rev });
+    const reviewer = MOCK_PEOPLE.find((p) => p.id === Number(b.reviewerId));
+    if (!reviewer?.canApprove || reviewer.id === MOCK_ME_REQUESTER) return error("DS_VALIDATION", { issues: [{ path: "reviewerId", message: "The reviewer must be a Manager who can open this design" }] });
+    for (const a of state.approvals) if (a.docId === row.id && a.state === "requested") a.state = "none";
+    const approval: ReportApproval = {
+      id: state.nextApproval++,
+      docId: row.id,
+      rev: row.rev,
+      requestedBy: MOCK_ME_REQUESTER,
+      requestedByName: personName(MOCK_ME_REQUESTER),
+      reviewerId: reviewer.id,
+      reviewerName: reviewer.name,
+      dueAt: b.dueAt ?? null,
+      state: "requested",
+      note: b.note ?? null,
+      decisionNote: null,
+      decidedAt: null,
+      createdAt: NOW,
+    };
     state.approvals.push(approval);
-    row.status = "in_review";
     return HttpResponse.json<ReportApproval>(approval, { status: 201 });
   }),
   http.post("*/studio/approvals/:id/decide", async ({ params, request }) => {
@@ -1417,20 +1534,48 @@ export const studioHandlers = [
     if (off) return off;
     const a = state.approvals.find((x) => x.id === Number(params.id));
     if (!a) return error("DS_DOC_NOT_FOUND");
-    const b = await body<{ decision: "approved" | "changes_requested"; note?: string }>(request);
-    a.state = b.decision === "approved" ? "approved" : "changes_requested";
-    a.note = b.note ?? a.note;
+    const b = await body<{ decision: ApprovalDecision; note?: string | null }>(request);
+    if (a.state !== "requested") return error("DS_VALIDATION", { issues: [{ path: "decision", message: "This request was already decided or withdrawn" }] });
+    if (b.decision === "request_changes" && !b.note?.trim()) return error("DS_VALIDATION", { issues: [{ path: "note", message: "Say what should change" }] });
+    a.state = b.decision === "approve" ? "approved" : "changes_requested";
+    a.decisionNote = b.note ?? null;
     a.decidedAt = NOW;
     const row = state.docs.get(a.docId);
-    if (row) row.status = a.state === "approved" ? "approved" : "draft";
+    if (row && a.state === "approved") a.rev = row.rev;
     return HttpResponse.json<ReportApproval>(a);
   }),
   http.delete("*/studio/approvals/:id", ({ params }) => {
     const off = gate();
     if (off) return off;
-    const before = state.approvals.length;
-    state.approvals = state.approvals.filter((a) => a.id !== Number(params.id));
-    return before === state.approvals.length ? error("DS_DOC_NOT_FOUND") : new HttpResponse(null, { status: 204 });
+    const a = state.approvals.find((x) => x.id === Number(params.id));
+    if (!a) return error("DS_DOC_NOT_FOUND");
+    a.state = "none";
+    return new HttpResponse(null, { status: 204 });
+  }),
+  http.get("*/studio/docs/:id/versions/:n/preview.html", ({ params }) => {
+    const row = loadDoc(params.id);
+    if (isResponse(row)) return row;
+    const v = row.versions.find((x) => x.n === Number(params.n));
+    if (!v) return error("DS_DOC_NOT_FOUND");
+    return HttpResponse.text(PREVIEW_HTML.replace('data-mock="studio-preview"', `data-mock="studio-preview" data-version="${v.n}"`), { headers: { "content-type": "text/html; charset=utf-8", "x-doc-version": String(v.n) } });
+  }),
+  http.get("*/studio/review-settings", () => gate() ?? HttpResponse.json<ReviewSettings>({ ...state.reviewSettings, brandControls: state.brandKit.brandControls })),
+  http.put("*/studio/review-settings", async ({ request }) => {
+    const off = gate();
+    if (off) return off;
+    const b = await body<{ requireReview?: boolean; brandControls?: boolean }>(request);
+    if (b.brandControls !== undefined && !state.reviewSettings.canEditBrandControls) return error("DS_ROLE");
+    if (b.requireReview !== undefined) state.reviewSettings.requireReview = b.requireReview;
+    if (b.brandControls !== undefined) state.brandKit.brandControls = b.brandControls;
+    return HttpResponse.json<ReviewSettings>({ ...state.reviewSettings, brandControls: state.brandKit.brandControls });
+  }),
+  http.delete("*/studio/templates/:id", ({ params }) => {
+    const off = gate();
+    if (off) return off;
+    const t = state.templates.find((x) => x.id === Number(params.id) && x.companyId !== null);
+    if (!t) return error("DS_LAYOUT_NOT_FOUND");
+    state.templates = state.templates.filter((x) => x.slug !== t.slug);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   // DS-1 fonts (a stand-in WOFF2 header)
