@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
 import { KpiGate } from "../../lib/kpi/KpiGate";
 import { StudioGate } from "../../lib/studio/StudioGate"; // DS-0
+import { InsightsGate } from "../../lib/insights/InsightsGate"; // IN-0
 import StatusPage from "./components/StatusPage";
 import { type LegacyRedirect, type Role, type ShellRoute, asRole, canAccess, homeFor, resolveLegacyRedirect } from "./routeMap";
 
@@ -78,6 +79,15 @@ export function RoleGuard({ route, children }: { route: ShellRoute; children: Re
       <StudioGate staff={staff} home={staff ? "/clients" : homeFor(role)}>
         {children}
       </StudioGate>
+    );
+  }
+  // IN-0: Insights routes show "not turned on" while the company's Insights switch is off.
+  if (route.requires === "insights") {
+    const staff = role === "Superadmin";
+    return (
+      <InsightsGate staff={staff} home={staff ? "/clients" : homeFor(role)}>
+        {children}
+      </InsightsGate>
     );
   }
   return <>{children}</>;

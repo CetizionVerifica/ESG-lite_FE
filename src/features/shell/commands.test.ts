@@ -66,3 +66,17 @@ describe("Design Studio commands (DS-0)", () => {
     expect(studio("User", { studio: true, kpi: true })).toEqual([]);
   });
 });
+
+describe("Insights command (IN-0)", () => {
+  const insights = (role: "User" | "Manager" | "Admin" | "Superadmin", flags: { kpi?: boolean; insights?: boolean }) => routeCommands(role, 3, flags).filter((c) => c.to === "/insights");
+
+  it("is offered only while the switch is on, never to Users", () => {
+    for (const role of ["User", "Manager", "Admin", "Superadmin"] as const) expect(insights(role, { kpi: true }), role).toEqual([]);
+    expect(insights("User", { insights: true })).toEqual([]);
+    for (const role of ["Manager", "Admin", "Superadmin"] as const) {
+      const [c] = insights(role, { insights: true });
+      expect(c.label, role).toBe("Insights");
+      expect(c.keywords, role).toContain("decoupling");
+    }
+  });
+});

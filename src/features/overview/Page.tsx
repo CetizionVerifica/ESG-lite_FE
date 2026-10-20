@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Building2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { feraCategoryIds } from "../../lib/emissions/pendingCount";
+import { useInsightsNavOn } from "../../lib/insights/switch"; // IN-0
 import { useFyStartMonth } from "../../lib/fiscalYear";
 import {
   Button,
@@ -72,6 +73,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
   const period = supportedPeriod(ctx.period, now);
   const scopeSites = ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id);
   const fyStartMonth = useFyStartMonth();
+  const insightsOn = useInsightsNavOn(); // IN-0: "See insights" only while the company's switch is on
   const range = periodRange(period, fyStartMonth);
 
   const overview = useOverview(toOverviewPeriod(period), scopeSites, ctx.categoryIds);
@@ -203,7 +205,17 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={title} context={chips} />
+      <PageHeader
+        title={title}
+        context={chips}
+        description={
+          insightsOn ? (
+            <Link to="/insights" className={cn("font-medium text-brand hover:underline", focusRing)} data-testid="see-insights">
+              See insights →
+            </Link>
+          ) : undefined
+        }
+      />
 
       <KpiStrip items={kpis} loading={overview.isPending} error={err(overview)} onRetry={() => overview.refetch()} />
 
