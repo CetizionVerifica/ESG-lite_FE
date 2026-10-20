@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
 import { KpiClientPickerContext } from "../../lib/kpi/clientPicker";
 import { useKpiNavOn } from "../../lib/kpi/switch";
+import { useStudioNavOn } from "../../lib/studio/switch"; // DS-0
 import { useTheme } from "../../theme";
 import { CommandPalette } from "../../ui";
 import { shellUser } from "./account";
@@ -74,7 +75,8 @@ export default function AppShell() {
   const previewStyle = usePreviewStyle(clientId, clientScoped, resolvedAppearance);
   // KPI-1: items behind a company switch show only while it's on (D18: for a Superadmin, also before a client is chosen).
   const kpi = useKpiNavOn();
-  const flags = useMemo(() => ({ kpi }), [kpi]);
+  const { studio } = useStudioNavOn(); // DS-0: Design Studio nav item and palette entries
+  const flags = useMemo(() => ({ kpi, studio }), [kpi, studio]);
   const nav = navFor(role, flags);
   const commands = useMemo(() => routeCommands(role, clientId, flags), [role, clientId, flags]);
   const account = shellUser(user, rawRole);

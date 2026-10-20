@@ -1,9 +1,11 @@
 import { type ReactNode, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
-import { Download, FileBarChart, FileSpreadsheet } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Download, FileBarChart, FileSpreadsheet, LayoutTemplate } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
+import { useDesignStudio } from "../../lib/studio/switch"; // DS-5
+import { designThisReportLink } from "../../lib/studio/designLink"; // DS-5
 import {
   Button,
   Callout,
@@ -269,6 +271,12 @@ export default function GhgReportPage() {
     }
   };
   const ready = !!figures && !figures.empty && !tables.isFetching;
+  // DS-5: "Design this report" opens the Design Studio's new-design flow with these filters, when the studio is on.
+  const studio = useDesignStudio();
+  const navigate = useNavigate();
+  const designAction = studio.kinds.ghg
+    ? [{ label: "Design this report", onClick: () => navigate(designThisReportLink({ year: period.year, yearType: period.yearType, compareYear: prev.year, siteIds: pickedSites })), icon: <LayoutTemplate aria-hidden className="size-4" /> }]
+    : [];
 
   const header = (context?: ReactNode, actions = false) => (
     <PageHeader
@@ -294,6 +302,7 @@ export default function GhgReportPage() {
                 disabled: !ready || exporting,
                 icon: <FileSpreadsheet aria-hidden className="size-4" />,
               },
+              ...designAction, // DS-5
             ]
           : []
       }

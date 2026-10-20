@@ -81,3 +81,11 @@ Run after `npm ci`:
 - Shared components: see `src/ui/README.md`; the dev-only gallery is `/__ui` (`npm run dev`).
 - Run lint:new, typecheck and unit tests before every push.
 - A lane with a backend part runs the end-to-end data workflow test in ESG-lite before review (`bash ci/workflow/local.sh`, see ESG-lite `ci/workflow/README.md`) and puts "Workflow test: N passed, M skipped" in its last PR. It checks the data from client setup to the report; what a User sees stays in Playwright.
+
+## Design Studio — see docs/design-studio/ (in ESG-lite)
+- Pages live in `src/features/studio/`; shared logic in `src/lib/studio/`. Nothing is visible unless `designStudioOn(user)`. Sustainability designs also need `kpiTrackingOn(user)`.
+- `src/lib/studio/render/` is a generated mirror of ESG-lite `src/reporting/studio/render/`. Never edit it by hand: run `npm run sync:studio-render`. CI checks `RENDER_HASH`.
+- The editor draws pages with that renderer inside a shadow root, so the editor, Page view, Present and the PDF match. Never restyle report content with app CSS or Tailwind inside the sheet.
+- Numbers on pages come from `/studio/resolve` and data chips. The FE never computes a reported figure.
+- Every AI result is a suggestion card with Accept / Try again / Discard. Nothing AI-written lands on a page without a click.
+- `docs/design-studio/05-ux.md` is binding (Canva-style rail, drawers, contextual toolbar, page strip). Never use "Magic" or Canva's names, icons or look. The editor needs ≥1280 px.

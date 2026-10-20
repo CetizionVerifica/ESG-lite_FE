@@ -1,6 +1,7 @@
 import { cloneElement, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "./cn";
+import { portalRoot } from "./portalRoot";
 
 export type TooltipProps = {
   content: ReactNode;
@@ -148,7 +149,7 @@ export function Tooltip({ content, children, side = "top", toggleOnClick, classN
           >
             {content}
           </span>,
-          document.body,
+          portalRoot(),
         )}
     </span>
   );
