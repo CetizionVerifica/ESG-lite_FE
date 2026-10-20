@@ -93,6 +93,7 @@ const REASON_TEXT: Record<string, string> = {
   measure: "a page couldn't be laid out",
   storage: "it couldn't be stored",
   data: "the design or its data changed",
+  checks: "a page failed its layout checks (see Checks)", // DS-12: the worker's layout gate
 };
 
 /** "Making your PDF for print…" / "PDF for print is ready." / "The PDF for print couldn't be made: it took too long. Try again." */
