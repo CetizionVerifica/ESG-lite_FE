@@ -27,6 +27,18 @@ import {
   type AiAction,
   type AiUsage,
   type Binding,
+  type DataCatalogResponse, // DS-2
+  type DataGroup,
+  type DataItem,
+  type GhgBinding,
+  type InputPrefill,
+  type InputsPatch,
+  type InputsPrefillResponse,
+  type KpiBinding,
+  type MaterialityResponse,
+  type MaterialTopic,
+  type YearType,
+  inputKeysFor,
   type BrandKit,
   type ChatReply,
   type Check,
@@ -151,6 +163,7 @@ interface State {
   kpi: boolean;
   docs: Map<number, DocRow>;
   nextDoc: number;
+  materiality: MaterialTopic[]; // DS-2
   brandKit: BrandKit;
   assets: StudioAsset[];
   nextAsset: number;
@@ -194,6 +207,11 @@ const initialState = (): State => ({
     [2, docRow(2, STUDIO_SUSTAINABILITY_DOC, { leadership_message: { value: "A year of steady progress.", source: "typed", updatedBy: 2, updatedAt: NOW } })],
   ]),
   nextDoc: 3,
+  materiality: [
+    { esrs_topic: "E1", name: "Climate change", material: true, impact_score: 8, financial_score: 7.5 },
+    { esrs_topic: "S1", name: "Own workforce", material: true, impact_score: null, financial_score: null },
+    { esrs_topic: "E3", name: "Water and marine resources", material: false, impact_score: null, financial_score: null },
+  ], // DS-2
   brandKit: {
     fonts: { heading: "fraunces", body: "source-sans-3" },
     voice: "",
@@ -298,21 +316,98 @@ const addDoc = (doc: ReportDoc, inputs: ReportInputs = {}, sourceDocId: number |
   return row;
 };
 
-/** A made-up display string per binding (mock data, never a reported figure). */
-const resolveOne = (b: Binding, i: number): ResolvedBinding & { unavailable?: string } => {
+/** A made-up display string per binding (mock data, never a reported figure). DS-2: the real shapes of src/studio/sources. */
+const resolveOne = (b: Binding, i: number): ResolvedBinding => {
   if (b.source === "custom") return { display: "Unlinked data", value: null, unit: null, source: "custom" };
   if (b.source === "input") return { display: "From report details", value: null, unit: null, source: "input" };
-  if (b.source === "ghg" && b.metric === "scope2_market") return { display: "Not reported", value: null, unit: "tCO₂e", source: "ghg", unavailable: "Market-based Scope 2 isn't recorded (D7)" };
+  if (b.source === "ghg" && b.metric === "scope2_market")
+    return { display: "Not reported", value: null, unit: "tCO₂e", source: "ghg", unavailable: { reason: "NOT_RECORDED", detail: "Market-based Scope 2 isn't recorded (D7)." } };
   const value = 1000 + i * 111;
   return {
     display: value.toLocaleString("en-GB"),
     value,
     unit: b.source === "ghg" ? "tCO₂e" : (b.unit ?? null),
     source: b.source,
-    approvedAt: "2026-04-12",
+    approvedAt: "2026-04-12T00:00:00.000Z",
     series: [{ label: "2025", values: [{ key: "2025", value }] }],
   };
 };
+
+/** DS-2: matrix points only when every material topic is scored (as src/studio/sources/materiality.ts). */
+const materialityPoints = (topics: MaterialTopic[]): MaterialityResponse["points"] => {
+  const m = topics.filter((t) => t.material);
+  if (!m.length || m.some((t) => t.impact_score === null || t.financial_score === null)) return null;
+  return m.map((t) => ({ topic: t.esrs_topic, label: t.name, impact: t.impact_score as number, financial: t.financial_score as number }));
+};
+
+/** DS-2: the Data drawer list (made-up values). */
+const ghgItem = (id: string, label: string, binding: GhgBinding, i: number): DataItem => {
+  const r = resolveOne(binding, i);
+  return { id, label, binding, resolved: { display: r.display, value: r.value, unit: r.unit, approvedAt: r.approvedAt ?? null, ...(r.unavailable ? { unavailable: r.unavailable } : {}) } };
+};
+const g = (metric: GhgBinding["metric"], extra: Partial<GhgBinding> = {}): GhgBinding => ({ source: "ghg", metric, years: { last: 1 }, sites: "all", ...extra });
+export const MOCK_GHG_DATA: DataGroup[] = [
+  {
+    id: "scopes",
+    label: "Scopes",
+    items: [
+      ghgItem("total", "Total emissions", g("total"), 0),
+      ghgItem("scope1", "Scope 1", g("scope1"), 1),
+      ghgItem("scope2_location", "Scope 2 (location-based)", g("scope2_location"), 2),
+      ghgItem("scope2_market", "Scope 2 (market-based)", g("scope2_market"), 3),
+      ghgItem("scope3", "Scope 3", g("scope3"), 4),
+    ],
+  },
+  {
+    id: "scope3_categories",
+    label: "Scope 3 categories",
+    items: [
+      ghgItem("scope3_category_1", "1 · Purchased goods and services", g("scope3_category", { scope3Category: 1 }), 5),
+      {
+        id: "scope3_category_8",
+        label: "8 · Upstream leased assets",
+        binding: g("scope3_category", { scope3Category: 8 }),
+        resolved: { display: "Excluded: No leased assets", value: null, unit: "tCO₂e", approvedAt: null, unavailable: { reason: "EXCLUDED", detail: "No leased assets" } },
+      },
+    ],
+  },
+  { id: "breakdowns", label: "Sites, months and sources", items: [ghgItem("by_site", "Total by site", g("total", { breakdown: "site" }), 6)] },
+  {
+    id: "gases",
+    label: "Gases",
+    items: [{ id: "gas_ch4", label: "CH₄", binding: g("gas_ch4"), resolved: { display: "Not reported", value: null, unit: "t CH₄", approvedAt: null, unavailable: { reason: "NOT_TRACKED" } } }],
+  },
+  { id: "intensity", label: "Intensity", items: [ghgItem("intensity_output", "Intensity per unit of output", g("intensity_output"), 7)] },
+  { id: "base_year", label: "Base year and quality", items: [ghgItem("base_year_total", "Base year (Scope 3)", g("base_year_total"), 8)] },
+];
+const MOCK_KPIS: { code: string; name: string; topic: string }[] = [
+  { code: "WATER_WITHDRAWAL", name: "Water withdrawal", topic: "water" },
+  { code: "ENERGY_TOTAL", name: "Total energy consumption", topic: "energy" },
+  { code: "EMPLOYEES_TOTAL", name: "Total employees", topic: "workforce" },
+];
+const kpiData = (q: string | null, topic: string | null): DataGroup[] => {
+  const hits = MOCK_KPIS.filter((k) => (!q || `${k.code} ${k.name}`.toLowerCase().includes(q.toLowerCase())) && (!topic || k.topic === topic));
+  const topics = [...new Set(hits.map((k) => k.topic))];
+  return topics.map((t) => ({
+    id: t,
+    label: t.replace(/^./, (c) => c.toUpperCase()),
+    items: hits
+      .filter((k) => k.topic === t)
+      .map((k, i) => {
+        const binding: KpiBinding = { source: "kpi", kpis: [k.code], years: { last: 1 }, sites: "all" };
+        const r = resolveOne(binding, i);
+        return { id: k.code, label: k.name, binding, resolved: { display: r.display, value: r.value, unit: r.unit, approvedAt: r.approvedAt ?? null, complete: true } };
+      }),
+  }));
+};
+const ghgPrefill = (): InputPrefill => ({
+  reporting_period: { value: "Financial year 2025 (1 April 2024 – 31 March 2025)", source: "company" },
+  consolidation_approach: { value: "Operational control", source: "company" },
+  gwp_set: { value: "AR6", source: "company" },
+  conformance: { value: ["GHGP"], source: "company" },
+  revenue: { value: 2300, source: "kpi", note: "INR crore" },
+  exclusions: { value: [{ what: "Category 8 · Upstream leased assets", reason: "No leased assets" }], source: "company" },
+});
 
 const suggestion = (action: AiAction): Suggestion => ({
   id: `sug-${++state.aiCalls}`,
@@ -488,26 +583,64 @@ export const studioHandlers = [
     if (off) return off;
     const values = (b.bindings ?? []).map(resolveOne);
     const tokens = (b.tokens ?? []).map((t, i) => resolveOne(t.attrs.binding, i));
-    const unavailable = values.flatMap((v, i) => (v.unavailable ? [{ bindingIdx: i, reason: v.unavailable }] : []));
+    const unavailable = values.flatMap((v, i) => (v.unavailable ? [{ bindingIdx: i, reason: v.unavailable.reason }] : [])); // DS-2: reason codes
     return HttpResponse.json<ResolveResponse>({ values, tokens, dataHash: `sha256:mock-${values.length}-${tokens.length}`, unavailable });
   }),
   http.get("*/studio/docs/:id/inputs", ({ params }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    return HttpResponse.json<DocInputsResponse>({
-      rev: row.rev,
-      inputs: row.inputs,
-      prefill: row.doc.kind === "ghg" ? { consolidation_approach: { value: "operational control", source: "company" }, gwp_set: { value: "AR6", source: "company" } } : {},
-    });
+    return HttpResponse.json<DocInputsResponse>({ rev: row.rev, inputs: row.inputs, prefill: row.doc.kind === "ghg" ? ghgPrefill() : {} });
   }),
   http.patch("*/studio/docs/:id/inputs", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    const b = await body<{ rev: number; inputs: ReportInputs }>(request);
+    const b = await body<{ rev: number; inputs: InputsPatch }>(request);
     if (b.rev !== row.rev) return error("DS_VERSION_CONFLICT", { rev: row.rev });
-    row.inputs = { ...row.inputs, ...(b.inputs ?? {}) };
+    // DS-2: per-key entries; null removes a key; source defaults to typed.
+    const next: Record<string, unknown> = { ...row.inputs };
+    const issues: { path: string; message: string }[] = [];
+    for (const [k, v] of Object.entries(b.inputs ?? {})) {
+      if (v === null) delete next[k];
+      else if (typeof v.value === "number" && v.value < 0) issues.push({ path: `inputs.${k}`, message: "Number must be greater than or equal to 0" });
+      else next[k] = { value: v.value, source: v.source ?? "typed", updatedBy: 2, updatedAt: NOW };
+    }
+    if (issues.length) return error("DS_VALIDATION", { issues });
+    row.inputs = next as ReportInputs;
     row.rev += 1;
-    return HttpResponse.json<DocInputsResponse>({ rev: row.rev, inputs: row.inputs, prefill: {} });
+    return HttpResponse.json<DocInputsResponse>({ rev: row.rev, inputs: row.inputs, prefill: row.doc.kind === "ghg" ? ghgPrefill() : {} });
+  }),
+  // DS-2 additions: prefill before a doc exists, the Data drawer list, materiality scores
+  http.get("*/studio/inputs/prefill", ({ request }) => {
+    const kind = new URL(request.url).searchParams.get("kind") as ReportKind | null;
+    const off = gate(kind);
+    if (off) return off;
+    return HttpResponse.json<InputsPrefillResponse>({ keys: inputKeysFor(kind ?? "ghg"), prefill: kind === "ghg" ? ghgPrefill() : { reporting_period: { value: "Calendar year 2025 (1 January 2025 – 31 December 2025)", source: "company" } } });
+  }),
+  http.get("*/studio/data", ({ request }) => {
+    const url = new URL(request.url);
+    const kind = url.searchParams.get("kind") as ReportKind | null;
+    const off = gate(kind);
+    if (off) return off;
+    const year = Number(url.searchParams.get("year") ?? 2025);
+    const groups = kind === "sustainability" ? kpiData(url.searchParams.get("q"), url.searchParams.get("topic")) : MOCK_GHG_DATA;
+    return HttpResponse.json<DataCatalogResponse>({ kind: kind ?? "ghg", year, yearType: (url.searchParams.get("yearType") as YearType) ?? "CY", siteIds: [1, 2], groups });
+  }),
+  http.get("*/studio/materiality", () => {
+    const off = gate("sustainability");
+    if (off) return off;
+    return HttpResponse.json<MaterialityResponse>({ topics: state.materiality, points: materialityPoints(state.materiality) });
+  }),
+  http.put("*/studio/materiality", async ({ request }) => {
+    const off = gate("sustainability");
+    if (off) return off;
+    const b = await body<{ scores: { esrs_topic: string; impact_score: number | null; financial_score: number | null }[] }>(request);
+    for (const sc of b.scores ?? []) {
+      const t = state.materiality.find((x) => x.esrs_topic === sc.esrs_topic);
+      if (!t) return error("DS_DOC_NOT_FOUND");
+      t.impact_score = sc.impact_score;
+      t.financial_score = sc.financial_score;
+    }
+    return HttpResponse.json<MaterialityResponse>({ topics: state.materiality, points: materialityPoints(state.materiality) });
   }),
 
   // DS-5 docs

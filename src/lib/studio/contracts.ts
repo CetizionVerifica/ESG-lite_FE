@@ -610,27 +610,85 @@ export interface ResolveRequest {
   bindings: Binding[];
   tokens: DataToken[];
 }
-/** One resolved binding (mock shape after RS ResolvedBinding; DS-2 confirms). */
+/**
+ * DS-2: why a binding has no value (`unavailable.reason`), as ESG-lite
+ * src/studio/sources/types.ts sends it.
+ */
+export const UNAVAILABLE_REASONS = ["NOT_RECORDED", "NOT_TRACKED", "NO_DATA", "NO_BASE_YEAR", "NO_INPUT", "NO_TARGET", "KPI_TRACKING_OFF", "EXCLUDED", "DIVIDE_BY_ZERO"] as const;
+export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number];
+
+/** One resolved binding or token (DS-2, src/studio/sources/types.ts). `display` is already rounded; the FE shows it as is. */
 export interface ResolvedBinding {
+  source: DataSource;
   display: string;
   value: number | null;
   unit: string | null;
+  /** Without a breakdown: one series over the years; with one: a series per year keyed by the breakdown. */
   series?: { label: string; values: { key: string; value: number | null }[] }[];
   approvedAt?: string | null;
-  source: DataSource;
+  evidenceCount?: number;
+  complete?: boolean;
+  compare?: { against: "prior" | "base" | "target"; year: number | null; value: number | null; change_abs: number | null; change_pct: number | null; reason?: string };
+  target?: { baseline_year: number; baseline_value: number; target_year: number; target_value: number; progress_pct: number | null; status: string };
+  total?: number | null;
+  unavailable?: { reason: UnavailableReason; detail?: string };
 }
 export interface ResolveResponse {
   values: ResolvedBinding[];
   tokens: ResolvedBinding[];
   dataHash: string;
-  unavailable: { bindingIdx: number; reason: string }[];
+  unavailable: { bindingIdx: number; reason: UnavailableReason; token?: boolean }[];
 }
 
-/** GET /docs/:id/inputs: inputs with prefill sources (mock shape). */
+/** A prefilled input: what the company's data already says (DS-2 inputs.ts). `note` is a unit or the GWP sets behind MIXED. */
+export type InputPrefill = Partial<Record<ReportInputKey, { value: unknown; source: InputSource; note?: string }>>;
+
+/** GET /docs/:id/inputs and PATCH /docs/:id/inputs (`{rev, inputs: {key: {value, source?} | null}}`). */
 export interface DocInputsResponse {
   rev: number;
   inputs: ReportInputs;
-  prefill: Partial<Record<ReportInputKey, { value: unknown; source: InputSource }>>;
+  prefill: InputPrefill;
+}
+/** PATCH /docs/:id/inputs body: a value per key (source defaults to typed); null removes the key. */
+export type InputsPatch = Partial<Record<ReportInputKey, { value: unknown; source?: InputSource } | null>>;
+
+/** DS-2 addition: GET /inputs/prefill?kind=&year=&yearType=&sites= (the new-design flow, before a doc exists). */
+export interface InputsPrefillResponse {
+  keys: ReportInputKey[];
+  prefill: InputPrefill;
+}
+
+/** DS-2 addition: GET /data?kind=&year=&yearType=&sites=&q=&topic=&framework= (the Data drawer list). */
+export interface DataItem {
+  id: string;
+  label: string;
+  binding: GhgBinding | KpiBinding;
+  resolved: Pick<ResolvedBinding, "display" | "value" | "unit" | "approvedAt" | "unavailable" | "series" | "complete">;
+}
+export interface DataGroup {
+  id: string;
+  label: string;
+  items: DataItem[];
+}
+export interface DataCatalogResponse {
+  kind: ReportKind;
+  year: number;
+  yearType: YearType;
+  siteIds: number[];
+  groups: DataGroup[];
+}
+
+/** DS-2 addition: GET/PUT /materiality (materiality matrix scores, sustainability kind). */
+export interface MaterialTopic {
+  esrs_topic: string;
+  name: string;
+  material: boolean;
+  impact_score: number | null;
+  financial_score: number | null;
+}
+export interface MaterialityResponse {
+  topics: MaterialTopic[];
+  points: { topic: string; label: string; impact: number; financial: number }[] | null;
 }
 
 /** GET /docs list item (mock shape; DS-5 confirms). */
