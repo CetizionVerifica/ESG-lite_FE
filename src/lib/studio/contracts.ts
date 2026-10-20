@@ -1242,6 +1242,51 @@ export interface AiUsage {
   monthUsd: number;
   monthBudgetUsd: number;
 }
+// DS-9: request shapes of the AI endpoints and design from a brief (ESG-lite src/studio/contracts/ai.ts DS-9 block).
+export interface AiTarget {
+  pageId: string;
+  elementId?: string;
+}
+export interface AiParams {
+  /** scope3_category_text: the category (1–15). */
+  category?: number;
+  /** Try again: the earlier suggestion's text, so the next one differs. */
+  differentFrom?: string;
+  /** A short instruction from the chat. */
+  note?: string;
+}
+/** POST /docs/:id/ai */
+export interface AiRequest {
+  action: AiAction;
+  target?: AiTarget;
+  params?: AiParams;
+}
+/** POST /docs/:id/ai/chat */
+export interface ChatRequest {
+  messages: ChatTurn[];
+  selection?: { pageId: string; elementIds: string[] };
+}
+export const CHAT_ROUTER_TURNS = 12;
+/** POST /ai/brief */
+export interface BriefRequest {
+  kind: ReportKind;
+  brief: string;
+}
+export interface BriefProposal {
+  templateId: number;
+  look: string | null;
+  templateName: string;
+  format: string;
+  purpose: string;
+  chapters: string[];
+  styleId: string | null;
+  title: string;
+  reason: string;
+}
+export interface BriefReply {
+  proposals: BriefProposal[];
+  model: string;
+}
 
 // ---------------------------------------------------------------------------
 // DS-13 collaboration shapes (mock shapes; DS-13 confirms)

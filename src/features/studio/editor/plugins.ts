@@ -8,6 +8,7 @@ import { AiSoon, BasicElementsPanel, BasicUploadsPanel, ChartsSoon, DataDrawer, 
 import { registerDrawer, registerToolbar } from "./registry";
 import { registerTextPlugins } from "./text/register"; // DS-7
 import { registerChartsPlugins } from "./charts/register"; // DS-8
+import { registerAiPlugins } from "../ai/register"; // DS-9
 import { DataToolbar, MediaToolbar, MultiToolbar, PageToolbar, ShapeToolbar, TextToolbar } from "./toolbars";
 
 let done = false;
@@ -37,6 +38,9 @@ export function registerEditorPlugins(): void {
 
   // DS-8: the Charts drawer, the Data drawer with binding editing and drag to page, chart and table toolbars.
   registerChartsPlugins();
+
+  // DS-9: the AI drawer (chat, suggestion cards), "AI ▾" on text, chart title suggestions, ghost preview.
+  registerAiPlugins();
 }
 
 /** Registers the shell's toolbars (fallbacks: real ones from DS-7/DS-8 win). */

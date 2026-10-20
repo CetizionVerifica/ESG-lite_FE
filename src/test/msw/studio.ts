@@ -26,6 +26,8 @@ import sustainabilityFixture from "../fixtures/studio/sustainability-doc.json";
 import {
   type AiAction,
   type AiUsage,
+  type BriefReply, // DS-9
+  type Element as StudioElement, // DS-9
   type Binding,
   type DataCatalogResponse, // DS-2
   type DataGroup,
@@ -631,6 +633,15 @@ const ghgPrefill = (): InputPrefill => ({
   exclusions: { value: [{ what: "Category 8 · Upstream leased assets", reason: "No leased assets" }], source: "company" },
 });
 
+/** DS-9: a text suggestion for a target text box (the box with the new text), as the server answers. */
+function aiTextFor(row: DocRow, action: AiAction, target?: { pageId: string; elementId?: string }): Suggestion {
+  const s = suggestion(action);
+  const page = row.doc.pages.find((p) => p.id === target?.pageId);
+  const el = page?.kind === "freeform" && target?.elementId ? page.elements.find((e) => e.id === target.elementId) : undefined;
+  if (!el || (el.type !== "text" && el.type !== "callout") || !s.payload.text) return s;
+  return { ...s, payload: { ...s.payload, elements: [{ ...el, source: "ai", reviewed: false, props: { ...el.props, doc: s.payload.text } } as unknown as StudioElement] } };
+}
+
 const suggestion = (action: AiAction): Suggestion => ({
   id: `sug-${++state.aiCalls}`,
   action,
@@ -1218,12 +1229,17 @@ export const studioHandlers = [
     return new HttpResponse(new TextEncoder().encode("%PDF-1.7\n% mock\n"), { headers: { "content-type": "application/pdf" } });
   }),
 
-  // DS-9 AI
+  // DS-9 AI: a text action answers for its target text box (payload.elements = the box with new
+  // text, as the server does); chat maps a chip to an action; brief proposes the mock templates.
   http.post("*/studio/docs/:id/ai/chat", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    await body<{ messages: unknown[] }>(request);
-    return HttpResponse.json<ChatReply>({ reply: "Here is a shorter summary based on your approved data.", suggestions: [suggestion("rewrite_shorter")] });
+    const b = await body<{ messages: { role: string; text: string }[]; selection?: { pageId: string; elementIds: string[] } }>(request);
+    const last = b.messages?.[b.messages.length - 1]?.text ?? "";
+    if (/layout/i.test(last)) return HttpResponse.json<ChatReply>({ reply: "Layout suggestions aren't available yet. You can pick a page layout from the Templates drawer.", suggestions: [] });
+    if (/missing disclosures/i.test(last)) return HttpResponse.json<ChatReply>({ reply: "Here's what looks missing from the report.", suggestions: [suggestion("missing_disclosures")] });
+    const action: AiAction = /executive summary/i.test(last) ? "ghg_exec_summary" : "rewrite_shorter";
+    return HttpResponse.json<ChatReply>({ reply: action === "ghg_exec_summary" ? "Here's a draft of the executive summary from your approved data." : "Here's a shorter version.", suggestions: [aiTextFor(row, action, b.selection ? { pageId: b.selection.pageId, elementId: b.selection.elementIds[0] } : undefined)] });
   }),
   http.get("*/studio/docs/:id/ai/usage", ({ params }) => {
     const row = loadDoc(params.id);
@@ -1232,9 +1248,22 @@ export const studioHandlers = [
   http.post("*/studio/docs/:id/ai", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    const b = await body<{ action: AiAction }>(request);
+    const b = await body<{ action: AiAction; target?: { pageId: string; elementId?: string } }>(request);
     if (!b.action) return error("DS_VALIDATION", { issues: [{ path: "action", message: "Required" }] });
-    return HttpResponse.json<Suggestion>(suggestion(b.action));
+    const s = suggestion(b.action);
+    return HttpResponse.json<Suggestion>(s.kind === "text" ? aiTextFor(row, b.action, b.target) : s);
+  }),
+  http.post("*/studio/ai/brief", async ({ request }) => {
+    const off = gate();
+    if (off) return off;
+    const b = await body<{ kind: ReportKind; brief: string }>(request);
+    if (!b.brief || b.brief.trim().length < 3) return error("DS_VALIDATION", { issues: [{ path: "brief", message: "Too short" }] });
+    const ts = state.templates.filter((t) => t.kind === b.kind).slice(0, 2);
+    state.aiCalls += 1;
+    return HttpResponse.json<BriefReply>({
+      model: "anthropic/claude-sonnet-5.5",
+      proposals: ts.map((t, i) => ({ templateId: t.id, look: t.look ?? null, templateName: t.name, format: t.format, purpose: t.purpose, chapters: ["Cover", "Executive summary", "Scope 3"], styleId: null, title: i === 0 ? "Board GHG brief" : "GHG inventory", reason: i === 0 ? "A short deck for the board, with Scope 3 up front." : "The full inventory if the board wants the detail." })),
+    });
   }),
 
   // DS-12 checks
