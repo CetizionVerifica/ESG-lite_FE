@@ -8,7 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { FontId, ReportDoc, StudioDocResponse } from "../../../lib/studio/contracts";
 import { loadHistory, saveHistory } from "../../../lib/studio/history";
 import { ensureStudioFonts } from "../../../lib/studio/renderHost";
-import { Button, Callout, EmptyState, Loading, Modal, Skeleton } from "../../../ui";
+import { Button, Callout, EmptyState, Loading, Modal, PopoverLayer, Skeleton } from "../../../ui";
 import { conflictRev, dsCode, editorErrorMessage, getStudioDoc, useSaveStudioDoc, useStudioDoc } from "./api";
 import { Canvas } from "./Canvas";
 import { ChartsHost } from "./charts/ChartsHost"; // DS-8
@@ -104,6 +104,8 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
 
   return (
     <EditorContext.Provider value={ed}>
+      {/* The editor and its toolbars clip (overflow-hidden), so popovers draw on a layer. */}
+      <PopoverLayer>
       <div data-testid="studio-editor" className="flex h-[calc(100vh-4rem)] min-h-[560px] flex-col overflow-hidden rounded-card border border-line bg-page text-ink">
         <TopBar save={save.state} status={initial.status} onHelp={() => setHelp(true)} />
         <ApprovalBar /> {/* DS-13: approval requested / approved / changes requested */}
@@ -168,6 +170,7 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
           </Button>
         </Modal>
       </div>
+      </PopoverLayer>
     </EditorContext.Provider>
   );
 }
