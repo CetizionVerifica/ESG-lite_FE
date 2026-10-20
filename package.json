@@ -15,7 +15,8 @@
     "preview": "vite preview",
     "check:studio-contracts": "node scripts/check-studio-contracts.mjs",
     "sync:studio-render": "node scripts/sync-studio-render.mjs",
-    "check:studio-render": "node scripts/sync-studio-render.mjs check"
+    "check:studio-render": "node scripts/sync-studio-render.mjs check",
+    "sync:studio-resize": "node scripts/sync-studio-resize.mjs"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8",

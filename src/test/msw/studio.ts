@@ -22,6 +22,7 @@
  */
 import { http, HttpResponse } from "msw";
 import ghgFixture from "../fixtures/studio/ghg-doc.json";
+import { resizeDocument } from "../../lib/studio/resize"; // DS-10
 import sustainabilityFixture from "../fixtures/studio/sustainability-doc.json";
 import {
   type AiAction,
@@ -58,12 +59,16 @@ import {
   type CreateDocBody,
   type StudioDocBuild,
   type JobKind,
-  type PageFormat,
   type ReportApproval,
   type ReportComment,
   type ReportDoc,
   type ReportInputs,
   type ReportJob,
+  type LinkedSource, // DS-10
+  type LinkedSourceResponse, // DS-10
+  type ResizeBody, // DS-10
+  type ResizeResponse, // DS-10
+  PAGE_FORMAT_SIZES, // DS-10
   type CreateJobBody, // DS-11
   type CreateShareBody, // DS-11
   type PublicShareMeta, // DS-11
@@ -338,6 +343,12 @@ export function resetStudioMocks(): void {
   BUILD_POLLS = 2; // DS-5
   JOB_POLLS = 1; // DS-11
   finalBlocked = false; // DS-11
+  resizeDataVersion = 1; // DS-10
+}
+// DS-10: the mock's approved data version; bumping it makes every resized copy's source "changed".
+let resizeDataVersion = 1;
+export function setStudioMockSourceDataChanged(): void {
+  resizeDataVersion += 1;
 }
 // DS-4: whether POST /studio/assets/generate has an image provider (off by default, as in CI).
 let imageGen = false;
@@ -1037,16 +1048,39 @@ export const studioHandlers = [
     return HttpResponse.json({ id: addDoc(doc, clone(row.inputs)).id }, { status: 201 });
   }),
 
-  // DS-10 resize
+  // DS-10 resize: the real engine (src/lib/studio/resize.ts), as the server runs it.
   http.post("*/studio/docs/:id/resize", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    const b = await body<{ format: PageFormat; purpose: ReportDoc["purpose"]; title: string }>(request);
-    if (!b.format) return error("DS_FORMAT_INVALID");
-    if (b.purpose === "social" && row.doc.pages.every((p) => p.kind === "flow")) return error("DS_RESIZE_UNSUPPORTED");
-    const doc: ReportDoc = { ...clone(row.doc), format: b.format, purpose: b.purpose ?? row.doc.purpose, source: { docId: row.id, rev: row.rev, dataHash: "sha256:mock" } };
-    doc.meta.title = b.title ?? doc.meta.title;
-    return HttpResponse.json({ id: addDoc(doc, clone(row.inputs), row.id).id }, { status: 201 });
+    const b = await body<ResizeBody>(request);
+    if (!b.format || !b.purpose) return error("DS_VALIDATION");
+    const dataHash = `sha256:mock-${resizeDataVersion}`;
+    const title = b.title ?? `${row.doc.meta.title} · copy`;
+    const r = resizeDocument(clone(row.doc) as unknown as Record<string, unknown>, { purpose: b.purpose, format: b.format, pageIds: b.pageIds, title, sizes: PAGE_FORMAT_SIZES, link: { docId: row.id, rev: row.rev, dataHash } });
+    if (!r.ok) return error(r.error === "FORMAT_INVALID" ? "DS_FORMAT_INVALID" : r.error === "UNSUPPORTED" ? "DS_RESIZE_UNSUPPORTED" : "DS_VALIDATION");
+    const made = addDoc(r.doc as unknown as ReportDoc, clone(row.inputs), row.id);
+    const res: ResizeResponse = { id: made.id, title, pageCount: r.doc.pages.length, dropped: r.report.dropped.length, truncated: r.report.truncated.length, summarised: 0 };
+    return HttpResponse.json(res, { status: 201 });
+  }),
+  http.get("*/studio/docs/:id/source", ({ params }) => {
+    const row = loadDoc(params.id);
+    if (isResponse(row)) return row;
+    const link = row.doc.source;
+    if (!link) return HttpResponse.json({ source: null } satisfies LinkedSourceResponse);
+    const src = state.docs.get(link.docId);
+    const exists = !!src && !src.deleted;
+    const current = `sha256:mock-${resizeDataVersion}`;
+    const out: LinkedSource = {
+      docId: link.docId,
+      exists,
+      title: exists ? src.doc.meta.title : null,
+      rev: link.rev,
+      dataHash: link.dataHash,
+      currentRev: exists ? src.rev : null,
+      currentDataHash: exists ? current : null,
+      dataChanged: exists && current !== link.dataHash,
+    };
+    return HttpResponse.json({ source: out } satisfies LinkedSourceResponse);
   }),
 
   // DS-11 preview, jobs, versions, shares (and the public /s/:token)
