@@ -102,6 +102,7 @@ export function FinalForm({ docId, canFinal, compact, onStarted }: FinalFormProp
                     onChange={(e) => setAck((prev) => {
                       const next = new Set(prev);
                       if (e.target.checked) next.add(id);
+                      // data-loss-reviewed: removes an entry from an in-memory Set/Map, no record is deleted.
                       else next.delete(id);
                       return next;
                     })}

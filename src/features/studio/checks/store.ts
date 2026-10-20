@@ -32,6 +32,7 @@ export function setChecksState(docId: number, patch: Partial<ChecksState>): void
 
 const subscribe = (l: () => void) => {
   listeners.add(l);
+  // data-loss-reviewed: removes an entry from an in-memory Set/Map, no record is deleted.
   return () => listeners.delete(l);
 };
 

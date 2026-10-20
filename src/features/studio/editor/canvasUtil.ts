@@ -28,6 +28,7 @@ export const setSheetRoot = (pageId: string, root: ShadowRoot): void => {
   roots.set(pageId, root);
 };
 export const clearSheetRoot = (pageId: string, root: ShadowRoot): void => {
+  // data-loss-reviewed: removes an entry from an in-memory Set/Map, no record is deleted.
   if (roots.get(pageId) === root) roots.delete(pageId);
 };
 

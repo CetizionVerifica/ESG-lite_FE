@@ -18,7 +18,9 @@ export function SelectFromLink() {
       if (elId && page.kind === "freeform" && page.elements.some((e) => e.id === elId)) ed.select([elId], page.id);
     }
     const next = new URLSearchParams(params);
+    // data-loss-reviewed: removes a URL query parameter, no record is deleted.
     next.delete("page");
+    // data-loss-reviewed: removes a URL query parameter, no record is deleted.
     next.delete("el");
     setParams(next, { replace: true });
     // Once per link.

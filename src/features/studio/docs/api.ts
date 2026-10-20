@@ -59,6 +59,7 @@ export async function patchDoc(id: number, body: PatchDocBody, companyId: number
   return data;
 }
 export async function deleteDoc(id: number, companyId: number | null): Promise<void> {
+  // data-loss-reviewed: deletes a draft design; Studio home asks "Delete “title”?" in a Modal first; a final can't be deleted (server 409).
   await api.delete(`/studio/docs/${id}`, { params: withCompany(companyId) });
 }
 export async function duplicateDoc(id: number, title: string | undefined, companyId: number | null): Promise<{ id: number }> {

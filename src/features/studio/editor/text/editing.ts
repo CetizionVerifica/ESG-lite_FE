@@ -24,6 +24,7 @@ const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 const subscribe = (l: () => void) => {
   listeners.add(l);
+  // data-loss-reviewed: removes an entry from an in-memory Set/Map, no record is deleted.
   return () => listeners.delete(l);
 };
 

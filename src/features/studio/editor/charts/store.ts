@@ -34,6 +34,7 @@ export function setChartsUi(patch: Partial<ChartsUi>): void {
 }
 export const subscribeChartsUi = (l: () => void): (() => void) => {
   listeners.add(l);
+  // data-loss-reviewed: removes an entry from an in-memory Set/Map, no record is deleted.
   return () => listeners.delete(l);
 };
 export const useChartsUi = (): ChartsUi => useSyncExternalStore(subscribeChartsUi, chartsUi, chartsUi);

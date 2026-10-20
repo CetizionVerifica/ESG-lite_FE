@@ -61,6 +61,7 @@ export async function patchAsset(id: string, body: { folder?: string | null; alt
   return data;
 }
 export async function deleteAsset(id: string, companyId: number | null): Promise<void> {
+  // data-loss-reviewed: deletes an uploaded image; the Uploads drawer asks "Delete this image?" in a Modal first.
   await api.delete(`/studio/assets/${id}`, { params: params(companyId) });
 }
 export async function generateImage(prompt: string, folder: string | null, companyId: number | null): Promise<StudioAsset> {

@@ -55,6 +55,7 @@ export async function patchComment(id: number, body: { body?: string; resolved?:
   return data;
 }
 export async function deleteComment(id: number, companyId: number | null): Promise<void> {
+  // data-loss-reviewed: deletes one comment; the Comments panel asks "Delete this comment?" inline (Delete / Keep) first.
   await api.delete(`/studio/comments/${id}`, params(companyId));
 }
 export async function assignTask(id: number, assigneeId: number | null, companyId: number | null): Promise<ReportComment> {
@@ -78,6 +79,7 @@ export async function decideApproval(id: number, decision: ApprovalDecision, not
   return data;
 }
 export async function withdrawApproval(id: number, companyId: number | null): Promise<void> {
+  // data-loss-reviewed: withdraws a pending approval request; the approval bar asks "Withdraw the request?" inline (Withdraw / Keep) first.
   await api.delete(`/studio/approvals/${id}`, params(companyId));
 }
 export async function getDrift(docId: number, companyId: number | null): Promise<DriftResponse> {

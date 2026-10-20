@@ -19,7 +19,9 @@ export function ReviewLinks() {
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev);
+        // data-loss-reviewed: removes a URL query parameter, no record is deleted.
         next.delete("comment");
+        // data-loss-reviewed: removes a URL query parameter, no record is deleted.
         next.delete("approval");
         return next;
       },

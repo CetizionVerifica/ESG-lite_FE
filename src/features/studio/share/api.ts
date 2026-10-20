@@ -69,6 +69,7 @@ export async function createShare(docId: number, body: CreateShareBody, companyI
   return data;
 }
 export async function revokeShare(shareId: number, companyId: number | null): Promise<void> {
+  // data-loss-reviewed: turns off a share link (the stored PDF stays); the link dialog asks inline (Turn off / Keep) first.
   await api.delete(`/studio/shares/${shareId}`, { params: withCompany(companyId) });
 }
 

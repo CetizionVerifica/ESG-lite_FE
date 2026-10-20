@@ -159,6 +159,7 @@ export const shownCategories = (s: FlowSection): number[] => (s.options.categori
 /** Toggles a category; picking all 15 stores none (the default). */
 export function toggleCategory(s: FlowSection, n: number): number[] | undefined {
   const cur = new Set(shownCategories(s));
+  // data-loss-reviewed: removes an entry from an in-memory Set/Map, no record is deleted.
   if (cur.has(n)) cur.delete(n);
   else cur.add(n);
   const list = [...cur].sort((a, b) => a - b);

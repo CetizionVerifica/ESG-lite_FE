@@ -83,6 +83,7 @@ export async function ensureStudioFonts(ids: FontId[], fontSet: FontFaceSet | un
                 return true;
               })
               .catch(() => {
+                // data-loss-reviewed: removes an entry from an in-memory Set/Map, no record is deleted.
                 loaded.delete(key);
                 return false;
               });

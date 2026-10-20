@@ -911,6 +911,7 @@ export const studioHandlers = [
     const folder = new URL(request.url).searchParams.get("folder");
     return HttpResponse.json<StudioAsset[]>(state.assets.filter((a) => !folder || a.folder === folder));
   }),
+  // data-loss-reviewed: MSW test mock handler, no production data.
   http.delete("*/studio/assets/:id", ({ params }) => {
     const off = gate();
     if (off) return off;
@@ -1085,6 +1086,7 @@ export const studioHandlers = [
     row.updatedAt = new Date().toISOString();
     return HttpResponse.json<StudioDocResponse>(docResponse(row));
   }),
+  // data-loss-reviewed: MSW test mock handler, no production data.
   http.delete("*/studio/docs/:id", ({ params }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
@@ -1303,6 +1305,7 @@ export const studioHandlers = [
     if (isResponse(row)) return row;
     return HttpResponse.json<ReportShare[]>(state.shares.filter((s) => s.docId === row.id).reverse().map(publicShare));
   }),
+  // data-loss-reviewed: MSW test mock handler, no production data.
   http.delete("*/studio/shares/:id", ({ params }) => {
     const off = gate();
     if (off) return off;
@@ -1489,6 +1492,7 @@ export const studioHandlers = [
     }
     return HttpResponse.json(c);
   }),
+  // data-loss-reviewed: MSW test mock handler, no production data.
   http.delete("*/studio/comments/:id", ({ params }) => {
     const off = gate();
     if (off) return off;
@@ -1544,6 +1548,7 @@ export const studioHandlers = [
     if (row && a.state === "approved") a.rev = row.rev;
     return HttpResponse.json<ReportApproval>(a);
   }),
+  // data-loss-reviewed: MSW test mock handler, no production data.
   http.delete("*/studio/approvals/:id", ({ params }) => {
     const off = gate();
     if (off) return off;
@@ -1569,6 +1574,7 @@ export const studioHandlers = [
     if (b.brandControls !== undefined) state.brandKit.brandControls = b.brandControls;
     return HttpResponse.json<ReviewSettings>({ ...state.reviewSettings, brandControls: state.brandKit.brandControls });
   }),
+  // data-loss-reviewed: MSW test mock handler, no production data.
   http.delete("*/studio/templates/:id", ({ params }) => {
     const off = gate();
     if (off) return off;

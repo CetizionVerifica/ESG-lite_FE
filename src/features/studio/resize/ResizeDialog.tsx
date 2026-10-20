@@ -119,6 +119,7 @@ export function ResizeDialog({ open, onClose, docId, doc, data, brand, assets, a
 
   const toggleTarget = (id: TargetId) => {
     const next = new Set(targets);
+    // data-loss-reviewed: removes an entry from an in-memory Set/Map, no record is deleted.
     if (next.has(id)) next.delete(id);
     else {
       next.add(id);
@@ -129,6 +130,7 @@ export function ResizeDialog({ open, onClose, docId, doc, data, brand, assets, a
   };
   const toggleChapter = (id: string) => {
     const next = new Set(chapterOn);
+    // data-loss-reviewed: removes an entry from an in-memory Set/Map, no record is deleted.
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setChapterOn(next);
