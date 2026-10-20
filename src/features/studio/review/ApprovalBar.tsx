@@ -26,6 +26,8 @@ export function ApprovalBar() {
   const [changes, setChanges] = useState(false);
   const [note, setNote] = useState("");
   const [again, setAgain] = useState(false);
+  // Withdrawing an approval request asks first (inline Withdraw / Keep).
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const decide = useReviewMutation(ed.docId, (a: { id: number; decision: "approve" | "request_changes"; note: string | null }, cid) => decideApproval(a.id, a.decision, a.note, cid));
   const withdraw = useReviewMutation(ed.docId, (id: number, cid) => withdrawApproval(id, cid));
   const line = approvalLine(q.data);
@@ -50,9 +52,21 @@ export function ApprovalBar() {
         </>
       )}
       {a.state === "requested" && who === "requester" && (
-        <Button size="sm" variant="ghost" onClick={() => withdraw.mutate(a.id, { onError: fail })}>
-          Withdraw
-        </Button>
+        confirmWithdraw ? (
+          <span className="flex items-center gap-1">
+            <span className="text-xs">Withdraw the request?</span>
+            <Button size="sm" variant="danger" loading={withdraw.isPending} onClick={() => withdraw.mutate(a.id, { onError: fail, onSettled: () => setConfirmWithdraw(false) })}>
+              Withdraw
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmWithdraw(false)}>
+              Keep
+            </Button>
+          </span>
+        ) : (
+          <Button size="sm" variant="ghost" onClick={() => setConfirmWithdraw(true)}>
+            Withdraw
+          </Button>
+        )
       )}
       {(a.state === "changes_requested" || (a.state === "approved" && q.data?.stale)) && !ed.readOnly && (
         <Button size="sm" variant="secondary" onClick={() => setAgain(true)}>

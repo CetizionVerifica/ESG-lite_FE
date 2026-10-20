@@ -125,6 +125,23 @@ describe("Comments, mentions and tasks (DS-13)", () => {
     await waitFor(() => expect(studioMockComments()[0].resolvedAt).toBeNull());
   });
 
+  it("deleting a comment asks first; Keep leaves it, Delete removes it", async () => {
+    await openEditor();
+    const panel = await openPanel();
+    fireEvent.change(within(panel).getByRole("combobox", { name: "New comment" }), { target: { value: "Typo in the title" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Comment" }));
+    const thread = await within(panel).findByRole("article", { name: "Comment by Maya Manager" });
+    fireEvent.click(within(thread).getByRole("button", { name: "Delete comment" }));
+    expect(within(thread).getByText("Delete this comment?")).toBeTruthy();
+    expect(studioMockComments()).toHaveLength(1);
+    fireEvent.click(within(thread).getByRole("button", { name: "Keep" }));
+    expect(within(thread).queryByText("Delete this comment?")).toBeNull();
+    expect(studioMockComments()).toHaveLength(1);
+    fireEvent.click(within(thread).getByRole("button", { name: "Delete comment" }));
+    fireEvent.click(within(thread).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(studioMockComments().filter((c) => !(c as { deleted?: boolean }).deleted)).toHaveLength(0));
+  });
+
   it("a comment at a spot (C + click) shows as a pin that opens its thread", async () => {
     await openEditor();
     openReview(1, { pin: { pageId: "p-summary", elementId: "p-summary.body", x: 40, y: 60 } });

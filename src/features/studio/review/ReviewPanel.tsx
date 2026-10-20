@@ -174,6 +174,8 @@ function ThreadCard({ thread, people, focused, canDeleteAny }: { thread: Thread;
   const task = useReviewMutation(ed.docId, (a: { id: number; assigneeId: number | null }, cid) => assignTask(a.id, a.assigneeId, cid));
   const done = useReviewMutation(ed.docId, (a: { id: number; done: boolean }, cid) => setTaskDone(a.id, a.done, cid));
   const remove = useReviewMutation(ed.docId, (id: number, cid) => deleteComment(id, cid));
+  // Deleting a comment asks first (inline Delete / Keep), like Revoke on a share link.
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
   const goTo = () => {
     const page = ed.doc.pages.find((p) => p.id === root.pageId);
@@ -191,11 +193,22 @@ function ThreadCard({ thread, people, focused, canDeleteAny }: { thread: Thread;
           <span className="truncate text-xs font-semibold text-ink">{c.authorName}</span>
           <span className="text-[11px] text-muted">{timeAgo(c.createdAt)}</span>
           <div className="flex-1" />
-          {(c.authorId === me || canDeleteAny) && (
-            <button type="button" aria-label="Delete comment" onClick={() => remove.mutate(c.id, { onError: fail })} className={cn("rounded-chip p-0.5 text-muted hover:text-bad", focusRing)}>
-              <Trash2 aria-hidden className="size-3.5" />
-            </button>
-          )}
+          {(c.authorId === me || canDeleteAny) &&
+            (confirmDelete === c.id ? (
+              <span className="flex items-center gap-1 text-[11px]">
+                <span className="text-muted">Delete this comment?</span>
+                <button type="button" onClick={() => remove.mutate(c.id, { onError: fail, onSettled: () => setConfirmDelete(null) })} className={cn("rounded-chip px-1 font-semibold text-bad hover:bg-tint", focusRing)}>
+                  Delete
+                </button>
+                <button type="button" onClick={() => setConfirmDelete(null)} className={cn("rounded-chip px-1 text-muted hover:bg-tint", focusRing)}>
+                  Keep
+                </button>
+              </span>
+            ) : (
+              <button type="button" aria-label="Delete comment" onClick={() => setConfirmDelete(c.id)} className={cn("rounded-chip p-0.5 text-muted hover:text-bad", focusRing)}>
+                <Trash2 aria-hidden className="size-3.5" />
+              </button>
+            ))}
         </div>
         <Body c={c} />
         {c.taskAssigneeId !== null && (
