@@ -13,15 +13,20 @@ const viewport = { width: 1280, height: 800 };
 
 describe("layerPosition", () => {
   it("puts the panel under the trigger, aligned to its start", () => {
-    expect(layerPosition(rect(100, 50, 120, 32), { width: 320, height: 300 }, viewport, "start")).toEqual({ top: 86, left: 100 });
+    expect(layerPosition(rect(100, 50, 120, 32), { width: 320, height: 300 }, viewport, "start")).toMatchObject({ top: 86, left: 100 });
   });
 
   it("aligns to the trigger's end", () => {
-    expect(layerPosition(rect(900, 50, 120, 32), { width: 320, height: 300 }, viewport, "end")).toEqual({ top: 86, left: 700 });
+    expect(layerPosition(rect(900, 50, 120, 32), { width: 320, height: 300 }, viewport, "end")).toMatchObject({ top: 86, left: 700 });
   });
 
   it("keeps the panel on screen at the right edge", () => {
     expect(layerPosition(rect(1200, 50, 60, 32), { width: 320, height: 300 }, viewport, "start").left).toBe(1280 - 320 - 8);
+  });
+
+  it("caps a panel taller than the room below to that room, so it scrolls inside", () => {
+    // The page toolbar's Layout list: 1,200 px of layouts under a trigger at the top of a 900 px window.
+    expect(layerPosition(rect(300, 100, 80, 32), { width: 320, height: 1200 }, { width: 1440, height: 900 }, "start")).toEqual({ top: 136, left: 300, maxHeight: 900 - 8 - 136 });
   });
 
   it("opens above when there is no room below", () => {
