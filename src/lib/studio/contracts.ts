@@ -414,7 +414,7 @@ export const FRAME_MASKS = ["rect", "rounded", "circle", "arch", "blob"] as cons
 export type FrameMask = (typeof FRAME_MASKS)[number];
 
 export interface ElementPropsByType {
-  text: { doc: TextDoc; style: TextStyleId; align: "left" | "center" | "right" | "justify"; color?: string; valign?: "top" | "middle" | "bottom" };
+  text: { doc: TextDoc; style: TextStyleId; align: "left" | "center" | "right" | "justify"; color?: string; valign?: "top" | "middle" | "bottom" } & TextEditProps; // PRO-0
   kpi_tile: { binding: ValueBinding; label?: string; showDelta: boolean; showSparkline: boolean; variant: "plain" | "card" | "band" };
   chart: {
     binding: Binding;
@@ -439,14 +439,14 @@ export interface ElementPropsByType {
     /** DS-8: merged body cells (static tables only). */
     merges?: { r: number; c: number; rs: number; cs: number }[];
   };
-  image: { assetId: string; fit: "cover" | "contain"; alt: string; crop?: Crop; radius?: number; bleed?: boolean };
+  image: { assetId: string; fit: "cover" | "contain"; alt: string; crop?: Crop; radius?: number; bleed?: boolean } & ImageEditProps; // PRO-0
   shape: { shape: "rect" | "ellipse" | "line"; fill?: string; stroke?: string; strokeWidth?: number; radius?: number; opacity?: number; bleed?: boolean };
   icon: { name: string; color?: string };
   sdg: { goal: number; variant: "full" | "compact" };
   divider: { color?: string; strokeWidth?: number; style?: "solid" | "dashed" | "dotted" };
   page_number: { format?: "n" | "n_of_m"; align?: "left" | "center" | "right"; color?: string };
   placeholder: { accepts: ("text" | "image" | "chart" | "table" | "kpi_tile" | "frame" | "big_number")[]; hint?: string };
-  frame: { mask: FrameMask; assetId?: string; fit: "cover" | "contain"; alt: string; crop?: Crop; bleed?: boolean };
+  frame: { mask: FrameMask; assetId?: string; fit: "cover" | "contain"; alt: string; crop?: Crop; bleed?: boolean } & ImageEditProps; // PRO-0
   grid: { columns: number; gap: number; mask?: FrameMask; cells: { assetId?: string; alt: string; crop?: Crop }[] };
   line: { x1: number; y1: number; x2: number; y2: number; stroke?: string; strokeWidth: number; dash: "solid" | "dashed" | "dotted"; startArrow?: boolean; endArrow?: boolean };
   big_number: { binding: ValueBinding; measure?: Measure; format?: NumberFormat; label?: string; showDelta: boolean };
@@ -640,6 +640,8 @@ export interface BrandKit {
   /** company.brand_controls (DS-13): pickers show brand palettes and the brand font pair only. */
   brandControls: boolean;
   updatedAt: string | null;
+  /** PRO-0 (PE-2): uploaded brand fonts (GET /brand-kit/fonts has the same list); absent until PE-2 fills it. */
+  customFonts?: BrandFont[];
 }
 /** PUT /brand-kit (Manager): each part optional; `palettes` replaces the list (order = sort; `id` keeps a palette). */
 export interface BrandKitUpdate {
@@ -726,6 +728,8 @@ export interface StudioAsset extends AssetRef {
   sha256?: string;
   /** DS-4 */
   createdAt?: string;
+  /** PRO-0 (PE-1): set on a derived asset (background removed); the source asset is kept. */
+  derivedFrom?: { assetId: string; op: "remove_background" } | null;
 }
 /** DS-4: uploads are JPG, PNG, WebP or SVG, up to 10 MB. */
 export const ASSET_MAX_BYTES = 10 * 1024 * 1024;
@@ -1097,6 +1101,13 @@ export const DS_ERROR_STATUS = {
   DS_AI_OUTPUT_INVALID: 502,
   DS_VALIDATION: 400,
   DS_COMPANY_REQUIRED: 400,
+  // PRO-0 (ESG-lite docs/design-studio/pro/)
+  DS_NOT_BUILT: 501,
+  DS_BG_UNAVAILABLE: 503,
+  DS_FONT_TYPE: 415,
+  DS_FONT_TOO_LARGE: 413,
+  DS_FONT_LICENCE: 422,
+  DS_FONT_EXISTS: 409,
 } as const;
 export type DsErrorCode = keyof typeof DS_ERROR_STATUS;
 export const DS_ERROR_CODES = Object.keys(DS_ERROR_STATUS) as DsErrorCode[];
@@ -1311,6 +1322,8 @@ export interface Suggestion {
     pages?: FreeformPage[];
     findings?: { message: string; pageId?: string; elementId?: string; severity: CheckSeverity }[];
     assetId?: string;
+    /** PRO-0 (AT-2): `suggest_layouts` describes payload.pages[i] in layoutOptions[i]. */
+    layoutOptions?: LayoutOptionMeta[];
   };
   sources: SuggestionSource[];
 }
@@ -1530,3 +1543,278 @@ export const STUDIO_ROUTE_IDS = [
   "studio-versions",
 ] as const;
 export type StudioRouteId = (typeof STUDIO_ROUTE_IDS)[number];
+
+// ---------------------------------------------------------------------------
+// PRO-0 · Pro editing and AI templates (ESG-lite src/studio/contracts/proProps.ts and pro.ts;
+// plan: ESG-lite docs/design-studio/pro/). AT-1, AT-2, PE-1 and PE-2 build on these.
+// ---------------------------------------------------------------------------
+
+// PE-1 element props (image and frame). Slider units, not CSS: the shared renderer maps them.
+export const IMAGE_FILTERS = ["none", "vivid", "mono", "warm", "cool", "fade"] as const;
+export type ImageFilter = (typeof IMAGE_FILTERS)[number];
+export const IMAGE_ADJUST_KEYS = ["brightness", "contrast", "saturation", "warmth", "blur"] as const;
+export type ImageAdjustKey = (typeof IMAGE_ADJUST_KEYS)[number];
+/** All but blur -100..100 (0 = unchanged); blur 0..100. Integers. */
+export const IMAGE_ADJUST_RANGE: Record<ImageAdjustKey, readonly [number, number]> = {
+  brightness: [-100, 100],
+  contrast: [-100, 100],
+  saturation: [-100, 100],
+  warmth: [-100, 100],
+  blur: [0, 100],
+};
+/** Each key optional, 0 when absent. */
+export type ImageAdjust = Partial<Record<ImageAdjustKey, number>>;
+export interface Duotone {
+  dark: string;
+  light: string;
+}
+/**
+ * Added to image and frame props. `originalAssetId` is set when `assetId` is a
+ * derived asset (background removed); "Restore original" moves it back.
+ * Transparency is the element's own `opacity` (0..1): show it as 0..100 %.
+ */
+export interface ImageEditProps {
+  adjust?: ImageAdjust;
+  filter?: ImageFilter;
+  duotone?: Duotone | null;
+  originalAssetId?: string;
+}
+
+// PE-2 element props (text).
+export const TEXT_EFFECTS = ["shadow", "lift", "outline", "highlight", "curve"] as const;
+export type TextEffectKind = (typeof TEXT_EFFECTS)[number];
+/** Slider units (integers). Shadow and lift exclude each other. curve.radius -100..100 (0 straight, > 0 up). */
+export interface TextEffects {
+  shadow?: { blur: number; offsetX: number; offsetY: number; colour: string; opacity: number };
+  lift?: { intensity: number };
+  outline?: { width: number; colour: string };
+  highlight?: { colour: string; radius: number };
+  curve?: { radius: number };
+}
+export const CUSTOM_FONT_PREFIX = "custom:";
+/** A bundled font or an uploaded brand font (`custom:<BrandFont.id>`). */
+export type FontRef = FontId | `custom:${number}`;
+export const isCustomFontRef = (v: unknown): v is `custom:${number}` => typeof v === "string" && /^custom:[1-9][0-9]{0,9}$/.test(v);
+export interface TextEditProps {
+  effects?: TextEffects;
+  /** Overrides the text style's font for this box; a deleted custom font falls back to the style's font. */
+  font?: FontRef;
+}
+
+// AT-1 · POST /studio/templates/suggest
+export const BRIEF_PURPOSES = ["sustainability_report", "ghg_inventory", "board_brief", "site_fact_sheet"] as const;
+export type BriefPurpose = (typeof BRIEF_PURPOSES)[number];
+export const BRIEF_AUDIENCES = ["verifier", "board", "investors", "public"] as const;
+export type BriefAudience = (typeof BRIEF_AUDIENCES)[number];
+export const BRIEF_LENGTHS = ["short", "medium", "long"] as const;
+export type BriefLength = (typeof BRIEF_LENGTHS)[number];
+export const BRIEF_LENGTH_PAGES: Record<BriefLength, number> = { short: 2, medium: 20, long: 40 };
+export const BRIEF_TONES = ["formal", "plain", "engaging"] as const;
+export type BriefTone = (typeof BRIEF_TONES)[number];
+export const BRIEF_NOTE_MAX = 500;
+export const TEMPLATE_SHORTLIST_MAX = 3;
+export interface TemplateBrief {
+  purpose: BriefPurpose;
+  frameworks: FrameworkCode[];
+  audience: BriefAudience;
+  length: BriefLength;
+  tone?: BriefTone;
+  /** Untrusted free text, fenced for the model; never stored. */
+  note?: string;
+}
+export interface TemplateSuggestBody {
+  kind: ReportKind;
+  brief: TemplateBrief;
+  year: number;
+  yearType?: YearType;
+  sites?: Sites;
+  format?: PageFormat;
+}
+export const READINESS_BADGE_KEYS = ["scope12_months", "scope3_categories", "kpi_coverage", "targets", "base_year"] as const;
+export type ReadinessBadgeKey = (typeof READINESS_BADGE_KEYS)[number];
+export const READINESS_LEVELS = ["ready", "partial", "low"] as const;
+export type ReadinessLevel = (typeof READINESS_LEVELS)[number];
+/** Counts only, never a figure. `label` is written by the server. */
+export interface ReadinessBadge {
+  key: ReadinessBadgeKey;
+  label: string;
+  have: number;
+  of: number;
+  status: "ok" | "partial" | "missing";
+  notReportedPages: number;
+  framework?: string;
+}
+export interface TemplateReadiness {
+  score: number;
+  level: ReadinessLevel;
+  badges: ReadinessBadge[];
+  notReportedPages: number;
+}
+export interface TemplateSuggestion {
+  templateId: number;
+  rank: number;
+  template: ReportTemplate;
+  readiness: TemplateReadiness;
+  /** 2–3 AI reasons; [] when aiUsed is false. */
+  reasons: string[];
+  /** Page ids of the template's doc. */
+  pagesToDrop: string[];
+  /** Layout slugs of the same family. */
+  pagesToAdd: string[];
+}
+export interface TemplateSuggestResponse {
+  shortlist: TemplateSuggestion[];
+  aiUsed: boolean;
+  model: string | null;
+  considered: number;
+}
+
+// AT-2 · suggest_layouts (DS-9 POST /docs/:id/ai) and template swap
+export const LAYOUT_OPTIONS_PER_PAGE = 3;
+export const LAYOUT_OPTION_IDS = ["A", "B", "C"] as const;
+export type LayoutOptionId = (typeof LAYOUT_OPTION_IDS)[number];
+/**
+ * `suggest_layouts` answers a Suggestion of kind 'pages': payload.pages are the 3 options
+ * (the target page's id), payload.layoutOptions[i] describes pages[i]. Every bound element
+ * and chip of the page is in every option with identical props; only frame/z change.
+ * Apply = replace the page as one undo step.
+ */
+export interface LayoutOptionMeta {
+  id: LayoutOptionId;
+  name: string;
+  layoutSlug: string;
+  reason: string;
+  placedElementIds: string[];
+}
+export interface TemplateSwapBody {
+  templateId: number;
+  rev: number;
+}
+export interface TemplateSwapApplyBody extends TemplateSwapBody {
+  previewHash: string;
+}
+export const SWAP_PAGE_STATUSES = ["mapped", "kept", "added"] as const;
+export type SwapPageStatus = (typeof SWAP_PAGE_STATUSES)[number];
+export interface SwapPageMapping {
+  pageId: string;
+  fromLayoutId: string | null;
+  toLayoutId: string | null;
+  status: SwapPageStatus;
+}
+export interface SwapUnplaced {
+  pageId: string;
+  elementId: string;
+  reason: "no_slot" | "locked";
+}
+/** POST /docs/:id/template-swap/preview (nothing saved). /apply answers StudioDocResponse. */
+export interface TemplateSwapPreview {
+  fromTemplateId: string;
+  templateId: number;
+  rev: number;
+  doc: ReportDoc;
+  pages: SwapPageMapping[];
+  unplaced: SwapUnplaced[];
+  previewHash: string;
+}
+
+// PE-1 · background remover (server job)
+export const IMAGE_JOB_KINDS = ["remove_background"] as const;
+export type ImageJobKind = (typeof IMAGE_JOB_KINDS)[number];
+export const BG_INPUT_MIMES = ["image/jpeg", "image/png", "image/webp"] as const;
+/** POST /assets/:id/remove-background (202) and GET /image-jobs/:id. */
+export interface ImageJob {
+  id: number;
+  kind: ImageJobKind;
+  assetId: string;
+  status: JobStatus;
+  resultAssetId: string | null;
+  errorCode: DsErrorCode | null;
+  errorReason: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+// PE-2 · custom brand fonts (Manager writes) and find and replace (FE-only doc op)
+export const FONT_FILE_FORMATS = ["woff2", "ttf", "otf"] as const;
+export type FontFileFormat = (typeof FONT_FILE_FORMATS)[number];
+export const FONT_MAX_BYTES = 5 * 1024 * 1024;
+export const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const;
+export const FONT_STYLES = ["normal", "italic"] as const;
+export type FontStyle = (typeof FONT_STYLES)[number];
+export const FONT_FAMILY_MAX = 60;
+export const BRAND_FONTS_MAX = 20;
+/** Multipart fields of POST /brand-kit/fonts next to `file` (one file per request). */
+export interface FontUploadFields {
+  family: string;
+  weight?: number;
+  style?: FontStyle;
+  /** Must be true ("We hold a licence that allows embedding this font in PDFs"), else DS_FONT_LICENCE. */
+  licenceConfirmed: boolean;
+}
+export interface BrandFontFile {
+  assetId: string;
+  weight: number;
+  style: FontStyle;
+  format: FontFileFormat;
+  bytes: number;
+  /** GET /studio/brand-kit/fonts/:id/files/:assetId */
+  url: string;
+}
+export interface BrandFont {
+  id: number;
+  /** `custom:<id>` */
+  ref: string;
+  family: string;
+  weights: number[];
+  styles: FontStyle[];
+  assetIds: string[];
+  files: BrandFontFile[];
+  licenceConfirmedBy: number;
+  licenceConfirmedAt: string;
+  createdAt: string;
+}
+export interface BrandFontsResponse {
+  fonts: BrandFont[];
+  canEdit: boolean;
+}
+
+/**
+ * Find and replace (PE-2): a pure doc op, no endpoint. Searches text and callout
+ * boxes and flow-section text. Data chips, locked/templateLocked elements and
+ * hidden pages are never changed (they may be listed as skipped). Applied as
+ * one undo step ("Replace all: n").
+ */
+export interface FindQuery {
+  find: string;
+  matchCase: boolean;
+  wholeWords: boolean;
+  scope: "doc" | "page";
+  /** With scope 'page'. */
+  pageId?: string;
+}
+export interface FindMatch {
+  /** Stable within one search: `${pageId}:${elementId|'flow'}:${n}`. */
+  id: string;
+  pageId: string;
+  /** null for a flow section's text. */
+  elementId: string | null;
+  /** Path of the TipTap text node from the TextDoc root (child indexes). */
+  path: number[];
+  from: number;
+  to: number;
+  /** A short excerpt around the match, for the list. */
+  excerpt: string;
+}
+export interface FindReplaceOp {
+  type: "find_replace";
+  query: FindQuery;
+  replace: string;
+  /** Replace only these matches (FindMatch.id); absent = all. */
+  matchIds?: string[];
+}
+export interface FindResult {
+  matches: FindMatch[];
+  /** Matches inside locked boxes or hidden pages (never replaced). */
+  skipped: number;
+}
+// end PRO-0
