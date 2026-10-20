@@ -547,13 +547,53 @@ export interface SustainabilityReadiness {
 }
 export type Readiness = GhgReadiness | SustainabilityReadiness;
 
-/** GET/PUT /brand-kit (mock shape; DS-3 confirms). */
+// DS-3 · brand kit (confirmed; ESG-lite src/studio/contracts/brandkit.ts)
+export const BRAND_VOICE_MAX = 3000;
+export const PALETTE_MAX_COLORS = 10;
+export const PALETTES_MAX = 20;
+export const PALETTE_NAME_MAX = 60;
+/** WCAG thresholds of the theme engine (src/theme/buildTheme.ts AA_TEXT, AA_UI). */
+export const AA_TEXT_RATIO = 4.5;
+export const AA_UI_RATIO = 3;
+
+/** One colour pair of a palette: WCAG ratio, ≥ 4.5 text, ≥ 3 graphic. */
+export interface PaletteContrast {
+  a: string;
+  b: string;
+  ratio: number;
+  text: boolean;
+  graphic: boolean;
+}
+export interface BrandPalette {
+  id: number;
+  name: string;
+  colors: string[];
+  sort: number;
+  /** Every pair of the palette's colours. */
+  contrast: PaletteContrast[];
+}
+/** GET /brand-kit, and the answer to PUT. Logos and brand colours come from `brand` (Superadmin edits them in /brands). */
 export interface BrandKit {
+  name: string;
+  logos: { primary: string | null; onDark: string | null };
+  colors: { primary: string; accent: string; coverFrom: string; coverTo: string };
+  defaultLook: Look;
   fonts: { heading: FontId | null; body: FontId | null };
   voice: string;
-  palettes: { id: number; name: string; colors: string[]; sort: number }[];
-  logos: { primary: string | null; mark: string | null };
+  palettes: BrandPalette[];
+  /** Manager or Superadmin. */
+  canEdit: boolean;
+  /** company.brand_controls (DS-13): pickers show brand palettes and the brand font pair only. */
+  brandControls: boolean;
+  updatedAt: string | null;
 }
+/** PUT /brand-kit (Manager): each part optional; `palettes` replaces the list (order = sort; `id` keeps a palette). */
+export interface BrandKitUpdate {
+  fonts?: { heading: FontId | null; body: FontId | null };
+  voice?: string;
+  palettes?: { id?: number; name: string; colors: string[] }[];
+}
+// end DS-3
 
 /** GET /templates (mock shape; DS-4 confirms). */
 export interface ReportTemplate {
