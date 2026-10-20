@@ -29,6 +29,7 @@ import { boundsOf, dominantAxis, round, type AlignEdge } from "../../../lib/stud
 import { Button, NumberField, Tabs, Toggle, cn, focusRing } from "../../../ui";
 import { layerName } from "./actions";
 import { useEditor } from "./EditorContext";
+import { TemplateUnlock } from "../review/TemplateUnlock"; // DS-13
 
 export function PositionPanel() {
   const ed = useEditor();
@@ -190,6 +191,7 @@ function Layers() {
                   onClick={() => ed.commit(setHidden(ed.doc, page.id, [el.id], !el.hidden), el.hidden ? "Show" : "Hide")}
                   icon={el.hidden ? <EyeOff aria-hidden className="size-4" /> : <Eye aria-hidden className="size-4" />}
                 />
+                <TemplateUnlock el={el} pageId={page.id} /> {/* DS-13: unlock a template element (role and brand controls) */}
                 <IconButton
                   label={el.locked ? `Unlock ${layerName(el)}` : `Lock ${layerName(el)}`}
                   pressed={!!el.locked}

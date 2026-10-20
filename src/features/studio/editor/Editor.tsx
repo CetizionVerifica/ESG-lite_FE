@@ -21,6 +21,10 @@ import { useRenderInputs } from "./renderInputs";
 import { commandFor, isTypingTarget, runCommand, SHORTCUT_HELP, type Command } from "./shortcuts";
 import { DrawerHost, SideRail } from "./SideRail";
 import { ChecksPanelHost } from "../checks/ChecksPanel"; // DS-12
+import { ReviewPanelHost } from "../review/ReviewPanel"; // DS-13
+import { ApprovalBar } from "../review/ApprovalBar"; // DS-13
+import { DriftBanner } from "../review/DriftBanner"; // DS-13
+import { ReviewLinks } from "../review/ReviewLinks"; // DS-13
 import { STUDIO_REV_EVENT } from "../panels/data/api"; // DS-12
 import { StatusBar } from "./StatusBar";
 import { TopBar, type SaveState } from "./TopBar";
@@ -102,6 +106,9 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
     <EditorContext.Provider value={ed}>
       <div data-testid="studio-editor" className="flex h-[calc(100vh-4rem)] min-h-[560px] flex-col overflow-hidden rounded-card border border-line bg-page text-ink">
         <TopBar save={save.state} status={initial.status} onHelp={() => setHelp(true)} />
+        <ApprovalBar /> {/* DS-13: approval requested / approved / changes requested */}
+        <DriftBanner /> {/* DS-13: texts written before the data changed */}
+        <ReviewLinks /> {/* DS-13: ?comment= and ?approval= from a notification */}
         {width < EDIT_MIN_WIDTH && (
           <Callout tone="info" className="m-2">
             Editing needs a screen at least 1,280 px wide. You can view the pages, comment and download here.
@@ -111,6 +118,7 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
           <SideRail />
           <DrawerHost />
           <ChecksPanelHost /> {/* DS-12: the checks panel */}
+          <ReviewPanelHost /> {/* DS-13: comments, tasks, data changes */}
           <section className="flex min-w-0 flex-1 flex-col" aria-label="Pages">
             {state.ui.view === "grid" ? (
               <GridView />

@@ -1,9 +1,10 @@
 // DS-6 · the editor top bar (48 px, 05-ux): ← Designs, File ▾ (view toggles,
 // shortcuts), Resize, undo/redo, the title and save state, comments, Present,
 // Share ▾ and Download ▾ (DS-11), Resize and the "Made from" chip (DS-10). Checks (DS-12) and version
-// history (DS-13) plug in here when they land; until then they say so.
-import { Link } from "react-router-dom";
-import { ChevronLeft, MessageSquare, Play, Redo2, Undo2 } from "lucide-react";
+// history, Comments and save as template (DS-13) plug in here.
+import { useState } from "react"; // DS-13
+import { Link, useNavigate } from "react-router-dom";
+import { ChevronLeft, Play, Redo2, Undo2 } from "lucide-react";
 import { Menu, cn, focusRing } from "../../../ui";
 import { useEditor } from "./EditorContext";
 import { TbButton } from "./toolbars";
@@ -14,6 +15,8 @@ import { useCanManage } from "../share/useCanManage"; // DS-11
 import { ResizeButton } from "../resize/ResizeButton"; // DS-10
 import { LinkedSourceChip } from "../resize/LinkedSourceChip"; // DS-10
 import { ChecksButton } from "../checks/ChecksButton"; // DS-12
+import { CommentsButton } from "../review/CommentsButton"; // DS-13
+import { SaveTemplateDialog, type SaveAs } from "../review/SaveTemplateDialog"; // DS-13
 
 export type SaveState = "saved" | "unsaved" | "saving" | "error" | "conflict";
 
@@ -30,6 +33,8 @@ export function TopBar({ save, status, onHelp }: { save: SaveState; status: stri
   const { ui, readOnly } = ed;
   const show = ui.show;
   const canManage = useCanManage(); // DS-11
+  const navigate = useNavigate(); // DS-13
+  const [saveAs, setSaveAs] = useState<SaveAs | null>(null); // DS-13
   const statusWord = status === "final" ? "Final" : status === "in_review" ? "In review" : status === "approved" ? "Approved" : "Draft";
   return (
     // DS-10: buttons keep one line (the title and the "Made from" chip shrink instead).
@@ -53,7 +58,10 @@ export function TopBar({ save, status, onHelp }: { save: SaveState; status: stri
           { label: "Page strip  ⌥⌘2", checked: ui.view === "strip", onSelect: () => ed.setView("strip") },
           { label: "Grid view  ⌥⌘3", checked: ui.view === "grid", onSelect: () => ed.setView("grid") },
           { kind: "separator" },
-          { label: "Version history (coming with review)", disabled: true, onSelect: () => undefined },
+          // DS-13: version history, save as template or layout.
+          { label: "Version history", onSelect: () => navigate(`/studio/${ed.docId}/versions`) },
+          { label: "Save as template…", onSelect: () => setSaveAs("template") },
+          { label: "Save this page as a layout…", disabled: !ed.page, onSelect: () => setSaveAs("layout") },
           { label: "Keyboard shortcuts  ⌘/", onSelect: onHelp },
         ]}
       />
@@ -68,15 +76,14 @@ export function TopBar({ save, status, onHelp }: { save: SaveState; status: stri
       </span>
       <div className="flex-1" />
       <ChecksButton /> {/* DS-12: ⚑ n checks */}
-      <TbButton active={ui.commentMode} onClick={() => ed.setCommentMode(!ui.commentMode)} icon={<MessageSquare aria-hidden className="size-4" />} title="Comment (C)">
-        Comment
-      </TbButton>
+      <CommentsButton /> {/* DS-13: Comments n (C + click still drops a pin) */}
       <Link to={`/studio/${ed.docId}/present`} className={cn("inline-flex h-8 items-center gap-1.5 rounded-control border border-line px-2.5 text-[13px] font-medium text-ink hover:bg-tint", focusRing)}>
         <Play aria-hidden className="size-4" /> Present
       </Link>
       <ShareMenu docId={ed.docId} canShare={canManage} /> {/* DS-11 */}
       <DownloadMenu docId={ed.docId} canFinal={canManage} pageCount={ed.doc.pages.length} pageViewHref={`/studio/${ed.docId}/preview`} /> {/* DS-11 */}
       <SelectFromLink /> {/* DS-11: Page view → editor selection */}
+      <SaveTemplateDialog mode={saveAs} onClose={() => setSaveAs(null)} /> {/* DS-13 */}
     </header>
   );
 }
