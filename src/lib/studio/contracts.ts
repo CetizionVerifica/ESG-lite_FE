@@ -422,9 +422,23 @@ export interface ElementPropsByType {
     title?: string;
     subtitle?: string;
     caption?: string;
-    options: Partial<Record<"greyPrior" | "showValues" | "horizontal" | "stacked" | "showTarget", boolean>>;
+    options: Partial<Record<"greyPrior" | "showValues" | "horizontal" | "stacked" | "showTarget" | "showLegend" | "basisNote", boolean>> & {
+      // DS-8: scope colours (default) or the brand series; scope_split as a 100 % bar or a donut.
+      colors?: "scope" | "brand";
+      variant?: "bar" | "donut";
+    };
   };
-  table: { binding?: Binding; columns?: string[]; rows?: (string | number | null)[][]; style: "lined" | "zebra" | "minimal"; totalRow?: boolean };
+  table: {
+    binding?: Binding;
+    columns?: string[];
+    rows?: (string | number | null)[][];
+    style: "lined" | "zebra" | "minimal";
+    totalRow?: boolean;
+    /** DS-8: column widths in % of the frame. */
+    colWidths?: number[];
+    /** DS-8: merged body cells (static tables only). */
+    merges?: { r: number; c: number; rs: number; cs: number }[];
+  };
   image: { assetId: string; fit: "cover" | "contain"; alt: string; crop?: Crop; radius?: number; bleed?: boolean };
   shape: { shape: "rect" | "ellipse" | "line"; fill?: string; stroke?: string; strokeWidth?: number; radius?: number; opacity?: number; bleed?: boolean };
   icon: { name: string; color?: string };
@@ -749,6 +763,8 @@ export interface ResolvedBinding {
   compare?: { against: "prior" | "base" | "target"; year: number | null; value: number | null; change_abs: number | null; change_pct: number | null; reason?: string };
   target?: { baseline_year: number; baseline_value: number; target_year: number; target_value: number; progress_pct: number | null; status: string };
   total?: number | null;
+  /** DS-8: month or quarter breakdowns, one series per scope of the current year (monthly_stack). */
+  stacks?: { label: string; values: { key: string; value: number | null }[] }[];
   unavailable?: { reason: UnavailableReason; detail?: string };
 }
 export interface ResolveResponse {
