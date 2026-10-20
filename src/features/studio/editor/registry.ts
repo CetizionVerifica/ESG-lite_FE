@@ -8,7 +8,7 @@
 // Registration order doesn't matter: a `fallback` registration (the shell's
 // own placeholders) never replaces a real one.
 import type { ComponentType } from "react";
-import type { Element, ElementType, ReportDoc } from "../../../lib/studio/contracts";
+import type { Element, ElementType, FreeformPage, ReportDoc } from "../../../lib/studio/contracts";
 import type { StudioPanelProps } from "../panels/types";
 import type { EditorApi } from "./EditorContext";
 import type { DrawerId } from "./state";
@@ -108,6 +108,37 @@ export const registryVersion = (): number => version;
 export function resetRegistry(): void {
   drawers.clear();
   toolbars.clear();
+  overlays.clear(); // DS-7
+  elementEditors.clear(); // DS-7
   commentHandler = null;
   changed();
 }
+
+// ---------------------------------------------------------------------------
+// DS-7: in-place editors and page overlays
+// ---------------------------------------------------------------------------
+
+/** What a page overlay gets: drawn inside the page's SelectionLayer, in page px (mm × zoom × PX_PER_MM). */
+export interface PageOverlayProps {
+  page: FreeformPage;
+  zoom: number;
+  wMm: number;
+  hMm: number;
+  safeMm: number;
+}
+const overlays = new Map<string, ComponentType<PageOverlayProps>>();
+/** Adds a layer above every free-form page (DS-7: the text editor, overflow tags). One per id. */
+export function registerPageOverlay(id: string, component: ComponentType<PageOverlayProps>): void {
+  overlays.set(id, component);
+  changed();
+}
+export const getPageOverlays = (): [string, ComponentType<PageOverlayProps>][] => [...overlays];
+
+type ElementEditor = (target: { pageId: string; elementId: string }, editor: EditorApi) => void;
+const elementEditors = new Map<string, ElementEditor>();
+/** Double-click on an element of this type opens its in-place editor (DS-7: text, callout). */
+export function registerElementEditor(type: ElementType, fn: ElementEditor): void {
+  elementEditors.set(type, fn);
+  changed();
+}
+export const getElementEditor = (type: string): ElementEditor | null => elementEditors.get(type) ?? null;

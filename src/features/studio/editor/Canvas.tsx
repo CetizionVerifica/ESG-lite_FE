@@ -149,7 +149,12 @@ function PageSlot({ page, index, live }: { page: Page; index: number; live: bool
       <div
         className={cn("relative bg-panel shadow-md", active && "ring-2 ring-brand/40", page.hidden && "opacity-60")}
         style={{ width: mmToPx(spec.wMm, zoom), height: mmToPx(spec.hMm, zoom) }}
-        onPointerDownCapture={() => !active && page.kind === "flow" && ed.setPage(page.id)}
+        onPointerDownCapture={() => {
+          if (page.kind !== "flow") return;
+          if (!active) ed.setPage(page.id);
+          // DS-7: a flow section's settings and text are in the Text drawer.
+          if (ed.ui.drawer !== "text" && !readOnly) ed.openDrawer("text");
+        }}
       >
         {live ? (
           <Sheet page={page} doc={doc} wMm={spec.wMm} hMm={spec.hMm} zoom={zoom} data={ed.render.data} assets={ed.render.assets} brand={ed.render.brand} />

@@ -359,8 +359,15 @@ export interface DataToken {
 // ---------------------------------------------------------------------------
 
 export const TEXT_NODE_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "listItem", "hardBreak", "text"] as const;
-export const TEXT_MARK_TYPES = ["bold", "italic", "link", "highlight"] as const;
-export type TextMark = { type: "bold" } | { type: "italic" } | { type: "highlight"; attrs?: { color?: string } } | { type: "link"; attrs: { href: string } };
+export const TEXT_MARK_TYPES = ["bold", "italic", "link", "highlight", "footnote"] as const; // footnote: DS-7
+/** DS-7: a footnote's text (factor sources, methodology notes). */
+export const MAX_FOOTNOTE_CHARS = 500;
+export type TextMark =
+  | { type: "bold" }
+  | { type: "italic" }
+  | { type: "highlight"; attrs?: { color?: string } }
+  | { type: "link"; attrs: { href: string } }
+  | { type: "footnote"; attrs: { note: string } };
 export interface TextNode {
   type: (typeof TEXT_NODE_TYPES)[number];
   attrs?: Record<string, unknown>;
@@ -736,6 +743,8 @@ export interface ResolvedBinding {
   series?: { label: string; values: { key: string; value: number | null }[] }[];
   approvedAt?: string | null;
   evidenceCount?: number;
+  /** DS-7 (GHG): approved emission entries behind the figure (chip hover card). */
+  approvedEntries?: number;
   complete?: boolean;
   compare?: { against: "prior" | "base" | "target"; year: number | null; value: number | null; change_abs: number | null; change_pct: number | null; reason?: string };
   target?: { baseline_year: number; baseline_value: number; target_year: number; target_value: number; progress_pct: number | null; status: string };

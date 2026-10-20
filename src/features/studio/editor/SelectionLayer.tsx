@@ -29,7 +29,7 @@ import { guideAt, neighbourBoxes, snapMove, snapResize, snapTargets, thresholdFo
 import { cn } from "../../../ui";
 import { useEditor } from "./EditorContext";
 import { DND_ASSET, hasStudioPayload, imageFromAsset, readAsset, readElement } from "./dnd";
-import { getCommentHandler } from "./registry";
+import { getCommentHandler, getElementEditor, getPageOverlays } from "./registry";
 import { bindingOf, linkMarkText } from "./renderInputs";
 import { hitElements, liveFrame, scaleOf } from "./canvasUtil";
 
@@ -330,6 +330,13 @@ export function SelectionLayer({ page, wMm, hMm, safeMm, bleedMm, zoom }: Select
       return;
     }
     if (readOnly || hit.locked) return;
+    // DS-7: text and callouts open their in-place editor.
+    const edit = getElementEditor(hit.type);
+    if (edit) {
+      ed.select([hit.id], page.id);
+      edit({ pageId: page.id, elementId: hit.id }, ed);
+      return;
+    }
     if (hit.type === "frame" || hit.type === "image") {
       if (hit.props.assetId) ed.startCrop({ pageId: page.id, elementId: hit.id });
       return;
@@ -507,6 +514,10 @@ export function SelectionLayer({ page, wMm, hMm, safeMm, bleedMm, zoom }: Select
         />
       ))}
       {marquee && <div aria-hidden className="pointer-events-none border border-brand bg-brand/10" style={box(marquee)} />}
+      {/* DS-7: registered page overlays (in-place text editor, overflow tags). */}
+      {getPageOverlays().map(([id, Overlay]) => (
+        <Overlay key={id} page={page} zoom={zoom} wMm={wMm} hMm={hMm} safeMm={safeMm} />
+      ))}
       {pins.map((p, i) => (
         <span key={i} className="pointer-events-none absolute -translate-x-1/2 -translate-y-full text-brand" style={{ left: p.x * k, top: p.y * k }} data-testid="comment-pin">
           <MessageSquare aria-hidden className="size-5 fill-panel" />
