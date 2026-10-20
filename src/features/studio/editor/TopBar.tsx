@@ -11,6 +11,7 @@ import { DownloadMenu } from "../share/DownloadMenu"; // DS-11
 import { ShareMenu } from "../share/ShareMenu"; // DS-11
 import { SelectFromLink } from "../share/SelectFromLink"; // DS-11
 import { useCanManage } from "../share/useCanManage"; // DS-11
+import { ChecksButton } from "../checks/ChecksButton"; // DS-12
 
 export type SaveState = "saved" | "unsaved" | "saving" | "error" | "conflict";
 
@@ -66,6 +67,7 @@ export function TopBar({ save, status, onHelp }: { save: SaveState; status: stri
         {statusWord} · {readOnly ? "View only" : SAVE_TEXT[save]}
       </span>
       <div className="flex-1" />
+      <ChecksButton /> {/* DS-12: ⚑ n checks */}
       <TbButton active={ui.commentMode} onClick={() => ed.setCommentMode(!ui.commentMode)} icon={<MessageSquare aria-hidden className="size-4" />} title="Comment (C)">
         Comment
       </TbButton>

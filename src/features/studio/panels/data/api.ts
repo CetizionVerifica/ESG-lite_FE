@@ -54,6 +54,9 @@ export function useResolve(body: (ResolveRequest & { docId?: number; inputs?: Re
   });
 }
 
+/** DS-12: fired when something other than the editor's autosave moves a doc's rev: `{docId, from, rev}`. */
+export const STUDIO_REV_EVENT = "studio:doc-rev";
+
 /** GET /studio/docs/:id/inputs. */
 export function useDocInputs(docId: number | null) {
   const companyId = useStudioCompanyId();
@@ -70,8 +73,10 @@ export function useSaveDocInputs(docId: number) {
   const companyId = useStudioCompanyId();
   return useMutation({
     mutationFn: ({ rev, inputs }: { rev: number; inputs: InputsPatch }) => patchDocInputs(docId, rev, inputs, companyId),
-    onSuccess: (data) => {
+    onSuccess: (data, vars) => {
       qc.setQueryData(sourceKeys.inputs(companyId, docId), data);
+      // DS-12: saving report details moves the doc's rev; the open editor's autosave follows it (no false conflict).
+      if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STUDIO_REV_EVENT, { detail: { docId, from: vars.rev, rev: data.rev } }));
       void qc.invalidateQueries({ queryKey: ["studio", "resolve"] });
       void qc.invalidateQueries({ queryKey: ["studio", "data"] });
     },
