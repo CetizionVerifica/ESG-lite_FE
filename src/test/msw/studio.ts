@@ -100,6 +100,34 @@ import {
   type StylePreset,
   type Suggestion,
   type SustainabilityReadiness,
+  // PRO-0
+  BG_INPUT_MIMES,
+  BRAND_FONTS_MAX,
+  BRIEF_AUDIENCES,
+  BRIEF_LENGTH_PAGES,
+  BRIEF_LENGTHS,
+  BRIEF_NOTE_MAX,
+  BRIEF_PURPOSES,
+  FONT_FAMILY_MAX,
+  FONT_MAX_BYTES,
+  FONT_STYLES,
+  FONT_WEIGHTS,
+  LAYOUT_OPTION_IDS,
+  REPORT_KINDS,
+  TEMPLATE_SHORTLIST_MAX,
+  type BrandFont,
+  type BrandFontsResponse,
+  type FontFileFormat,
+  type FontStyle,
+  type ImageJob,
+  type ReadinessBadge,
+  type TemplateReadiness,
+  type TemplateSuggestBody,
+  type TemplateSuggestion,
+  type TemplateSuggestResponse,
+  type TemplateSwapApplyBody,
+  type TemplateSwapBody,
+  type TemplateSwapPreview,
 } from "../../lib/studio/contracts";
 
 export const STUDIO_GHG_DOC = ghgFixture as unknown as ReportDoc;
@@ -361,6 +389,8 @@ export function resetStudioMocks(): void {
   finalBlocked = false; // DS-11
   resizeDataVersion = 1; // DS-10
   mockChecks = null; // DS-12
+  pro = proInitial(); // PRO-0
+  IMAGE_JOB_POLLS = 1; // PRO-0
 }
 // DS-13: the people a design's collaborators can be (the mock caller is Maya, a Manager).
 export const MOCK_ME = 2;
@@ -419,6 +449,15 @@ const MESSAGES: Partial<Record<DsErrorCode, string>> = {
   DS_VERSION_CONFLICT: "Someone else changed this design. Reload to see their changes.",
   DS_VALIDATION: "The request isn't valid.",
   DS_ROLE: "Your role can't do this.", // DS-3
+  // PRO-0
+  DS_BG_UNAVAILABLE: "Background remover isn't set up on this server yet.",
+  DS_FONT_TYPE: "Upload a WOFF2, TTF or OTF font.",
+  DS_FONT_TOO_LARGE: "Fonts can be up to 5 MB.",
+  DS_FONT_LICENCE: "Confirm that your company holds a licence to embed this font in PDFs.",
+  DS_FONT_EXISTS: "This font family already has that weight and style.",
+  DS_ASSET_TYPE: "Upload a JPG, PNG, WebP or SVG image.",
+  DS_LAYOUT_NOT_FOUND: "That template or layout wasn't found.",
+  DS_FINAL_IMMUTABLE: "A final version can't be changed.",
 };
 /** Typed as a plain Response so a handler may answer an error or its own typed body. */
 const error = (code: DsErrorCode, details?: unknown): Response =>
@@ -728,6 +767,130 @@ const suggestion = (action: AiAction): Suggestion => ({
         },
   sources: [{ source: "ghg", metric: "total", year: 2025 }],
 });
+
+// ---------------------------------------------------------------------------
+// PRO-0 · Pro editing and AI templates (ESG-lite docs/design-studio/pro/): mock state and
+// helpers for AT-1 (template suggestions), AT-2 (suggest_layouts, template swap), PE-1
+// (background remover jobs) and PE-2 (brand fonts). The modules keep these in step.
+// ---------------------------------------------------------------------------
+interface ProMockState {
+  /** AT-1: false = the AI was unavailable (rule order, no reasons, aiUsed false). */
+  templateAi: boolean;
+  /** PE-1: false = no STUDIO_BG_MODEL_PATH on the server (503 DS_BG_UNAVAILABLE). */
+  bgRemover: boolean;
+  imageJobs: Map<number, ImageJob & { pollsLeft: number }>;
+  nextImageJob: number;
+  fonts: BrandFont[];
+  nextFont: number;
+  nextFontFile: number;
+  fontBytes: Map<string, ArrayBuffer>;
+}
+const proInitial = (): ProMockState => ({ templateAi: true, bgRemover: true, imageJobs: new Map(), nextImageJob: 1, fonts: [], nextFont: 1, nextFontFile: 1, fontBytes: new Map() });
+let pro = proInitial();
+/** PE-1: polls of GET /image-jobs/:id before a job is done (0 = at once). */
+let IMAGE_JOB_POLLS = 1;
+/** AT-1: whether the mock AI orders the shortlist and writes reasons. */
+export function setStudioMockTemplateAi(on: boolean): void {
+  pro.templateAi = on;
+}
+/** PE-1: whether the server has a background-removal model. */
+export function setStudioMockBgRemover(on: boolean, polls = 1): void {
+  pro.bgRemover = on;
+  IMAGE_JOB_POLLS = polls;
+}
+/** PE-2: the stored brand fonts (tests read back what POST saved). */
+export const studioMockFonts = (): BrandFont[] => clone(pro.fonts);
+
+const proBadges = (t: ReportTemplate): ReadinessBadge[] =>
+  t.kind === "ghg"
+    ? [
+        { key: "scope12_months", label: "Scope 1 and 2: 12 of 12 months approved", have: 12, of: 12, status: "ok", notReportedPages: 0 },
+        { key: "scope3_categories", label: "Scope 3: 9 of 15 categories have data", have: 9, of: 15, status: "partial", notReportedPages: t.pageCount > 10 ? 6 : 0 },
+      ]
+    : [
+        { key: "kpi_coverage", label: "GRI: 82 of 100 disclosures have values", have: 82, of: 100, status: "partial", notReportedPages: 2, framework: "GRI" },
+        { key: "targets", label: "No targets set in KPI tracking", have: 0, of: 1, status: "missing", notReportedPages: 1 },
+      ];
+const proReadiness = (t: ReportTemplate): TemplateReadiness => {
+  const badges = proBadges(t);
+  const notReportedPages = badges.reduce((n, b) => n + b.notReportedPages, 0);
+  const score = Math.max(0, Math.round(100 - (notReportedPages / Math.max(1, t.pageCount)) * 100));
+  return { score, level: score >= 85 ? "ready" : score >= 60 ? "partial" : "low", badges, notReportedPages };
+};
+/** AT-1 rules in the mock: same kind (and format), then a purpose/length fit, then readiness. */
+const proShortlist = (b: Partial<TemplateSuggestBody>): { shortlist: TemplateSuggestion[]; considered: number } => {
+  const kindTemplates = state.templates.filter((t) => t.kind === b.kind && (!b.format || t.format === b.format));
+  const pages = BRIEF_LENGTH_PAGES[b.brief?.length ?? "medium"];
+  const purposeFit = (t: ReportTemplate) => (b.brief?.purpose === "board_brief" ? (t.purpose === "deck" ? 0 : 1) : b.brief?.purpose === "site_fact_sheet" ? (t.purpose === "summary" ? 0 : 1) : t.purpose === "report" ? 0 : 1);
+  const ranked = [...kindTemplates].sort((x, y) => purposeFit(x) - purposeFit(y) || Math.abs(x.pageCount - pages) - Math.abs(y.pageCount - pages) || x.id - y.id).slice(0, TEMPLATE_SHORTLIST_MAX);
+  return {
+    considered: kindTemplates.length,
+    shortlist: ranked.map((t, i) => ({
+      templateId: t.id,
+      rank: i + 1,
+      template: t,
+      readiness: proReadiness(t),
+      reasons: pro.templateAi ? [i === 0 ? "Closest to the length and purpose you chose." : "A shorter alternative with the same tables.", "Uses your brand kit colours and fonts."] : [],
+      pagesToDrop: [],
+      pagesToAdd: [],
+    })),
+  };
+};
+
+/** AT-2: three layout options for a page, made by moving the same elements (A as is, B mirrored, C flipped). */
+const proLayoutSuggestion = (row: DocRow, target?: { pageId: string }): Suggestion | Response => {
+  const page = row.doc.pages.find((p): p is FreeformPage => p.kind === "freeform" && (!target || p.id === target.pageId));
+  if (!page) return error("DS_VALIDATION", { issues: [{ path: "target.pageId", message: "Pick a free-form page" }] });
+  const { wMm, hMm } = PAGE_FORMAT_SIZES[row.doc.format];
+  const move = (f: (e: StudioElement) => StudioElement["frame"]): FreeformPage => ({ ...clone(page), elements: page.elements.map((e) => ({ ...clone(e), frame: f(e) })) });
+  const pages = [
+    move((e) => ({ ...e.frame })),
+    move((e) => ({ ...e.frame, x: Math.max(0, wMm - e.frame.x - e.frame.w) })),
+    move((e) => ({ ...e.frame, y: Math.max(0, hMm - e.frame.y - e.frame.h) })),
+  ];
+  const names = ["Chart + story", "Big number + table", "Full-width chart"];
+  const ids = page.elements.map((e) => e.id);
+  return {
+    id: `sug-${++state.aiCalls}`,
+    action: "suggest_layouts",
+    model: "anthropic/claude-sonnet-5.5",
+    createdAt: NOW,
+    kind: "pages",
+    payload: { pages, layoutOptions: LAYOUT_OPTION_IDS.map((id, i) => ({ id, name: names[i], layoutSlug: page.layoutId ?? "blank", reason: i === 0 ? "The chart answers the page's question first; the table stays for the verifier." : "", placedElementIds: ids })) },
+    sources: [],
+  };
+};
+
+/** AT-2: the mock's template swap keeps every page and element and only points the design at the new template. */
+const proSwapPreview = (row: DocRow, templateId: number): TemplateSwapPreview => {
+  const t = state.templates.find((x) => x.id === templateId) as ReportTemplate;
+  const doc: ReportDoc = { ...clone(row.doc), design: { ...row.doc.design, templateId: String(t.id), templateVersion: t.version } };
+  return {
+    fromTemplateId: row.doc.design.templateId,
+    templateId: t.id,
+    rev: row.rev,
+    doc,
+    pages: row.doc.pages.map((p) => {
+      const layoutId = p.kind === "freeform" ? (p.layoutId ?? null) : null;
+      const role = layoutId?.split("/")[1];
+      const to = role ? state.layouts.find((l) => l.family === t.family && l.role === role) : undefined;
+      return { pageId: p.id, fromLayoutId: layoutId, toLayoutId: to?.slug ?? null, status: to ? "mapped" : "kept" };
+    }),
+    unplaced: [],
+    previewHash: `mock:${row.id}:${row.rev}:${t.id}`,
+  };
+};
+
+const imageJobOut = (j: ImageJob): ImageJob => ({ id: j.id, kind: j.kind, assetId: j.assetId, status: j.status, resultAssetId: j.resultAssetId, errorCode: j.errorCode, errorReason: j.errorReason, createdAt: j.createdAt, finishedAt: j.finishedAt });
+/** PE-2: the format a font file's first bytes name (the mock checks magic bytes like the server). */
+const fontFormatOf = (bytes: Uint8Array): FontFileFormat | null => {
+  const hex = Array.from(bytes.slice(0, 4), (b) => b.toString(16).padStart(2, "0")).join("");
+  if (hex === "774f4632") return "woff2";
+  if (hex === "00010000" || hex === "74727565") return "ttf";
+  if (hex === "4f54544f") return "otf";
+  return null;
+};
+// end PRO-0 helpers
 
 const PREVIEW_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Preview</title></head><body><main data-mock="studio-preview"><section class="sheet" data-page-id="p-cover"><h1>Preview</h1></section></main></body></html>`;
 
@@ -1351,6 +1514,7 @@ export const studioHandlers = [
     if (isResponse(row)) return row;
     const b = await body<{ action: AiAction; target?: { pageId: string; elementId?: string } }>(request);
     if (!b.action) return error("DS_VALIDATION", { issues: [{ path: "action", message: "Required" }] });
+    if (b.action === "suggest_layouts") { const s = proLayoutSuggestion(row, b.target); return isResponse(s) ? s : HttpResponse.json<Suggestion>(s); } // PRO-0 (AT-2)
     const s = suggestion(b.action);
     return HttpResponse.json<Suggestion>(s.kind === "text" ? aiTextFor(row, b.action, b.target) : s);
   }),
@@ -1586,6 +1750,133 @@ export const studioHandlers = [
 
   // DS-1 fonts (a stand-in WOFF2 header)
   http.get("*/studio/fonts/:file", () => gate() ?? new HttpResponse(new Uint8Array([0x77, 0x4f, 0x46, 0x32]), { headers: { "content-type": "font/woff2", "cache-control": "public, max-age=31536000, immutable" } })),
+
+  // PRO-0 · AT-1 template suggestions
+  http.post("*/studio/templates/suggest", async ({ request }) => {
+    const b = await body<TemplateSuggestBody>(request);
+    const off = gate(b.kind);
+    if (off) return off;
+    const issues: { path: string; message: string }[] = [];
+    if (!b.kind || !(REPORT_KINDS as readonly unknown[]).includes(b.kind)) issues.push({ path: "kind", message: "Required" });
+    if (!b.brief || !(BRIEF_PURPOSES as readonly unknown[]).includes(b.brief.purpose)) issues.push({ path: "brief.purpose", message: "Required" });
+    if (b.brief && !(BRIEF_AUDIENCES as readonly unknown[]).includes(b.brief.audience)) issues.push({ path: "brief.audience", message: "Required" });
+    if (b.brief && !(BRIEF_LENGTHS as readonly unknown[]).includes(b.brief.length)) issues.push({ path: "brief.length", message: "Required" });
+    if ((b.brief?.note?.length ?? 0) > BRIEF_NOTE_MAX) issues.push({ path: "brief.note", message: `At most ${BRIEF_NOTE_MAX} characters` });
+    if (issues.length) return error("DS_VALIDATION", { issues });
+    if (pro.templateAi) state.aiCalls += 1;
+    const { shortlist, considered } = proShortlist(b);
+    return HttpResponse.json<TemplateSuggestResponse>({ shortlist, aiUsed: pro.templateAi, model: pro.templateAi ? "anthropic/claude-sonnet-5.5" : null, considered });
+  }),
+  // PRO-0 · AT-2 try another template
+  http.post("*/studio/docs/:id/template-swap/preview", async ({ params, request }) => {
+    const row = loadDoc(params.id);
+    if (isResponse(row)) return row;
+    const b = await body<TemplateSwapBody>(request);
+    const t = state.templates.find((x) => x.id === b.templateId);
+    if (!t || t.kind !== row.doc.kind) return error("DS_LAYOUT_NOT_FOUND");
+    if (b.rev !== row.rev) return error("DS_VERSION_CONFLICT", { rev: row.rev });
+    return HttpResponse.json<TemplateSwapPreview>(proSwapPreview(row, t.id));
+  }),
+  http.post("*/studio/docs/:id/template-swap/apply", async ({ params, request }) => {
+    const row = loadDoc(params.id);
+    if (isResponse(row)) return row;
+    const b = await body<TemplateSwapApplyBody>(request);
+    const t = state.templates.find((x) => x.id === b.templateId);
+    if (!t || t.kind !== row.doc.kind) return error("DS_LAYOUT_NOT_FOUND");
+    if (row.status === "final") return error("DS_FINAL_IMMUTABLE");
+    const preview = proSwapPreview(row, t.id);
+    if (b.rev !== row.rev || b.previewHash !== preview.previewHash) return error("DS_VERSION_CONFLICT", { rev: row.rev });
+    row.doc = preview.doc;
+    row.rev += 1;
+    row.updatedAt = NOW;
+    return HttpResponse.json<StudioDocResponse>(docResponse(row));
+  }),
+  // PRO-0 · PE-1 background remover
+  http.post("*/studio/assets/:id/remove-background", ({ params }) => {
+    const off = gate();
+    if (off) return off;
+    const a = state.assets.find((x) => x.id === params.id);
+    if (!a) return error("DS_DOC_NOT_FOUND");
+    if (!(BG_INPUT_MIMES as readonly string[]).includes(a.mime)) return error("DS_ASSET_TYPE");
+    if (!pro.bgRemover) return error("DS_BG_UNAVAILABLE");
+    const job = { id: pro.nextImageJob++, kind: "remove_background" as const, assetId: a.id, status: "queued" as const, resultAssetId: null, errorCode: null, errorReason: null, createdAt: NOW, finishedAt: null, pollsLeft: IMAGE_JOB_POLLS };
+    pro.imageJobs.set(job.id, job);
+    return HttpResponse.json<ImageJob>(imageJobOut(job), { status: 202 });
+  }),
+  http.get("*/studio/image-jobs/:id", ({ params }) => {
+    const off = gate();
+    if (off) return off;
+    const job = pro.imageJobs.get(Number(params.id));
+    if (!job) return error("DS_DOC_NOT_FOUND");
+    if (job.status !== "done" && job.pollsLeft-- <= 0) {
+      const src = state.assets.find((x) => x.id === job.assetId);
+      const derived: StudioAsset = { id: `${job.assetId}-nobg-${job.id}`, kind: "image", w: src?.w ?? 1200, h: src?.h ?? 800, alt: src?.alt ?? "", folder: src?.folder ?? null, url: `/mock/${job.assetId}-nobg.png`, bytes: 64000, mime: "image/png", sha256: "d".repeat(64), createdAt: NOW, derivedFrom: { assetId: job.assetId, op: "remove_background" } };
+      state.assets.push(derived);
+      Object.assign(job, { status: "done", resultAssetId: derived.id, finishedAt: NOW });
+    } else if (job.status === "queued") job.status = "running";
+    return HttpResponse.json<ImageJob>(imageJobOut(job));
+  }),
+  // PRO-0 · PE-2 brand fonts (writes need a Manager: canEdit false answers DS_ROLE, as PUT /brand-kit)
+  http.get("*/studio/brand-kit/fonts", () => gate() ?? HttpResponse.json<BrandFontsResponse>({ fonts: clone(pro.fonts), canEdit: state.brandKit.canEdit })),
+  http.post("*/studio/brand-kit/fonts", async ({ request }) => {
+    const off = gate();
+    if (off) return off;
+    if (!state.brandKit.canEdit) return error("DS_ROLE");
+    let form: FormData;
+    try {
+      form = await request.formData();
+    } catch {
+      return error("DS_VALIDATION", { issues: [{ path: "file", message: "Choose a font file" }] });
+    }
+    const file = form.get("file");
+    const family = String(form.get("family") ?? "").trim();
+    const weight = Number(form.get("weight") ?? 400);
+    const style = (String(form.get("style") ?? "normal") as FontStyle);
+    if (String(form.get("licenceConfirmed")) !== "true") return error("DS_FONT_LICENCE");
+    if (!file || typeof file !== "object") return error("DS_VALIDATION", { issues: [{ path: "file", message: "Choose a font file" }] });
+    if (!family || family.length > FONT_FAMILY_MAX) return error("DS_VALIDATION", { issues: [{ path: "family", message: "Name the font family" }] });
+    if (!(FONT_WEIGHTS as readonly number[]).includes(weight) || !(FONT_STYLES as readonly string[]).includes(style)) return error("DS_VALIDATION", { issues: [{ path: "weight", message: "Weight is 100, 200 … 900" }] });
+    const buf = await (file as Blob).arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    if (bytes.length > FONT_MAX_BYTES) return error("DS_FONT_TOO_LARGE");
+    const format = fontFormatOf(bytes);
+    if (!format) return error("DS_FONT_TYPE");
+    let font = pro.fonts.find((f) => f.family.toLowerCase() === family.toLowerCase());
+    if (font?.files.some((f) => f.weight === weight && f.style === style)) return error("DS_FONT_EXISTS");
+    if (!font) {
+      if (pro.fonts.length >= BRAND_FONTS_MAX) return error("DS_VALIDATION", { issues: [{ path: "family", message: `At most ${BRAND_FONTS_MAX} font families` }] });
+      const id = pro.nextFont++;
+      font = { id, ref: `custom:${id}`, family, weights: [], styles: [], assetIds: [], files: [], licenceConfirmedBy: MOCK_ME, licenceConfirmedAt: NOW, createdAt: NOW };
+      pro.fonts.push(font);
+    }
+    const assetId = `font-${pro.nextFontFile++}`;
+    pro.fontBytes.set(assetId, buf);
+    font.files.push({ assetId, weight, style, format, bytes: bytes.length, url: `/studio/brand-kit/fonts/${font.id}/files/${assetId}` });
+    font.weights = [...new Set(font.files.map((f) => f.weight))].sort((x, y) => x - y);
+    font.styles = [...new Set(font.files.map((f) => f.style))];
+    font.assetIds = font.files.map((f) => f.assetId);
+    Object.assign(font, { licenceConfirmedBy: MOCK_ME, licenceConfirmedAt: NOW });
+    return HttpResponse.json<BrandFont>(clone(font), { status: 201 });
+  }),
+  // data-loss-reviewed: MSW test mock handler, no production data.
+  http.delete("*/studio/brand-kit/fonts/:id", ({ params }) => {
+    const off = gate();
+    if (off) return off;
+    if (!state.brandKit.canEdit) return error("DS_ROLE");
+    const before = pro.fonts.length;
+    pro.fonts = pro.fonts.filter((f) => f.id !== Number(params.id));
+    return before === pro.fonts.length ? error("DS_DOC_NOT_FOUND") : new HttpResponse(null, { status: 204 });
+  }),
+  http.get("*/studio/brand-kit/fonts/:id/files/:fileId", ({ params }) => {
+    const off = gate();
+    if (off) return off;
+    const font = pro.fonts.find((f) => f.id === Number(params.id));
+    const file = font?.files.find((f) => f.assetId === params.fileId);
+    const bytes = file && pro.fontBytes.get(file.assetId);
+    if (!file || !bytes) return error("DS_DOC_NOT_FOUND");
+    return new HttpResponse(bytes, { headers: { "content-type": `font/${file.format}`, "cache-control": "private, max-age=3600" } });
+  }),
+  // end PRO-0
 
   // Anything else under /studio: gated like the backend, then 404.
   http.all("*/studio/*", () => gate() ?? error("DS_DOC_NOT_FOUND")),
