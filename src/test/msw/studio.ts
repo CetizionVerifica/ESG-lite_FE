@@ -54,6 +54,9 @@ import {
   type ElementTemplate,
   type FreeformPage,
   type GhgReadiness,
+  type BuildProgress, // DS-5
+  type CreateDocBody,
+  type StudioDocBuild,
   type JobKind,
   type PageFormat,
   type ReportApproval,
@@ -95,6 +98,10 @@ interface DocRow {
   sourceDocId: number | null;
   deleted: boolean;
   versions: ReportVersion[];
+  templateId: number | null; // DS-5
+  build: BuildProgress | null; // DS-5
+  /** GET ?build=1 polls left before a background build reports done (DS-5). */
+  buildPolls: number;
 }
 
 const TEMPLATES: ReportTemplate[] = [
@@ -252,6 +259,9 @@ const docRow = (id: number, doc: ReportDoc, inputs: ReportInputs = {}): DocRow =
   sourceDocId: null,
   deleted: false,
   versions: [],
+  templateId: null, // DS-5
+  build: null,
+  buildPolls: 0,
 });
 
 const initialState = (): State => ({
@@ -299,6 +309,7 @@ let state = initialState();
 /** Restores the sample (switch on, KPI tracking on, docs 1 and 2). */
 export function resetStudioMocks(): void {
   state = initialState();
+  BUILD_POLLS = 2; // DS-5
 }
 /** The company's `design_studio_enabled`. */
 export function setStudioMockEnabled(enabled: boolean): void {
@@ -362,12 +373,42 @@ const summary = (row: DocRow): StudioDocSummary => ({
   yearType: row.doc.meta.yearType,
   status: row.status,
   rev: row.rev,
+  pageCount: row.doc.pages.length,
+  templateId: row.templateId,
+  sourceDocId: row.sourceDocId,
+  finalVersion: row.versions.filter((v) => v.kind === "final").reduce<number | null>((n, v) => Math.max(n ?? 0, v.n), null),
+  buildState: row.build?.state ?? null,
+  createdAt: NOW,
   updatedAt: row.updatedAt,
   updatedBy: "Maya Manager",
   thumbnailUrl: null,
-  sourceDocId: row.sourceDocId,
 });
-const docResponse = (row: DocRow): StudioDocResponse => ({ id: row.id, doc: row.doc, rev: row.rev, status: row.status });
+const docResponse = (row: DocRow): StudioDocResponse => ({ id: row.id, doc: row.doc, rev: row.rev, status: row.status, title: row.doc.meta.title, dataHash: "sha256:mock", updatedAt: row.updatedAt, build: row.build });
+const docBuild = (row: DocRow): StudioDocBuild => ({ id: row.id, rev: row.rev, status: row.status, title: row.doc.meta.title, build: row.build });
+
+/** DS-5: the build steps as the backend reports them (all done, or the first `done` of them). */
+const buildProgress = (ai: boolean, pageCount: number, done = 6): BuildProgress => {
+  const ids = ["template", "data", "layout", "inputs", "ai", "save"] as const;
+  const labels = ["Loading the template", "Reading your approved data", "Laying out the pages", "Filling in report details", "Writing text with AI", "Saving the design"];
+  return {
+    state: done >= ids.length ? "done" : "running",
+    steps: ids.map((id, i) => ({
+      id,
+      label: labels[i],
+      state: id === "ai" && !ai ? "skipped" : i < done ? "done" : i === done ? "running" : "pending",
+      ...(id === "ai" && ai ? { note: "AI drafting isn't available yet; the template's text is kept." } : {}),
+    })),
+    dropped: [],
+    pageCount: done >= ids.length ? pageCount : null,
+    startedAt: NOW,
+    finishedAt: done >= ids.length ? NOW : null,
+  };
+};
+/** DS-5: how many ?build=1 polls a background build takes (tests may set 0). */
+let BUILD_POLLS = 2;
+export function setStudioMockBuildPolls(n: number): void {
+  BUILD_POLLS = n;
+}
 
 const addDoc = (doc: ReportDoc, inputs: ReportInputs = {}, sourceDocId: number | null = null): DocRow => {
   const row = { ...docRow(state.nextDoc++, doc, inputs), sourceDocId };
@@ -508,28 +549,52 @@ export const studioHandlers = [
     const off = gate(kind);
     if (off) return off;
     const year = Number(url.searchParams.get("year") ?? 2025);
+    const yearType = (url.searchParams.get("yearType") ?? "CY") as YearType;
+    const periodLabel = yearType === "FY" ? `FY ${year - 1}–${String(year).slice(-2)}` : String(year);
     if (kind === "sustainability") {
       return HttpResponse.json<SustainabilityReadiness>({
         kind: "sustainability",
         year,
+        yearType,
+        periodLabel,
+        setupDone: true,
         locked: false,
         lockedAt: null,
         coverage: [
           { framework: "GRI", pct: 82 },
           { framework: "BRSR", pct: 64 },
         ],
-        missing: [{ kpi: "WATER_WITHDRAWAL", sites: [2], periods: ["2025-11", "2025-12"] }],
+        missing: [{ kpi: "WATER_WITHDRAWAL", name: "Water withdrawal", sites: [2], periods: ["Nov 2025", "Dec 2025"] }],
         pendingCount: 4,
+        state: "almost",
+        gaps: [
+          { kind: "kpi_missing", severity: "warning", message: `1 KPI value set is missing for ${periodLabel}.`, link: "/kpi/dashboard", linkLabel: "Open KPI dashboard", count: 1 },
+          { kind: "year_not_locked", severity: "error", message: `${periodLabel} isn't locked yet. A final needs the year locked.`, link: "/kpi/dashboard", linkLabel: "Lock the year" },
+        ],
       });
     }
     return HttpResponse.json<GhgReadiness>({
       kind: "ghg",
-      approvedRows: 412,
-      pendingRows: 3,
+      year,
+      yearType,
+      periodLabel,
+      approvedRows: 1284,
+      pendingRows: 4,
+      rejectedRows: 0,
       sitesCovered: 2,
+      sitesTotal: 3,
+      sitesMissing: [{ id: 3, name: "Pune warehouse" }],
       monthsCovered: 12,
+      monthsExpected: 12,
+      monthsMissing: [],
       scope3Addressed: "11/15",
-      gaps: [{ category: 14, message: "Category 14 is neither reported nor excluded." }],
+      scope3: { reported: [1, 3, 4, 5, 6, 7, 9, 12], excluded: [2, 11, 15], unaddressed: [8, 10, 13, 14] },
+      state: "almost",
+      gaps: [
+        { kind: "pending_entries", severity: "error", message: "4 entries wait for approval. A final needs them approved.", link: "/data/approvals", linkLabel: "Open Review", count: 4 },
+        { kind: "site_no_data", severity: "warning", message: `Pune warehouse has no approved data for ${periodLabel}.`, link: "/data/ledger?site=3", linkLabel: "Open site", siteId: 3 },
+        { kind: "scope3_unaddressed", severity: "warning", message: "Categories 8, 10, 13 and 14 are neither reported nor excluded.", link: "/settings/scope3/screening", linkLabel: "Scope 3 screening", categories: [8, 10, 13, 14] },
+      ],
     });
   }),
 
@@ -730,27 +795,66 @@ export const studioHandlers = [
     return HttpResponse.json<StudioDocSummary[]>(rows.map(summary));
   }),
   http.post("*/studio/docs", async ({ request }) => {
-    const b = await body<{ kind: ReportKind; templateId: number; year: number; yearType: "CY" | "FY"; inputs: ReportInputs }>(request);
+    const b = await body<CreateDocBody>(request);
     const off = gate(b.kind);
     if (off) return off;
-    const t = state.templates.find((x) => x.id === Number(b.templateId) && x.kind === b.kind);
-    if (!t) return error("DS_LAYOUT_NOT_FOUND");
-    const doc = templateDoc(t);
-    doc.meta = { ...doc.meta, year: b.year ?? doc.meta.year, yearType: b.yearType ?? doc.meta.yearType };
-    return HttpResponse.json<StudioDocResponse>(docResponse(addDoc(doc, b.inputs ?? {})), { status: 201 });
+    if (!b.kind || !b.year || !b.yearType || b.templateId === undefined) return error("DS_VALIDATION", { issues: [{ path: "templateId", message: "Required" }] });
+    let doc: ReportDoc;
+    let templateId: number | null = null;
+    if (b.templateId === "blank") {
+      const format = b.format ?? "a4";
+      doc = clone(STUDIO_GHG_DOC);
+      doc.kind = b.kind;
+      doc.format = format;
+      doc.purpose = format === "slide_16_9" ? "deck" : "report";
+      doc.meta.frameworks = b.kind === "ghg" ? ["GHGP"] : ["GRI"];
+      doc.design = { templateId: "blank", templateVersion: 1, theme: {} };
+      doc.pages = [{ id: "p1", kind: "freeform", name: "Page 1", background: {}, elements: [] }];
+    } else {
+      const t = state.templates.find((x) => x.id === Number(b.templateId) && x.kind === b.kind);
+      if (!t) return error("DS_LAYOUT_NOT_FOUND");
+      doc = templateDoc(t);
+      templateId = t.id;
+      doc.meta.title = `${t.name} ${b.yearType === "FY" ? `FY ${b.year - 1}–${String(b.year).slice(-2)}` : b.year}`;
+    }
+    doc.meta = { ...doc.meta, year: b.year, yearType: b.yearType, sites: b.sites ?? "all", ...(b.frameworks?.length ? { frameworks: b.frameworks } : {}), ...(b.compareYear ? { compareYear: b.compareYear } : {}) };
+    if (b.title) doc.meta.title = b.title;
+    const inputs = Object.fromEntries(Object.entries(b.inputs ?? {}).filter(([, v]) => v).map(([k, v]) => [k, { value: (v as { value: unknown }).value, source: "typed", updatedBy: 2, updatedAt: NOW }])) as ReportInputs;
+    const row = addDoc(doc, inputs);
+    row.templateId = templateId;
+    if (new URL(request.url).searchParams.get("wait") === "0" && BUILD_POLLS > 0) {
+      row.build = buildProgress(!!b.ai, doc.pages.length, 1);
+      row.buildPolls = BUILD_POLLS;
+      return HttpResponse.json<StudioDocBuild>(docBuild(row), { status: 202 });
+    }
+    row.build = buildProgress(!!b.ai, doc.pages.length);
+    if (new URL(request.url).searchParams.get("wait") === "0") return HttpResponse.json<StudioDocBuild>(docBuild(row), { status: 202 });
+    return HttpResponse.json<StudioDocResponse>(docResponse(row), { status: 201 });
   }),
-  http.get("*/studio/docs/:id", ({ params }) => {
+  http.get("*/studio/docs/:id", ({ params, request }) => {
     const row = loadDoc(params.id);
-    return isResponse(row) ? row : HttpResponse.json<StudioDocResponse>(docResponse(row));
+    if (isResponse(row)) return row;
+    if (new URL(request.url).searchParams.get("build") === "1") {
+      // DS-5: a background build moves one step per poll, then reports done.
+      if (row.build && row.build.state === "running") {
+        row.buildPolls -= 1;
+        const done = row.buildPolls <= 0 ? 6 : 6 - row.buildPolls;
+        row.build = buildProgress(row.build.steps.some((s) => s.id === "ai" && s.state !== "skipped"), row.doc.pages.length, done);
+      }
+      return HttpResponse.json<StudioDocBuild>(docBuild(row));
+    }
+    return HttpResponse.json<StudioDocResponse>(docResponse(row));
   }),
   http.patch("*/studio/docs/:id", async ({ params, request }) => {
     const row = loadDoc(params.id);
     if (isResponse(row)) return row;
-    const b = await body<{ rev: number; doc: ReportDoc }>(request);
+    const b = await body<{ rev: number; doc?: ReportDoc; title?: string }>(request);
     if (row.status === "final") return error("DS_FINAL_IMMUTABLE");
     if (b.rev !== row.rev) return error("DS_VERSION_CONFLICT", { rev: row.rev });
-    if (!b.doc || b.doc.schemaVersion !== 2 || b.doc.kind !== row.doc.kind) return error("DS_DOC_INVALID", { issues: [{ path: "doc", message: "Not a v2 doc of this kind" }] });
-    row.doc = b.doc;
+    if (!b.doc && !b.title) return error("DS_VALIDATION", { issues: [{ path: "doc", message: "Send doc or title" }] });
+    if (b.doc && (b.doc.schemaVersion !== 2 || b.doc.kind !== row.doc.kind)) return error("DS_DOC_INVALID", { issues: [{ path: "doc", message: "Not a v2 doc of this kind" }] });
+    row.doc = b.doc ? b.doc : clone(row.doc);
+    if (b.title) row.doc.meta.title = b.title; // DS-5: rename
     row.rev += 1;
     row.updatedAt = new Date().toISOString();
     return HttpResponse.json<StudioDocResponse>(docResponse(row));
