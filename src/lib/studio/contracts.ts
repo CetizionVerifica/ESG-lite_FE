@@ -595,7 +595,11 @@ export interface BrandKitUpdate {
 }
 // end DS-3
 
-/** GET /templates (mock shape; DS-4 confirms). */
+/**
+ * GET /templates (DS-4, confirmed: ESG-lite src/studio/contracts/library.ts).
+ * The fields marked DS-4 are always sent by the backend; they are optional
+ * here only so older mocks still type-check.
+ */
 export interface ReportTemplate {
   id: number;
   companyId: number | null;
@@ -607,11 +611,20 @@ export interface ReportTemplate {
   version: number;
   thumbnailUrl: string | null;
   pageCount: number;
+  /** DS-4: `<family>-<look>` (a one-look family: `<family>`), = doc.design.templateId. */
+  slug?: string;
+  /** DS-4: the template the looks share; its layouts carry the same family. */
+  family?: string;
+  /** DS-4: Classic, Light or Night (D9); null for company templates. */
+  look?: Look | null;
+  /** DS-4: one line for the gallery card. */
+  description?: string;
 }
 export interface ReportTemplateDetail extends ReportTemplate {
+  /** A full ReportDoc with placeholders ({{company}}, {{period}}, {{year}}, {{title}}); bindings relative to the doc's year. */
   doc: ReportDoc;
 }
-/** GET /layouts (mock shape; DS-4 confirms). */
+/** GET /layouts (DS-4, confirmed). */
 export interface ReportLayout {
   id: number;
   companyId: number | null;
@@ -620,26 +633,49 @@ export interface ReportLayout {
   pageKind: LayoutKind;
   name: string;
   thumbnailUrl: string | null;
+  /** A FreeformPage whose id is the layout's role and whose element ids are `<role>.<slot>`. */
   page: FreeformPage;
+  /** DS-4: `<family>/<role>`, the value FreeformPage.layoutId holds. */
+  slug?: string;
+  family?: string;
+  /** DS-4: what the page is for (`cover`, `scope1`, `exec_summary`…); applyTemplate maps pages by it. */
+  role?: string;
+  sort?: number;
 }
 export const ELEMENT_GROUPS = ["shapes", "lines", "frames", "grids", "icons", "sdg", "esg", "data"] as const;
-/** GET /elements (mock shape; DS-4 confirms). */
+export type ElementGroup = (typeof ELEMENT_GROUPS)[number];
+/** DS-4: an editable group (ESG graphics); children's frames are relative to the w × h box and share a groupId once inserted. */
+export interface ElementGroupPayload {
+  type: "group";
+  w: number;
+  h: number;
+  elements: Element[];
+}
+/** GET /elements (DS-4, confirmed). `payload` sits at x = y = 0; ids are replaced on insert. */
 export interface ElementTemplate {
   id: number;
   companyId: number | null;
-  group: (typeof ELEMENT_GROUPS)[number];
+  group: ElementGroup;
   name: string;
   tags: string[];
-  payload: Element;
+  payload: Element | ElementGroupPayload;
   license: string;
 }
-/** POST/GET /assets. */
+/** POST/GET /assets (DS-4, confirmed). */
 export interface StudioAsset extends AssetRef {
   folder: string | null;
+  /** The R2 public URL (or the local-uploads URL in development). */
   url: string;
   bytes: number;
   mime: string;
+  /** DS-4 */
+  sha256?: string;
+  /** DS-4 */
+  createdAt?: string;
 }
+/** DS-4: uploads are JPG, PNG, WebP or SVG, up to 10 MB. */
+export const ASSET_MAX_BYTES = 10 * 1024 * 1024;
+export const ASSET_MIMES = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"] as const;
 
 /** POST /resolve. */
 export interface ResolveRequest {

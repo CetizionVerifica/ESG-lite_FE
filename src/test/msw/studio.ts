@@ -97,12 +97,13 @@ interface DocRow {
   versions: ReportVersion[];
 }
 
+// DS-4: the shapes GET /studio/templates answers (ESG-lite src/studio/library/service.ts), a few of the seeded rows.
 const TEMPLATES: ReportTemplate[] = [
-  { id: 1, companyId: null, kind: "ghg", purpose: "report", format: "a4", name: "Inventory (GHG Protocol)", tags: ["ghgp", "a4"], version: 1, thumbnailUrl: null, pageCount: 20 },
-  { id: 2, companyId: null, kind: "ghg", purpose: "report", format: "a4", name: "ISO 14064-1", tags: ["iso"], version: 1, thumbnailUrl: null, pageCount: 22 },
-  { id: 3, companyId: null, kind: "ghg", purpose: "deck", format: "slide_16_9", name: "Board brief", tags: ["deck"], version: 1, thumbnailUrl: null, pageCount: 9 },
-  { id: 4, companyId: null, kind: "ghg", purpose: "summary", format: "a4", name: "One-page summary", tags: ["summary"], version: 1, thumbnailUrl: null, pageCount: 1 },
-  { id: 5, companyId: null, kind: "sustainability", purpose: "report", format: "a4", name: "Annual report", tags: ["gri", "brsr"], version: 2, thumbnailUrl: null, pageCount: 36 },
+  { id: 1, companyId: null, kind: "ghg", purpose: "report", format: "a4", name: "GHG Inventory · Classic", tags: ["ghg protocol", "inventory", "a4", "classic"], version: 1, thumbnailUrl: null, pageCount: 23, slug: "ghg-inventory-classic", family: "ghg-inventory", look: "classic", description: "A full GHG Protocol inventory." },
+  { id: 2, companyId: null, kind: "ghg", purpose: "report", format: "a4", name: "ISO 14064-1 inventory · Night", tags: ["iso 14064-1", "inventory", "night"], version: 1, thumbnailUrl: null, pageCount: 25, slug: "ghg-iso14064-night", family: "ghg-iso14064", look: "night", description: "The Inventory plus ISO 14064-1 categories." },
+  { id: 3, companyId: null, kind: "ghg", purpose: "deck", format: "slide_16_9", name: "Board brief · Light", tags: ["deck", "board", "light"], version: 1, thumbnailUrl: null, pageCount: 10, slug: "ghg-board-brief-light", family: "ghg-board-brief", look: "light", description: "Ten slides for the board." },
+  { id: 4, companyId: null, kind: "ghg", purpose: "summary", format: "a4", name: "One-page summary · Classic", tags: ["summary", "one page", "factsheet", "classic"], version: 1, thumbnailUrl: null, pageCount: 1, slug: "ghg-one-page-classic", family: "ghg-one-page", look: "classic", description: "The year on one A4 page." },
+  { id: 5, companyId: null, kind: "sustainability", purpose: "report", format: "a4", name: "Editorial", tags: ["editorial", "annual report", "gri", "brsr"], version: 1, thumbnailUrl: null, pageCount: 24, slug: "sustainability-editorial", family: "sustainability-editorial", look: "classic", description: "Magazine-style annual report." },
 ];
 const templateDoc = (t: ReportTemplate): ReportDoc => {
   const base = clone(t.kind === "ghg" ? STUDIO_GHG_DOC : STUDIO_SUSTAINABILITY_DOC);
@@ -111,10 +112,10 @@ const templateDoc = (t: ReportTemplate): ReportDoc => {
 
 const firstFreeform = (doc: ReportDoc): FreeformPage => doc.pages.find((p): p is FreeformPage => p.kind === "freeform") as FreeformPage;
 const LAYOUTS: ReportLayout[] = [
-  { id: 1, companyId: null, kind: "ghg", format: "a4", pageKind: "cover", name: "GHG cover", thumbnailUrl: null, page: firstFreeform(STUDIO_GHG_DOC) },
-  { id: 2, companyId: null, kind: "ghg", format: "a4", pageKind: "data_page", name: "Executive summary", thumbnailUrl: null, page: STUDIO_GHG_DOC.pages[1] as FreeformPage },
-  { id: 3, companyId: null, kind: "sustainability", format: "a4", pageKind: "cover", name: "Annual report cover", thumbnailUrl: null, page: firstFreeform(STUDIO_SUSTAINABILITY_DOC) },
-  { id: 4, companyId: null, kind: "sustainability", format: "a4", pageKind: "highlights", name: "Highlights", thumbnailUrl: null, page: STUDIO_SUSTAINABILITY_DOC.pages[1] as FreeformPage },
+  { id: 1, companyId: null, kind: "ghg", format: "a4", pageKind: "cover", name: "GHG cover", thumbnailUrl: null, page: firstFreeform(STUDIO_GHG_DOC), slug: "ghg-inventory/cover", family: "ghg-inventory", role: "cover", sort: 1 },
+  { id: 2, companyId: null, kind: "ghg", format: "a4", pageKind: "data_page", name: "Executive summary", thumbnailUrl: null, page: STUDIO_GHG_DOC.pages[1] as FreeformPage, slug: "ghg-inventory/exec_summary", family: "ghg-inventory", role: "exec_summary", sort: 3 },
+  { id: 3, companyId: null, kind: "sustainability", format: "a4", pageKind: "cover", name: "Annual report cover", thumbnailUrl: null, page: firstFreeform(STUDIO_SUSTAINABILITY_DOC), slug: "sustainability-editorial/cover", family: "sustainability-editorial", role: "cover", sort: 1 },
+  { id: 4, companyId: null, kind: "sustainability", format: "a4", pageKind: "highlights", name: "Highlights", thumbnailUrl: null, page: STUDIO_SUSTAINABILITY_DOC.pages[1] as FreeformPage, slug: "sustainability-editorial/highlights", family: "sustainability-editorial", role: "highlights", sort: 5 },
 ];
 
 const ELEMENTS: ElementTemplate[] = [
@@ -152,8 +153,27 @@ const ELEMENTS: ElementTemplate[] = [
       props: { binding: { source: "ghg", metric: "total", years: { last: 1 }, sites: "all" }, label: "tCO₂e", showDelta: true },
     },
   },
-  { id: 4, companyId: null, group: "icons", name: "Leaf", tags: ["nature"], license: "Lucide (ISC)", payload: { id: "tpl-leaf", type: "icon", frame: { x: 0, y: 0, w: 12, h: 12, rotation: 0 }, z: 0, source: "user", props: { name: "leaf" } } },
-  { id: 5, companyId: null, group: "sdg", name: "SDG 13", tags: ["climate"], license: "UN SDG guidelines", payload: { id: "tpl-sdg13", type: "sdg", frame: { x: 0, y: 0, w: 20, h: 20, rotation: 0 }, z: 0, source: "user", props: { goal: 13, variant: "full" } } },
+  { id: 4, companyId: null, group: "icons", name: "Leaf", tags: ["icon", "nature", "esg"], license: "lucide-isc", payload: { id: "tpl-leaf", type: "icon", frame: { x: 0, y: 0, w: 12, h: 12, rotation: 0 }, z: 0, source: "user", props: { name: "lucide:leaf" } } },
+  { id: 5, companyId: null, group: "sdg", name: "SDG 13: Climate action", tags: ["sdg", "climate"], license: "sdg-colours", payload: { id: "tpl-sdg13", type: "sdg", frame: { x: 0, y: 0, w: 20, h: 20, rotation: 0 }, z: 0, source: "user", props: { goal: 13, variant: "full" } } },
+  // DS-4: a line and an editable group (ESG graphic), as seeded.
+  { id: 6, companyId: null, group: "lines", name: "Arrow", tags: ["line", "arrow"], license: "own", payload: { id: "el", type: "line", frame: { x: 0, y: 0, w: 60, h: 4, rotation: 0 }, z: 1, source: "user", props: { x1: 0, y1: 2, x2: 60, y2: 2, strokeWidth: 0.8, dash: "solid", endArrow: true } } },
+  {
+    id: 7,
+    companyId: null,
+    group: "esg",
+    name: "Scope circles",
+    tags: ["esg", "scope", "diagram"],
+    license: "own",
+    payload: {
+      type: "group",
+      w: 100,
+      h: 40,
+      elements: [
+        { id: "s1", type: "shape", frame: { x: 0, y: 0, w: 40, h: 40, rotation: 0 }, z: 1, source: "user", props: { shape: "ellipse", opacity: 0.3 } },
+        { id: "s2", type: "shape", frame: { x: 60, y: 0, w: 40, h: 40, rotation: 0 }, z: 2, source: "user", props: { shape: "ellipse", opacity: 0.6 } },
+      ],
+    },
+  },
 ];
 
 // DS-3: the shape GET /studio/styles answers for the mock brand kit (ESG-lite brandkit/styles.ts).
@@ -276,8 +296,8 @@ const initialState = (): State => ({
   ], // DS-2
   brandKit: mockBrandKit(), // DS-3
   assets: [
-    { id: "a-plant", kind: "image", w: 2400, h: 1600, alt: "The Bahrain plant at dawn", folder: "Photos", url: "/mock/a-plant.jpg", bytes: 420000, mime: "image/jpeg" },
-    { id: "a-logo", kind: "logo", w: 600, h: 300, alt: "ACME logo", folder: null, url: "/mock/a-logo.png", bytes: 12000, mime: "image/png" },
+    { id: "a-plant", kind: "image", w: 2400, h: 1600, alt: "The Bahrain plant at dawn", folder: "Photos", url: "/mock/a-plant.jpg", bytes: 420000, mime: "image/jpeg", sha256: "a".repeat(64), createdAt: NOW },
+    { id: "a-logo", kind: "logo", w: 600, h: 300, alt: "ACME logo", folder: null, url: "/mock/a-logo.png", bytes: 12000, mime: "image/png", sha256: "b".repeat(64), createdAt: NOW },
   ],
   nextAsset: 1,
   jobs: new Map(),
@@ -299,6 +319,12 @@ let state = initialState();
 /** Restores the sample (switch on, KPI tracking on, docs 1 and 2). */
 export function resetStudioMocks(): void {
   state = initialState();
+  imageGen = false; // DS-4
+}
+// DS-4: whether POST /studio/assets/generate has an image provider (off by default, as in CI).
+let imageGen = false;
+export function setStudioMockImageGen(on: boolean): void {
+  imageGen = on;
 }
 /** The company's `design_studio_enabled`. */
 export function setStudioMockEnabled(enabled: boolean): void {
@@ -571,7 +597,12 @@ export const studioHandlers = [
     const tag = url.searchParams.get("tag");
     return HttpResponse.json<ReportTemplate[]>(
       state.templates.filter(
-        (t) => (!kind || t.kind === kind) && (!format || t.format === format) && (!q || t.name.toLowerCase().includes(q)) && (!tag || t.tags.includes(tag)) && (state.kpi || t.kind === "ghg"),
+        (t) =>
+          (!kind || t.kind === kind) &&
+          (!format || t.format === format) &&
+          (!q || [t.name, t.description ?? "", ...t.tags].some((x) => x.toLowerCase().includes(q))) && // DS-4: name, description and tags
+          (!tag || t.tags.includes(tag)) &&
+          (state.kpi || t.kind === "ghg"),
       ),
     );
   }),
@@ -597,7 +628,11 @@ export const studioHandlers = [
     if (off) return off;
     const format = url.searchParams.get("format");
     const pageKind = url.searchParams.get("pageKind");
-    return HttpResponse.json<ReportLayout[]>(state.layouts.filter((l) => (!kind || l.kind === kind) && (!format || l.format === format) && (!pageKind || l.pageKind === pageKind)));
+    const template = url.searchParams.get("template"); // DS-4: a family, or a template slug naming one
+    const family = template ? (state.templates.find((t) => t.slug === template)?.family ?? template) : null;
+    return HttpResponse.json<ReportLayout[]>(
+      state.layouts.filter((l) => (!kind || l.kind === kind) && (!format || l.format === format) && (!pageKind || l.pageKind === pageKind) && (!family || l.family === family) && (state.kpi || l.kind === "ghg")),
+    );
   }),
   http.post("*/studio/layouts/from-page", async ({ request }) => {
     const off = gate();
@@ -632,7 +667,7 @@ export const studioHandlers = [
       // A JSON body in a unit test: keep the defaults.
     }
     if (!/\.(png|jpe?g|webp|svg)$/i.test(name)) return error("DS_ASSET_TYPE");
-    const asset: StudioAsset = { id: `up-${state.nextAsset++}`, kind: "image", w: 1200, h: 800, alt: "", folder, url: `/mock/${name}`, bytes: 50000, mime: "image/png" };
+    const asset: StudioAsset = { id: `up-${state.nextAsset++}`, kind: "image", w: 1200, h: 800, alt: "", folder, url: `/mock/${name}`, bytes: 50000, mime: "image/png", sha256: "c".repeat(64), createdAt: NOW };
     state.assets.push(asset);
     return HttpResponse.json(asset, { status: 201 });
   }),
@@ -648,6 +683,28 @@ export const studioHandlers = [
     const before = state.assets.length;
     state.assets = state.assets.filter((a) => a.id !== params.id);
     return before === state.assets.length ? error("DS_DOC_NOT_FOUND") : new HttpResponse(null, { status: 204 });
+  }),
+  // DS-4 additions: move or rename an asset, and AI images (503 unless setStudioMockImageGen(true)).
+  http.patch("*/studio/assets/:id", async ({ params, request }) => {
+    const off = gate();
+    if (off) return off;
+    const a = state.assets.find((x) => x.id === params.id);
+    if (!a) return error("DS_DOC_NOT_FOUND");
+    const b = await body<{ folder: string | null; alt: string }>(request);
+    if (typeof b.folder === "string" && /[/\\<>]/.test(b.folder)) return error("DS_VALIDATION", { issues: [{ path: "folder", message: "A folder name can't contain / \\ < or >" }] });
+    if (b.folder !== undefined) a.folder = b.folder || null;
+    if (b.alt !== undefined) a.alt = b.alt;
+    return HttpResponse.json<StudioAsset>(a);
+  }),
+  http.post("*/studio/assets/generate", async ({ request }) => {
+    const off = gate();
+    if (off) return off;
+    const b = await body<{ prompt: string; folder: string }>(request);
+    if (!b.prompt || b.prompt.trim().length < 3) return error("DS_VALIDATION", { issues: [{ path: "prompt", message: "Describe the image" }] });
+    if (!imageGen) return error("DS_AI_UNAVAILABLE");
+    const asset: StudioAsset = { id: `ai-${state.nextAsset++}`, kind: "ai_image", w: 1536, h: 1024, alt: b.prompt.slice(0, 500), folder: b.folder || "AI images", url: "/mock/ai.png", bytes: 80000, mime: "image/png", sha256: "d".repeat(64), createdAt: NOW };
+    state.assets.unshift(asset);
+    return HttpResponse.json(asset, { status: 201 });
   }),
 
   // DS-2 resolve and report inputs
