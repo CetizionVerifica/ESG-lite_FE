@@ -1,0 +1,978 @@
+/**
+ * Design Studio contracts (DS-0): the frontend copy of ESG-lite
+ * `src/studio/contracts/` (docs/design-studio/01-contracts.md, on top of the RS
+ * base rs-base/01-contracts.md). Enums, the ReportDoc v2 types, bindings and
+ * report inputs, error codes, check ids, AI actions and the HTTP shapes of §4.
+ *
+ * Change the backend contracts first (a DS-0 follow-up), then this file and
+ * `contracts.snapshot.json` (a copy of ESG-lite `ci/studio-contracts.json`):
+ * `contracts.test.ts` fails when the two disagree, and
+ * `node scripts/check-studio-contracts.mjs ../ESG-lite` diffs the copy with
+ * the backend's.
+ *
+ * The zod schema lives only in the backend. Where 01-contracts names an
+ * endpoint but not its exact response, the shape here is marked "mock shape":
+ * the owning module confirms or changes it in a DS-0 follow-up, and
+ * `src/test/msw/studio.ts` answers with it until then.
+ */
+
+// ---------------------------------------------------------------------------
+// §1 Enums
+// ---------------------------------------------------------------------------
+
+/** `ghg` needs only the studio switch; `sustainability` also needs KPI tracking (D4). */
+export const REPORT_KINDS = ["ghg", "sustainability"] as const;
+export type ReportKind = (typeof REPORT_KINDS)[number];
+
+export const PAGE_FORMATS = ["a4", "a4_landscape", "letter", "a5", "slide_16_9", "square", "social_191"] as const;
+export type PageFormat = (typeof PAGE_FORMATS)[number];
+
+/** Page size and bleed in mm (DS-1 §1). The renderer's `formats.ts` is the source; this is for layout maths. */
+export const PAGE_FORMAT_SIZES: Record<PageFormat, { wMm: number; hMm: number; bleedMm: number }> = {
+  a4: { wMm: 210, hMm: 297, bleedMm: 3 },
+  a4_landscape: { wMm: 297, hMm: 210, bleedMm: 3 },
+  letter: { wMm: 215.9, hMm: 279.4, bleedMm: 3 },
+  a5: { wMm: 148, hMm: 210, bleedMm: 3 },
+  slide_16_9: { wMm: 338.7, hMm: 190.5, bleedMm: 0 },
+  square: { wMm: 285.75, hMm: 285.75, bleedMm: 0 },
+  social_191: { wMm: 317.5, hMm: 166.1, bleedMm: 0 },
+};
+
+export const DOC_PURPOSES = ["report", "summary", "deck", "social"] as const;
+export type DocPurpose = (typeof DOC_PURPOSES)[number];
+
+export const REPORT_STATUSES = ["draft", "in_review", "approved", "final"] as const;
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+
+export const VERSION_KINDS = ["snapshot", "review", "final", "autosave"] as const;
+export type VersionKind = (typeof VERSION_KINDS)[number];
+
+export const PAGE_KINDS = ["freeform", "flow"] as const;
+export type PageKind = (typeof PAGE_KINDS)[number];
+
+export const FLOW_TYPES = [
+  "toc",
+  "narrative",
+  "data_tables",
+  "gri_index",
+  "brsr_index",
+  "esrs_index",
+  "methodology",
+  "glossary",
+  "ghgp_index",
+  "iso_index",
+  "ghg_factor_table",
+  "scope3_categories",
+] as const;
+export type FlowType = (typeof FLOW_TYPES)[number];
+
+export const LAYOUT_KINDS = [
+  "cover",
+  "contents",
+  "leadership",
+  "about",
+  "highlights",
+  "chapter_opener",
+  "data_page",
+  "targets",
+  "materiality",
+  "people",
+  "quote",
+  "back_cover",
+  "blank",
+] as const;
+export type LayoutKind = (typeof LAYOUT_KINDS)[number];
+
+export const ELEMENT_TYPES = [
+  "text",
+  "kpi_tile",
+  "chart",
+  "table",
+  "image",
+  "shape",
+  "icon",
+  "sdg",
+  "divider",
+  "page_number",
+  "placeholder",
+  "frame",
+  "grid",
+  "line",
+  "big_number",
+  "progress",
+  "callout",
+  "qr",
+] as const;
+export type ElementType = (typeof ELEMENT_TYPES)[number];
+
+export const CHART_KINDS = [
+  "stacked_bar",
+  "bar",
+  "line",
+  "donut",
+  "share_bar",
+  "waterfall",
+  "sankey",
+  "target_bars",
+  "dot_grid",
+  "materiality_matrix",
+  "sparkline",
+  "scope_split",
+  "category_bars",
+  "gas_split",
+  "site_bars",
+  "monthly_stack",
+  "base_year_waterfall",
+  "intensity_line",
+  "treemap",
+] as const;
+export type ChartKind = (typeof CHART_KINDS)[number];
+
+export const ELEMENT_SOURCES = ["layout", "auto", "ai", "user"] as const;
+export type ElementSource = (typeof ELEMENT_SOURCES)[number];
+
+export const TEXT_STYLE_IDS = ["kicker", "title", "heading", "subheading", "body", "caption", "big_number", "quote", "footnote"] as const;
+export type TextStyleId = (typeof TEXT_STYLE_IDS)[number];
+
+export const MEASURES = ["value", "change_abs", "change_pct", "share", "progress", "target", "baseline"] as const;
+export type Measure = (typeof MEASURES)[number];
+
+export const YEAR_REF_WORDS = ["current", "prior", "base"] as const;
+export type YearRef = (typeof YEAR_REF_WORDS)[number] | number;
+
+export const LOOKS = ["classic", "light", "night"] as const;
+export type Look = (typeof LOOKS)[number];
+
+export const FONT_IDS = [
+  "source-serif-4",
+  "source-sans-3",
+  "dm-serif-display",
+  "ibm-plex-sans",
+  "ibm-plex-serif",
+  "archivo",
+  "fraunces",
+  "noto-sans",
+] as const;
+export type FontId = (typeof FONT_IDS)[number];
+
+export const NUMBER_FORMATS = ["auto", "int", "1dp", "2dp", "pct0", "pct1", "compact", "indian"] as const;
+export type NumberFormat = (typeof NUMBER_FORMATS)[number];
+
+export const YEAR_TYPES = ["CY", "FY"] as const;
+export type YearType = (typeof YEAR_TYPES)[number];
+
+export const SUSTAINABILITY_FRAMEWORKS = ["GRI", "BRSR", "ESRS"] as const;
+export const GHG_FRAMEWORKS = ["GHGP", "ISO14064", "BRSR_P6", "ESRS_E1"] as const;
+export const FRAMEWORK_CODES = [...SUSTAINABILITY_FRAMEWORKS, ...GHG_FRAMEWORKS] as const;
+export type FrameworkCode = (typeof FRAMEWORK_CODES)[number];
+export const FRAMEWORKS_BY_KIND: Record<ReportKind, readonly FrameworkCode[]> = { ghg: GHG_FRAMEWORKS, sustainability: SUSTAINABILITY_FRAMEWORKS };
+
+export const DOWNLOAD_KINDS = ["pdf_screen", "pdf_print", "png_pages"] as const;
+export type DownloadKind = (typeof DOWNLOAD_KINDS)[number];
+
+export const JOB_KINDS = ["proof", "final", "thumbnail", "png", "print"] as const;
+export type JobKind = (typeof JOB_KINDS)[number];
+
+export const JOB_STATUSES = ["queued", "running", "done", "failed"] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
+
+export const APPROVAL_STATES = ["none", "requested", "approved", "changes_requested"] as const;
+export type ApprovalState = (typeof APPROVAL_STATES)[number];
+
+export const CHECK_SEVERITIES = ["error", "warning", "info"] as const;
+export type CheckSeverity = (typeof CHECK_SEVERITIES)[number];
+
+export const RENDER_MODES = ["sheet", "paged", "present", "print"] as const;
+export type RenderMode = (typeof RENDER_MODES)[number];
+
+/** R = Admin, Manager, Superadmin (create and edit); M = Manager, Superadmin (finals, approvals, share links). */
+export const STUDIO_EDITOR_ROLES = ["Admin", "Manager", "Superadmin"] as const;
+export const STUDIO_MANAGER_ROLES = ["Manager", "Superadmin"] as const;
+export const canEditStudio = (role: string | null | undefined) => !!role && (STUDIO_EDITOR_ROLES as readonly string[]).includes(role);
+export const canFinaliseStudio = (role: string | null | undefined) => !!role && (STUDIO_MANAGER_ROLES as readonly string[]).includes(role);
+
+/** `palette`: [primary, accent, ink, surface, muted]. */
+export interface StylePreset {
+  id: string;
+  name: string;
+  palette: [string, string, string, string, string];
+  fonts: { heading: FontId; body: FontId };
+}
+
+// ---------------------------------------------------------------------------
+// §1–§2.1 Sources, bindings, tokens, report inputs
+// ---------------------------------------------------------------------------
+
+export const DATA_SOURCES = ["kpi", "ghg", "input", "custom"] as const;
+export type DataSource = (typeof DATA_SOURCES)[number];
+
+export const GHG_METRICS = [
+  "total",
+  "scope1",
+  "scope2_location",
+  "scope2_market",
+  "scope3",
+  "scope3_category",
+  "biogenic_co2",
+  "gas_co2",
+  "gas_ch4",
+  "gas_n2o",
+  "gas_other",
+  "intensity_revenue",
+  "intensity_output",
+  "intensity_employee",
+  "base_year_total",
+  "dq_score",
+  "primary_data_pct",
+  "sites_covered",
+  "months_covered",
+] as const;
+export type GhgMetric = (typeof GHG_METRICS)[number];
+
+export const GHG_BREAKDOWNS = ["scope", "scope3_category", "site", "month", "quarter", "gas", "fuel", "source_category"] as const;
+export type GhgBreakdown = (typeof GHG_BREAKDOWNS)[number];
+
+export type Sites = "all" | number[];
+export type BindingYears = { last: number } | number[];
+
+/** RS `Binding`, now the `kpi` variant. */
+export interface KpiBinding {
+  source: "kpi";
+  kpis: string[];
+  years: BindingYears;
+  sites: Sites;
+  unit?: string;
+  breakdown?: string;
+  compare?: "prior" | "base" | "target";
+}
+export interface GhgBinding {
+  source: "ghg";
+  metric: GhgMetric;
+  years: BindingYears;
+  sites: Sites;
+  breakdown?: GhgBreakdown;
+  /** 1–15 */
+  scope3Category?: number;
+  top?: number;
+  compare?: "prior" | "base";
+}
+
+export const REPORT_INPUT_KEYS = [
+  "consolidation_approach",
+  "responsible_person",
+  "reporting_period",
+  "base_year",
+  "recalculation_policy",
+  "significance_threshold_pct",
+  "gwp_set",
+  "exclusions",
+  "scope2_instruments",
+  "uncertainty_statement",
+  "verification",
+  "conformance",
+  "revenue",
+  "revenue_ppp_rate",
+  "output_units",
+  "employees",
+  "leadership_message",
+  "about_company",
+] as const;
+export type ReportInputKey = (typeof REPORT_INPUT_KEYS)[number];
+
+export const REPORT_INPUT_KINDS: Record<ReportInputKey, readonly ReportKind[]> = {
+  consolidation_approach: ["ghg"],
+  responsible_person: ["ghg"],
+  reporting_period: ["ghg", "sustainability"],
+  base_year: ["ghg"],
+  recalculation_policy: ["ghg"],
+  significance_threshold_pct: ["ghg"],
+  gwp_set: ["ghg"],
+  exclusions: ["ghg"],
+  scope2_instruments: ["ghg"],
+  uncertainty_statement: ["ghg"],
+  verification: ["ghg", "sustainability"],
+  conformance: ["ghg"],
+  revenue: ["ghg"],
+  revenue_ppp_rate: ["ghg"],
+  output_units: ["ghg"],
+  employees: ["ghg"],
+  leadership_message: ["sustainability"],
+  about_company: ["sustainability"],
+};
+export const inputKeysFor = (kind: ReportKind): ReportInputKey[] => REPORT_INPUT_KEYS.filter((k) => REPORT_INPUT_KINDS[k].includes(kind));
+
+export const INPUT_SOURCES = ["company", "typed", "kpi"] as const;
+export type InputSource = (typeof INPUT_SOURCES)[number];
+export const VERIFICATION_STATUSES = ["none", "limited", "reasonable"] as const;
+export const CONFORMANCE_CODES = ["GHGP", "ISO14064"] as const;
+export const GWP_SETS = ["AR4", "AR5", "AR6", "MIXED"] as const;
+
+export interface ReportInputValues {
+  consolidation_approach: string;
+  responsible_person: string;
+  reporting_period: string;
+  base_year: number;
+  recalculation_policy: string;
+  significance_threshold_pct: number;
+  gwp_set: (typeof GWP_SETS)[number];
+  exclusions: { what: string; reason: string }[];
+  scope2_instruments: string;
+  uncertainty_statement: string;
+  verification: { status: (typeof VERIFICATION_STATUSES)[number]; provider?: string; statementAssetId?: string };
+  conformance: (typeof CONFORMANCE_CODES)[number][];
+  revenue: number;
+  revenue_ppp_rate: number;
+  output_units: number;
+  employees: number;
+  leadership_message: string;
+  about_company: string;
+}
+export interface ReportInput<K extends ReportInputKey = ReportInputKey> {
+  value: ReportInputValues[K];
+  source: InputSource;
+  updatedBy: number | null;
+  updatedAt: string;
+}
+export type ReportInputs = { [K in ReportInputKey]?: ReportInput<K> };
+
+export interface InputBinding {
+  source: "input";
+  key: ReportInputKey;
+}
+/** Typed table data (≤ 200 × 20). Never a reported figure: shows "Unlinked data". */
+export interface CustomData {
+  source: "custom";
+  columns: string[];
+  rows: (string | number)[][];
+}
+export type Binding = KpiBinding | GhgBinding | InputBinding | CustomData;
+export type ValueBinding = KpiBinding | GhgBinding | InputBinding;
+
+/** A text chip: one value. `year` is kept from an RS KpiToken by the v1 upgrade. */
+export interface DataToken {
+  type: "data";
+  attrs: { binding: GhgBinding | KpiBinding; measure: Measure; format?: NumberFormat; year?: YearRef };
+}
+
+// ---------------------------------------------------------------------------
+// §2 ReportDoc v2
+// ---------------------------------------------------------------------------
+
+export const TEXT_NODE_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "listItem", "hardBreak", "text"] as const;
+export const TEXT_MARK_TYPES = ["bold", "italic", "link", "highlight"] as const;
+export type TextMark = { type: "bold" } | { type: "italic" } | { type: "highlight"; attrs?: { color?: string } } | { type: "link"; attrs: { href: string } };
+export interface TextNode {
+  type: (typeof TEXT_NODE_TYPES)[number];
+  attrs?: Record<string, unknown>;
+  content?: (TextNode | DataToken)[];
+  text?: string;
+  marks?: TextMark[];
+}
+export interface TextDoc {
+  type: "doc";
+  content: TextNode[];
+}
+
+export interface ThemeOverrides {
+  look?: Look;
+  colors?: Partial<Record<"primary" | "accent" | "ink" | "muted" | "surface" | "coverFrom" | "coverTo", string>>;
+  fonts?: { heading?: FontId; body?: FontId };
+}
+
+export const ASSET_KINDS = ["image", "logo", "ai_image"] as const;
+export interface AssetRef {
+  id: string;
+  kind: (typeof ASSET_KINDS)[number];
+  w: number;
+  h: number;
+  alt: string;
+}
+
+/** Millimetres on the doc's format, origin top-left; rotation in degrees. */
+export interface Frame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation: number;
+}
+export interface Crop {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export const FRAME_MASKS = ["rect", "rounded", "circle", "arch", "blob"] as const;
+export type FrameMask = (typeof FRAME_MASKS)[number];
+
+export interface ElementPropsByType {
+  text: { doc: TextDoc; style: TextStyleId; align: "left" | "center" | "right" | "justify"; color?: string; valign?: "top" | "middle" | "bottom" };
+  kpi_tile: { binding: ValueBinding; label?: string; showDelta: boolean; showSparkline: boolean; variant: "plain" | "card" | "band" };
+  chart: {
+    binding: Binding;
+    kind: ChartKind;
+    title?: string;
+    subtitle?: string;
+    caption?: string;
+    options: Partial<Record<"greyPrior" | "showValues" | "horizontal" | "stacked" | "showTarget", boolean>>;
+  };
+  table: { binding?: Binding; columns?: string[]; rows?: (string | number | null)[][]; style: "lined" | "zebra" | "minimal"; totalRow?: boolean };
+  image: { assetId: string; fit: "cover" | "contain"; alt: string; crop?: Crop; radius?: number; bleed?: boolean };
+  shape: { shape: "rect" | "ellipse" | "line"; fill?: string; stroke?: string; strokeWidth?: number; radius?: number; opacity?: number; bleed?: boolean };
+  icon: { name: string; color?: string };
+  sdg: { goal: number; variant: "full" | "compact" };
+  divider: { color?: string; strokeWidth?: number; style?: "solid" | "dashed" | "dotted" };
+  page_number: { format?: "n" | "n_of_m"; align?: "left" | "center" | "right"; color?: string };
+  placeholder: { accepts: ("text" | "image" | "chart" | "table" | "kpi_tile" | "frame" | "big_number")[]; hint?: string };
+  frame: { mask: FrameMask; assetId?: string; fit: "cover" | "contain"; alt: string; crop?: Crop; bleed?: boolean };
+  grid: { columns: number; gap: number; mask?: FrameMask; cells: { assetId?: string; alt: string; crop?: Crop }[] };
+  line: { x1: number; y1: number; x2: number; y2: number; stroke?: string; strokeWidth: number; dash: "solid" | "dashed" | "dotted"; startArrow?: boolean; endArrow?: boolean };
+  big_number: { binding: ValueBinding; measure?: Measure; format?: NumberFormat; label?: string; showDelta: boolean };
+  progress: { binding: ValueBinding; variant: "ring" | "bar"; label?: string; color?: string };
+  callout: { doc: TextDoc; icon?: string; tone?: "primary" | "accent" | "muted" | "good" | "warn"; color?: string };
+  qr: { url: string; color?: string };
+}
+
+interface ElementBase {
+  /** '<pageId>.<slot>' for layout elements, a nanoid for user ones. */
+  id: string;
+  frame: Frame;
+  z: number;
+  locked?: boolean;
+  templateLocked?: boolean;
+  groupId?: string;
+  hidden?: boolean;
+  /** Transparency (DS-6 toolbar); 1 when absent. */
+  opacity?: number;
+  source: ElementSource;
+  reviewed?: boolean;
+  basedOnHash?: string;
+}
+export type ElementOf<T extends ElementType> = ElementBase & { type: T; props: ElementPropsByType[T] };
+export type Element = { [T in ElementType]: ElementOf<T> }[ElementType];
+
+export interface FreeformPage {
+  id: string;
+  kind: "freeform";
+  name: string;
+  layoutId?: string;
+  background: { color?: string; assetId?: string; fit?: "cover" | "contain" };
+  elements: Element[];
+  hidden?: boolean;
+  lockedByTemplate?: boolean;
+  bookmark?: string;
+  /** Speaker notes (Present, DS-11). */
+  notes?: string;
+  /** Ruler guides (DS-6), never printed. */
+  guides?: { axis: "x" | "y"; mm: number }[];
+}
+export interface FlowOptions {
+  columns?: 1 | 2;
+  kpis?: string[];
+  years?: { last: number };
+  groupBy?: "pillar" | "topic";
+  showEvidence?: boolean;
+  startOnRight?: boolean;
+  categories?: number[];
+  showDq?: boolean;
+  showMethod?: boolean;
+}
+export interface FlowSection {
+  id: string;
+  kind: "flow";
+  name: string;
+  flowType: FlowType;
+  options: FlowOptions;
+  content?: TextDoc;
+  hidden?: boolean;
+  bookmark?: string;
+}
+export type Page = FreeformPage | FlowSection;
+
+export interface ReportDoc {
+  schemaVersion: 2;
+  kind: ReportKind;
+  purpose: DocPurpose;
+  format: PageFormat;
+  meta: {
+    title: string;
+    subtitle?: string;
+    year: number;
+    yearType: YearType;
+    sites: Sites;
+    frameworks: FrameworkCode[];
+    compareYear?: number;
+    language: "en";
+  };
+  design: { templateId: string; templateVersion: number; styleId?: string; theme: ThemeOverrides };
+  pages: Page[];
+  assets: AssetRef[];
+  /** Set on a resized copy (DS-10). */
+  source?: { docId: number; rev: number; dataHash: string };
+}
+
+export const MAX_DOC_BYTES = 2 * 1024 * 1024;
+
+// ---------------------------------------------------------------------------
+// §4 API shapes (mounted at /studio)
+// ---------------------------------------------------------------------------
+
+/** GET /studio/status: answers while the switch is off. */
+export interface StudioStatus {
+  enabled: boolean;
+  kinds: Record<ReportKind, boolean>;
+}
+
+/** GET /readiness?kind=ghg (mock shape for `gaps`). */
+export interface GhgReadiness {
+  kind: "ghg";
+  approvedRows: number;
+  pendingRows: number;
+  sitesCovered: number;
+  monthsCovered: number;
+  /** "n/15" */
+  scope3Addressed: string;
+  gaps: { siteId?: number; month?: string; category?: number; message: string }[];
+}
+/** GET /readiness?kind=sustainability: the RS readiness. */
+export interface SustainabilityReadiness {
+  kind: "sustainability";
+  year: number;
+  locked: boolean;
+  lockedAt: string | null;
+  coverage: { framework: FrameworkCode; pct: number }[];
+  missing: { kpi: string; sites: number[]; periods: string[] }[];
+  pendingCount: number;
+}
+export type Readiness = GhgReadiness | SustainabilityReadiness;
+
+/** GET/PUT /brand-kit (mock shape; DS-3 confirms). */
+export interface BrandKit {
+  fonts: { heading: FontId | null; body: FontId | null };
+  voice: string;
+  palettes: { id: number; name: string; colors: string[]; sort: number }[];
+  logos: { primary: string | null; mark: string | null };
+}
+
+/** GET /templates (mock shape; DS-4 confirms). */
+export interface ReportTemplate {
+  id: number;
+  companyId: number | null;
+  kind: ReportKind;
+  purpose: DocPurpose;
+  format: PageFormat;
+  name: string;
+  tags: string[];
+  version: number;
+  thumbnailUrl: string | null;
+  pageCount: number;
+}
+export interface ReportTemplateDetail extends ReportTemplate {
+  doc: ReportDoc;
+}
+/** GET /layouts (mock shape; DS-4 confirms). */
+export interface ReportLayout {
+  id: number;
+  companyId: number | null;
+  kind: ReportKind;
+  format: PageFormat;
+  pageKind: LayoutKind;
+  name: string;
+  thumbnailUrl: string | null;
+  page: FreeformPage;
+}
+export const ELEMENT_GROUPS = ["shapes", "lines", "frames", "grids", "icons", "sdg", "esg", "data"] as const;
+/** GET /elements (mock shape; DS-4 confirms). */
+export interface ElementTemplate {
+  id: number;
+  companyId: number | null;
+  group: (typeof ELEMENT_GROUPS)[number];
+  name: string;
+  tags: string[];
+  payload: Element;
+  license: string;
+}
+/** POST/GET /assets. */
+export interface StudioAsset extends AssetRef {
+  folder: string | null;
+  url: string;
+  bytes: number;
+  mime: string;
+}
+
+/** POST /resolve. */
+export interface ResolveRequest {
+  kind: ReportKind;
+  year: number;
+  yearType: YearType;
+  sites: Sites;
+  bindings: Binding[];
+  tokens: DataToken[];
+}
+/** One resolved binding (mock shape after RS ResolvedBinding; DS-2 confirms). */
+export interface ResolvedBinding {
+  display: string;
+  value: number | null;
+  unit: string | null;
+  series?: { label: string; values: { key: string; value: number | null }[] }[];
+  approvedAt?: string | null;
+  source: DataSource;
+}
+export interface ResolveResponse {
+  values: ResolvedBinding[];
+  tokens: ResolvedBinding[];
+  dataHash: string;
+  unavailable: { bindingIdx: number; reason: string }[];
+}
+
+/** GET /docs/:id/inputs: inputs with prefill sources (mock shape). */
+export interface DocInputsResponse {
+  rev: number;
+  inputs: ReportInputs;
+  prefill: Partial<Record<ReportInputKey, { value: unknown; source: InputSource }>>;
+}
+
+/** GET /docs list item (mock shape; DS-5 confirms). */
+export interface StudioDocSummary {
+  id: number;
+  kind: ReportKind;
+  purpose: DocPurpose;
+  format: PageFormat;
+  title: string;
+  year: number;
+  yearType: YearType;
+  status: ReportStatus;
+  rev: number;
+  updatedAt: string;
+  updatedBy: string | null;
+  thumbnailUrl: string | null;
+  sourceDocId: number | null;
+}
+/** POST /docs body. */
+export interface CreateDocBody {
+  kind: ReportKind;
+  templateId: number;
+  year: number;
+  yearType: YearType;
+  sites: Sites;
+  frameworks: FrameworkCode[];
+  inputs: ReportInputs;
+  ai: boolean;
+}
+/** GET/PATCH /docs/:id and POST /docs. */
+export interface StudioDocResponse {
+  id: number;
+  doc: ReportDoc;
+  rev: number;
+  status: ReportStatus;
+}
+
+/** POST /docs/:id/jobs and GET /jobs/:id (RS ReportJob plus kinds and options). */
+export interface ReportJob {
+  id: number;
+  docId: number;
+  versionId: number | null;
+  kind: JobKind;
+  status: JobStatus;
+  errorCode: DsErrorCode | null;
+  requestedBy: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  downloadUrl: string | null;
+  options?: { bleed?: boolean; cropMarks?: boolean; pages?: [number, number] };
+}
+export interface ReportVersion {
+  n: number;
+  kind: VersionKind;
+  note: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  pageCount: number | null;
+  pdfUrl: string | null;
+  dataHash: string | null;
+}
+/** POST /docs/:id/shares returns the url once; GET lists without it. */
+export interface ReportShare {
+  id: number;
+  versionId: number;
+  expiresAt: string;
+  revokedAt: string | null;
+  views: number;
+  url?: string;
+}
+
+// ---------------------------------------------------------------------------
+// §5 Error codes
+// ---------------------------------------------------------------------------
+
+export const DS_ERROR_STATUS = {
+  DS_STUDIO_OFF: 403,
+  DS_KIND_OFF: 403,
+  DS_FORMAT_INVALID: 422,
+  DS_SOURCE_UNAVAILABLE: 422,
+  DS_SHARE_EXPIRED: 410,
+  DS_APPROVAL_PENDING: 409,
+  DS_RESIZE_UNSUPPORTED: 422,
+  DS_ROLE: 403,
+  DS_SITES_SCOPE: 403,
+  DS_DOC_NOT_FOUND: 404,
+  DS_VERSION_CONFLICT: 409,
+  DS_FINAL_IMMUTABLE: 409,
+  DS_DOC_INVALID: 422,
+  DS_DOC_TOO_LARGE: 413,
+  DS_BINDING_INVALID: 422,
+  DS_LAYOUT_NOT_FOUND: 404,
+  DS_ASSET_TYPE: 415,
+  DS_ASSET_TOO_LARGE: 413,
+  DS_YEAR_NOT_LOCKED: 409,
+  DS_CHECKS_BLOCKING: 409,
+  DS_JOB_RUNNING: 409,
+  DS_JOB_FAILED: 500,
+  DS_AI_UNAVAILABLE: 503,
+  DS_AI_BUDGET_EXCEEDED: 429,
+  DS_AI_OUTPUT_INVALID: 502,
+  DS_VALIDATION: 400,
+  DS_COMPANY_REQUIRED: 400,
+} as const;
+export type DsErrorCode = keyof typeof DS_ERROR_STATUS;
+export const DS_ERROR_CODES = Object.keys(DS_ERROR_STATUS) as DsErrorCode[];
+export interface DsErrorBody {
+  code: DsErrorCode;
+  message: string;
+  details?: unknown;
+}
+export const isDsErrorCode = (v: unknown): v is DsErrorCode => typeof v === "string" && v in DS_ERROR_STATUS;
+
+// ---------------------------------------------------------------------------
+// §6 Checks
+// ---------------------------------------------------------------------------
+
+export const CHECK_IDS = [
+  "YEAR_NOT_LOCKED",
+  "VALUES_MISSING",
+  "NUMBER_MISMATCH",
+  "NUMBER_UNBOUND",
+  "TEXT_OVERFLOW",
+  "OUTSIDE_SAFE_AREA",
+  "OVERLAPS_LOCKED",
+  "FONT_TOO_SMALL",
+  "LOW_CONTRAST",
+  "EMPTY_PLACEHOLDER",
+  "MISSING_ALT",
+  "AI_UNREVIEWED",
+  "LEADERSHIP_UNCONFIRMED",
+  "DATA_CHANGED",
+  "GHG_PENDING_ENTRIES",
+  "GHG_SITES_MISSING",
+  "GHG_MONTHS_MISSING",
+  "CONSOLIDATION_MISSING",
+  "PERIOD_MISSING",
+  "BASE_YEAR_MISSING",
+  "RECALC_POLICY_MISSING",
+  "SCOPE2_MARKET_MISSING",
+  "GAS_BREAKDOWN_MISSING",
+  "BIOGENIC_IN_SCOPE",
+  "BIOGENIC_NOT_SHOWN",
+  "SCOPE3_CATEGORY_UNADDRESSED",
+  "EXCLUSION_NO_REASON",
+  "SCOPE3_DQ_MISSING",
+  "EF_SOURCE_MISSING",
+  "GWP_MIXED",
+  "RESPONSIBLE_PERSON_MISSING",
+  "UNCERTAINTY_MISSING",
+  "VERIFICATION_STATEMENT_MISSING",
+  "INTENSITY_MISSING",
+  "TOTAL_MISMATCH",
+  "YOY_UNEXPLAINED",
+  "UNLINKED_DATA",
+] as const;
+export type CheckId = (typeof CHECK_IDS)[number];
+
+const BOTH = ["ghg", "sustainability"] as const;
+const GHG = ["ghg"] as const;
+const SUS = ["sustainability"] as const;
+/** Default severity and the kinds each check applies to (D8 escalates ISO checks). */
+export const CHECK_RULES: Record<CheckId, { severity: CheckSeverity; kinds: readonly ReportKind[] }> = {
+  YEAR_NOT_LOCKED: { severity: "error", kinds: SUS },
+  VALUES_MISSING: { severity: "warning", kinds: BOTH },
+  NUMBER_MISMATCH: { severity: "error", kinds: BOTH },
+  NUMBER_UNBOUND: { severity: "info", kinds: BOTH },
+  TEXT_OVERFLOW: { severity: "error", kinds: BOTH },
+  OUTSIDE_SAFE_AREA: { severity: "error", kinds: BOTH },
+  OVERLAPS_LOCKED: { severity: "warning", kinds: BOTH },
+  FONT_TOO_SMALL: { severity: "error", kinds: BOTH },
+  LOW_CONTRAST: { severity: "error", kinds: BOTH },
+  EMPTY_PLACEHOLDER: { severity: "error", kinds: BOTH },
+  MISSING_ALT: { severity: "warning", kinds: BOTH },
+  AI_UNREVIEWED: { severity: "warning", kinds: BOTH },
+  LEADERSHIP_UNCONFIRMED: { severity: "error", kinds: SUS },
+  DATA_CHANGED: { severity: "warning", kinds: BOTH },
+  GHG_PENDING_ENTRIES: { severity: "error", kinds: GHG },
+  GHG_SITES_MISSING: { severity: "warning", kinds: GHG },
+  GHG_MONTHS_MISSING: { severity: "warning", kinds: GHG },
+  CONSOLIDATION_MISSING: { severity: "error", kinds: GHG },
+  PERIOD_MISSING: { severity: "error", kinds: GHG },
+  BASE_YEAR_MISSING: { severity: "warning", kinds: GHG },
+  RECALC_POLICY_MISSING: { severity: "warning", kinds: GHG },
+  SCOPE2_MARKET_MISSING: { severity: "warning", kinds: GHG },
+  GAS_BREAKDOWN_MISSING: { severity: "warning", kinds: GHG },
+  BIOGENIC_IN_SCOPE: { severity: "error", kinds: GHG },
+  BIOGENIC_NOT_SHOWN: { severity: "warning", kinds: GHG },
+  SCOPE3_CATEGORY_UNADDRESSED: { severity: "error", kinds: GHG },
+  EXCLUSION_NO_REASON: { severity: "error", kinds: GHG },
+  SCOPE3_DQ_MISSING: { severity: "warning", kinds: GHG },
+  EF_SOURCE_MISSING: { severity: "error", kinds: GHG },
+  GWP_MIXED: { severity: "warning", kinds: GHG },
+  RESPONSIBLE_PERSON_MISSING: { severity: "warning", kinds: GHG },
+  UNCERTAINTY_MISSING: { severity: "info", kinds: GHG },
+  VERIFICATION_STATEMENT_MISSING: { severity: "warning", kinds: GHG },
+  INTENSITY_MISSING: { severity: "warning", kinds: GHG },
+  TOTAL_MISMATCH: { severity: "error", kinds: GHG },
+  YOY_UNEXPLAINED: { severity: "info", kinds: GHG },
+  UNLINKED_DATA: { severity: "info", kinds: BOTH },
+};
+
+export const CHECK_FIXES = ["replace_with_token", "shrink_text", "move_inside", "open_values", "open_inputs"] as const;
+export interface Check {
+  id: CheckId;
+  severity: CheckSeverity;
+  pageId?: string;
+  elementId?: string;
+  message: string;
+  details?: unknown;
+  fix?: (typeof CHECK_FIXES)[number];
+}
+/** POST /docs/:id/checks. */
+export interface ChecksResponse {
+  checks: Check[];
+  blocking: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// §8 AI
+// ---------------------------------------------------------------------------
+
+export const AI_ACTIONS = [
+  "draft_report",
+  "draft_page",
+  "headline",
+  "body",
+  "leadership_draft",
+  "about_report",
+  "rewrite_shorter",
+  "rewrite_longer",
+  "rewrite_formal",
+  "rewrite_plain",
+  "explain_change",
+  "add_target_context",
+  "chart_title",
+  "chart_kind",
+  "suggest_layouts",
+  "fill_page",
+  "alt_text",
+  "cover_art",
+  "honesty_check",
+  "jargon_check",
+  "missing_disclosures",
+  "design_from_brief",
+  "suggest_style",
+  "ghg_exec_summary",
+  "ghg_methodology_text",
+  "scope3_category_text",
+  "exclusion_reason_draft",
+  "summarise_for_deck",
+  "summarise_for_social",
+  "apply_brand_voice",
+] as const;
+export type AiAction = (typeof AI_ACTIONS)[number];
+
+export const SUGGESTION_KINDS = ["text", "elements", "pages", "findings", "image"] as const;
+export type SuggestionSource =
+  | { source: "kpi"; kpi: string; year: number }
+  | { source: "ghg"; metric: GhgMetric; year: number; scope3Category?: number }
+  | { source: "input"; key: ReportInputKey };
+export interface Suggestion {
+  id: string;
+  action: AiAction;
+  model: string;
+  createdAt: string;
+  kind: (typeof SUGGESTION_KINDS)[number];
+  payload: {
+    text?: TextDoc;
+    elements?: Element[];
+    pages?: FreeformPage[];
+    findings?: { message: string; pageId?: string; elementId?: string; severity: CheckSeverity }[];
+    assetId?: string;
+  };
+  sources: SuggestionSource[];
+}
+export interface ChatTurn {
+  role: "user" | "assistant";
+  text: string;
+  suggestions?: Suggestion[];
+}
+/** POST /docs/:id/ai/chat. */
+export interface ChatReply {
+  reply: string;
+  suggestions: Suggestion[];
+}
+/** GET /docs/:id/ai/usage (RS plus the company month). */
+export interface AiUsage {
+  todayUsd: number;
+  budgetUsd: number;
+  calls: number;
+  callBudget: number;
+  monthUsd: number;
+  monthBudgetUsd: number;
+}
+
+// ---------------------------------------------------------------------------
+// DS-13 collaboration shapes (mock shapes; DS-13 confirms)
+// ---------------------------------------------------------------------------
+
+export interface ReportComment {
+  id: number;
+  docId: number;
+  pageId: string;
+  elementId: string | null;
+  parentId: number | null;
+  body: string;
+  authorId: number;
+  authorName: string;
+  mentions: number[];
+  taskAssigneeId: number | null;
+  taskDoneAt: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+export interface ReportApproval {
+  id: number;
+  docId: number;
+  rev: number;
+  requestedBy: number;
+  reviewerId: number;
+  dueAt: string | null;
+  state: ApprovalState;
+  note: string | null;
+  decidedAt: string | null;
+}
+/** GET /docs/:id/drift (RS). */
+export interface DriftResponse {
+  changed: { elementId: string; before: string; after: string }[];
+}
+
+// ---------------------------------------------------------------------------
+// §9 FE routes
+// ---------------------------------------------------------------------------
+
+export const STUDIO_ROUTE_IDS = [
+  "studio-home",
+  "studio-new",
+  "studio-brand-kit",
+  "studio-editor",
+  "studio-preview",
+  "studio-present",
+  "studio-versions",
+] as const;
+export type StudioRouteId = (typeof STUDIO_ROUTE_IDS)[number];
