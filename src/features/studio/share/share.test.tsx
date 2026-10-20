@@ -125,7 +125,7 @@ describe("ShareMenu and the view link dialog", () => {
     renderAt(<ShareMenu docId={1} canShare />);
     await user.click(screen.getByTestId("share-menu"));
     const menu = screen.getByRole("menu", { name: "Share" });
-    expect(within(menu).getByText("Comments and @mentions arrive with review.")).toBeTruthy();
+    expect(within(menu).getByText("Comment, @mention people with studio access, assign tasks.")).toBeTruthy(); // DS-13
     await user.click(within(menu).getByTestId("share-view-link"));
     const dialog = await screen.findByRole("dialog", { name: "View link" });
     // Nothing stored yet: make a proof first.

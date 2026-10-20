@@ -1,5 +1,5 @@
 // DS-11 · Share ▾ (05-ux S7): people with studio access and comments
-// (DS-13), Request approval (DS-13), and Create view link (Manager; D15),
+// (DS-13, opens the review panel), Request approval (DS-13, its dialog), and Create view link (Manager; D15),
 // with the design's active links and their views.
 import { useState } from "react";
 import { Link2, MessageSquare, UserCheck } from "lucide-react";
@@ -7,6 +7,9 @@ import { Button, Popover, cn, focusRing } from "../../../ui";
 import { shareLine } from "../../../lib/studio/outputs";
 import { useShares } from "./api";
 import { ViewLinkDialog } from "./ViewLinkDialog";
+import { useLocation, useNavigate } from "react-router-dom"; // DS-13
+import { RequestApprovalDialog } from "../review/RequestApprovalDialog"; // DS-13
+import { openReview } from "../review/store"; // DS-13
 
 function Row({ icon, title, sub, onClick, disabled, testId }: { icon: React.ReactNode; title: string; sub: string; onClick?: () => void; disabled?: boolean; testId?: string }) {
   return (
@@ -33,6 +36,14 @@ export function ShareMenu({ docId, canShare }: { docId: number; canShare: boolea
   const [dialog, setDialog] = useState(false);
   const shares = useShares(docId, canShare);
   const active = (shares.data ?? []).filter((s) => s.state === "active");
+  // DS-13: comments open the review panel (in the editor); Request approval opens its dialog.
+  const [approval, setApproval] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const openComments = () => {
+    openReview(docId);
+    if (location.pathname !== `/studio/${docId}`) navigate(`/studio/${docId}`);
+  };
   return (
     <>
       <Popover
@@ -48,8 +59,26 @@ export function ShareMenu({ docId, canShare }: { docId: number; canShare: boolea
         {(close) => (
           <div role="menu" aria-label="Share" className="flex flex-col gap-0.5">
             <div className="px-2.5 py-1.5 text-xs font-semibold text-muted">Share</div>
-            <Row icon={<MessageSquare className="size-4" />} title="People and comments" sub="Comments and @mentions arrive with review." disabled />
-            <Row icon={<UserCheck className="size-4" />} title="Request approval" sub="Arrives with review." disabled />
+            <Row
+              testId="share-comments"
+              icon={<MessageSquare className="size-4" />}
+              title="People and comments"
+              sub="Comment, @mention people with studio access, assign tasks."
+              onClick={() => {
+                close();
+                openComments();
+              }}
+            />
+            <Row
+              testId="share-request-approval"
+              icon={<UserCheck className="size-4" />}
+              title="Request approval"
+              sub="Ask a Manager to approve the design as it is."
+              onClick={() => {
+                close();
+                setApproval(true);
+              }}
+            />
             <div aria-hidden className="my-1 h-px bg-line" />
             <Row
               testId="share-view-link"
@@ -87,6 +116,7 @@ export function ShareMenu({ docId, canShare }: { docId: number; canShare: boolea
         )}
       </Popover>
       {canShare && dialog && <ViewLinkDialog docId={docId} open={dialog} onClose={() => setDialog(false)} />}
+      <RequestApprovalDialog docId={docId} open={approval} onClose={() => setApproval(false)} /> {/* DS-13 */}
     </>
   );
 }
