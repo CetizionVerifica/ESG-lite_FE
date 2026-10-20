@@ -42,3 +42,27 @@ describe("command registry", () => {
   });
 
 });
+
+describe("Design Studio commands (DS-0)", () => {
+  const studio = (role: "User" | "Manager" | "Admin" | "Superadmin", flags: { kpi?: boolean; studio?: boolean }) =>
+    routeCommands(role, 3, flags)
+      .filter((c) => c.group === "Design Studio" || c.to.startsWith("/studio"))
+      .map((c) => [c.label, c.to]);
+
+  it("offers nothing while the studio is off", () => {
+    for (const role of ["User", "Manager", "Admin", "Superadmin"] as const) expect(studio(role, { kpi: true }), role).toEqual([]);
+  });
+
+  it("offers the studio and a new GHG design; a sustainability design also needs KPI tracking", () => {
+    expect(studio("Manager", { studio: true })).toEqual([
+      ["Design Studio", "/studio"],
+      ["New GHG report design", "/studio/new?kind=ghg"],
+    ]);
+    expect(studio("Admin", { studio: true, kpi: true })).toEqual([
+      ["Design Studio", "/studio"],
+      ["New GHG report design", "/studio/new?kind=ghg"],
+      ["New sustainability report design", "/studio/new?kind=sustainability"],
+    ]);
+    expect(studio("User", { studio: true, kpi: true })).toEqual([]);
+  });
+});

@@ -106,3 +106,20 @@ describe("switch-aware nav (KPI-1)", () => {
     expect(navFor("Manager", {}).every((i) => i.kind === "link" || i.items.length > 0)).toBe(true);
   });
 });
+
+describe("Design Studio nav item (DS-0)", () => {
+  const studioLinks = (role: "User" | "Manager" | "Admin" | "Superadmin", flags: { kpi?: boolean; studio?: boolean }) => navLinks(role, flags).filter((l) => l.to.startsWith("/studio"));
+
+  it("is hidden while the studio switch is off, whatever KPI tracking says", () => {
+    for (const role of ["User", "Manager", "Admin", "Superadmin"] as const) {
+      for (const flags of [{}, { kpi: true }, { studio: false }]) expect(studioLinks(role, flags), role).toEqual([]);
+    }
+  });
+
+  it("shows under Reports for Managers and the Superadmin, at the top level for Admins, never for Users", () => {
+    expect(studioLinks("Manager", { studio: true })).toEqual([{ label: "Design Studio", to: "/studio", group: "Reports" }]);
+    expect(studioLinks("Superadmin", { studio: true })).toEqual([{ label: "Design Studio", to: "/studio", group: "Reports" }]);
+    expect(studioLinks("Admin", { studio: true })).toEqual([{ label: "Design Studio", to: "/studio" }]);
+    expect(studioLinks("User", { studio: true, kpi: true })).toEqual([]);
+  });
+});

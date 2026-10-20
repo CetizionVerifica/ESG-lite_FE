@@ -4,6 +4,7 @@ import { RotateCw } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
 import { KpiGate } from "../../lib/kpi/KpiGate";
+import { StudioGate } from "../../lib/studio/StudioGate"; // DS-0
 import StatusPage from "./components/StatusPage";
 import { type LegacyRedirect, type Role, type ShellRoute, asRole, canAccess, homeFor, resolveLegacyRedirect } from "./routeMap";
 
@@ -68,6 +69,15 @@ export function RoleGuard({ route, children }: { route: ShellRoute; children: Re
       <KpiGate staff={staff} home={staff ? "/clients" : homeFor(role)}>
         {children}
       </KpiGate>
+    );
+  }
+  // DS-0: Design Studio routes show "not available" while the company's studio switch is off.
+  if (route.requires === "studio") {
+    const staff = role === "Superadmin";
+    return (
+      <StudioGate staff={staff} home={staff ? "/clients" : homeFor(role)}>
+        {children}
+      </StudioGate>
     );
   }
   return <>{children}</>;

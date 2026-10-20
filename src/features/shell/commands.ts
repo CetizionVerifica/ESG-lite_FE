@@ -1,6 +1,19 @@
 import { navLinks, resolveNavTo } from "./nav";
 import type { FeatureFlags, Role } from "./routeMap";
 
+/** DS-0: Design Studio shortcuts (01-contracts §9). Sustainability designs also need KPI tracking. */
+const STUDIO_ROLES: readonly Role[] = ["Manager", "Admin", "Superadmin"];
+function studioCommands(role: Role, flags: FeatureFlags): Command[] {
+  if (!STUDIO_ROLES.includes(role) || flags.studio !== true) return [];
+  const out: Command[] = [
+    { id: "studio:new-ghg", label: "New GHG report design", group: "Design Studio", to: "/studio/new?kind=ghg", keywords: "design studio new ghg report design inventory emissions" },
+  ];
+  if (flags.kpi === true) {
+    out.push({ id: "studio:new-sustainability", label: "New sustainability report design", group: "Design Studio", to: "/studio/new?kind=sustainability", keywords: "design studio new sustainability annual report design esg" });
+  }
+  return out;
+}
+
 /**
  * ⌘K registry. Today it holds the routes a role can open; entity search
  * (sites, categories, emission factors) plugs in later as more providers.
@@ -26,6 +39,7 @@ export function routeCommands(role: Role | null, clientId: number | null, flags:
   }));
   return [
     ...pages,
+    ...studioCommands(role, flags), // DS-0
     { id: "route:/notifications", label: "Notifications", group: "Account", to: "/notifications", keywords: "notifications bell alerts" },
     { id: "route:/settings", label: "Settings", group: "Account", to: "/settings", keywords: "settings preferences profile password" },
   ];
