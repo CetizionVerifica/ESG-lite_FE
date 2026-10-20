@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Popover, PopoverLayer } from "./Popover";
 import { layerPosition } from "./popoverPosition";
+import { portalRoot } from "./portalRoot";
 
 afterEach(cleanup);
 
@@ -106,5 +107,30 @@ describe("Popover without a layer", () => {
     const panel = screen.getByRole("dialog", { name: "Filter panel" });
     expect(panel.parentElement?.parentElement).toBe(document.body.firstElementChild);
     expect(panel.className).toContain("absolute");
+  });
+});
+
+describe("portalRoot in full screen", () => {
+  afterEach(() => {
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => null });
+  });
+
+  it("attaches a layered panel inside the element in full screen, so it stays visible", async () => {
+    const stage = document.createElement("div");
+    document.body.appendChild(stage);
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => stage });
+    expect(portalRoot()).toBe(stage);
+    render(
+      <PopoverLayer>
+        <Picker name="Insert data value" />
+      </PopoverLayer>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Insert data value" }));
+    expect(screen.getByRole("dialog", { name: "Insert data value panel" }).parentElement).toBe(stage);
+    stage.remove();
+  });
+
+  it("uses document.body when nothing is in full screen", () => {
+    expect(portalRoot()).toBe(document.body);
   });
 });
