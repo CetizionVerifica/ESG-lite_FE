@@ -30,6 +30,8 @@ const KPI_DASHBOARD = kpiLink("Dashboard", "/kpi/dashboard", "KPI dashboard");
 const KPI_TARGETS = kpiLink("Targets", "/kpi/targets", "KPI targets"); // KPI-9 nav fix (wave D)
 const KPI_REPORTS = kpiLink("Framework reports", "/reports/kpi/GRI");
 const KPI_SETUP = kpiLink("KPI setup", "/kpi/setup");
+/** DS-0: Design Studio, behind the company's studio switch. */
+const STUDIO = link("Design Studio", "/studio", "studio");
 
 export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   User: [
@@ -53,6 +55,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("EDE report", "/reports/ede"),
       link("Framework reports", "/reports/kpi/GRI", "kpi"), // KPI-1
       link("Scope 3 boundary", "/settings/scope3"),
+      STUDIO, // DS-0
     ]),
     group("KPIs", [KPI_ESG, KPI_DASHBOARD, KPI_TARGETS]), // KPI-1, wave D: Targets next to Dashboard
     link("Targets (SBTi)", "/targets"),
@@ -66,6 +69,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     link("Scope 3 boundary", "/settings/scope3"),
     link("Suppliers", "/suppliers"),
     group("KPIs", [KPI_ESG, KPI_DASHBOARD, KPI_TARGETS, KPI_REPORTS, KPI_SETUP]), // KPI-1, wave D
+    STUDIO, // DS-0: Admins have no Reports group
   ],
   Superadmin: [
     link("Console", "/console"),
@@ -97,7 +101,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Data-entry forms", "/capture/forms"),
       link("Bulk upload", "/capture/upload"),
     ]),
-    group("Reports", [link("GHG", "/reports/ghg"), link("EDE", "/reports/ede")]),
+    group("Reports", [link("GHG", "/reports/ghg"), link("EDE", "/reports/ede"), STUDIO]), // DS-0: Design Studio
     // D18: everything an Admin has for KPIs, for the chosen client, plus the KPI review (Approvals → KPIs).
     group("KPIs", [KPI_ESG, KPI_DASHBOARD, KPI_TARGETS, kpiLink("Approvals", "/data/approvals?view=kpi", "KPI approvals"), KPI_REPORTS, KPI_SETUP]),
   ],

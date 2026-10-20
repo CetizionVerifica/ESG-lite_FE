@@ -23,6 +23,8 @@ export type Company = {
   ai_import_enabled?: boolean | null;
   /** "KPI tracking" (KPI-1, D2); absent on servers without migrate:kpi-switch = off. */
   kpi_tracking_enabled?: boolean;
+  /** "Design Studio" (DS-0, D4); absent on servers without migrate:ds-0-switch = off. */
+  design_studio_enabled?: boolean;
 };
 export type Site = { site_id: number; name: string; address?: string | null; company?: { company_id: number } | null; country?: { name: string } | null };
 export type AdminUser = {

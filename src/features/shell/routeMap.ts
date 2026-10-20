@@ -33,8 +33,11 @@ export interface ShellRoute {
   requires?: Requirement;
 }
 
-/** Company switches nav items and routes can depend on (KPI-1: `"kpi"` = `kpi_tracking_enabled`). */
-export const REQUIREMENTS = ["kpi"] as const;
+/**
+ * Company switches nav items and routes can depend on (KPI-1: `"kpi"` = `kpi_tracking_enabled`;
+ * DS-0: `"studio"` = `design_studio_enabled`).
+ */
+export const REQUIREMENTS = ["kpi", "studio"] as const;
 export type Requirement = (typeof REQUIREMENTS)[number];
 /** Which switches are on for the signed-in user; a missing key is off. */
 export type FeatureFlags = Partial<Record<Requirement, boolean>>;
@@ -128,6 +131,17 @@ export const SHELL_ROUTES = [
   { id: "kpi-esg", path: "/kpi/esg", title: "ESG dashboard", crumb: ["KPIs", "ESG dashboard"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-ESG", clientContext: true, requires: "kpi" },
   { id: "kpi-reports", path: "/reports/kpi/:framework", title: "Framework reports", crumb: ["Reports", "Framework reports"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-11", clientContext: true, requires: "kpi" },
   { id: "kpi-library", path: "/setup/kpi-library", title: "KPI library", crumb: ["Setup", "KPI library"], roles: ["Superadmin"], spec: "KPI-2" },
+
+  // DS-0: Design Studio (docs/design-studio/01-contracts.md §9). Admins, Managers and the Superadmin
+  // (for the chosen client); hidden while the company's switch is off. Sustainability designs also
+  // need KPI tracking (checked per kind by the pages). /s/:token (public viewer) is DS-11's, outside the shell.
+  { id: "studio-home", path: "/studio", title: "Design Studio", crumb: ["Reports", "Design Studio"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-5", clientContext: true, requires: "studio" },
+  { id: "studio-new", path: "/studio/new", title: "New design", crumb: ["Reports", "Design Studio", "New design"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-5", clientContext: true, requires: "studio" },
+  { id: "studio-brand-kit", path: "/studio/brand-kit", title: "Brand kit", crumb: ["Reports", "Design Studio", "Brand kit"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-3", clientContext: true, requires: "studio" },
+  { id: "studio-editor", path: "/studio/:id", title: "Design", crumb: ["Reports", "Design Studio", "Design"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-6", clientContext: true, requires: "studio" },
+  { id: "studio-preview", path: "/studio/:id/preview", title: "Page view", crumb: ["Reports", "Design Studio", "Page view"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-11", clientContext: true, requires: "studio" },
+  { id: "studio-present", path: "/studio/:id/present", title: "Present", crumb: ["Reports", "Design Studio", "Present"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-11", clientContext: true, requires: "studio" },
+  { id: "studio-versions", path: "/studio/:id/versions", title: "Versions", crumb: ["Reports", "Design Studio", "Versions"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-13", clientContext: true, requires: "studio" },
 ] as const satisfies readonly ShellRoute[];
 
 export type ShellRouteId = (typeof SHELL_ROUTES)[number]["id"];

@@ -72,7 +72,7 @@ describe("route map", () => {
 
 describe("nav per role", () => {
   // With every switch off and with KPI tracking on (KPI-1).
-  const FLAGS = [{}, { kpi: true }];
+  const FLAGS = [{}, { kpi: true }, { kpi: true, studio: true }]; // DS-0: and the studio on
 
   it("only links to pages the role may open", () => {
     for (const flags of FLAGS)
@@ -187,5 +187,38 @@ describe("client context from the URL", () => {
     expect(pathForClient(byPath("/clients/:clientId/brand"), 9)).toBe("/clients/9/brand");
     expect(pathForClient(byPath("/capture/forms/:id"), 9)).toBeNull();
     expect(pathForClient(byPath("/reports/ghg"), 9)).toBeNull();
+  });
+});
+
+describe("Design Studio routes (DS-0, 01-contracts §9)", () => {
+  it("registers every studio route behind the studio switch, for Admins, Managers and the Superadmin", () => {
+    const studio = SHELL_ROUTES.filter((r) => r.id.startsWith("studio-"));
+    expect(studio.map((r) => [r.id, r.path])).toEqual([
+      ["studio-home", "/studio"],
+      ["studio-new", "/studio/new"],
+      ["studio-brand-kit", "/studio/brand-kit"],
+      ["studio-editor", "/studio/:id"],
+      ["studio-preview", "/studio/:id/preview"],
+      ["studio-present", "/studio/:id/present"],
+      ["studio-versions", "/studio/:id/versions"],
+    ]);
+    for (const r of studio) {
+      expect((r as { requires?: string }).requires, r.id).toBe("studio");
+      expect(r.roles, r.id).toEqual(["Manager", "Admin", "Superadmin"]);
+      expect(canAccess("User", r), r.id).toBe(false);
+    }
+  });
+
+  it("sends /studio/new and /studio/brand-kit to their own pages, not the editor", () => {
+    expect(routeFor("/studio/new?kind=ghg")?.id).toBe("studio-new");
+    expect(routeFor("/studio/brand-kit")?.id).toBe("studio-brand-kit");
+    expect(routeFor("/studio/12")?.id).toBe("studio-editor");
+    expect(routeFor("/studio/12/present")?.id).toBe("studio-present");
+  });
+
+  it("meets the studio requirement only when its switch is on", () => {
+    expect(meetsRequirement("studio", {})).toBe(false);
+    expect(meetsRequirement("studio", { kpi: true })).toBe(false);
+    expect(meetsRequirement("studio", { studio: true })).toBe(true);
   });
 });
