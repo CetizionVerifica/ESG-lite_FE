@@ -2,6 +2,7 @@
 // narrative editor in the drawer): the contract schema, live chips, footnote
 // numbers from the element's base, and the `{{` data picker.
 import { useEffect, useRef, useState } from "react";
+import { closeHistory } from "@tiptap/pm/history";
 import { useEditor, type Editor } from "@tiptap/react";
 import type { DataItem, TextDoc } from "../../../../lib/studio/contracts";
 import { chipName, primeChip, useChipData } from "./chipData";
@@ -95,6 +96,9 @@ export function insertChip(editor: Editor, item: DataItem, range?: { from: numbe
   const attrs = chipFor(item);
   primeChip(attrs, { ...item.resolved, source: item.binding.source }, chipName(attrs, item.label));
   const content = [{ type: "data", attrs }, { type: "text", text: " " }];
+  // A chip is its own undo step: undo after deleting it brings it back, not the typing before.
+  editor.view.dispatch(closeHistory(editor.state.tr));
   const chain = editor.chain().focus();
   (range ? chain.insertContentAt(range, content) : chain.insertContent(content)).run();
+  editor.view.dispatch(closeHistory(editor.state.tr));
 }
