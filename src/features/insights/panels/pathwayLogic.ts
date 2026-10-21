@@ -23,7 +23,7 @@ export const PATHWAY_IDS = {
 export const PATHWAY_STACK = "actual";
 
 /** One year's group id: bars keep their identity by year through a morph. */
-export const yearGroupId = (year: number) => `year-${year}`;
+export const yearGroupId = (year: number) => `year:${year}`; // same ids as the bridge totals (IN-5), so the morph pairs them
 
 export const SCOPE_LABEL = { s1: "Scope 1", s2: "Scope 2", s3: "Scope 3" } as const;
 type ScopeKey = keyof typeof SCOPE_LABEL;

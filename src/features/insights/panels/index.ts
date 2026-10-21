@@ -10,8 +10,8 @@ import { DisclosureFlow } from "./DisclosureFlow";
 import { InsightCards } from "../components/InsightCards";
 import { MaterialityMatrix } from "./MaterialityMatrix"; // IN-7
 import { Completeness } from "./Completeness";
-import { Pathway } from "./Pathway";
-import { Decoupling } from "./Decoupling";
+import { PathwayStory } from "./PathwayStory";
+import { DecouplingStory } from "./DecouplingStory";
 import { EsgRing } from "./EsgRing";
 import { TargetWall } from "./TargetWall";
 
@@ -28,11 +28,11 @@ export const definePanel = <P extends PanelId>(component: ComponentType<PanelPro
 
 export const PANELS: Partial<Record<SlotId, PanelComponent>> = {
   hero: definePanel<"summary">(HeroStrip), // IN-1
-  decoupling: definePanel<"decoupling">(Decoupling), // IN-2
+  decoupling: definePanel<"decoupling">(DecouplingStory), // IN-2 (+ IN-3 sentence, IN-4 events)
   ring: definePanel<"esg_ring">(EsgRing), // IN-2
   wall: definePanel<"target_wall">(TargetWall), // IN-2
   cards: definePanel<"cards">(InsightCards), // IN-3
-  pathway: definePanel<"pathway">(Pathway), // IN-4
+  pathway: definePanel<"pathway">(PathwayStory), // IN-4 (+ IN-5 What moved, IN-3 sentence)
   completeness: definePanel<"completeness">(Completeness), // IN-4
   flow: definePanel<"flow">(DisclosureFlow), // IN-6
   materiality: definePanel<"materiality">(MaterialityMatrix), // IN-7
