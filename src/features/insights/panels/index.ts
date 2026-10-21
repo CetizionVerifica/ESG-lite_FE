@@ -11,6 +11,9 @@ import { InsightCards } from "../components/InsightCards";
 import { MaterialityMatrix } from "./MaterialityMatrix"; // IN-7
 import { Completeness } from "./Completeness";
 import { Pathway } from "./Pathway";
+import { Decoupling } from "./Decoupling";
+import { EsgRing } from "./EsgRing";
+import { TargetWall } from "./TargetWall";
 
 /** What a slot's component gets: the envelope (availability 'ok', data present) and the page query. */
 export interface PanelProps<P extends PanelId = PanelId> {
@@ -25,7 +28,9 @@ export const definePanel = <P extends PanelId>(component: ComponentType<PanelPro
 
 export const PANELS: Partial<Record<SlotId, PanelComponent>> = {
   hero: definePanel<"summary">(HeroStrip), // IN-1
-  // IN-2: decoupling, ring, wall
+  decoupling: definePanel<"decoupling">(Decoupling), // IN-2
+  ring: definePanel<"esg_ring">(EsgRing), // IN-2
+  wall: definePanel<"target_wall">(TargetWall), // IN-2
   cards: definePanel<"cards">(InsightCards), // IN-3
   pathway: definePanel<"pathway">(Pathway), // IN-4
   completeness: definePanel<"completeness">(Completeness), // IN-4

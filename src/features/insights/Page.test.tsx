@@ -73,7 +73,11 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     const cards = await settled("cards");
     expect(cards.getAttribute("data-state")).toBe("ok");
     expect(within(cards).getAllByTestId("insight-card")).toHaveLength(6);
-    for (const id of ["decoupling", "ring", "wall"]) {
+    // IN-2's story panels render from the API.
+    expect(within(await settled("decoupling")).getByTestId("decoupling")).toBeTruthy();
+    expect(within(await settled("ring")).getByTestId("esg-ring")).toBeTruthy();
+    expect(within(await settled("wall")).getByTestId("target-wall")).toBeTruthy();
+    for (const id of ["stripes"]) {
       const el = await settled(id);
       expect(el.getAttribute("data-state"), id).toBe("ok");
       // No module has filled the slot yet: the shell says which one will.
@@ -159,7 +163,7 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     await waitFor(() => expect(router.state.location.search).toContain("compare=base"));
     await userEvent.click(screen.getByRole("button", { name: "Chennai plant" }));
     await waitFor(() => expect(router.state.location.search).toContain("sites=11"));
-    await waitFor(() => expect(screen.getByTestId("panel-decoupling").textContent).toContain("Chennai plant"));
+    await waitFor(() => expect(screen.getByTestId("panel-stripes").textContent).toContain("Chennai plant"));
     await userEvent.click(screen.getByRole("button", { name: "All sites" }));
     await waitFor(() => expect(router.state.location.search).not.toContain("sites="));
   });
