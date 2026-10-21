@@ -11,6 +11,7 @@ import { registerChartsPlugins } from "./charts/register"; // DS-8
 import { registerAiPlugins } from "../ai/register"; // DS-9
 import { registerChecksPlugins } from "../checks/register"; // DS-12
 import { registerReviewPlugins } from "../review/register"; // DS-13
+import { registerPhotoPlugins } from "../photo/register"; // PE-1
 import { DataToolbar, MediaToolbar, MultiToolbar, PageToolbar, ShapeToolbar, TextToolbar } from "./toolbars";
 
 let done = false;
@@ -49,6 +50,9 @@ export function registerEditorPlugins(): void {
 
   // DS-13: C + click opens the comment box at the spot; saved threads show as pins.
   registerReviewPlugins();
+
+  // PE-1: photo tools on the image and frame toolbar (remove background, adjust, filters, duotone, before/after).
+  registerPhotoPlugins();
 }
 
 /** Registers the shell's toolbars (fallbacks: real ones from DS-7/DS-8 win). */
