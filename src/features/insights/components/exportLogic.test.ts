@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { exportAllChartPngs, snapshotFileName } from "./ExportMenu";
+import { exportAllChartPngs, snapshotFileName } from "./exportLogic";
 
 describe("export (IN-8)", () => {
   it("names the snapshot after the period and sites", () => {

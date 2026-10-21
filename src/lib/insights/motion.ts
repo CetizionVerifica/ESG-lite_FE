@@ -31,10 +31,10 @@ export const FADE_MS = 400;
 export interface EntranceOptions {
   animation: boolean;
   animationDuration?: number;
-  animationEasing?: string;
+  animationEasing?: "cubicOut";
   animationDelay?: (idx: number) => number;
   animationDurationUpdate?: number;
-  animationEasingUpdate?: string;
+  animationEasingUpdate?: "cubicInOut";
 }
 
 /**

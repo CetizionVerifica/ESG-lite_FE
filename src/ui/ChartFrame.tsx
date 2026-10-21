@@ -1,4 +1,5 @@
-import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import { useContext, useRef, useState, type ReactNode } from "react";
+import { ChartFrameDefaults } from "./chartFrameDefaults";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { Download } from "lucide-react";
@@ -48,12 +49,6 @@ export type ChartFrameProps = {
   renderer?: "canvas" | "svg";
   className?: string;
 };
-
-/**
- * Overrides for every ChartFrame below it: a larger `height` (present mode),
- * the SVG renderer and no animation (print).
- */
-export const ChartFrameDefaults = createContext<{ height?: number; renderer?: "canvas" | "svg"; static?: boolean }>({});
 
 /** Frame for every ECharts chart: title + unit, theme from tokens, loading/empty/error, table view, PNG export. */
 export function ChartFrame({

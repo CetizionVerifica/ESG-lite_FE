@@ -4,16 +4,7 @@ import { inErrorCode, type InsightsQuery } from "../../../lib/insights/contracts
 import { useInsightsCompanyId } from "../../../lib/insights/switch";
 import { getInsightsSnapshot } from "../../../services/insightsService";
 import { Button, Menu, useToast } from "../../../ui";
-
-/** The file name of the snapshot: "insights-CY-2026-all-sites.pdf". */
-export const snapshotFileName = (q: InsightsQuery) => `insights-${q.yearType}-${q.year}-${q.sites === "all" ? "all-sites" : `sites-${q.sites.join("-")}`}.pdf`;
-
-/** Clicks every chart's own PNG export on the page (ChartFrame's button), one file per chart. Returns how many. */
-export function exportAllChartPngs(root: ParentNode = document): number {
-  const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-chart-export]"));
-  buttons.forEach((b) => b.click());
-  return buttons.length;
-}
+import { exportAllChartPngs, snapshotFileName } from "./exportLogic";
 
 /**
  * IN-8 · Export ▾ (05-ux §3): "PDF snapshot" (one A4 landscape page from the
