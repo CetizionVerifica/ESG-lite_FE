@@ -2,7 +2,7 @@
 // IN-0 adds the status and sites calls and one panel getter; panel hooks live in
 // src/features/insights/api.ts (TanStack Query).
 import api from "../api/axios";
-import { PANEL_PATHS, type InsightsQuery, type InsightsSites, type InsightsStatus, type PanelDataMap, type PanelId, type PanelResponse } from "../lib/insights/contracts";
+import { PANEL_PATHS, type EventCreate, type EventRef, type InsightsQuery, type InsightsSites, type InsightsStatus, type PanelDataMap, type PanelId, type PanelResponse } from "../lib/insights/contracts";
 
 const companyParams = (companyId: number | null | undefined) => (companyId ? { company_id: companyId } : undefined);
 
@@ -35,4 +35,37 @@ export function panelParams(q: InsightsQuery, extra: Record<string, string | num
 export async function getInsightsPanel<P extends PanelId>(panel: P, q: InsightsQuery, extra: Record<string, string | number> = {}, companyId?: number | null): Promise<PanelResponse<PanelDataMap[P]>> {
   const { data } = await api.get(`/insights${PANEL_PATHS[panel]}`, { params: panelParams(q, extra, companyId) });
   return data as PanelResponse<PanelDataMap[P]>;
+}
+
+// IN-4 · events (01-contracts §4): list, add, edit, delete. Manager+; the
+// server checks site scope and who may edit (creator, Admin, Superadmin).
+
+/** `?from=&to=` (ISO dates, both optional). */
+export interface EventsRange {
+  from?: string;
+  to?: string;
+}
+
+/** GET /insights/events: the events in the range. */
+export async function listInsightsEvents(range: EventsRange = {}, companyId?: number | null): Promise<EventRef[]> {
+  const params = { ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}), ...companyParams(companyId) };
+  const { data } = await api.get("/insights/events", { params });
+  return ((data as { events?: EventRef[] } | null)?.events ?? []) as EventRef[];
+}
+
+/** POST /insights/events: `{date, label (≤ 60), kind, site_id?}`. */
+export async function createInsightsEvent(body: EventCreate, companyId?: number | null): Promise<EventRef> {
+  const { data } = await api.post("/insights/events", body, { params: companyParams(companyId) });
+  return data as EventRef;
+}
+
+/** PATCH /insights/events/:id: any of the create fields. */
+export async function updateInsightsEvent(id: number, patch: Partial<EventCreate>, companyId?: number | null): Promise<EventRef> {
+  const { data } = await api.patch(`/insights/events/${id}`, patch, { params: companyParams(companyId) });
+  return data as EventRef;
+}
+
+/** DELETE /insights/events/:id. */
+export async function deleteInsightsEvent(id: number, companyId?: number | null): Promise<void> {
+  await api.delete(`/insights/events/${id}`, { params: companyParams(companyId) });
 }

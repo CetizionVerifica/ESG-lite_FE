@@ -30,8 +30,12 @@ export type ChartFrameProps = {
   /** True when there's no data to plot. */
   empty?: boolean;
   emptyText?: string;
-  /** The same data as a table for the "Table" view (and screen readers). */
-  table?: { columns: ChartTableColumn[]; rows: Array<Record<string, string | number | null>> };
+  /**
+   * The same data as a table for the "Table" view (and screen readers). A cell
+   * may be an element (e.g. a button that opens a cell's detail) so the table
+   * view keeps every chart action reachable from the keyboard.
+   */
+  table?: { columns: ChartTableColumn[]; rows: Array<Record<string, string | number | null | ReactNode>> };
   /** Enables PNG export with this file name (no extension). */
   exportName?: string;
   /** Custom legend under the chart, when the ECharts legend is off. */
