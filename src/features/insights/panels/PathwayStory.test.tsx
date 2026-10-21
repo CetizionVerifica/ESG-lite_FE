@@ -15,15 +15,14 @@ type Series = { id: string; groupId?: string; data: unknown[] };
 const captured = vi.hoisted(() => ({ options: [] as { series: Series[] }[], mounts: 0 }));
 vi.mock("echarts-for-react", async () => {
   const { useEffect } = await import("react");
-  return {
-    default: (props: { option: { series: Series[] } }) => {
-      captured.options.push(props.option);
-      useEffect(() => {
-        captured.mounts += 1;
-      }, []);
-      return <div data-testid="echart" />;
-    },
-  };
+  function EChartStub(props: { option: { series: Series[] } }) {
+    captured.options.push(props.option);
+    useEffect(() => {
+      captured.mounts += 1;
+    }, []);
+    return <div data-testid="echart" />;
+  }
+  return { default: EChartStub };
 });
 vi.mock("../../../theme", async (orig) => {
   const actual = await orig<typeof import("../../../theme")>();
