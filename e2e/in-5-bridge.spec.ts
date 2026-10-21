@@ -2,23 +2,21 @@ import { expect, test, type Page } from "@playwright/test";
 import { managerAt, mockInsightsApi, overflowX } from "./insightsMockApi";
 
 /**
- * IN-5 · The emissions bridge (D) on mocks. The bridge lives in the pathway
- * slot behind the "Pathway | What moved" toggle, which the lead adds after
- * IN-4 merges; until then these tests are marked fixme.
+ * IN-5 · The emissions bridge (D) on mocks. It lives in the pathway slot
+ * behind the "Pathway | What moved" toggle and draws in the same chart, so the
+ * bars morph between the two views.
  */
-const TOGGLE_PENDING = "the Pathway | What moved toggle lands after IN-4 merges";
 
 async function openBridge(page: Page) {
   await page.goto("/insights?year=2026&panel=bridge");
   const slot = page.getByTestId("panel-pathway");
-  await slot.getByRole("radio", { name: "What moved" }).click();
-  const bridge = slot.getByTestId("bridge");
-  await expect(bridge).toBeVisible();
-  return bridge;
+  // ?panel=bridge opens on What moved; the toggle says so.
+  await expect(slot.getByRole("radio", { name: "What moved" })).toHaveAttribute("aria-checked", "true");
+  await expect(slot.getByTestId("pathway-story")).toHaveAttribute("data-mode", "bridge");
+  return slot;
 }
 
 test("What moved shows the waterfall with signed changes, a table view and the calculation drawer", async ({ page }) => {
-  test.fixme(true, TOGGLE_PENDING);
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true });
   const bridge = await openBridge(page);
@@ -39,33 +37,33 @@ test("What moved shows the waterfall with signed changes, a table view and the c
 });
 
 test("toggling back to Pathway and forth keeps the bridge", async ({ page }) => {
-  test.fixme(true, TOGGLE_PENDING);
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true });
-  await openBridge(page);
-  const slot = page.getByTestId("panel-pathway");
+  const slot = await openBridge(page);
+  // One chart for both views: the canvas stays while the bars morph.
+  await expect(slot.locator("canvas")).toHaveCount(1);
   await slot.getByRole("radio", { name: "Pathway" }).click();
-  await expect(slot.getByTestId("bridge")).toHaveCount(0);
+  await expect(slot.getByTestId("pathway-story")).toHaveAttribute("data-mode", "pathway");
+  await expect(slot.getByRole("img")).toHaveAttribute("aria-label", /pathway/i);
+  await expect(slot.locator("canvas")).toHaveCount(1);
   await slot.getByRole("radio", { name: "What moved" }).click();
-  await expect(slot.getByTestId("bridge")).toBeVisible();
+  await expect(slot.getByTestId("pathway-story")).toHaveAttribute("data-mode", "bridge");
 });
 
 test("without data the bridge says what's needed", async ({ page }) => {
-  test.fixme(true, TOGGLE_PENDING);
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockInsightsApi(page, "Manager", managerAt(true, true), {
     insights: true,
     kpi: true,
     panels: { bridge: { availability: "no_data", reason: "Approve emissions for 2025 and 2026 to see what moved." } },
   });
-  await page.goto("/insights?year=2026&panel=bridge");
+  await page.goto("/insights?year=2026");
   const slot = page.getByTestId("panel-pathway");
   await slot.getByRole("radio", { name: "What moved" }).click();
   await expect(slot.getByTestId("bridge-panel")).toContainText("Approve emissions for 2025 and 2026 to see what moved.");
 });
 
 test("at 390 px the bridge and its drawer fit without overflow", async ({ page }) => {
-  test.fixme(true, TOGGLE_PENDING);
   await page.setViewportSize({ width: 390, height: 844 });
   await mockInsightsApi(page, "Manager", managerAt(true, false), { insights: true, kpi: false });
   const bridge = await openBridge(page);
