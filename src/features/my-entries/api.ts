@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type EmissionStatus, type PaginatedEmissions, getEmissionsPaginated, updateEmission } from "../../services/emissionService";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
-import { getDocumentsByEmission } from "../../services/documentService";
+import { deleteDocument, getDocumentsByEmission, uploadMultipleDocuments } from "../../services/documentService";
 import { getEmissionBreakdown } from "../../services/emissionBreakdownService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
 import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
@@ -58,6 +58,32 @@ export function useEntryDocuments(entryId: number | null) {
     queryKey: ["emission-documents", entryId],
     queryFn: () => getDocumentsByEmission(entryId as number),
     enabled: entryId !== null,
+  });
+}
+
+/** After evidence changes: the drawer's list, the table (its 📎 and data quality) and the entry's history. */
+function evidenceChanged(client: ReturnType<typeof useQueryClient>, entryId: number) {
+  void client.invalidateQueries({ queryKey: ["emission-documents", entryId] });
+  void client.invalidateQueries({ queryKey: ["my-entries"] });
+  void client.invalidateQueries({ queryKey: ["audit-logs", "emission", entryId] });
+}
+
+/** Attach files to an entry the User can still change (pending or rejected). */
+export function useAddEvidence(entryId: number | null) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (files: File[]) => uploadMultipleDocuments({ files, emission_id: entryId as number, document_type: "other" }),
+    onSuccess: () => entryId !== null && evidenceChanged(client, entryId),
+  });
+}
+
+/** Take a file off an entry the User can still change. */
+export function useRemoveEvidence(entryId: number | null) {
+  const client = useQueryClient();
+  return useMutation({
+    // data-loss-reviewed: removes one evidence file from the User's own pending or rejected entry, after an inline "Remove this file from the entry?" Keep / Remove file confirm that names the file; the entry itself stays
+    mutationFn: (documentId: number) => deleteDocument(documentId),
+    onSuccess: () => entryId !== null && evidenceChanged(client, entryId),
   });
 }
 

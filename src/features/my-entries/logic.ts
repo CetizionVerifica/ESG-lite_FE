@@ -113,6 +113,20 @@ export function quantityOf(activityData: Record<string, unknown> | null | undefi
   return null;
 }
 
+/**
+ * The quantity the table and drawer show: the server's (it knows the form's number fields, so
+ * "Amount of gas" or "Fuel consumption" count too), else the canonical-key guess for an older API.
+ */
+export function entryQuantity(row: Pick<EmissionData, "quantity" | "activity_data">): number | null {
+  const server = row.quantity === null || row.quantity === undefined ? NaN : Number(row.quantity);
+  return Number.isFinite(server) ? server : quantityOf(row.activity_data);
+}
+
+/** Decimals to show a quantity with: none for a whole number, even one stored with float noise (999596100.0000001). */
+export function quantityDecimals(q: number): 0 | 2 {
+  return Number.isInteger(Math.round(q * 100) / 100) ? 0 : 2;
+}
+
 /** The emission category (fuel, grid, …) that picked the factor. */
 export function keyActivity(row: EmissionData): string | null {
   const k = findKey(row.activity_data ?? {}, "emission_category");
