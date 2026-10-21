@@ -55,7 +55,8 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     const hero = await settled("hero");
     expect(within(hero).getByTestId("hero-strip")).toBeTruthy();
     expect((await screen.findByTestId("pending-banner")).textContent).toContain("12 entries and 3 KPI values waiting for approval aren't in these figures.");
-    for (const id of ["stripes", "decoupling", "ring", "pathway", "wall", "cards", "flow"]) {
+    expect(within(await settled("stripes")).getByRole("img").getAttribute("aria-label")).toMatch(/^Monthly emissions from Jan 2021 to Sep 2026/);
+    for (const id of ["decoupling", "ring", "pathway", "wall", "cards", "flow"]) {
       const el = await settled(id);
       expect(el.getAttribute("data-state"), id).toBe("ok");
       // No module has filled the slot yet: the shell says which one will.
