@@ -11,6 +11,17 @@ import InsightsPage from "./Page";
 
 const auth = vi.hoisted(() => ({ role: "Manager" as string, user: {} as Record<string, unknown> }));
 vi.mock("../../context/AuthContext", () => ({ useAuth: () => ({ role: auth.role, user: auth.user }) }));
+// IN-7: panels draw ECharts charts; jsdom has no canvas and the page renders without a ThemeProvider.
+vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="echart" /> }));
+vi.mock("../../theme", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../theme")>()),
+  useChartTheme: () => ({
+    color: [],
+    tooltip: { backgroundColor: "panel" },
+    status: { good: "good", goodSoft: "good-soft", warn: "warn", warnSoft: "warn-soft", bad: "bad", badSoft: "bad-soft", info: "info", infoSoft: "info-soft" },
+    ui: { ink: "ink", muted: "muted", line: "line", panel: "panel", tint: "tint", brand: "brand", onBrand: "on-brand", accent: "accent" },
+  }),
+}));
 
 const server = setupServer(...handlers);
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -66,6 +77,17 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     expect(screen.queryByTestId("panel-completeness")).toBeNull();
     const sites = await screen.findByRole("button", { name: "Pune plant" });
     expect(sites).toBeTruthy();
+  });
+
+  it("the Materiality tab loads when opened and shows the IN-7 matrix", async () => {
+    renderPage();
+    await settled("hero");
+    expect(screen.queryByTestId("panel-materiality")).toBeNull();
+    await userEvent.click(screen.getByRole("tab", { name: "Materiality" }));
+    const el = await settled("materiality");
+    expect(el.getAttribute("data-state")).toBe("ok");
+    expect(within(el).getByTestId("materiality-matrix")).toBeTruthy();
+    expect(within(el).queryByTestId("panel-placeholder")).toBeNull();
   });
 
   it("KPI tracking off: the ring and the Materiality tab are hidden, and there are no pillar chips", async () => {
