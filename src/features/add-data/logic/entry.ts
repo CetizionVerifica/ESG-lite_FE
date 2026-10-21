@@ -1,8 +1,8 @@
 // Period context, row validation and the save payload for Add data.
-import { canConvert, unitsMatchExact } from "../../../ui/unitMatch";
+import { unitChoices, unitFitsFactor } from "../../../ui/unitMatch";
 import { factorYearForDate, yearlyPeriodEndDate, type PeriodMode, type YearType } from "../hooks/reportingPeriod";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
-import { isSupportedCurrency } from "../../../lib/scope3/spend";
+import { isSpendRow, isSupportedCurrency } from "../../../lib/scope3/spend";
 import type { ModalRow } from "../types";
 import { SUPPLIER_ROW_KEYS, supplierMethodOf, supplierPayload } from "./supplier";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
@@ -63,6 +63,18 @@ export function periodTotalQuery(p: EntryPeriod) {
   } as const;
 }
 
+/**
+ * The units the row's Unit select offers: once the row's activity has a factor, only the units
+ * rowIssue's check accepts for it; `first` (a calculation method's unit) leads when there is no
+ * factor yet. Spend and supplier rows skip that check (a currency converts at the FX rate, a
+ * supplier's figure sets the unit), so they keep every unit.
+ */
+export function unitOptionsForRow(row: ModalRow, calc: EmissionCalculator, units: readonly string[], first: string | null = null): string[] {
+  const factor = row.emission_category ? calc.getEmissionFactor(row.emission_category) : undefined;
+  const factorUnit = factor && !isSpendRow(row, factor) && !supplierMethodOf(row) ? factor.denominator_unit || null : null;
+  return unitChoices(units, factorUnit, row.activity_data_unit, first);
+}
+
 /** The field an issue shows under; "values" is the quantity (or, on the spend form, the amount spent). */
 export type RowIssue = { field: "emission_category" | "activity_data_unit" | "currency" | "values"; message: string };
 
@@ -91,7 +103,7 @@ export function rowIssue(row: ModalRow, calc: EmissionCalculator): RowIssue | nu
     return r.value === null ? { field: "values", message: r.status } : null;
   }
   const expected = calc.getExpectedUnit(row.emission_category);
-  if (expected && !unitsMatchExact(expected, row.activity_data_unit) && !canConvert(row.activity_data_unit, expected)) {
+  if (expected && !unitFitsFactor(expected, row.activity_data_unit)) {
     const bracket = row.emission_category.match(/\[([^\]]+)\]/)?.[1];
     return {
       field: "activity_data_unit",
