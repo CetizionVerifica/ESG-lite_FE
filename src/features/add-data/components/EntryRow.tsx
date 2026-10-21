@@ -4,7 +4,7 @@ import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Selec
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
 import { formColumns, isColumnVisible, rowMethodChoices, visibleExtraFields, type FormModel } from "../logic/form";
-import type { RowIssue } from "../logic/entry";
+import { unitOptionsForRow, type RowIssue } from "../logic/entry";
 import type { CategoryMapping } from "../api";
 import type { EmissionFactor, ModalRow } from "../types";
 import { billOf, isAiField, LOW_CONFIDENCE } from "../logic/bill";
@@ -157,10 +157,10 @@ export function EntryRow(p: Props) {
   // The spend form's own fields replace the form's older "Spent value" / "Currency" extras.
   const extras = spendForm ? allExtras.filter((f) => !SPEND_EXTRA_KEYS.has(f.key)) : allExtras;
   const firstSelect = visible.find((c) => c.column_type === "select")?.column_name;
-  // A method that names its units (S3-3 method_options) offers only those.
-  const unitOptions = [
-    ...new Set([...(methodUnits ?? [...(expectedUnit ? [expectedUnit] : []), ...p.units]), ...(row.activity_data_unit ? [row.activity_data_unit] : [])]),
-  ];
+  // A method that names its units (S3-3 method_options) offers only those; else the units the activity's factor takes.
+  const unitOptions = methodUnits
+    ? [...new Set([...methodUnits, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])]
+    : unitOptionsForRow(row, calc, p.units, expectedUnit);
 
   return (
     <section aria-label={`Row ${p.index + 1}`} className={cn(panel, "space-y-4 p-4")}>
