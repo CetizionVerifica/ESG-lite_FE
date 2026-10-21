@@ -9,6 +9,14 @@ import { ToastProvider } from "../../ui";
 import { handlers, resetInsightsMocks, setInsightsMockEnabled, setInsightsMockKpi, setInsightsMockPanel } from "../../test/msw";
 import InsightsPage from "./Page";
 
+// IN-4 · panels draw ECharts: no canvas in jsdom, and the theme without its provider.
+vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="echart" /> }));
+vi.mock("../../theme", async (orig) => {
+  const actual = await orig<typeof import("../../theme")>();
+  const theme = actual.chartTheme(actual.buildTheme(actual.PLANETPULSE, "light", "light"));
+  return { ...actual, useChartTheme: () => theme };
+});
+
 const auth = vi.hoisted(() => ({ role: "Manager" as string, user: {} as Record<string, unknown> }));
 vi.mock("../../context/AuthContext", () => ({ useAuth: () => ({ role: auth.role, user: auth.user }) }));
 // Panels draw ECharts (canvas) inside ChartFrame: stub the chart and give it the PlanetPulse light theme.
@@ -65,7 +73,7 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     const cards = await settled("cards");
     expect(cards.getAttribute("data-state")).toBe("ok");
     expect(within(cards).getAllByTestId("insight-card")).toHaveLength(6);
-    for (const id of ["decoupling", "ring", "pathway", "wall"]) {
+    for (const id of ["decoupling", "ring", "wall"]) {
       const el = await settled(id);
       expect(el.getAttribute("data-state"), id).toBe("ok");
       // No module has filled the slot yet: the shell says which one will.
@@ -76,6 +84,10 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     expect(flow.getAttribute("data-state")).toBe("ok");
     expect(within(flow).getByTestId("disclosure-flow")).toBeTruthy();
     expect(within(flow).getByRole("img").getAttribute("aria-label")).toBe("3 sites feed Scope 1, 2 and 3; 3 KPIs feed 3 disclosures.");
+    // IN-4: the pathway slot draws its panel.
+    const pathway = await settled("pathway");
+    expect(within(pathway).getByTestId("pathway")).toBeTruthy();
+    expect(within(pathway).getByRole("button", { name: "Events" })).toBeTruthy();
     // Lazy tabs: Materiality and Completeness haven't loaded.
     expect(screen.queryByTestId("panel-materiality")).toBeNull();
     expect(screen.queryByTestId("panel-completeness")).toBeNull();
@@ -138,7 +150,9 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
 
   it("filters go to the URL; ?panel= targets a slot and opens its tab", async () => {
     const router = renderPage("/insights?panel=completeness");
-    expect((await settled("completeness")).className).toContain("ring-2");
+    const completeness = await settled("completeness");
+    expect(completeness.className).toContain("ring-2");
+    expect(within(completeness).getByTestId("completeness")).toBeTruthy(); // IN-4
     await userEvent.click(await screen.findByRole("button", { name: "Social" }));
     await waitFor(() => expect(router.state.location.search).toContain("pillar=social"));
     await userEvent.click(screen.getByRole("radio", { name: "Base year" }));
