@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Download, Presentation } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Presentation } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useInsightsQuery } from "../../lib/insights/query";
 import { isInsightsOff, useInsights } from "../../lib/insights/switch";
 import { InsightsNotAvailable } from "../../lib/insights/InsightsGate";
-import { PageHeader, Select, TabPanel, Tabs, cn } from "../../ui";
+import { Button, PageHeader, Select, TabPanel, Tabs, cn } from "../../ui";
+import { ExportMenu } from "./components/ExportMenu";
 import { useInsightsSites } from "./api";
 import { InsightsFilters } from "./components/InsightsFilters";
 import { PanelShell } from "./components/PanelShell";
@@ -30,6 +32,8 @@ export default function InsightsPage() {
   const [tab, setTab] = useState<TabSlot>(() => (targetSlot && (tabs as string[]).includes(targetSlot) ? (targetSlot as TabSlot) : tabs[0]));
   const activeTab: TabSlot = tabs.includes(tab) ? tab : tabs[0];
   const thisYear = new Date().getFullYear();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // A `?panel=` naming a tab opens it.
   useEffect(() => {
@@ -57,11 +61,14 @@ export default function InsightsPage() {
         title="Insights"
         description="How you're doing and why: emissions, targets and ESG data in one story, from approved data."
         context={<InsightsFilters query={query} sites={sites.data?.sites} pillars={kpiOn} onChange={set} thisYear={thisYear} />}
-        secondaryActions={[
-          { label: "Present", icon: <Presentation className="size-4" aria-hidden />, onClick: () => undefined, disabled: true }, // IN-8
-          { label: "Export", icon: <Download className="size-4" aria-hidden />, onClick: () => undefined, disabled: true }, // IN-8
-        ]}
       />
+      <div className="-mt-2 flex flex-wrap justify-end gap-2" data-testid="insights-actions">
+        {/* IN-8: present mode (same filters) and the Export menu. */}
+        <Button icon={<Presentation className="size-4" aria-hidden />} onClick={() => navigate(`/insights/present${location.search}`)}>
+          Present
+        </Button>
+        <ExportMenu query={query} />
+      </div>
 
       <PendingBanner query={query} />
 

@@ -50,8 +50,8 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
   it("renders the header, filters and every slot, each in its own state", async () => {
     renderPage();
     expect(screen.getByRole("heading", { name: "Insights", level: 1 })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /Present/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: /Export/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /Present/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: /Export/ }) as HTMLButtonElement).disabled).toBe(false);
     const hero = await settled("hero");
     expect(within(hero).getByTestId("hero-strip")).toBeTruthy();
     expect((await screen.findByTestId("pending-banner")).textContent).toContain("12 entries and 3 KPI values waiting for approval aren't in these figures.");

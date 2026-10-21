@@ -9,6 +9,7 @@ import type { PanelProps } from "../panels";
 import { useCountUp } from "../hooks/useCountUp";
 import { compareLabel, intensityDecimals, intensityUnit, pathwayHint, readinessSentence } from "./heroLogic";
 import { ChangeChip, PillarLetter, StatusChip } from "./kit";
+import { useInsightsSurface } from "./presentContext";
 
 /**
  * IN-1 · The hero strip (05-ux §4): four cells answering "are we on track?"
@@ -17,11 +18,12 @@ import { ChangeChip, PillarLetter, StatusChip } from "./kit";
  * with a menu of what's waiting. Every figure is the server's; each cell is a
  * door to the page behind it (`links`). 1280: one row; 1024: 2 × 2; 390: stacked.
  */
-export function HeroStrip({ response, query, size = "page" }: PanelProps<"summary"> & { size?: "page" | "present" }) {
+export function HeroStrip({ response, query, size }: PanelProps<"summary"> & { size?: "page" | "present" }) {
   const s = response.data;
   const links = response.links;
   const vs = compareLabel(query);
-  const big = size === "present";
+  const surface = useInsightsSurface();
+  const big = (size ?? surface) === "present";
   return (
     <dl className={cn("grid grid-cols-1 gap-px overflow-hidden rounded-card bg-line md:grid-cols-2 lg:grid-cols-4", big && "lg:grid-cols-2")} data-testid="hero-strip">
       <NetCell s={s} vs={vs} link={links.net} big={big} />

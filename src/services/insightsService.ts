@@ -36,3 +36,9 @@ export async function getInsightsPanel<P extends PanelId>(panel: P, q: InsightsQ
   const { data } = await api.get(`/insights${PANEL_PATHS[panel]}`, { params: panelParams(q, extra, companyId) });
   return data as PanelResponse<PanelDataMap[P]>;
 }
+
+/** GET /insights/snapshot.pdf (IN-8): the one-page PDF of the page for the query. */
+export async function getInsightsSnapshot(q: InsightsQuery, companyId?: number | null): Promise<Blob> {
+  const { data } = await api.get("/insights/snapshot.pdf", { params: panelParams(q, {}, companyId), responseType: "blob", timeout: 70_000 });
+  return data as Blob;
+}

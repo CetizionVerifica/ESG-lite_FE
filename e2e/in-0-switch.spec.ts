@@ -61,8 +61,8 @@ test("with the switch on, Insights is the manager's second nav item and the page
   await expect(page).toHaveURL(/compare=base/);
   await page.getByRole("group", { name: "Sites" }).getByRole("button", { name: "Pune plant" }).click();
   await expect(page).toHaveURL(/sites=13/);
-  await expect(page.getByRole("button", { name: "Present" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Export" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Present" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Export" })).toBeEnabled();
 });
 
 test("KPI tracking off: the ring and the Materiality tab are hidden, not empty, and there are no pillar chips", async ({ page }) => {

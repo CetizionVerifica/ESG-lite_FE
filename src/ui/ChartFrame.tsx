@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { Download } from "lucide-react";
@@ -49,13 +49,19 @@ export type ChartFrameProps = {
   className?: string;
 };
 
+/**
+ * Overrides for every ChartFrame below it: a larger `height` (present mode),
+ * the SVG renderer and no animation (print).
+ */
+export const ChartFrameDefaults = createContext<{ height?: number; renderer?: "canvas" | "svg"; static?: boolean }>({});
+
 /** Frame for every ECharts chart: title + unit, theme from tokens, loading/empty/error, table view, PNG export. */
 export function ChartFrame({
   title,
   unit,
   subtitle,
   option,
-  height = 280,
+  height: heightProp = 280,
   loading,
   error,
   onRetry,
@@ -69,9 +75,12 @@ export function ChartFrame({
   view: viewProp,
   onViewChange,
   onEvents,
-  renderer = "canvas",
+  renderer: rendererProp = "canvas",
   className,
 }: ChartFrameProps) {
+  const defaults = useContext(ChartFrameDefaults);
+  const height = defaults.height ? Math.max(defaults.height, heightProp) : heightProp;
+  const renderer = defaults.renderer ?? rendererProp;
   const theme = useChartTheme();
   const chartRef = useRef<ReactECharts>(null);
   const [viewState, setViewState] = useState<"chart" | "table">("chart");
@@ -81,7 +90,8 @@ export function ChartFrame({
     onViewChange?.(v);
   };
   const ready = !loading && !error && !empty;
-  const resolvedOption = typeof option === "function" ? option(theme) : option;
+  const built = typeof option === "function" ? option(theme) : option;
+  const resolvedOption = defaults.static ? { ...built, animation: false } : built;
 
   const exportPng = () => {
     const inst = chartRef.current?.getEchartsInstance();
@@ -170,7 +180,7 @@ export function ChartFrame({
           />
         )}
         {exportName && ready && view === "chart" && (
-          <Button size="sm" variant="ghost" onClick={exportPng} icon={<Download aria-hidden className="size-4" />}>
+          <Button size="sm" variant="ghost" onClick={exportPng} data-chart-export={exportName} icon={<Download aria-hidden className="size-4" />}>
             PNG
           </Button>
         )}
