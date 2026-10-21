@@ -7,9 +7,9 @@
 // While the figures load (or when /resolve failed) the sheet relabels the
 // renderer's NOT_RESOLVED "Not reported" marks as "Loading…" / "Couldn't load"
 // (pendingFigures.ts); a real "Not reported" from /resolve keeps its words.
-import { memo, useLayoutEffect, useRef } from "react";
+import { memo, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import type { FlowSection, FreeformPage, ReportDoc } from "../../../lib/studio/contracts";
-import { mountFlow, mountSheet } from "../../../lib/studio/renderHost";
+import { customFontsVersion, mountFlow, mountSheet, subscribeCustomFonts } from "../../../lib/studio/renderHost";
 import { mmToPx } from "../../../lib/studio/geometry";
 import { clearSheetRoot, setSheetRoot } from "./canvasUtil";
 import type { RenderAssets, RenderBrand, RenderData, RenderDoc, RenderFlowSection, RenderFreeformPage } from "../../../lib/studio/render";
@@ -38,6 +38,8 @@ const docKey = (doc: ReportDoc) => `${doc.kind}|${doc.format}|${JSON.stringify(d
 function SheetImpl({ page, doc, wMm, hMm, zoom, data, assets, brand, figures = "ready", thumbnail }: SheetProps) {
   const host = useRef<HTMLDivElement>(null);
   const key = docKey(doc);
+  // PE-2: the uploaded brand fonts arrived or changed: draw again with them.
+  const fontsVersion = useSyncExternalStore(subscribeCustomFonts, customFontsVersion, customFontsVersion);
   useLayoutEffect(() => {
     const el = host.current;
     if (!el) return;
@@ -53,7 +55,7 @@ function SheetImpl({ page, doc, wMm, hMm, zoom, data, assets, brand, figures = "
     };
     // `key` stands for the doc parts the renderer reads (page numbers, theme, meta).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, key, data, assets, brand, figures, thumbnail]);
+  }, [page, key, data, assets, brand, figures, thumbnail, fontsVersion]);
 
   // Flow sections paginate in print; the editor shows their first page's worth.
   return (

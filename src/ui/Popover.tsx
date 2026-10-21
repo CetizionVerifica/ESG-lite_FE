@@ -72,12 +72,19 @@ export function Popover({ trigger, children, label, align = "start", className }
     };
   }, [open, layered, align]);
 
+  // A layered panel is hidden until it is placed, and a hidden element can't take focus,
+  // so focus moves in once it is visible (else Esc would reach the page behind it).
+  const placed = !layered || !!pos;
+  useEffect(() => {
+    if (!open || !placed) return;
+    const panel = panelRef.current;
+    // preventScroll: focusing must not scroll a clipping parent (a toolbar) sideways.
+    if (panel && !panel.contains(document.activeElement)) (focusableIn(panel)[0] ?? panel).focus({ preventScroll: true });
+  }, [open, placed]);
+
   useEffect(() => {
     if (!open) return;
     insideRef.current = false;
-    const panel = panelRef.current;
-    // preventScroll: focusing must not scroll a clipping parent (a toolbar) sideways.
-    if (panel) (focusableIn(panel)[0] ?? panel).focus({ preventScroll: true });
     const onDown = (e: MouseEvent) => {
       const inside = insideRef.current || !!rootRef.current?.contains(e.target as Node);
       insideRef.current = false;
