@@ -83,6 +83,17 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     expect(sites).toBeTruthy();
   });
 
+  it("the Materiality tab loads when opened and shows the IN-7 matrix", async () => {
+    renderPage();
+    await settled("hero");
+    expect(screen.queryByTestId("panel-materiality")).toBeNull();
+    await userEvent.click(screen.getByRole("tab", { name: "Materiality" }));
+    const el = await settled("materiality");
+    expect(el.getAttribute("data-state")).toBe("ok");
+    expect(within(el).getByTestId("materiality-matrix")).toBeTruthy();
+    expect(within(el).queryByTestId("panel-placeholder")).toBeNull();
+  });
+
   it("KPI tracking off: the ring and the Materiality tab are hidden, and there are no pillar chips", async () => {
     setInsightsMockKpi(false);
     auth.user = { sites: [{ site_id: 11, company: { company_id: 1, insights_enabled: true, kpi_tracking_enabled: false } }] };

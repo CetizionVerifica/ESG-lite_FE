@@ -8,6 +8,7 @@ import type { SlotId } from "../logic";
 import { HeroStrip } from "../components/HeroStrip";
 import { DisclosureFlow } from "./DisclosureFlow";
 import { InsightCards } from "../components/InsightCards";
+import { MaterialityMatrix } from "./MaterialityMatrix"; // IN-7
 
 /** What a slot's component gets: the envelope (availability 'ok', data present) and the page query. */
 export interface PanelProps<P extends PanelId = PanelId> {
@@ -26,6 +27,6 @@ export const PANELS: Partial<Record<SlotId, PanelComponent>> = {
   cards: definePanel<"cards">(InsightCards), // IN-3
   // IN-4: pathway, completeness
   flow: definePanel<"flow">(DisclosureFlow), // IN-6
-  // IN-7: materiality
+  materiality: definePanel<"materiality">(MaterialityMatrix), // IN-7
   // IN-8: stripes
 };
