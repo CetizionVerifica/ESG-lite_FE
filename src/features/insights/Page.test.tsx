@@ -11,6 +11,12 @@ import InsightsPage from "./Page";
 
 const auth = vi.hoisted(() => ({ role: "Manager" as string, user: {} as Record<string, unknown> }));
 vi.mock("../../context/AuthContext", () => ({ useAuth: () => ({ role: auth.role, user: auth.user }) }));
+// Charts (IN-2 on) render as a stub with a token-name theme: jsdom has no canvas or ThemeProvider here.
+vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="echart" /> }));
+vi.mock("../../theme", async (importOriginal) => {
+  const { testTheme } = await import("./panels/testTheme");
+  return { ...(await importOriginal<typeof import("../../theme")>()), useChartTheme: () => testTheme };
+});
 
 const server = setupServer(...handlers);
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -55,7 +61,11 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     const hero = await settled("hero");
     expect(within(hero).getByTestId("hero-strip")).toBeTruthy();
     expect((await screen.findByTestId("pending-banner")).textContent).toContain("12 entries and 3 KPI values waiting for approval aren't in these figures.");
-    for (const id of ["stripes", "decoupling", "ring", "pathway", "wall", "cards", "flow"]) {
+    // IN-2's story panels render from the API.
+    expect(within(await settled("decoupling")).getByTestId("decoupling")).toBeTruthy();
+    expect(within(await settled("ring")).getByTestId("esg-ring")).toBeTruthy();
+    expect(within(await settled("wall")).getByTestId("target-wall")).toBeTruthy();
+    for (const id of ["stripes", "pathway", "cards", "flow"]) {
       const el = await settled(id);
       expect(el.getAttribute("data-state"), id).toBe("ok");
       // No module has filled the slot yet: the shell says which one will.
@@ -109,7 +119,7 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     await waitFor(() => expect(router.state.location.search).toContain("compare=base"));
     await userEvent.click(screen.getByRole("button", { name: "Chennai plant" }));
     await waitFor(() => expect(router.state.location.search).toContain("sites=11"));
-    await waitFor(() => expect(screen.getByTestId("panel-decoupling").textContent).toContain("Chennai plant"));
+    await waitFor(() => expect(screen.getByTestId("panel-stripes").textContent).toContain("Chennai plant"));
     await userEvent.click(screen.getByRole("button", { name: "All sites" }));
     await waitFor(() => expect(router.state.location.search).not.toContain("sites="));
   });
