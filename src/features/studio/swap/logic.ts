@@ -3,7 +3,7 @@
 // (every element kept with its props, only frame and z moved, only layout decoration
 // added: the same rule the server checks), replacing the page as one change, and the
 // summary lines of a template swap. No React, no network.
-import type { Element, FreeformPage, ReportDoc, TemplateSwapPreview, TextNode } from "../../../lib/studio/contracts";
+import type { DataToken, Element, FreeformPage, ReportDoc, TemplateSwapPreview, TextNode } from "../../../lib/studio/contracts";
 
 const DECOR = new Set<Element["type"]>(["shape", "divider", "line", "page_number"]);
 export const isDecor = (e: Pick<Element, "type">): boolean => DECOR.has(e.type);
@@ -23,9 +23,9 @@ export const canon = (v: unknown): string =>
 
 const withoutPosition = (e: Element) => canon({ ...e, frame: null, z: null });
 
-function chipsIn(nodes: TextNode[] | undefined): number {
+function chipsIn(nodes: (TextNode | DataToken)[] | undefined): number {
   let n = 0;
-  for (const node of nodes ?? []) n += (node.type === "data" ? 1 : 0) + chipsIn(node.content);
+  for (const node of nodes ?? []) n += node.type === "data" ? 1 : chipsIn(node.content);
   return n;
 }
 

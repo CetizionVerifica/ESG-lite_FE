@@ -2,9 +2,10 @@
 // page in view, built by the server from library layouts and the page's own elements
 // (DS-9 action `suggest_layouts`). Picking one previews it on the canvas (the editor's
 // preview doc plus GhostPreview's dashed outlines); nothing changes until Apply, which
-// replaces the page as one undo step. "More ideas" asks for layouts not shown yet.
+// replaces the page as one undo step. The card's actions are the AI card's: Accept, Try again
+// (layouts not shown yet) and Discard (layer rule 6).
 import { useEffect, useMemo, useState } from "react";
-import { LayoutTemplate, RefreshCw, Sparkles } from "lucide-react";
+import { Check, LayoutTemplate, RefreshCw, Sparkles, X } from "lucide-react";
 import type { FreeformPage, Suggestion } from "../../../lib/studio/contracts";
 import { Badge, Button, cn, focusRing } from "../../../ui";
 import type { EditorApi } from "../editor/EditorContext";
@@ -44,6 +45,10 @@ export function LayoutIdeas({ editor }: { editor: EditorApi }) {
   };
   // The page in view changed, or the drawer closed: stop previewing.
   useEffect(() => stopPreview, [page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // An edit while previewing drops the preview (the edit clears it); picking an option again re-checks it.
+  useEffect(() => {
+    if (editor.shown === editor.doc) stopPreview();
+  }, [editor.doc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const preview = (i: number, s: Suggestion | null = current?.suggestion ?? null) => {
     const opt = s?.payload.pages?.[i];
@@ -82,6 +87,12 @@ export function LayoutIdeas({ editor }: { editor: EditorApi }) {
     stopPreview();
     editor.commit(next, `AI: layout ${meta.id} (${meta.name})`, { pageId: page.id });
     setIdeas(null);
+  };
+
+  const discard = () => {
+    stopPreview();
+    setIdeas(null);
+    setError(null);
   };
 
   if (!page) {
@@ -142,13 +153,16 @@ export function LayoutIdeas({ editor }: { editor: EditorApi }) {
               <Badge tone="neutral">{kept}</Badge> {kept === 1 ? "item has no place in this layout and stays where it was." : "items have no place in this layout and stay where they were."}
             </p>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="ghost" icon={<X aria-hidden className="size-4" />} disabled={busy} onClick={discard}>
+              Discard
+            </Button>
             <Button size="sm" variant="ghost" icon={<RefreshCw aria-hidden className="size-4" />} loading={busy} onClick={() => ask(true)}>
-              More ideas
+              Try again
             </Button>
             <span className="flex-1" />
-            <Button size="sm" variant="primary" disabled={!option || editor.readOnly || busy} onClick={apply}>
-              Apply {meta?.id ?? ""}
+            <Button size="sm" variant="primary" icon={<Check aria-hidden className="size-4" />} disabled={!option || editor.readOnly || busy} onClick={apply} data-testid="layout-accept">
+              Accept {meta?.id ?? ""}
             </Button>
           </div>
         </>

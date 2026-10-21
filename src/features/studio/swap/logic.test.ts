@@ -57,7 +57,7 @@ describe("AT-2 swap logic", () => {
   });
 
   it("checks a swap keeps text, chips and charts (style may change)", () => {
-    const after = docOf({ ...base, elements: base.elements.map((e) => (e.type === "text" ? ({ ...e, frame: frame(20, 20), props: { ...e.props, style: "lead" } } as Element) : e)) });
+    const after = docOf({ ...base, elements: base.elements.map((e) => (e.type === "text" ? ({ ...e, frame: frame(20, 20), props: { ...e.props, style: "heading" } } as Element) : e)) });
     expect(swapKeepsContent(docOf(base), after)).toBe(true);
     const lost = docOf({ ...base, elements: [text("p1.body", 2), chart("p1.chart")] });
     expect(swapKeepsContent(docOf(base), lost)).toBe(false);
