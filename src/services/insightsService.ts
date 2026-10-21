@@ -67,6 +67,7 @@ export async function updateInsightsEvent(id: number, patch: Partial<EventCreate
 
 /** DELETE /insights/events/:id. */
 export async function deleteInsightsEvent(id: number, companyId?: number | null): Promise<void> {
+  // data-loss-reviewed: deletes one Insights event marker (label, date, kind) and nothing else; EventsDrawer asks "Delete “label”? It comes off every chart." inline first, and the server checks role and site. Not undoable.
   await api.delete(`/insights/events/${id}`, { params: companyParams(companyId) });
 }
 

@@ -248,6 +248,7 @@ export const insightsHandlers = [
     Object.assign(event, { ...body, ...(body.label ? { label: body.label.trim() } : {}) });
     return HttpResponse.json(event);
   }),
+  // data-loss-reviewed: MSW mock for tests and dev only; removes the event from in-memory mock state, never real data.
   http.delete("*/insights/events/:id", ({ params }) => {
     const blocked = gate();
     if (blocked) return blocked;
