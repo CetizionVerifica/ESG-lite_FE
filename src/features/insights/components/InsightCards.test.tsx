@@ -3,10 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Cards, InsightCard, InsightsQuery, PanelResponse } from "../../../lib/insights/contracts";
 import { cardsData } from "../../../test/msw/insightsData";
 import { InsightCards } from "./InsightCards";
 import { shownCards } from "./cardSentence";
+
+vi.mock("../../../context/AuthContext", () => ({ useAuth: () => ({ role: "Manager", user: { user_id: 12 } }) }));
+// Natural wording off: the cards come from the shell's response, no request.
+vi.mock("../api", () => ({ useCardsPanel: () => ({ data: undefined, isFetching: false }) }));
 
 afterEach(cleanup);
 
@@ -25,7 +30,11 @@ const envelope = (data: Cards): PanelResponse<Cards> & { data: Cards } => ({
 
 function renderCards(data: Cards, url = "/insights") {
   const router = createMemoryRouter([{ path: "*", element: <InsightCards response={envelope(data)} query={query} /> }], { initialEntries: [url] });
-  render(<RouterProvider router={router} />);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
   return router;
 }
 

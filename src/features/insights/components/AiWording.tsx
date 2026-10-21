@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from "react";
 import { aiTextUsable, fillTokens } from "../../../lib/insights/aiText";
 import type { InsightCard } from "../../../lib/insights/contracts";
-import { AiLabel, Toggle, cn, focusRing } from "../../../ui";
+import { AiChip, Toggle, cn, focusRing } from "../../../ui";
 
 /** "Natural wording" on/off for the cards panel. */
 export function NaturalWordingToggle({ on, onChange, className }: { on: boolean; onChange: (on: boolean) => void; className?: string }) {
@@ -25,11 +25,12 @@ export function NaturalWordingToggle({ on, onChange, className }: { on: boolean;
  * the AI label and a "Show original" button that swaps to the rule copy; any
  * other card (rule source, or AI text that fails the check) shows `ruleText`.
  */
-export function CardWording({ card, ruleText, className }: { card: Pick<InsightCard, "id" | "source" | "text" | "rule" | "params">; ruleText: ReactNode; className?: string }) {
+export function CardWording({ card, ruleText, className, headingId }: { card: Pick<InsightCard, "id" | "source" | "text" | "rule" | "params">; ruleText: ReactNode; className?: string; /** Makes the sentence the card's level-3 heading with this id. */ headingId?: string }) {
+  const heading = headingId ? ({ id: headingId, role: "heading", "aria-level": 3 } as const) : {};
   const [original, setOriginal] = useState(false);
   if (!aiTextUsable(card)) {
     return (
-      <p className={cn("text-sm text-ink", className)} data-testid="card-wording" data-source="rule">
+      <p {...heading} className={cn("text-sm text-ink", className)} data-testid="card-wording" data-source="rule">
         {ruleText}
       </p>
     );
@@ -37,8 +38,15 @@ export function CardWording({ card, ruleText, className }: { card: Pick<InsightC
   const filled = fillTokens(card.text, card.params);
   return (
     <div className={cn("flex min-w-0 flex-col items-start gap-1", className)}>
-      <p className="text-sm text-ink" data-testid="card-wording" data-source={original ? "rule" : "ai"}>
-        {original ? ruleText : <AiLabel text={filled} ai />}
+      <p {...heading} className="text-sm text-ink" data-testid="card-wording" data-source={original ? "rule" : "ai"}>
+        {original ? (
+          ruleText
+        ) : (
+          <span className="inline-flex flex-wrap items-center gap-1.5">
+            {filled}
+            <AiChip hint=": reworded by AI from the same numbers" />
+          </span>
+        )}
       </p>
       <button
         type="button"

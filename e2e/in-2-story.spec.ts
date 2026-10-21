@@ -5,6 +5,8 @@ import { managerAt, mockInsightsApi, overflowX } from "./insightsMockApi";
 
 test("a click on a ring pillar filters the page through the URL, and 'All pillars' goes back", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
+  // The click aims at a canvas slice: draw it at once (no 700 ms entrance) so it's there to hit.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true });
   await page.goto("/insights?year=2026");
   const ring = page.getByTestId("panel-ring");

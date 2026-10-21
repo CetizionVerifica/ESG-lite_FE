@@ -8,6 +8,10 @@ import { Button, EmptyState, cn, focusRing } from "../../../ui";
 import { SLOTS, slotForPanel } from "../logic";
 import type { PanelProps } from "../panels";
 import { cardSentence, shownCards } from "./cardSentence";
+import { useNaturalWording } from "../../../lib/insights/aiPreference";
+import { useCardsPanel } from "../api";
+import { CardWording, NaturalWordingToggle } from "./AiWording";
+import { useInsightsSurface } from "./presentContext";
 
 const SEVERITY_ICON: Record<CardSeverity, typeof CheckCircle2> = {
   critical: OctagonAlert,
@@ -41,17 +45,33 @@ export function CardSentence({ card }: { card: InsightCard }) {
  * severity chip, one sentence, "Show" (sets `?panel=` so the PanelShell
  * scrolls to and pulses that panel) and "Open" (the server's `link`).
  */
-export function InsightCards({ response }: PanelProps<"cards">) {
-  const cards = shownCards(response.data.cards);
-  if (cards.length === 0) return <EmptyState compact icon={CheckCircle2} title="No standout changes this period." />;
+export function InsightCards({ response, query }: PanelProps<"cards">) {
+  // IN-9: "Natural wording" asks for ?ai=1; the shell's plain cards show while it loads or if it fails.
+  const [natural, setNatural] = useNaturalWording();
+  const ai = useCardsPanel(query, natural);
+  const surface = useInsightsSurface();
+  const source = (natural && ai.data?.availability === "ok" && ai.data.data?.cards) || response.data.cards;
+  // Present mode and the PDF show the top three (05-ux §8, IN-8).
+  const cards = shownCards(source).slice(0, surface === "page" ? undefined : 3);
   return (
-    <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="insight-cards">
-      {cards.map((card) => (
-        <li key={card.id} className="min-w-0">
-          <CardItem card={card} />
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-3">
+      {surface === "page" && (
+        <div className="flex justify-end" data-testid="cards-header">
+          <NaturalWordingToggle on={natural} onChange={setNatural} />
+        </div>
+      )}
+      {cards.length === 0 ? (
+        <EmptyState compact icon={CheckCircle2} title="No standout changes this period." />
+      ) : (
+        <ul className={cn("grid grid-cols-1 gap-3 md:grid-cols-2", surface === "page" ? "xl:grid-cols-3" : "lg:grid-cols-3")} data-testid="insight-cards" aria-busy={natural && ai.isFetching}>
+          {cards.map((card) => (
+            <li key={card.id} className="min-w-0">
+              <CardItem card={card} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -73,9 +93,7 @@ function CardItem({ card }: { card: InsightCard }) {
   return (
     <article aria-labelledby={headingId} data-testid="insight-card" data-rule={card.rule} data-severity={card.severity} className="flex h-full min-w-0 flex-col gap-3 rounded-card border border-line bg-panel p-4">
       <SeverityChip severity={card.severity} className="self-start" />
-      <h3 id={headingId} className="text-sm font-medium leading-snug text-ink">
-        <CardSentence card={card} />
-      </h3>
+      <CardWording card={card} ruleText={cardSentence(card)} headingId={headingId} className="font-medium leading-snug" />
       {(card.panel || card.link) && (
         <div className="mt-auto flex flex-wrap items-center gap-2">
           {card.panel && (
