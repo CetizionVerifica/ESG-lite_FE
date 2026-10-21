@@ -11,6 +11,13 @@ import InsightsPage from "./Page";
 
 const auth = vi.hoisted(() => ({ role: "Manager" as string, user: {} as Record<string, unknown> }));
 vi.mock("../../context/AuthContext", () => ({ useAuth: () => ({ role: auth.role, user: auth.user }) }));
+// Panels draw ECharts (canvas) inside ChartFrame: stub the chart and give it the PlanetPulse light theme.
+vi.mock("echarts-for-react", () => ({ default: () => <div data-testid="echart" /> }));
+vi.mock("../../theme", async (importOriginal) => {
+  const m = await importOriginal<typeof import("../../theme")>();
+  const theme = m.chartTheme(m.buildTheme(m.PLANETPULSE, "light", "light"));
+  return { ...m, useChartTheme: () => theme };
+});
 
 const server = setupServer(...handlers);
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -55,12 +62,17 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     const hero = await settled("hero");
     expect(within(hero).getByTestId("hero-strip")).toBeTruthy();
     expect((await screen.findByTestId("pending-banner")).textContent).toContain("12 entries and 3 KPI values waiting for approval aren't in these figures.");
-    for (const id of ["stripes", "decoupling", "ring", "pathway", "wall", "cards", "flow"]) {
+    for (const id of ["stripes", "decoupling", "ring", "pathway", "wall", "cards"]) {
       const el = await settled(id);
       expect(el.getAttribute("data-state"), id).toBe("ok");
       // No module has filled the slot yet: the shell says which one will.
       expect(within(el).getByTestId("panel-placeholder").textContent, id).toMatch(/This panel is built in IN-\d/);
     }
+    // IN-6: the first tab (Data flow) draws its sankey.
+    const flow = await settled("flow");
+    expect(flow.getAttribute("data-state")).toBe("ok");
+    expect(within(flow).getByTestId("disclosure-flow")).toBeTruthy();
+    expect(within(flow).getByRole("img").getAttribute("aria-label")).toBe("3 sites feed Scope 1, 2 and 3; 3 KPIs feed 3 disclosures.");
     // Lazy tabs: Materiality and Completeness haven't loaded.
     expect(screen.queryByTestId("panel-materiality")).toBeNull();
     expect(screen.queryByTestId("panel-completeness")).toBeNull();
