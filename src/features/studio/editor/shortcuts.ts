@@ -17,6 +17,7 @@ import {
 } from "../../../lib/studio/docOps";
 import type { EditorApi } from "./EditorContext";
 import { clampZoom } from "./state";
+import { openFindReplace } from "../find/store"; // PE-2
 
 export type Command =
   | { id: "undo" | "redo" | "copy" | "cut" | "paste" | "duplicate" | "group" | "ungroup" | "lock" | "delete" | "forward" | "backward" | "front" | "back" }
@@ -24,7 +25,8 @@ export type Command =
   | { id: "view"; view: "scroll" | "strip" | "grid" }
   | { id: "nudge"; dx: number; dy: number }
   | { id: "add"; what: "text" | "rect" | "line" }
-  | { id: "comment" };
+  | { id: "comment" }
+  | { id: "find" }; // PE-2
 
 export interface KeyLike {
   key: string;
@@ -81,6 +83,8 @@ export function commandFor(e: KeyLike): Command | null {
         return { id: "zoom100" };
       case "/":
         return { id: "help" };
+      case "f":
+        return e.shiftKey ? { id: "find" } : null; // PE-2: ⌘⇧F
       default:
         return null;
     }
@@ -148,6 +152,7 @@ export const SHORTCUT_HELP: { keys: string; what: string }[] = [
   { keys: "⌘A", what: "Select everything on the page" },
   { keys: "T / R / L", what: "Add text, a rectangle, a line" },
   { keys: "C", what: "Click to drop a comment" },
+  { keys: "⌘⇧F", what: "Find and replace" },
   { keys: "⌘+ / ⌘− / ⌘0", what: "Zoom in / out / 100 %" },
   { keys: "⌥⌘1 / 2 / 3", what: "Scroll view / page strip / grid view" },
   { keys: "Alt while dragging", what: "No snapping" },
@@ -206,6 +211,9 @@ export function runCommand(cmd: Command, ed: EditorApi, ui: { openHelp: () => vo
       return true;
     case "comment":
       ed.setCommentMode(!ed.ui.commentMode);
+      return true;
+    case "find":
+      openFindReplace();
       return true;
     case "escape":
       if (ed.ui.commentMode) ed.setCommentMode(false);

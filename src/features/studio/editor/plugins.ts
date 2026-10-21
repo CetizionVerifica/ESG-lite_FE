@@ -12,6 +12,7 @@ import { registerAiPlugins } from "../ai/register"; // DS-9
 import { registerChecksPlugins } from "../checks/register"; // DS-12
 import { registerReviewPlugins } from "../review/register"; // DS-13
 import { registerPhotoPlugins } from "../photo/register"; // PE-1
+import { registerProTextPlugins } from "../textfx/register"; // PE-2
 import { DataToolbar, MediaToolbar, MultiToolbar, PageToolbar, ShapeToolbar, TextToolbar } from "./toolbars";
 
 let done = false;
@@ -53,6 +54,8 @@ export function registerEditorPlugins(): void {
 
   // PE-1: photo tools on the image and frame toolbar (remove background, adjust, filters, duotone, before/after).
   registerPhotoPlugins();
+  // PE-2: Font and Effects on text, "Find and replace" on the text and page toolbars.
+  registerProTextPlugins();
 }
 
 /** Registers the shell's toolbars (fallbacks: real ones from DS-7/DS-8 win). */

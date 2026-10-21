@@ -18,6 +18,10 @@ describe("shortcuts", () => {
     expect(commandFor({ key: "l" })).toEqual({ id: "add", what: "line" });
     expect(commandFor({ key: "c" })).toEqual({ id: "comment" });
     expect(commandFor({ key: "q" })).toBeNull();
+    // PE-2: ⌘⇧F / Ctrl+Shift+F find and replace; ⌘F stays the browser's.
+    expect(commandFor({ key: "F", metaKey: true, shiftKey: true })).toEqual({ id: "find" });
+    expect(commandFor({ key: "f", ctrlKey: true, shiftKey: true })).toEqual({ id: "find" });
+    expect(commandFor({ key: "f", metaKey: true })).toBeNull();
   });
 
   it("nudges 0.5 mm, 5 mm with Shift", () => {
