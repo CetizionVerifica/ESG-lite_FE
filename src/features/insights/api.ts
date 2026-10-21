@@ -37,3 +37,18 @@ export function useInsightsSites() {
   const companyId = useInsightsCompanyId();
   return useQuery({ queryKey: keys.sites(companyId), queryFn: () => getInsightsSites(companyId), retry, staleTime: 5 * 60_000 });
 }
+
+/**
+ * IN-9 · The insight cards, reworded by AI when "Natural wording" is on
+ * (`?ai=1`). PanelShell loads the plain cards; InsightCards (IN-3) reads the
+ * toggle and takes its cards from here, falling back to the shell's response
+ * while the AI answer loads or if it fails:
+ *   const [natural, setNatural] = useNaturalWording();
+ *   const ai = useCardsPanel(query, natural);
+ *   const cards = (ai.data?.availability === "ok" && ai.data.data?.cards) || response.data.cards;
+ * Off has the same key as the shell's own query (no second request); on and
+ * off are separate cache entries, so switching back is instant.
+ */
+export function useCardsPanel(query: InsightsQuery, ai: boolean) {
+  return usePanel("cards", query, { extra: ai ? { ai: 1 } : {} });
+}

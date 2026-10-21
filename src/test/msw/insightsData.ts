@@ -170,6 +170,25 @@ export const cardsData = (kpiOn: boolean): Cards => ({
   ],
 });
 
+/**
+ * IN-9 · The cards with `?ai=1`: the same cards, some reworded (`source: 'ai'`
+ * with `{{v:key}}` tokens). `renewables_jump` carries a deliberately invalid
+ * text (a digit outside the tokens) that the FE must ignore in favour of the
+ * rule copy; the rest stay `source: 'rule'`.
+ */
+export const AI_CARD_TEXT: Partial<Record<string, string>> = {
+  decoupling: "Since {{v:base_year}}, output grew {{v:output_pct}}% and emissions dropped {{v:emissions_pct}}%.",
+  pathway_gap: "You're running {{v:gap_pct}}% over the path to your {{v:target_year}} target.",
+  largest_source: "{{v:category}} makes up {{v:share_pct}}% of everything you emit.",
+  renewables_jump: "Renewables went from {{v:from_pct}}% to {{v:to_pct}}% in 1 year.",
+};
+export const aiCardsData = (kpiOn: boolean): Cards => ({
+  cards: cardsData(kpiOn).cards.map((c) => {
+    const text = AI_CARD_TEXT[c.id];
+    return text ? { ...c, source: "ai" as const, text } : c;
+  }),
+});
+
 export const MOCK_EVENTS: EventRef[] = [
   { id: 1, date: "2023-04-01", label: "Rooftop solar at Pune", kind: "initiative", site_id: 13 },
   { id: 2, date: "2024-09-15", label: "Nagpur kiln upgrade", kind: "initiative", site_id: 12 },

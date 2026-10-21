@@ -17,6 +17,8 @@
  *   setInsightsMockRole("User")    the caller is a contributor: 403 `IN_FORBIDDEN`.
  *   setInsightsMockPanel(id, …)    one panel answers `no_data` / `setup_incomplete`
  *                                  (with a reason) or fails with a 500.
+ *   GET /insights/cards?ai=1      IN-9: the same cards, some with `source: 'ai'` and
+ *                                  token `text` (one deliberately invalid).
  * Events are stateful (create, rename, delete, read back). Each module keeps
  * its handlers in step with its contract.
  */
@@ -42,6 +44,7 @@ import {
 import {
   MOCK_EVENTS,
   MOCK_SITES,
+  aiCardsData,
   bridgeData,
   cardsData,
   completenessData,
@@ -150,14 +153,15 @@ function readQuery(request: Request): Query | Response {
 
 const siteLabel = (sites: SiteFilter) => (sites === "all" ? "All sites" : sites.length === 1 ? (MOCK_SITES.find((s) => s.site_id === sites[0])?.name ?? "1 site") : `${sites.length} sites`);
 
-function dataFor<P extends PanelId>(panel: P): PanelDataMap[P] {
+function dataFor<P extends PanelId>(panel: P, request: Request): PanelDataMap[P] {
   const kpi = state.kpi;
+  const ai = new URL(request.url).searchParams.get("ai") === "1";
   const data: { [K in PanelId]: () => PanelDataMap[K] } = {
     summary: () => summaryData(kpi),
     esg_ring: () => esgRingData,
     decoupling: () => decouplingData,
     target_wall: () => targetWallData(kpi),
-    cards: () => cardsData(kpi),
+    cards: () => (ai ? aiCardsData(kpi) : cardsData(kpi)), // IN-9: ?ai=1 rewords some cards
     pathway: () => pathwayData(state.events),
     completeness: () => completenessData,
     bridge: () => bridgeData,
@@ -194,7 +198,7 @@ function panelResponse(panel: PanelId, request: Request): Response {
       : panel === "target_wall"
         ? Object.fromEntries(targetWallData(state.kpi).items.map((i) => [i.id, i.link]))
         : {};
-  return HttpResponse.json<PanelResponse<PanelDataMap[typeof panel]>>({ ...base, availability: "ok", data: dataFor(panel), links });
+  return HttpResponse.json<PanelResponse<PanelDataMap[typeof panel]>>({ ...base, availability: "ok", data: dataFor(panel, request), links });
 }
 
 const LABEL_MAX = 60;
