@@ -68,7 +68,7 @@ test("390 px: pathway and completeness fit, completeness opens on its table", as
   await expect(page.getByTestId("panel-pathway").getByTestId("pathway")).toBeVisible();
   expect(await overflowX(page)).toBeLessThanOrEqual(1);
 
-  await page.getByLabel("More detail").selectOption({ label: "Completeness" });
+  await page.getByRole("combobox", { name: "More detail" }).selectOption({ label: "Completeness" });
   const panel = page.getByTestId("panel-completeness");
   await expect(panel.getByRole("table")).toBeVisible();
   expect(await overflowX(page)).toBeLessThanOrEqual(1);

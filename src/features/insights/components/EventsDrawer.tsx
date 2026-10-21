@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CalendarPlus, Pencil, Trash2 } from "lucide-react";
 import { Button, Callout, DateField, Drawer, EmptyState, Select, TextField, formatDate, useToast } from "../../../ui";
 import { EVENT_KINDS, type EventKind, type EventRef } from "../../../lib/insights/contracts";
@@ -37,6 +37,17 @@ export function EventsDrawer({ open, onClose, range = {}, defaultDate = "" }: Ev
     onClose();
   };
 
+  // Switching between the list and the form swaps the drawer's content: keep focus inside it (so Esc still closes).
+  const body = useRef<HTMLDivElement>(null);
+  const firstMode = useRef(true);
+  useEffect(() => {
+    if (firstMode.current) {
+      firstMode.current = false;
+      return;
+    }
+    if (open) body.current?.focus();
+  }, [mode.kind, open]);
+
   const listing = mode.kind === "list";
   return (
     <Drawer
@@ -56,18 +67,20 @@ export function EventsDrawer({ open, onClose, range = {}, defaultDate = "" }: Ev
       error={listing && events.isError ? "Couldn't load the events." : null}
       onRetry={() => void events.refetch()}
     >
-      {mode.kind === "list" ? (
-        <EventList events={events.data ?? []} siteName={siteName} onEdit={(event) => setMode({ kind: "edit", event })} onAdd={() => setMode({ kind: "add" })} />
-      ) : (
-        <EventForm
-          key={mode.kind === "edit" ? mode.event.id : "new"}
-          event={mode.kind === "edit" ? mode.event : null}
-          defaultDate={defaultDate}
-          sites={sites.data?.sites ?? []}
-          sitesLoading={sites.isPending}
-          onDone={() => setMode({ kind: "list" })}
-        />
-      )}
+      <div ref={body} tabIndex={-1} className="outline-none">
+        {mode.kind === "list" ? (
+          <EventList events={events.data ?? []} siteName={siteName} onEdit={(event) => setMode({ kind: "edit", event })} onAdd={() => setMode({ kind: "add" })} />
+        ) : (
+          <EventForm
+            key={mode.kind === "edit" ? mode.event.id : "new"}
+            event={mode.kind === "edit" ? mode.event : null}
+            defaultDate={defaultDate}
+            sites={sites.data?.sites ?? []}
+            sitesLoading={sites.isPending}
+            onDone={() => setMode({ kind: "list" })}
+          />
+        )}
+      </div>
     </Drawer>
   );
 }
