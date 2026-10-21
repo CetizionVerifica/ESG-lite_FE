@@ -22,8 +22,9 @@ export const SLIDES: Slide[] = [
   { id: "cards", title: "What stands out", slots: ["cards"] },
 ];
 
-/** The slides for a company: the ESG ring only with KPI tracking. */
-export const slidesFor = (kpiOn: boolean): Slide[] => SLIDES.filter((s) => kpiOn || s.slots.every((id) => !SLOTS[id].kpi));
+/** The slides for a company: without KPI tracking slide 3 is "By scope and site" instead of the ESG ring. */
+export const slidesFor = (kpiOn: boolean): Slide[] =>
+  kpiOn ? SLIDES : SLIDES.map((s) => (s.slots.some((id) => SLOTS[id].kpi) ? { id: "scopes", title: SLOTS.scopes.title, slots: ["scopes"] as SlotId[] } : s));
 
 /** Clamp a slide index (←/→ stop at the ends). */
 export const clampSlide = (i: number, count: number) => Math.max(0, Math.min(count - 1, i));

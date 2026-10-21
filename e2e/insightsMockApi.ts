@@ -36,6 +36,10 @@ export type Opts = {
   scored?: boolean;
   /** Cards with AI text when `?ai=1` (IN-9). */
   aiCards?: (kpi: boolean) => unknown;
+  /** The company's brand pack (`/brands/mine`); none = PlanetPulse. */
+  brand?: object | null;
+  /** The account's saved appearance. */
+  appearance?: "light" | "dark";
 };
 
 /** The app's own port (assets); everything else is the API. E2E_PORT lets a lane run on its own dev server. */
@@ -87,8 +91,8 @@ export async function mockInsightsApi(page: Page, role: string, user: object, op
       calls.push({ method, path: `${path}${url.search}`, body });
 
       if (path.endsWith("/auth/me")) return json({ role, user });
-      if (path.endsWith("/auth/me/appearance")) return json({ appearance: "light" });
-      if (path.endsWith("/brands/mine")) return json({});
+      if (path.endsWith("/auth/me/appearance")) return json({ appearance: opts.appearance ?? "light" });
+      if (path.endsWith("/brands/mine")) return json(opts.brand ?? {});
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       if (path.endsWith("/kpi/status")) return json({ enabled: kpi, setup_completed: kpi });

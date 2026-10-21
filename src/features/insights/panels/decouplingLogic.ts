@@ -68,7 +68,11 @@ export function decouplingTooltip(data: Decoupling, i: number): string {
 }
 
 /** The line chart option. */
-export function decouplingOption(data: Decoupling, t: ChartTheme, events?: EventRef[]): EChartsOption {
+/** Event labels sit above the plot, horizontally; long ones are shortened (the table and tooltip have them in full). */
+export const shortLabel = (s: string, max = 18) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s);
+
+/** `compactMarks`: phones draw event lines without their labels (the tooltip and table have them). */
+export function decouplingOption(data: Decoupling, t: ChartTheme, events?: EventRef[], compactMarks = false): EChartsOption {
   const years = data.years.map(String);
   const marks = eventMarks(data, events);
   const series = data.series.map((s: Series, idx) => {
@@ -92,8 +96,8 @@ export function decouplingOption(data: Decoupling, t: ChartTheme, events?: Event
               silent: true,
               symbol: ["none", "none"],
               data: [
-                { xAxis: String(data.base_year), name: "Base year", lineStyle: { color: t.ui.muted, type: "dotted" as const }, label: { formatter: `Base year ${data.base_year}`, position: "insideEndTop" as const, color: t.ui.muted } },
-                ...marks.map((m) => ({ xAxis: m.xAxis, name: m.name, lineStyle: { color: t.ui.accent, type: "dashed" as const }, label: { formatter: m.name, position: "insideEndTop" as const, color: t.ui.ink } })),
+                { xAxis: String(data.base_year), name: "Base year", lineStyle: { color: t.ui.muted, type: "dotted" as const }, label: { formatter: `Base year ${data.base_year}`, position: "end" as const, color: t.ui.muted, fontSize: 10 } },
+                ...marks.map((m) => ({ xAxis: m.xAxis, name: m.name, lineStyle: { color: t.ui.accent, type: "dashed" as const }, label: { show: !compactMarks, formatter: shortLabel(m.name), position: "end" as const, color: t.ui.ink, fontSize: 10 } })),
               ],
             },
           }
@@ -102,10 +106,10 @@ export function decouplingOption(data: Decoupling, t: ChartTheme, events?: Event
   });
   return {
     ...entrance(series.length),
-    grid: { left: 8, right: 56, top: 28, bottom: 8, containLabel: true },
+    grid: { left: 8, right: 56, top: 40, bottom: 8, containLabel: true },
     tooltip: { trigger: "axis", formatter: (ps: unknown) => decouplingTooltip(data, (ps as { dataIndex: number }[])[0]?.dataIndex ?? -1) },
     xAxis: { type: "category", data: years, boundaryGap: false },
-    yAxis: { type: "value", name: `Index (${data.base_year} = 100)`, scale: true, nameTextStyle: { align: "left" } },
+    yAxis: { type: "value", scale: true }, // "Indexed, base year = 100" is the subtitle
     series,
   } as EChartsOption;
 }

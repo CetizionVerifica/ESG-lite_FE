@@ -73,11 +73,14 @@ test("present mode: same filters, arrow keys move through the slides, Esc goes b
   await expect(page.getByTestId("insights-page")).toBeVisible();
 });
 
-test("present mode without KPI tracking has no ESG ring slide, and fits 390 px", async ({ page }) => {
+test("present mode without KPI tracking shows By scope and site instead of the ring, and fits 390 px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockInsightsApi(page, "Manager", managerAt(true, false), { insights: true, kpi: false });
   await page.goto("/insights/present");
-  await expect(page.getByTestId("slide-counter")).toHaveText("1 / 5");
+  await expect(page.getByTestId("slide-counter")).toHaveText("1 / 6");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByTestId("slide-title")).toHaveText("By scope and site");
   expect(await overflowX(page)).toBeLessThanOrEqual(1);
 });
 

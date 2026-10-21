@@ -103,3 +103,11 @@ describe("pathwayTable / pathwayAria", () => {
     expect(pathwayAria({ ...data, gap_band: [], events: [] }, "CY")).toContain("not above the pathway in any year.");
   });
 });
+
+describe("event marks on the pathway", () => {
+  it("label one line per year above the plot, shortened, with a count of the rest", async () => {
+    const { eventMarkLabel } = await import("./pathwayLogic");
+    expect(eventMarkLabel("Rooftop solar at Pune")).toBe("Rooftop solar a…");
+    expect(eventMarkLabel("Kiln\u241ESolar")).toBe("Kiln +1");
+  });
+});

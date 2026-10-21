@@ -70,6 +70,14 @@ export function completenessOption(data: Completeness, t: ChartTheme): EChartsOp
     },
     xAxis: { type: "category", data: data.months.map(shortMonth), splitArea: { show: false }, axisTick: { show: false }, axisLine: { show: false } },
     yAxis: { type: "category", data: sites, inverse: true, axisTick: { show: false }, axisLine: { show: false } },
+    // ECharts' heatmap needs a visualMap: the same five steps on the heat ramp, hidden (the legend is ours).
+    visualMap: {
+      type: "piecewise",
+      show: false,
+      dimension: 2,
+      seriesIndex: 0,
+      pieces: HEAT_STEPS.map((s, i) => (i === HEAT_STEPS.length - 1 ? { gte: s.min, color: t.heat[i] } : { gte: s.min, lt: HEAT_STEPS[i + 1].min, color: t.heat[i] })),
+    },
     series: [
       {
         id: "completeness",

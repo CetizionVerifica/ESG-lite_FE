@@ -123,7 +123,7 @@ export function materialityOption(points: MaterialityPoint[], t: Pick<ChartTheme
   return {
     // motion.ts types its easing as a plain string; ECharts wants its own union.
     ...(entrance(series.length) as Pick<EChartsOption, "animation">),
-    grid: { left: 16, right: 24, top: statuses.length > 1 ? 36 : 16, bottom: 36, containLabel: true },
+    grid: { left: 36, right: 24, top: statuses.length > 1 ? 36 : 16, bottom: 36, containLabel: true },
     legend: statuses.length > 1 ? { top: 0, left: 0, data: statuses.map((s) => STATUS_WORD[s]), itemWidth: 12, itemHeight: 12 } : { show: false },
     tooltip: {
       trigger: "item",

@@ -1,20 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { PANEL_IDS } from "../../lib/insights/contracts";
-import { SLOTS, SLOT_IDS, STORY_SLOTS, shellState, slotForPanel, tabsFor, yearOptions } from "./logic";
+import { SLOTS, SLOT_IDS, STORY_SLOTS, shellState, slotForPanel, storySlotsFor, tabsFor, yearOptions } from "./logic";
 
 describe("Insights layout (05-ux §3)", () => {
   it("has a slot for every panel but the bridge, which shares the pathway slot", () => {
-    const panels = SLOT_IDS.map((s) => SLOTS[s].panel);
+    // "By scope and site" (no KPI tracking) reads the flow panel too.
+    const panels = SLOT_IDS.filter((s) => s !== "scopes").map((s) => SLOTS[s].panel);
     expect(new Set(panels).size).toBe(panels.length);
     expect(PANEL_IDS.filter((p) => !panels.includes(p))).toEqual(["bridge"]);
     expect(slotForPanel("bridge")).toBe("pathway");
     expect(slotForPanel("esg_ring")).toBe("ring");
     expect(slotForPanel("target_wall")).toBe("wall");
+    expect(slotForPanel("flow")).toBe("flow");
     expect(slotForPanel(null)).toBeNull();
   });
 
+  it("puts 'By scope and site' in Story 2 without KPI tracking", () => {
+    expect(storySlotsFor(true)).toEqual(["decoupling", "ring", "pathway", "wall"]);
+    expect(storySlotsFor(false)).toEqual(["decoupling", "scopes", "pathway", "wall"]);
+    expect(SLOTS.scopes.span).toBe("xl:col-span-4");
+  });
+
   it("lays the stories out 8/4 then 6/6", () => {
-    expect(STORY_SLOTS.map((s) => SLOTS[s].span)).toEqual(["lg:col-span-8", "lg:col-span-4", "lg:col-span-6", "lg:col-span-6"]);
+    expect(STORY_SLOTS.map((s) => SLOTS[s].span)).toEqual(["xl:col-span-8", "xl:col-span-4", "xl:col-span-6", "xl:col-span-6"]);
   });
 
   it("hides the Materiality tab without KPI tracking", () => {

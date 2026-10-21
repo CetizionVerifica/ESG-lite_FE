@@ -3,7 +3,8 @@ import { ChartFrameDefaults, formatDate } from "../../../ui";
 import { usePanel } from "../api";
 import { PanelShell } from "../components/PanelShell";
 import { InsightsSurfaceContext } from "../components/presentContext";
-import { SLOTS, STORY_SLOTS } from "../logic";
+import { useInsights } from "../../../lib/insights/switch";
+import { SLOTS, storySlotsFor } from "../logic";
 
 /**
  * IN-8 · `/insights/print?…`: what the backend's Playwright printer turns into
@@ -14,6 +15,7 @@ import { SLOTS, STORY_SLOTS } from "../logic";
 export default function PrintPage() {
   const { query } = useInsightsQuery();
   const summary = usePanel("summary", query);
+  const { kpi_tracking: kpiOn } = useInsights();
   return (
     <div className="fixed inset-0 z-50 overflow-auto bg-panel text-ink" data-testid="insights-print">
       <div className="mx-auto w-[1123px] space-y-3 p-6 text-xs">
@@ -22,7 +24,7 @@ export default function PrintPage() {
           <ChartFrameDefaults.Provider value={{ renderer: "svg", static: true }}>
             <PanelShell slot={SLOTS.hero} query={query} />
             <div className="grid grid-cols-2 gap-3">
-              {STORY_SLOTS.map((id) => (
+              {storySlotsFor(kpiOn).map((id) => (
                 <PanelShell key={id} slot={SLOTS[id]} query={query} />
               ))}
             </div>
