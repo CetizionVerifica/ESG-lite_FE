@@ -32,7 +32,7 @@ export function TemplateSwap({ editor }: { editor: EditorApi }) {
   const [result, setResult] = useState<TemplateSwapPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const choices = useMemo(() => (templates.data ?? []).filter((t) => ![t.slug, String(t.id)].includes(doc.design.templateId)).slice(0, MAX_CHOICES), [templates.data, doc.design.templateId]);
+  const choices = useMemo(() => (Array.isArray(templates.data) ? templates.data : []).filter((t) => ![t.slug, String(t.id)].includes(doc.design.templateId)).slice(0, MAX_CHOICES), [templates.data, doc.design.templateId]);
 
   const open = async (t: ReportTemplate) => {
     setError(null);
