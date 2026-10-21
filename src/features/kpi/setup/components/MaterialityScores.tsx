@@ -9,6 +9,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useAuth } from "../../../../context/AuthContext";
 import { useClientContext } from "../../../../lib/clientContext";
 import { useDesignStudio } from "../../../../lib/studio/switch";
+import { useInsights } from "../../../../lib/insights/switch"; // IN-7
 import type { MaterialTopic } from "../../../../lib/studio/contracts";
 import { getMateriality, putMateriality } from "../../../../services/studioService";
 import { Button, Callout, cn, panel, useToast } from "../../../../ui";
@@ -19,12 +20,13 @@ const toScores = (topics: MaterialTopic[]): Scores => Object.fromEntries(topics.
 
 export function MaterialityScores() {
   const studio = useDesignStudio();
+  const insights = useInsights(); // IN-7: the Insights materiality matrix reads the same scores (I10)
   const { role } = useAuth();
   const { clientId } = useClientContext();
   const companyId = role === "Superadmin" ? clientId : null;
   const qc = useQueryClient();
   const { toast } = useToast();
-  const on = studio.enabled && studio.kinds.sustainability;
+  const on = (studio.enabled && studio.kinds.sustainability) || insights.enabled; // IN-7: also with Insights on
   const query = useQuery({ queryKey: ["studio", "materiality", companyId], queryFn: () => getMateriality(companyId), enabled: on });
   const [scores, setScores] = useState<Scores>({});
   useEffect(() => {
@@ -51,7 +53,11 @@ export function MaterialityScores() {
         <h3 id="materiality-scores" className="font-medium text-ink">
           Scores (for the report's materiality chart)
         </h3>
-        <p className="text-sm text-muted">Optional. Score each material topic 0–10 for its impact and its financial effect. The sustainability report shows the matrix once every material topic has both.</p>
+        <p className="text-sm text-muted">
+          Optional. Score each material topic 0–10 for its impact and its financial effect.{" "}
+          {studio.enabled && studio.kinds.sustainability ? "The sustainability report shows the matrix once every material topic has both." : "Insights places each topic on its materiality matrix once every material topic has both."}
+          {/* IN-7: Insights-only wording */}
+        </p>
       </div>
       {unscored > 0 && <Callout tone="info">{unscored} material topic{unscored === 1 ? " still needs" : "s still need"} scores.</Callout>}
       <ul className="space-y-3">
