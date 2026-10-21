@@ -49,3 +49,11 @@ src/test/msw/studio.ts   mocks for every 01-contracts §4 endpoint (DS-0), kept 
 7. **Performance.** Only visible pages ±2 render as live sheets; the page strip and grid view use cached thumbnails. Dragging stays at 60 fps on a 50-page doc.
 8. **Width gate.** Below 1280 px: read-only canvas, comments and downloads (RS R16).
 9. **Tests:** unit tests for `src/lib/studio/*`; component tests with MSW for each panel; Playwright `e2e/ds-*.spec.ts` for the main path of each module and the switch-off path.
+
+## Pro editing (AT-1, AT-2, PE-1, PE-2) — see ESG-lite docs/design-studio/pro/
+- Plan: ESG-lite `docs/design-studio/pro/01-pro-editing-and-ai-templates.md`; mockups `docs/design-studio/pro/canvas/project/{AiTemplates,AiLayouts,PhotoEdit,TextEffects}.dc.html` (match their layout with `src/ui` components and theme tokens). Contracts and rules: `docs/design-studio/pro/PRO-0.md`.
+- Types: the `// PRO-0` block of `src/lib/studio/contracts.ts` (element props `ImageEditProps`, `TextEditProps`, `FontRef`; API shapes; find and replace op types `FindQuery`/`FindMatch`/`FindReplaceOp`). Change the backend contracts first, then this mirror and `contracts.snapshot.json`.
+- API clients (typed stubs, hooks): `new/suggestApi.ts` (AT-1), `swap/api.ts` (AT-2 template swap; `suggest_layouts` goes through `ai/api.ts` `postAiAction`), `photo/api.ts` (PE-1 background remover jobs), `brand-kit/fontsApi.ts` (PE-2 fonts). MSW: the `PRO-0` block of `src/test/msw/studio.ts` (`setStudioMockTemplateAi`, `setStudioMockBgRemover`, `studioMockFonts`).
+- Transparency is the element's `opacity` (0..1) shown as 0..100 %. Image edits are non-destructive; every visual effect is drawn by the shared renderer (never by app CSS in the sheet), so editor, preview and PDF match.
+- Figures stay chips: find and replace skips data chips and locked boxes; layouts and template swaps keep every text, chip and chart; AI output is a card applied in one undo step on Accept.
+- Font upload and delete are Manager-only (show the licence tick; delete needs an inline confirm). "Background remover isn't set up on this server yet" for `DS_BG_UNAVAILABLE`.

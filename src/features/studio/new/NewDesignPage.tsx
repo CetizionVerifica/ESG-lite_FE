@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, CheckCircle2, Circle, FileText, Loader2, MinusCircle, Plus, Search, XCircle } from "lucide-react";
@@ -13,6 +13,8 @@ import { docErrorMessage, useDocBuild, useStartBuild, useTemplates } from "../do
 import { FORMAT_ASPECT, formatLine } from "../home/logic";
 import { ReportDetailsForm } from "../panels/ReportDetailsForm";
 import { FRAMEWORK_LABELS, blankFormatFor, createBody, filterTemplates, initialState, yearOptions, type FormatFilter, type NewDesignState } from "./logic";
+import { HelpMeChoose } from "./HelpMeChoose"; // AT-1
+import type { ChooseMode } from "./suggestLogic"; // AT-1
 
 const STEPS = [
   { id: "template", label: "Template" },
@@ -90,7 +92,7 @@ export function NewDesignPage() {
           {error}
         </Callout>
       )}
-      {step === 0 && <TemplateStep state={state} set={set} kindsOn={kinds} />}
+      {step === 0 && <TemplateStep state={state} set={set} kindsOn={kinds} onUse={(templateId) => (set({ templateId }), setStep(1))} /* AT-1 */ />}
       {step === 1 && <ScopeStep state={state} set={set} />}
       {step === 2 && <DetailsStep state={state} set={set} />}
       {step === 3 && <WordsStep state={state} set={set} />}
@@ -142,7 +144,40 @@ function TemplateThumb({ format, title, kind }: { format: ReportTemplate["format
   );
 }
 
-function TemplateStep({ state, set, kindsOn }: StepProps & { kindsOn: Record<ReportKind, boolean> }) {
+// AT-1: step 1 offers "Browse all | Help me choose"; a suggestion's "Use this" picks it and moves on.
+function TemplateStep({ state, set, kindsOn, onUse }: StepProps & { kindsOn: Record<ReportKind, boolean>; onUse: (templateId: number) => void }) {
+  const [mode, setMode] = useState<ChooseMode>("browse");
+  const kindControl = (
+    <SegmentedControl
+      label="Report kind"
+      value={state.kind}
+      onChange={(kind) => set({ kind, templateId: null, frameworks: [FRAMEWORKS_BY_KIND[kind][0]], inputs: {} })}
+      options={[
+        { value: "ghg", label: "GHG report" },
+        ...(kindsOn.sustainability ? [{ value: "sustainability" as const, label: "Sustainability report" }] : []),
+      ]}
+    />
+  );
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <SegmentedControl
+          label="How to pick"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "browse", label: "Browse all" },
+            { value: "choose", label: "Help me choose" },
+          ]}
+        />
+        {mode === "choose" && kindControl}
+      </div>
+      {mode === "choose" ? <HelpMeChoose key={state.kind} state={state} onUse={onUse} onBrowse={() => setMode("browse")} /> : <BrowseTemplates state={state} set={set} kindControl={kindControl} />}
+    </div>
+  );
+}
+
+function BrowseTemplates({ state, set, kindControl }: StepProps & { kindControl: ReactNode }) {
   const [q, setQ] = useState("");
   const templates = useTemplates({ kind: state.kind, ...(q.trim() ? { q: q.trim() } : {}) });
   const shown = useMemo(() => filterTemplates(templates.data ?? [], state.formatFilter), [templates.data, state.formatFilter]);
@@ -153,15 +188,7 @@ function TemplateStep({ state, set, kindsOn }: StepProps & { kindsOn: Record<Rep
     <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">
-          <SegmentedControl
-            label="Report kind"
-            value={state.kind}
-            onChange={(kind) => set({ kind, templateId: null, frameworks: [FRAMEWORKS_BY_KIND[kind][0]], inputs: {} })}
-            options={[
-              { value: "ghg", label: "GHG report" },
-              ...(kindsOn.sustainability ? [{ value: "sustainability" as const, label: "Sustainability report" }] : []),
-            ]}
-          />
+          {kindControl}
           <SegmentedControl label="Format" value={state.formatFilter} onChange={(formatFilter) => set({ formatFilter, templateId: null })} options={FORMAT_FILTERS} />
           <div className="relative min-w-48 flex-1">
             <Search aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted" />

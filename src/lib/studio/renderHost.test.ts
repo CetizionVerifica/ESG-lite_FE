@@ -9,7 +9,7 @@ import { setupServer } from "msw/node";
 import fixture from "../../test/fixtures/studio-render/fixture-a4.json";
 import { handlers, setStudioMockEnabled } from "../../test/msw";
 import { renderSheet, type RenderData, type RenderDoc, type RenderFreeformPage } from "./render";
-import { ensureStudioFonts, measureSheet, mountFlow, mountSheet, resetStudioFonts, studioFontPath } from "./renderHost";
+import { customFontsVersion, ensureCustomFonts, ensureStudioFonts, measureSheet, mountFlow, mountSheet, resetCustomFonts, resetStudioFonts, setStudioCustomFonts, studioCustomFonts, studioFontPath } from "./renderHost";
 import api from "../../api/axios";
 
 const doc = fixture.doc as unknown as RenderDoc;
@@ -117,5 +117,51 @@ describe("ensureStudioFonts", () => {
     expect(await ensureStudioFonts(["archivo"], set)).toEqual([]);
     setStudioMockEnabled(true);
     expect(await ensureStudioFonts(["archivo"], set)).toEqual(["archivo", "noto-sans"]);
+  });
+});
+
+describe("uploaded brand fonts (PE-2)", () => {
+  const MIDAL = { ref: "custom:7", family: "Midal Sans", files: [{ weight: 400, style: "normal" as const, format: "woff2" as const, url: "/studio/brand-kit/fonts/7/files/a" }] };
+  const withFont = (font: string): RenderFreeformPage => ({ ...summary, elements: summary.elements.map((e) => (e.type === "text" ? { ...e, props: { ...e.props, font } } : e)) as RenderFreeformPage["elements"] });
+  afterEach(() => resetCustomFonts());
+
+  it("every mount draws `custom:<id>` boxes in the uploaded face once it is set; unknown refs fall back", () => {
+    const host = document.createElement("div");
+    const family = () => host.shadowRoot?.querySelector<HTMLElement>('[data-font="custom:7"] .ds-text')?.style.fontFamily ?? "";
+    mountSheet(host, withFont("custom:7"), doc, data, { assets });
+    expect(family()).toBe("");
+    const before = customFontsVersion();
+    setStudioCustomFonts([MIDAL]);
+    expect(customFontsVersion()).toBe(before + 1);
+    setStudioCustomFonts([{ ...MIDAL }]);
+    expect(customFontsVersion()).toBe(before + 1);
+    mountSheet(host, withFont("custom:7"), doc, data, { assets });
+    expect(family()).toContain("DS Brand 7");
+    expect(studioCustomFonts()).toEqual([MIDAL]);
+  });
+
+  it("loads each file once under the renderer's family name; a failed file is retried", async () => {
+    const made: { family: string; weight: string; style: string }[] = [];
+    class FakeFontFace {
+      constructor(family: string, _src: ArrayBuffer, desc: { weight: string; style: string }) {
+        made.push({ family, weight: desc.weight, style: desc.style });
+      }
+      load() {
+        return Promise.resolve(this);
+      }
+    }
+    vi.stubGlobal("FontFace", FakeFontFace);
+    const set = { add: vi.fn() } as unknown as FontFaceSet;
+    let fail = true;
+    const load = vi.fn(async () => {
+      if (fail) throw new Error("offline");
+      return new ArrayBuffer(4);
+    });
+    expect(await ensureCustomFonts([MIDAL], load, set)).toEqual([]);
+    fail = false;
+    expect(await ensureCustomFonts([MIDAL, { ...MIDAL, ref: "nope" }], load, set)).toEqual(["custom:7"]);
+    expect(made).toEqual([{ family: "DS Brand 7", weight: "400", style: "normal" }]);
+    await ensureCustomFonts([MIDAL], load, set);
+    expect(load).toHaveBeenCalledTimes(2);
   });
 });
