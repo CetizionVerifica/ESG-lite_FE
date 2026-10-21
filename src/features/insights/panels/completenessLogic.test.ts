@@ -60,3 +60,15 @@ describe("completeness table, cell and words", () => {
     expect(completenessAria(completenessData)).toBe("Data completeness for 3 sites by month, Jan 2026 to Dec 2026: 11 site-months are not complete yet.");
   });
 });
+
+describe("completeness heatmap needs a visualMap (ECharts)", () => {
+  it("maps the five heat steps, hidden", async () => {
+    const { completenessOption: build } = await import("./completenessLogic");
+    const { completenessData } = await import("../../../test/msw/insightsData");
+    const { testTheme } = await import("./testTheme");
+    const vm = (build(completenessData, testTheme as never) as { visualMap: { show: boolean; dimension: number; pieces: { color: string }[] } }).visualMap;
+    expect(vm.show).toBe(false);
+    expect(vm.dimension).toBe(2);
+    expect(vm.pieces.map((p) => p.color)).toEqual(testTheme.heat);
+  });
+});

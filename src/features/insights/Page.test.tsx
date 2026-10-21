@@ -107,12 +107,13 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     expect(within(el).queryByTestId("panel-placeholder")).toBeNull();
   });
 
-  it("KPI tracking off: the ring and the Materiality tab are hidden, and there are no pillar chips", async () => {
+  it("KPI tracking off: the ring and the Materiality tab are hidden, Story 2 is By scope and site, and there are no pillar chips", async () => {
     setInsightsMockKpi(false);
     auth.user = { sites: [{ site_id: 11, company: { company_id: 1, insights_enabled: true, kpi_tracking_enabled: false } }] };
     renderPage();
     await settled("decoupling");
     await waitFor(() => expect(screen.queryByTestId("panel-ring")).toBeNull());
+    expect(within(await settled("scopes")).getByTestId("scope-site")).toBeTruthy();
     expect(screen.queryByRole("tab", { name: "Materiality" })).toBeNull();
     expect(screen.queryByRole("group", { name: "Pillar" })).toBeNull();
   });

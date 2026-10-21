@@ -3,6 +3,7 @@ import type { EventRef } from "../../../lib/insights/contracts";
 import { ChartFrame } from "../../../ui";
 import type { PanelProps } from ".";
 import { usePanelView } from "../components/panelView";
+import { useNarrow } from "../hooks/useNarrow";
 import { Legend, LegendItem, LineSwatch } from "../components/kit";
 import { COMBINED_NOTE, SERIES_SWATCH, decouplingAria, decouplingOption, decouplingTable } from "./decouplingLogic";
 
@@ -21,6 +22,7 @@ export interface DecouplingProps extends PanelProps<"decoupling"> {
 export function Decoupling({ response, sentence, events }: DecouplingProps) {
   const data = response.data;
   const { view, setView } = usePanelView();
+  const narrow = useNarrow();
   return (
     <div data-testid="decoupling" data-decoupled={data.decoupled}>
       {/* Rule sentence slot (IN-3 fills it). */}
@@ -33,7 +35,7 @@ export function Decoupling({ response, sentence, events }: DecouplingProps) {
         className="border-0! bg-transparent! p-0!"
         title="Output and emissions since the base year"
         subtitle={`Indexed, ${data.base_year} = 100`}
-        option={(t) => decouplingOption(data, t, events)}
+        option={(t) => decouplingOption(data, t, events, narrow)}
         height={300}
         table={decouplingTable(data)}
         exportName="insights-decoupling"

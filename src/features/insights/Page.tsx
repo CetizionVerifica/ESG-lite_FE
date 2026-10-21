@@ -11,7 +11,7 @@ import { useInsightsSites } from "./api";
 import { InsightsFilters } from "./components/InsightsFilters";
 import { PanelShell } from "./components/PanelShell";
 import { PendingBanner } from "./components/PendingBanner";
-import { SLOTS, STORY_SLOTS, type TabSlot, slotForPanel, tabsFor } from "./logic";
+import { SLOTS, type TabSlot, slotForPanel, storySlotsFor, tabsFor } from "./logic";
 
 /**
  * IN-0 · `/insights`: the page shell (05-ux §3). Header with filters, then the
@@ -75,8 +75,8 @@ export default function InsightsPage() {
       {shell("stripes")}
       {shell("hero")}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12" data-testid="insights-stories">
-        {STORY_SLOTS.map((id) => shell(id, { className: cn("md:col-span-1", SLOTS[id].span) }))}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-12" data-testid="insights-stories">
+        {storySlotsFor(kpiOn).map((id) => shell(id, { className: cn("lg:col-span-1", SLOTS[id].span) }))}
       </div>
 
       {shell("cards")}

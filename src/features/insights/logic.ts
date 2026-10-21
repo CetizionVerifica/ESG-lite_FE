@@ -3,7 +3,7 @@
 // Pure data and helpers only; no figure is computed here.
 import type { PanelId, PanelResponse } from "../../lib/insights/contracts";
 
-export const SLOT_IDS = ["stripes", "hero", "decoupling", "ring", "pathway", "wall", "cards", "flow", "materiality", "completeness"] as const;
+export const SLOT_IDS = ["stripes", "hero", "decoupling", "ring", "scopes", "pathway", "wall", "cards", "flow", "materiality", "completeness"] as const;
 export type SlotId = (typeof SLOT_IDS)[number];
 
 export interface SlotDef {
@@ -14,19 +14,22 @@ export interface SlotDef {
   module: string;
   /** Where it sits: the top band, the story grid, or a lazy tab below the fold. */
   area: "band" | "story" | "tab";
-  /** Tailwind column span at ≥1024 px (story grid). */
-  span?: "lg:col-span-8" | "lg:col-span-4" | "lg:col-span-6" | "lg:col-span-12";
+  /** Tailwind column span at ≥1280 px (story grid; 6/6 at 1024, one column below). */
+  span?: "xl:col-span-8" | "xl:col-span-4" | "xl:col-span-6" | "xl:col-span-12";
   /** Needs KPI tracking: hidden without it (the tab too). */
   kpi?: boolean;
+  /** Shown only without KPI tracking (it stands in for a KPI slot). */
+  noKpi?: boolean;
 }
 
 export const SLOTS: Record<SlotId, SlotDef> = {
   stripes: { id: "stripes", panel: "stripes", title: "Monthly emissions", module: "IN-8", area: "band" },
   hero: { id: "hero", panel: "summary", title: "Summary", module: "IN-1", area: "band" },
-  decoupling: { id: "decoupling", panel: "decoupling", title: "Output and emissions", module: "IN-2", area: "story", span: "lg:col-span-8" },
-  ring: { id: "ring", panel: "esg_ring", title: "ESG data readiness", module: "IN-2", area: "story", span: "lg:col-span-4", kpi: true },
-  pathway: { id: "pathway", panel: "pathway", title: "Pathway", module: "IN-4", area: "story", span: "lg:col-span-6" },
-  wall: { id: "wall", panel: "target_wall", title: "Targets", module: "IN-2", area: "story", span: "lg:col-span-6" },
+  decoupling: { id: "decoupling", panel: "decoupling", title: "Output and emissions", module: "IN-2", area: "story", span: "xl:col-span-8" },
+  ring: { id: "ring", panel: "esg_ring", title: "ESG data readiness", module: "IN-2", area: "story", span: "xl:col-span-4", kpi: true },
+  scopes: { id: "scopes", panel: "flow", title: "By scope and site", module: "IN-10", area: "story", span: "xl:col-span-4", noKpi: true },
+  pathway: { id: "pathway", panel: "pathway", title: "Pathway", module: "IN-4", area: "story", span: "xl:col-span-6" },
+  wall: { id: "wall", panel: "target_wall", title: "Targets", module: "IN-2", area: "story", span: "xl:col-span-6" },
   cards: { id: "cards", panel: "cards", title: "What stands out", module: "IN-3", area: "band" },
   flow: { id: "flow", panel: "flow", title: "Data flow", module: "IN-6", area: "tab" },
   materiality: { id: "materiality", panel: "materiality", title: "Materiality", module: "IN-7", area: "tab", kpi: true },
@@ -34,6 +37,12 @@ export const SLOTS: Record<SlotId, SlotDef> = {
 };
 
 export const STORY_SLOTS: SlotId[] = ["decoupling", "ring", "pathway", "wall"];
+/**
+ * The story panels for a company (05-ux §3): without KPI tracking Story 2 is
+ * "By scope and site" (a treemap of the flow panel's site → scope tonnes)
+ * instead of the ESG ring.
+ */
+export const storySlotsFor = (kpiOn: boolean): SlotId[] => (kpiOn ? STORY_SLOTS : ["decoupling", "scopes", "pathway", "wall"]);
 export const TAB_SLOTS = ["flow", "materiality", "completeness"] as const;
 export type TabSlot = (typeof TAB_SLOTS)[number];
 
@@ -44,6 +53,7 @@ export const tabsFor = (kpiOn: boolean): TabSlot[] => TAB_SLOTS.filter((t) => kp
 export function slotForPanel(panel: PanelId | null): SlotId | null {
   if (!panel) return null;
   if (panel === "bridge") return "pathway";
+  if (panel === "flow") return "flow";
   return SLOT_IDS.find((s) => SLOTS[s].panel === panel) ?? null;
 }
 

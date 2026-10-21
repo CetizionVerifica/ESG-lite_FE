@@ -50,6 +50,7 @@ export function Completeness({ response, query }: PanelProps<"completeness">) {
   return (
     <div data-testid="completeness">
       <ChartFrame
+        className="border-0! bg-transparent! p-0!"
         title="Approved data by site and month"
         unit="% complete"
         subtitle={`${response.label} · blank months aren't due yet`}

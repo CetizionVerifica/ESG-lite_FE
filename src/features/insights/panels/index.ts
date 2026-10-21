@@ -15,6 +15,7 @@ import { DecouplingStory } from "./DecouplingStory";
 import { EsgRing } from "./EsgRing";
 import { TargetWall } from "./TargetWall";
 import { StripesBand } from "../components/Stripes";
+import { ScopeSiteTreemap } from "./ScopeSiteTreemap";
 
 /** What a slot's component gets: the envelope (availability 'ok', data present) and the page query. */
 export interface PanelProps<P extends PanelId = PanelId> {
@@ -38,4 +39,5 @@ export const PANELS: Partial<Record<SlotId, PanelComponent>> = {
   flow: definePanel<"flow">(DisclosureFlow), // IN-6
   materiality: definePanel<"materiality">(MaterialityMatrix), // IN-7
   stripes: definePanel<"stripes">(StripesBand), // IN-8
+  scopes: definePanel<"flow">(ScopeSiteTreemap), // IN-10 (05-ux §3: Story 2 without KPI tracking)
 };

@@ -45,6 +45,7 @@ export function DisclosureFlow({ response }: PanelProps<"flow">) {
   return (
     <div data-testid="disclosure-flow" className="min-w-0">
       <ChartFrame
+        className="border-0! bg-transparent! p-0!"
         title="From entries to disclosures"
         unit="tCO₂e"
         subtitle={kpiOn ? "Width shows tCO₂e from sites to KPIs, then the count of disclosures each KPI feeds." : "Width shows tCO₂e from sites to scopes to the largest categories."}

@@ -9,6 +9,7 @@ import { formatEmissions, formatNumber, formatPercent } from "../../../ui/format
 import type { EventRef, Pathway, YearType } from "../../../lib/insights/contracts";
 import { entrance, morph } from "../../../lib/insights/motion";
 import type { ChartTheme } from "../../../theme";
+import { esc } from "./shared";
 
 /** Stable series ids (IN-5 morphs from these). */
 export const PATHWAY_IDS = {
@@ -21,6 +22,14 @@ export const PATHWAY_IDS = {
 
 /** The bars' stack name: the three scope bars of one year are one column. */
 export const PATHWAY_STACK = "actual";
+
+const EVENT_SEP = "\u241E";
+/** "Rooftop solar at…" or "Rooftop solar at… +1" for a year with two events. */
+export function eventMarkLabel(joined: string, max = 16): string {
+  const [first, ...rest] = joined.split(EVENT_SEP);
+  const short = first.length > max ? `${first.slice(0, max - 1).trimEnd()}…` : first;
+  return rest.length ? `${short} +${rest.length}` : short;
+}
 
 /** One year's group id: bars keep their identity by year through a morph. */
 export const yearGroupId = (year: number) => `year:${year}`; // same ids as the bridge totals (IN-5), so the morph pairs them
@@ -63,6 +72,8 @@ export const gapYears = (data: Pathway) => data.gap_band.filter((g) => g.gap > 0
 
 export interface PathwayOptionOpts {
   yearType: YearType;
+  /** Phones: event lines without their text labels (they'd overlap); the tooltip and table keep the names. */
+  compactMarks?: boolean;
 }
 
 /** The ECharts option: stacked scope bars, dashed pathway, lever line on a right 0–100 % axis, gap band, target pin, event lines. */
@@ -126,9 +137,10 @@ export function pathwayOption(data: Pathway, t: ChartTheme, opts: PathwayOptionO
           markLine: {
             symbol: ["none", "none"],
             lineStyle: { color: t.ui.muted, type: "dotted" as const, width: 1 },
-            label: { show: true, position: "insideEndTop" as const, color: t.ui.muted, fontSize: 10, formatter: "{b}" },
-            tooltip: { show: true, formatter: "{b}" },
-            data: [...events.entries()].flatMap(([year, list]) => list.map((e) => ({ name: e.label, xAxis: String(year) }))),
+            // Above the plot, horizontal and shortened (one line per year); the tooltip and table have every name.
+            label: { show: !opts.compactMarks, position: "end" as const, color: t.ui.muted, fontSize: 10, formatter: (p: unknown) => eventMarkLabel((p as { name: string }).name) },
+            tooltip: { show: true, formatter: (p: unknown) => (p as { name: string }).name.split(EVENT_SEP).map(esc).join("<br/>") },
+            data: [...events.entries()].map(([year, list]) => ({ name: list.map((e) => e.label).join(EVENT_SEP), xAxis: String(year) })),
           },
         }
       : {}),
@@ -155,7 +167,7 @@ export function pathwayOption(data: Pathway, t: ChartTheme, opts: PathwayOptionO
   const series = [...bars, pathwayLine, ...leverLine];
   return {
     ...entrance(series.length),
-    grid: { left: 8, right: lever ? 8 : 16, top: 28, bottom: 8, containLabel: true },
+    grid: { left: 8, right: lever ? 8 : 16, top: 40, bottom: 8, containLabel: true },
     legend: { show: false },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     xAxis: { type: "category", data: cats },

@@ -4,6 +4,7 @@ import { Button, ChartFrame, cn, focusRing, formatNumber } from "../../../ui";
 import { EventsDrawer } from "../components/EventsDrawer";
 import { Legend, LegendItem, LineSwatch } from "../components/kit";
 import { usePanelView } from "../components/panelView";
+import { useNarrow } from "../hooks/useNarrow";
 import type { PanelProps } from "./index";
 import { gapYears, pathwayAria, pathwayOption, pathwayTable, renewableLever } from "./pathwayLogic";
 import type { Bridge } from "../../../lib/insights/contracts";
@@ -34,6 +35,7 @@ const Box = ({ className }: { className: string }) => <span className={`inline-b
 export function Pathway({ response, query, sentence, actions, whatMoved }: PathwayProps) {
   const data = response.data;
   const { view, setView } = usePanelView();
+  const narrow = useNarrow();
   const [eventsOpen, setEventsOpen] = useState(false);
   const [calcOpen, setCalcOpen] = useState(false);
   const bridge = whatMoved ?? null;
@@ -48,10 +50,11 @@ export function Pathway({ response, query, sentence, actions, whatMoved }: Pathw
     <div className="space-y-2" data-testid="pathway">
       {sentence && <div data-testid="pathway-sentence">{sentence}</div>}
       <ChartFrame
+        className="border-0! bg-transparent! p-0!"
         title={bridge ? "What moved" : `Emissions against the ${data.target_year} pathway`}
         unit="tCO₂e"
         subtitle={bridge ? `${bridge.from.year} to ${bridge.to.year}` : `${response.label} · ${formatNumber(data.annual_rate_pct, 1)}% a year from ${data.base_year}`}
-        option={(t) => (bridge ? bridgeOption(bridge, t) : pathwayOption(data, t, { yearType }))}
+        option={(t) => (bridge ? bridgeOption(bridge, t) : pathwayOption(data, t, { yearType, compactMarks: narrow }))}
         height={300}
         table={bridge ? { columns: BRIDGE_COLUMNS, rows: bridgeTableRows(bridge) } : table}
         exportName={bridge ? `emissions-bridge-${bridge.from.year}-${bridge.to.year}` : `insights-pathway-${response.period?.year ?? query.year}`}

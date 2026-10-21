@@ -8,8 +8,8 @@ describe("present slides (IN-8)", () => {
     expect(SLIDES[0].cover).toBe(true);
   });
 
-  it("drop the ESG ring without KPI tracking", () => {
-    expect(slidesFor(false).map((s) => s.id)).toEqual(["summary", "decoupling", "pathway", "wall", "cards"]);
+  it("show 'By scope and site' instead of the ESG ring without KPI tracking", () => {
+    expect(slidesFor(false).map((s) => s.id)).toEqual(["summary", "decoupling", "scopes", "pathway", "wall", "cards"]);
     expect(slidesFor(true)).toHaveLength(6);
   });
 

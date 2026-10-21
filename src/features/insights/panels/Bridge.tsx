@@ -25,6 +25,7 @@ export function Bridge({ response }: PanelProps<"bridge">) {
   return (
     <div className="min-w-0" data-testid="bridge">
       <ChartFrame
+        className="border-0! bg-transparent! p-0!"
         title="What moved"
         unit="tCO₂e"
         subtitle={`${data.from.year} to ${data.to.year}`}

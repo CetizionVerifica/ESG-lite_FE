@@ -52,6 +52,7 @@ function Matrix({ points, label }: { points: MaterialityPoint[]; label: string }
   return (
     <div className="min-w-0 space-y-3" data-testid="materiality-matrix">
       <ChartFrame
+        className="border-0! bg-transparent! p-0!"
         title="What matters most, and how you're doing"
         subtitle={`${label} · bubble size shows weight · scores 0–10`}
         option={(t) => materialityOption(points, t)}
