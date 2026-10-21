@@ -93,6 +93,7 @@ describe("flowLogic (IN-6)", () => {
     expect(linkTooltip(partial, labels)).toBe("Gross Scope 2 (location) → ESRS E1-6<br/>feeds 1 disclosure · Partial fit");
     expect(nodeTooltip(on.nodes.find((n) => n.id === "disc:GRI:305-1")!, true)).toBe("GRI 305-1<br/>Disclosure · GRI");
     expect(nodeTooltip(off.nodes.find((n) => n.id === "cat:elec")!, false)).toBe("Purchased electricity<br/>Category");
+    expect(nodeTooltip({ id: "cat:7", label: "Diesel", column: 2, kind: "category" }, true)).toBe("Diesel<br/>Category");
     expect(linkTooltip({ source: "x", target: "y", value: 2, measure: "count" }, new Map([["x", "<b>"]]))).toBe("&lt;b&gt; → y<br/>feeds 2 disclosures");
 
     const { formatter } = (flowOption(on, t) as unknown as { tooltip: Tip }).tooltip;

@@ -33,7 +33,7 @@ export const summaryData = (kpiOn: boolean): Summary => ({
   pathway: { status: "at_risk", gap_pct: 3.4, target_year: 2030 },
   intensity: { value: 0.612, unit: "t", combined: false, change_pct: -11.3, good: true },
   readiness: kpiOn ? { pct: 68.5, by_pillar: { environment: 81.2, social: 62.0, governance: 54.5 } } : null,
-  renewable_share_pct: kpiOn ? undefined : 46.6,
+  renewable_share_pct: 46.6,
   attention: {
     total: kpiOn ? 19 : 12,
     items: [
@@ -264,7 +264,7 @@ export const flowData = (kpiOn: boolean): Flow => {
     { source: "site:13", target: "scope:3", value: 4_910, measure: "tCO2e" },
   ];
   if (!kpiOn) {
-    nodes.push({ id: "cat:fuel", label: "Stationary combustion", column: 2, kind: "kpi" }, { id: "cat:elec", label: "Purchased electricity", column: 2, kind: "kpi" }, { id: "cat:goods", label: "Purchased goods", column: 2, kind: "kpi" });
+    nodes.push({ id: "cat:fuel", label: "Stationary combustion", column: 2, kind: "category" }, { id: "cat:elec", label: "Purchased electricity", column: 2, kind: "category" }, { id: "cat:goods", label: "Purchased goods", column: 2, kind: "category" });
     links.push(
       { source: "scope:1", target: "cat:fuel", value: 18_120, measure: "tCO2e" },
       { source: "scope:2", target: "cat:elec", value: 18_250, measure: "tCO2e" },

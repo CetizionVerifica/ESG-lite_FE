@@ -161,3 +161,13 @@ IN-0's checks were run first on the `in/local` it shipped (`3abea79`): typecheck
 ## Full e2e run
 
 `npx playwright test` on `in/local` after the last merge: 492 passed, 2 skipped, 0 failed (11.5 min).
+
+## Follow-ups after the merge (2026-10-21, branch `claude/project-thread-r40yj9`)
+
+With ESG-lite's follow-up PR (`GET /kpi/setup/materiality-scores`, 503 `IN_SNAPSHOT_UNAVAILABLE`):
+
+- **Contract mirror:** `Summary.readiness.by_pillar` is `Record<Pillar, number | null>`, so a pillar with nothing counted shows "–" and its sentence says "not counted yet". `Summary.renewable_share_pct` is now required (`number | null`), and the backend sends it whether KPI tracking is on or off. `Flow.nodes[].kind` adds `"category"`, which is labelled "Category" and coloured like KPI nodes. The `IN_SNAPSHOT_UNAVAILABLE: 503` code has been added, and `contracts.snapshot.json` matches the backend.
+- **KPI setup scores block:** it now reads and saves through `GET`/`PUT /kpi/setup/materiality-scores`, which only needs KPI tracking, so it works with Insights on and Design Studio off. It sends only material topics.
+- **PDF snapshot:** the error body arrives as a blob and is now read as JSON. A 503 says "PDF snapshots aren't set up on this server yet. Use Print view…". Export ▾ gains **Print view**, which opens `/insights/print?<filters>` in a new tab. That page has a Print button, and a print stylesheet prints only the view at its full height, with no buttons. The server's PDF is still built from its own HTML.
+- **Against the real backend** (ESG-lite `ci/fixtures/in-company`, Manager 902, CY 2025, KPI off and then on): every `/insights/*` call returned 200, with no console errors and no panel in an error state. The scores block saved with Design Studio off (checked in the database). The PDF returned 503, the toast appeared and Print view opened. The KPI flow can show a KPI with no approved figure as its own small group, as designed (no tonnes link).
+- **Checks:** typecheck and `lint:new` are clean. Vitest: 265 files, 2,351 tests. Playwright: the `in-*`, `kpi-setup` and `smoke` specs, including the new "Print view" fallback test.

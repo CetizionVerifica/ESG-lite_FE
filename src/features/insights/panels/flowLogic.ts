@@ -51,17 +51,18 @@ export function kindWord(node: FlowNode, kpiOn: boolean): string {
   if (node.kind === "site") return "Site";
   if (node.kind === "scope") return "Scope";
   if (node.kind === "disclosure") return "Disclosure";
+  if (node.kind === "category") return "Category";
   return kpiOn ? "KPI" : "Category";
 }
 
-/** Node colour by kind: sites the series palette, scopes their scope token, KPIs pillar E, disclosures muted. */
+/** Node colour by kind: sites the series palette, scopes their scope token, KPIs and categories pillar E, disclosures muted. */
 export function nodeColor(node: FlowNode, siteIndex: number, t: FlowTheme): string {
   if (node.kind === "site") return t.color[siteIndex % t.color.length] ?? t.ui.brand;
   if (node.kind === "scope") {
     const n = /^scope:(\d)$/.exec(node.id)?.[1];
     return n === "1" ? t.scopes.s1 : n === "2" ? t.scopes.s2 : n === "3" ? t.scopes.s3 : t.ui.brand;
   }
-  if (node.kind === "kpi") return t.pillars.environment;
+  if (node.kind === "kpi" || node.kind === "category") return t.pillars.environment;
   return t.ui.muted;
 }
 

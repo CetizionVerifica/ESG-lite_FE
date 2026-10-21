@@ -28,7 +28,7 @@ export function HeroStrip({ response, query, size }: PanelProps<"summary"> & { s
     <dl className={cn("grid grid-cols-1 gap-px overflow-hidden rounded-card bg-line lg:grid-cols-2 xl:grid-cols-4", big && "xl:grid-cols-2")} data-testid="hero-strip">
       <NetCell s={s} vs={vs} link={links.net} big={big} />
       <IntensityCell s={s} vs={vs} link={links.intensity} big={big} />
-      {s.readiness ? <ReadinessCell readiness={s.readiness} link={links.readiness} big={big} /> : <RenewableCell pct={s.renewable_share_pct ?? null} link={links.renewables ?? links.intensity} big={big} />}
+      {s.readiness ? <ReadinessCell readiness={s.readiness} link={links.readiness} big={big} /> : <RenewableCell pct={s.renewable_share_pct} link={links.renewables ?? links.intensity} big={big} />}
       <AttentionCell attention={s.attention} link={links.attention} big={big} />
     </dl>
   );
@@ -109,7 +109,7 @@ function IntensityCell({ s, vs, link, big }: { s: Summary; vs: string; link?: st
 const RING_R = [26, 19, 12] as const;
 
 /** Three small arcs, E outside to G inside, each with its letter: colour is never the only signal. */
-export function TriRing({ byPillar, size = 72 }: { byPillar: Record<Pillar, number>; size?: number }) {
+export function TriRing({ byPillar, size = 72 }: { byPillar: Record<Pillar, number | null>; size?: number }) {
   return (
     <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden className="shrink-0 -rotate-90">
       {PILLARS.map((p, idx) => {

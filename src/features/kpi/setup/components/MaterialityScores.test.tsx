@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// DS-2 · the materiality scores block in KPI setup (only with Design Studio on).
+// DS-2 · the materiality scores block in KPI setup (Design Studio or Insights on); IN-7: read and saved through /kpi/setup/materiality-scores.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
