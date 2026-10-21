@@ -33,6 +33,7 @@ export const summaryData = (kpiOn: boolean): Summary => ({
   pathway: { status: "at_risk", gap_pct: 3.4, target_year: 2030 },
   intensity: { value: 0.612, unit: "t", combined: false, change_pct: -11.3, good: true },
   readiness: kpiOn ? { pct: 68.5, by_pillar: { environment: 81.2, social: 62.0, governance: 54.5 } } : null,
+  renewable_share_pct: kpiOn ? undefined : 46.6,
   attention: {
     total: kpiOn ? 19 : 12,
     items: [

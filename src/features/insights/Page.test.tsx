@@ -52,7 +52,10 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     expect(screen.getByRole("heading", { name: "Insights", level: 1 })).toBeTruthy();
     expect((screen.getByRole("button", { name: /Present/ }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: /Export/ }) as HTMLButtonElement).disabled).toBe(true);
-    for (const id of ["stripes", "hero", "decoupling", "ring", "pathway", "wall", "cards", "flow"]) {
+    const hero = await settled("hero");
+    expect(within(hero).getByTestId("hero-strip")).toBeTruthy();
+    expect((await screen.findByTestId("pending-banner")).textContent).toContain("12 entries and 3 KPI values waiting for approval aren't in these figures.");
+    for (const id of ["stripes", "decoupling", "ring", "pathway", "wall", "cards", "flow"]) {
       const el = await settled(id);
       expect(el.getAttribute("data-state"), id).toBe("ok");
       // No module has filled the slot yet: the shell says which one will.
@@ -106,7 +109,7 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     await waitFor(() => expect(router.state.location.search).toContain("compare=base"));
     await userEvent.click(screen.getByRole("button", { name: "Chennai plant" }));
     await waitFor(() => expect(router.state.location.search).toContain("sites=11"));
-    await waitFor(() => expect(screen.getByTestId("panel-hero").textContent).toContain("Chennai plant"));
+    await waitFor(() => expect(screen.getByTestId("panel-decoupling").textContent).toContain("Chennai plant"));
     await userEvent.click(screen.getByRole("button", { name: "All sites" }));
     await waitFor(() => expect(router.state.location.search).not.toContain("sites="));
   });
