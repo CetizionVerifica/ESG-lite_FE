@@ -7,6 +7,7 @@ import { draftErrors, draftFromKit, draftsEqual, move, updateFromDraft, type Bra
 import { PALETTES_MAX } from "../../../lib/studio/contracts";
 import { brandKitErrorMessage, useBrandKit, useSaveBrandKit } from "./api";
 import { FontsSection } from "./components/FontsSection";
+import { BrandFontsSection } from "./components/BrandFontsSection"; // PE-2
 import { LogosSection } from "./components/LogosSection";
 import { PaletteCard } from "./components/PaletteCard";
 import { VoiceSection } from "./components/VoiceSection";
@@ -86,6 +87,7 @@ export function BrandKitPage() {
         <div className="space-y-5">
           <LogosSection kit={data} superadminClientId={role === "Superadmin" ? clientId : null} />
           <FontsSection heading={draft.heading} body={draft.body} readOnly={readOnly} onChange={(f) => update(f)} />
+          <BrandFontsSection /> {/* PE-2: uploaded fonts, saved on their own (not with "Save brand kit") */}
           <VoiceSection value={draft.voice} readOnly={readOnly} error={errors.voice} onChange={(voice) => update({ voice })} />
         </div>
 
