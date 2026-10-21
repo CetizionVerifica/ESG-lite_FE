@@ -83,8 +83,12 @@ export function formatDelta(
   if (rounded === 0) return { text: `${nf(decimals, decimals).format(0)}%`, pct, direction: "flat", tone: "neutral" };
   const direction = rounded > 0 ? "up" : "down";
   const better = lowerIsBetter ? direction === "down" : direction === "up";
+  // A fall that rounds to 100% while something is left reads as "> 99.9%", never as zero (F-20).
+  const nearlyAll = direction === "down" && Math.abs(rounded) >= 100 && current !== 0;
+  const step = 10 ** -decimals;
+  const amount = nearlyAll ? `>${nf(decimals, decimals).format(100 - step)}` : nf(decimals, decimals).format(Math.abs(rounded));
   return {
-    text: `${direction === "up" ? "▲" : "▼"} ${nf(decimals, decimals).format(Math.abs(rounded))}%`,
+    text: `${direction === "up" ? "▲" : "▼"} ${amount}%`,
     pct,
     direction,
     tone: better ? "good" : "bad",

@@ -54,6 +54,7 @@ export function MyBillsDrawer({ open, onClose, siteId, categoryId, rereading, on
               loading={rereading === inv.invoice_id}
               disabled={rereading !== null}
               onClick={() => onReuse(inv)}
+              aria-label={`Read again ${inv.file_name}`}
             >
               Read again
             </Button>

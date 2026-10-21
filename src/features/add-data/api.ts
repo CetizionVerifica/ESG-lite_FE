@@ -22,6 +22,7 @@ import {
 } from "../../services/invoiceService";
 import { periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPeriod } from "./logic/entry";
 import { entriesQuery, entryInPeriod, type SavedEntry } from "./logic/existing";
+import { BILL_UNREADABLE, billErrorMessage } from "./logic/bill";
 import type { ColumnConfig, EmissionFactor } from "./types";
 
 /**
@@ -238,10 +239,12 @@ export type { ExtractionResponse, Invoice };
 
 type BillContext = { siteId: number; categoryId: number; userId: number | null; units: string[] };
 
+// A contributor sees the service's words only when they are plain ones; a server-side
+// detail ("tesseract is not installed…") becomes "We couldn't read this bill…" (F-01).
 const aiError = (err: unknown, fallback: string) => {
   const e = err as { response?: { data?: { detail?: unknown } }; message?: string };
   const detail = e.response?.data?.detail;
-  return typeof detail === "string" ? detail : e.message || fallback;
+  return billErrorMessage(typeof detail === "string" ? detail : e.message, fallback);
 };
 
 /**
@@ -260,7 +263,7 @@ export async function readBill(file: File, ctx: BillContext): Promise<Extraction
     if (response.error && !response.emission?.length) throw new Error(response.error);
     return response;
   } catch (err) {
-    throw new Error(aiError(err, "Couldn't read this bill."));
+    throw new Error(aiError(err, BILL_UNREADABLE));
   }
 }
 
@@ -271,7 +274,7 @@ export async function rereadBill(invoiceId: number, ctx: BillContext): Promise<E
     if (response.error && !response.emission?.length) throw new Error(response.error);
     return response;
   } catch (err) {
-    throw new Error(aiError(err, "Couldn't read this bill again."));
+    throw new Error(aiError(err, BILL_UNREADABLE));
   }
 }
 

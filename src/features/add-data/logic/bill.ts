@@ -200,3 +200,17 @@ export function billOutsidePeriod(date: string | null, period: EntryPeriod): str
   if (day >= start && day <= end) return null;
   return `This bill is dated ${formatDate(day)}, outside ${entryPeriodLabel(period)}. Remove it here and add it with its own period selected.`;
 }
+
+/** What a contributor sees when a bill can't be read and the service's words aren't meant for them. */
+export const BILL_UNREADABLE = "We couldn't read this bill. Type the values in, or try a clearer PDF or photo.";
+
+// Server-side detail (a missing OCR tool, a stack trace, a connection or HTTP failure) that a
+// contributor can't act on: "tesseract is not installed or it's not in your PATH…" (F-01).
+const TECHNICAL = /tesseract|poppler|\bPATH\b|README|traceback|exception|errno|not installed|module named|internal server error|ECONN|ETIMEDOUT|timeout of \d+|status code \d{3}|network error/i;
+
+/** The service's message when it is a plain one, else BILL_UNREADABLE (or the caller's fallback). */
+export function billErrorMessage(detail: unknown, fallback: string = BILL_UNREADABLE): string {
+  const text = typeof detail === "string" ? detail.trim() : "";
+  if (!text || text.length > 200 || TECHNICAL.test(text)) return fallback;
+  return text;
+}

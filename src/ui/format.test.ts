@@ -74,6 +74,11 @@ describe("formatDelta", () => {
   it("flips the tone when higher is better", () => {
     expect(formatDelta(110, 100, { lowerIsBetter: false })).toMatchObject({ tone: "good" });
   });
+  it("never shows a fall to a non-zero value as 100% (F-20)", () => {
+    expect(formatDelta(897.7, 2_000_000)).toMatchObject({ text: "▼ >99.9%", direction: "down", tone: "good" });
+    expect(formatDelta(0, 500)).toMatchObject({ text: "▼ 100.0%" });
+    expect(formatDelta(897.7, 2_000_000, { decimals: 0 })?.text).toBe("▼ >99%");
+  });
   it("is neutral when the change rounds to zero", () => {
     expect(formatDelta(100.01, 100)).toMatchObject({ text: "0.0%", tone: "neutral", direction: "flat" });
   });

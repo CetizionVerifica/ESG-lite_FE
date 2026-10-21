@@ -14,18 +14,21 @@ export function useUndoableApprove<S extends string = "pending" | "approved" | "
   commit,
   onCommitted,
   onFailed,
+  onSent,
   delay = UNDO_MS,
 }: {
   commit: (id: number, opts?: { keepalive?: boolean }) => Promise<unknown>;
   onCommitted: () => void;
   onFailed: (id: number, error: unknown) => void;
+  /** The undo window closed and the request is on its way: e.g. take "Undo" off the toast. */
+  onSent?: (id: number) => void;
   delay?: number;
 }) {
   const [optimistic, setOptimistic] = useState<ReadonlyMap<number, S>>(() => new Map());
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   // Latest callbacks, so timers fired after a re-render use current ones.
-  const cb = useRef({ commit, onCommitted, onFailed });
-  cb.current = { commit, onCommitted, onFailed };
+  const cb = useRef({ commit, onCommitted, onFailed, onSent });
+  cb.current = { commit, onCommitted, onFailed, onSent };
 
   const setStatus = useCallback(
     (id: number, status: S | null) =>
@@ -40,6 +43,7 @@ export function useUndoableApprove<S extends string = "pending" | "approved" | "
 
   const send = useCallback((id: number, keepalive = false) => {
     timers.current.delete(id); // data-loss-reviewed: Map entry (timer handle), not a record
+    cb.current.onSent?.(id);
     cb.current
       .commit(id, keepalive ? { keepalive } : undefined)
       .then(() => cb.current.onCommitted())

@@ -3,7 +3,7 @@ import { ChevronDown, Copy, Trash2 } from "lucide-react";
 import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
-import { formColumns, isColumnVisible, rowMethodChoices, visibleExtraFields, type FormModel } from "../logic/form";
+import { formColumns, isColumnVisible, mappingKeyLabel, rowMethodChoices, visibleExtraFields, type FormModel } from "../logic/form";
 import type { RowIssue } from "../logic/entry";
 import type { CategoryMapping } from "../api";
 import type { EmissionFactor, ModalRow } from "../types";
@@ -184,7 +184,7 @@ export function EntryRow(p: Props) {
           </span>
           {row.emission_category ? (
             <span className="mt-1 inline-flex flex-wrap items-center gap-1 rounded-chip bg-tint px-2 py-1 text-ink">
-              {row._ecmKey || row.emission_category}
+              {row._ecmKey ? mappingKeyLabel(String(row._ecmKey)) : row.emission_category}
               {p.showCalcDetail && row._ecmKey && row._ecmKey !== row.emission_category && <span className="text-muted">· Global: {row.emission_category}</span>}
             </span>
           ) : (

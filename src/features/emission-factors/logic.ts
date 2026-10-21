@@ -297,6 +297,26 @@ export function gasSumHint(d: FactorDraft): string | null {
   return `The gas parts add up to ${fmt(sum)} kgCO₂e with ${d.gwpSet ?? DEFAULT_GWP_SET} GWPs, not the factor's ${fmt(total)}. Check them; you can still save.`;
 }
 
+/**
+ * A hint (never a block) when a grid electricity factor looks 1,000× too small: grid power is about
+ * 0.05–1.2 kgCO₂e per kWh (50–1,200 per MWh) almost everywhere, and the factor is in kg. A value
+ * under 10 per MWh is usually a tonnes-per-MWh figure (CEA's 0.71 t/MWh is 710 kg/MWh) (F-04).
+ * Renewable electricity can rightly be near zero, so it is left out.
+ */
+export function gridFactorHint(categoryName: string | null | undefined, value: number | null, unit: string): string | null {
+  const name = (categoryName ?? "").toLowerCase();
+  if (value === null || !(value > 0) || !name.includes("electric") || name.includes("renewable")) return null;
+  const per = unit.trim().toLowerCase().replace(/\s+/g, "");
+  const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  if (per === "mwh" && value < 10) {
+    return `Grid electricity is usually 50–1,200 kgCO₂e per MWh. ${fmt(value)} looks like tonnes per MWh; in kg that is ${fmt(value * 1000)}. Check it; you can still save.`;
+  }
+  if (per === "kwh" && value < 0.01) {
+    return `Grid electricity is usually 0.05–1.2 kgCO₂e per kWh. ${fmt(value)} looks 1,000 times too small; in kg per kWh that may be ${fmt(value * 1000)}. Check it; you can still save.`;
+  }
+  return null;
+}
+
 const sameValue = (a: unknown, b: unknown) =>
   typeof a === "string" && typeof b === "string" ? a.trim() === b.trim() : typeof a === "object" && a && b ? JSON.stringify(a) === JSON.stringify(b) : a === b;
 

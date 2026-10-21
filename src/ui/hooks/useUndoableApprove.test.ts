@@ -30,6 +30,26 @@ describe("useUndoableApprove", () => {
     expect(onCommitted).toHaveBeenCalled();
   });
 
+  it("tells the caller when the window closes and the request goes, never after an undo (F-18)", async () => {
+    const commit = vi.fn().mockResolvedValue({});
+    const onSent = vi.fn();
+    const hook = renderHook(() => useUndoableApprove({ commit, onCommitted: vi.fn(), onFailed: vi.fn(), onSent, delay: 8000 }));
+    act(() => hook.result.current.approve(7));
+    act(() => hook.result.current.approve(8));
+    act(() => {
+      hook.result.current.undo(8);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(7999);
+    });
+    expect(onSent).not.toHaveBeenCalled();
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(onSent).toHaveBeenCalledTimes(1);
+    expect(onSent).toHaveBeenCalledWith(7);
+  });
+
   it("undo sends nothing and restores the status", async () => {
     const { hook, commit } = setup();
     act(() => hook.result.current.approve(7));

@@ -15,6 +15,7 @@ import type { EmissionPayload } from "../logic/entry";
 import type { ModalRow } from "../types";
 import { DuplicateDialog, type DuplicateChoice } from "../components/DuplicateDialog";
 import { plainProblem } from "../../../lib/entryDetail";
+import { mappingKeyLabel } from "../logic/form";
 
 type Outcome = SaveOutcome | { kind: "skipped" } | { kind: "saving" };
 type Evidence = "attached" | "failed";
@@ -45,7 +46,7 @@ type Props = {
   workflow?: boolean;
 };
 
-const label = (row: ModalRow) => (row._ecmKey as string) || row.emission_category || "—";
+const label = (row: ModalRow) => (row._ecmKey ? mappingKeyLabel(String(row._ecmKey)) : row.emission_category) || "—";
 
 /** Step 3: what will be sent, then send it row by row. */
 export function Review(p: Props) {

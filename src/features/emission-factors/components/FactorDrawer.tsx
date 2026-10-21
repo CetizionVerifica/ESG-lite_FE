@@ -15,6 +15,7 @@ import {
   draftFrom,
   emptyDraft,
   gasSumHint,
+  gridFactorHint,
   isDirty,
   validate,
   yearHint,
@@ -116,6 +117,8 @@ export function FactorDrawer(props: Props) {
     props.onEdit();
   };
   const gasHint = gasSumHint(draft);
+  const categoryName = categoryOptions.find((c) => c.value === draft.categoryId)?.label ?? null;
+  const gridHint = gridFactorHint(categoryName, draft.value, draft.unit);
   const close = () => (dirty && !props.saving ? setConfirmClose(true) : props.onClose());
   const submit = () => {
     const errors = validate(draft);
@@ -208,6 +211,11 @@ export function FactorDrawer(props: Props) {
           />
           <NumberField label="Factor" required value={draft.value} onChange={(v) => set("value", v)} min={0} step={0.0001} error={shown.value} help="kgCO₂e per unit of activity, up to 8 decimals." />
           <TextField label="Unit" required value={draft.unit} onChange={(v) => set("unit", v)} error={shown.unit} help="The activity unit, e.g. litre, kWh, tonne. Saved in lowercase; for &quot;kg CO2e/kWh&quot; only kwh is kept." autoComplete="off" />
+          {gridHint && (
+            <Callout tone="warn" title="This looks 1,000 times too small">
+              {gridHint}
+            </Callout>
+          )}
           <Select<string>
             label="Type"
             placeholder="Not set"

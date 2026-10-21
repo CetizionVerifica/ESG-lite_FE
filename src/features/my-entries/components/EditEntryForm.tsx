@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { applyChange, formColumns, isColumnVisible, toFormModel, useEmissionCalc, type ModalRow } from "../../../lib/emissions";
+import { applyChange, formColumns, isColumnVisible, mappingKeyLabel, toFormModel, useEmissionCalc, type ModalRow } from "../../../lib/emissions";
 import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEmissions, formatNumber } from "../../../ui";
 import { useEditSetup } from "../api";
 import { type EditIssue, type EntryUpdate, buildUpdate, editIssue, editedDate, entryMonth, factorYearFor, monthBounds, rowFromEntry } from "../edit";
@@ -115,7 +115,7 @@ function Fields(p: FieldsProps) {
           <span className="block text-xs font-medium text-muted">Emission category</span>
           {row.emission_category ? (
             <span className="mt-1 inline-flex flex-wrap items-center gap-1 rounded-chip bg-tint px-2 py-1 text-ink">
-              {row._ecmKey || row.emission_category}
+              {row._ecmKey ? mappingKeyLabel(String(row._ecmKey)) : row.emission_category}
             </span>
           ) : (
             <span className={cn("mt-1 block", shown("emission_category") ? "text-bad" : "text-muted")}>Set by your choices below</span>

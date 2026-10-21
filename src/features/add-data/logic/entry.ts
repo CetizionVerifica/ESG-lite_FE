@@ -101,8 +101,14 @@ export function rowIssue(row: ModalRow, calc: EmissionCalculator): RowIssue | nu
     };
   }
   const result = calc.calculateEmission(row);
-  return result.value === null ? { field: "values", message: result.status } : null;
+  if (result.value !== null) return null;
+  // The engine's "Enter activity data" also stands for 0, a negative number or text typed in (F-11).
+  return { field: "values", message: result.status === MISSING_ACTIVITY ? AMOUNT_NEEDED : result.status };
 }
+
+const MISSING_ACTIVITY = "Enter activity data";
+/** What a row with no usable amount asks for: empty, 0, negative and text alike. */
+export const AMOUNT_NEEDED = "Enter the amount (a number above 0)";
 
 export interface EmissionPayload {
   site_id: number;
