@@ -35,9 +35,9 @@ export interface ShellRoute {
 
 /**
  * Company switches nav items and routes can depend on (KPI-1: `"kpi"` = `kpi_tracking_enabled`;
- * DS-0: `"studio"` = `design_studio_enabled`).
+ * DS-0: `"studio"` = `design_studio_enabled`; IN-0: `"insights"` = `insights_enabled`).
  */
-export const REQUIREMENTS = ["kpi", "studio"] as const;
+export const REQUIREMENTS = ["kpi", "studio", "insights"] as const;
 export type Requirement = (typeof REQUIREMENTS)[number];
 /** Which switches are on for the signed-in user; a missing key is off. */
 export type FeatureFlags = Partial<Record<Requirement, boolean>>;
@@ -142,6 +142,13 @@ export const SHELL_ROUTES = [
   { id: "studio-preview", path: "/studio/:id/preview", title: "Page view", crumb: ["Reports", "Design Studio", "Page view"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-11", clientContext: true, requires: "studio" },
   { id: "studio-present", path: "/studio/:id/present", title: "Present", crumb: ["Reports", "Design Studio", "Present"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-11", clientContext: true, requires: "studio" },
   { id: "studio-versions", path: "/studio/:id/versions", title: "Versions", crumb: ["Reports", "Design Studio", "Versions"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-13", clientContext: true, requires: "studio" },
+
+  // IN-0: Insights (docs/insights/01-contracts.md §9). Managers (their sites), Admins and the Superadmin
+  // (for the chosen client); Users never (I1). Hidden while the company's switch is off.
+  { id: "insights", path: "/insights", title: "Insights", crumb: ["Insights"], roles: ["Manager", "Admin", "Superadmin"], spec: "IN-0", clientContext: true, requires: "insights" },
+  { id: "insights-present", path: "/insights/present", title: "Present insights", crumb: ["Insights", "Present"], roles: ["Manager", "Admin", "Superadmin"], spec: "IN-8", clientContext: true, requires: "insights" },
+  // IN-8: the print route the backend's printer renders into the PDF snapshot (no nav item).
+  { id: "insights-print", path: "/insights/print", title: "Insights snapshot", crumb: ["Insights", "Snapshot"], roles: ["Manager", "Admin", "Superadmin"], spec: "IN-8", clientContext: true, requires: "insights" },
 ] as const satisfies readonly ShellRoute[];
 
 export type ShellRouteId = (typeof SHELL_ROUTES)[number]["id"];

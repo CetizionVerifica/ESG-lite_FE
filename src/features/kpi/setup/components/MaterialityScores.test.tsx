@@ -13,12 +13,15 @@ const studio = { enabled: true, kinds: { ghg: true, sustainability: true }, chec
 vi.mock("../../../../context/AuthContext", () => ({ useAuth: () => ({ role: "Admin", user: {} }) }));
 vi.mock("../../../../lib/clientContext", () => ({ useClientContext: () => ({ clientId: null }) }));
 vi.mock("../../../../lib/studio/switch", () => ({ useDesignStudio: () => studio }));
+const insights = { enabled: false, kpi_tracking: true, checking: false }; // IN-7
+vi.mock("../../../../lib/insights/switch", () => ({ useInsights: () => insights })); // IN-7
 
 const server = setupServer(...handlers);
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   resetStudioMocks();
   studio.enabled = true;
+  insights.enabled = false; // IN-7
 });
 afterEach(cleanup);
 afterAll(() => server.close());
@@ -50,5 +53,15 @@ describe("MaterialityScores", () => {
     studio.enabled = false;
     wrap();
     expect(screen.queryByTestId("materiality-scores")).toBeNull();
+  });
+
+  // IN-7: the same block shows when Insights is on (its materiality matrix reads these scores, I10).
+  it("shows with Insights on even while Design Studio is off", async () => {
+    studio.enabled = false;
+    insights.enabled = true;
+    wrap();
+    expect(await screen.findByTestId("materiality-scores")).toBeTruthy();
+    expect(screen.getByText(/Insights places each topic on its materiality matrix/)).toBeTruthy();
+    expect(screen.getByLabelText("Impact score for Own workforce")).toBeTruthy();
   });
 });

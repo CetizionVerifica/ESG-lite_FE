@@ -32,6 +32,8 @@ const KPI_REPORTS = kpiLink("Framework reports", "/reports/kpi/GRI");
 const KPI_SETUP = kpiLink("KPI setup", "/kpi/setup");
 /** DS-0: Design Studio, behind the company's studio switch. */
 const STUDIO = link("Design Studio", "/studio", "studio");
+/** IN-0: Insights, behind the company's Insights switch (I5: second item, under Overview). */
+const INSIGHTS = link("Insights", "/insights", "insights");
 
 export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   User: [
@@ -43,6 +45,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   Manager: [
     link("Overview", "/overview"),
+    INSIGHTS, // IN-0
     group("Data", [
       link("Approvals", "/data/approvals"),
       link("Emissions ledger", "/data/ledger"),
@@ -63,6 +66,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     link("Team", "/team"),
   ],
   Admin: [
+    INSIGHTS, // IN-0: Admins have no Overview; Insights comes first
     link("Users", "/users"),
     link("Bulk upload", "/capture/upload"),
     link("Brand theme", "/brand"),
@@ -101,7 +105,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Data-entry forms", "/capture/forms"),
       link("Bulk upload", "/capture/upload"),
     ]),
-    group("Reports", [link("GHG", "/reports/ghg"), link("EDE", "/reports/ede"), STUDIO]), // DS-0: Design Studio
+    group("Reports", [INSIGHTS, link("GHG", "/reports/ghg"), link("EDE", "/reports/ede"), STUDIO]), // DS-0: Design Studio; IN-0: Insights for the chosen client
     // D18: everything an Admin has for KPIs, for the chosen client, plus the KPI review (Approvals → KPIs).
     group("KPIs", [KPI_ESG, KPI_DASHBOARD, KPI_TARGETS, kpiLink("Approvals", "/data/approvals?view=kpi", "KPI approvals"), KPI_REPORTS, KPI_SETUP]),
   ],

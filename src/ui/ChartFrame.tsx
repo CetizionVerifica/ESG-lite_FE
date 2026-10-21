@@ -1,4 +1,5 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useContext, useRef, useState, type ReactNode } from "react";
+import { ChartFrameDefaults } from "./chartFrameDefaults";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { Download } from "lucide-react";
@@ -30,14 +31,26 @@ export type ChartFrameProps = {
   /** True when there's no data to plot. */
   empty?: boolean;
   emptyText?: string;
-  /** The same data as a table for the "Table" view (and screen readers). */
-  table?: { columns: ChartTableColumn[]; rows: Array<Record<string, string | number | null>> };
+  /**
+   * The same data as a table for the "Table" view (and screen readers). A cell
+   * may be an element (e.g. a button that opens a cell's detail) so the table
+   * view keeps every chart action reachable from the keyboard.
+   */
+  table?: { columns: ChartTableColumn[]; rows: Array<Record<string, string | number | null | ReactNode>> };
   /** Enables PNG export with this file name (no extension). */
   exportName?: string;
   /** Custom legend under the chart, when the ECharts legend is off. */
   legend?: ReactNode;
   /** Extra controls in the header (e.g. a SegmentedControl). */
   actions?: ReactNode;
+  /** One sentence summarising the chart for screen readers (on the chart view). */
+  ariaLabel?: string;
+  /** Controlled Chart / Table view (e.g. a panel opens its table on Enter). Uncontrolled when left out. */
+  view?: "chart" | "table";
+  onViewChange?: (view: "chart" | "table") => void;
+  /** Extra ECharts props: events (`onEvents`) and the renderer ("svg" for print). */
+  onEvents?: Record<string, (params: unknown) => void>;
+  renderer?: "canvas" | "svg";
   className?: string;
 };
 
@@ -47,7 +60,7 @@ export function ChartFrame({
   unit,
   subtitle,
   option,
-  height = 280,
+  height: heightProp = 280,
   loading,
   error,
   onRetry,
@@ -57,13 +70,27 @@ export function ChartFrame({
   exportName,
   legend,
   actions,
+  ariaLabel,
+  view: viewProp,
+  onViewChange,
+  onEvents,
+  renderer: rendererProp = "canvas",
   className,
 }: ChartFrameProps) {
+  const defaults = useContext(ChartFrameDefaults);
+  const height = defaults.height ? Math.max(defaults.height, heightProp) : heightProp;
+  const renderer = defaults.renderer ?? rendererProp;
   const theme = useChartTheme();
   const chartRef = useRef<ReactECharts>(null);
-  const [view, setView] = useState<"chart" | "table">("chart");
+  const [viewState, setViewState] = useState<"chart" | "table">("chart");
+  const view = viewProp ?? viewState;
+  const setView = (v: "chart" | "table") => {
+    setViewState(v);
+    onViewChange?.(v);
+  };
   const ready = !loading && !error && !empty;
-  const resolvedOption = typeof option === "function" ? option(theme) : option;
+  const built = typeof option === "function" ? option(theme) : option;
+  const resolvedOption = defaults.static ? { ...built, animation: false } : built;
 
   const exportPng = () => {
     const inst = chartRef.current?.getEchartsInstance();
@@ -118,7 +145,8 @@ export function ChartFrame({
         theme={theme}
         notMerge
         style={{ height: "100%", width: "100%" }}
-        opts={{ renderer: "canvas" }}
+        opts={{ renderer }}
+        onEvents={onEvents}
       />
     );
 
@@ -151,12 +179,14 @@ export function ChartFrame({
           />
         )}
         {exportName && ready && view === "chart" && (
-          <Button size="sm" variant="ghost" onClick={exportPng} icon={<Download aria-hidden className="size-4" />}>
+          <Button size="sm" variant="ghost" onClick={exportPng} data-chart-export={exportName} icon={<Download aria-hidden className="size-4" />}>
             PNG
           </Button>
         )}
       </figcaption>
-      <div style={{ height }}>{body}</div>
+      <div style={{ height }} {...(ariaLabel && ready && view === "chart" ? { role: "img", "aria-label": ariaLabel } : {})}>
+        {body}
+      </div>
       {legend && ready && view === "chart" && <div className="mt-3">{legend}</div>}
     </figure>
   );
