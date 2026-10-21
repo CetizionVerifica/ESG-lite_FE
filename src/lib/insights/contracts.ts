@@ -126,6 +126,12 @@ export interface Summary {
   pathway: { status: TargetStatus; gap_pct: number | null; target_year: number | null } | null;
   intensity: { value: number | null; unit: string; combined: boolean; change_pct: number | null; good: boolean | null };
   readiness: { pct: number; by_pillar: Record<Pillar, number> } | null;
+  /**
+   * FE-proposed IN-0 follow-up (IN-1 Build 6): the renewable electricity share
+   * the hero shows in place of readiness when KPI tracking is off. Optional
+   * until the backend sends it; without it the cell says what's needed.
+   */
+  renewable_share_pct?: number | null;
   attention: { total: number; items: { kind: AttentionKind; count: number; link: string }[] };
 }
 

@@ -8,6 +8,7 @@ import { PageHeader, Select, TabPanel, Tabs, cn } from "../../ui";
 import { useInsightsSites } from "./api";
 import { InsightsFilters } from "./components/InsightsFilters";
 import { PanelShell } from "./components/PanelShell";
+import { PendingBanner } from "./components/PendingBanner";
 import { SLOTS, STORY_SLOTS, type TabSlot, slotForPanel, tabsFor } from "./logic";
 
 /**
@@ -62,7 +63,7 @@ export default function InsightsPage() {
         ]}
       />
 
-      {/* IN-1: PendingBanner goes here ("12 entries … aren't in these figures. Review →"). */}
+      <PendingBanner query={query} />
 
       {shell("stripes")}
       {shell("hero")}
