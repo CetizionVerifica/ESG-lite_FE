@@ -1,13 +1,14 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Hammer } from "lucide-react";
-import { Button, EmptyState, SkeletonChart, cn, panel as panelBox } from "../../../ui";
+import { Button, EmptyState, SkeletonChart, cn, focusRing, panel as panelBox } from "../../../ui";
 import type { InsightsQuery, PanelId } from "../../../lib/insights/contracts";
 import { isInsightsOff } from "../../../lib/insights/switch";
 import { panelFade, pulse } from "../../../lib/insights/motion";
 import { usePanel } from "../api";
 import { EMPTY_FALLBACK, type SlotDef, shellState } from "../logic";
 import { PANELS } from "../panels";
+import { PanelViewContext, type PanelView } from "./panelView";
 
 export interface PanelShellProps {
   slot: SlotDef;
@@ -34,6 +35,8 @@ export function PanelShell({ slot, query, target = false, enabled = true, childr
   const q = usePanel(slot.panel, query, { enabled });
   const ref = useRef<HTMLElement>(null);
   const state = shellState(q);
+  const [view, setView] = useState<PanelView>("chart");
+  const viewState = useMemo(() => ({ view, setView }), [view]);
 
   useEffect(() => {
     if (q.error && isInsightsOff(q.error)) onSwitchOff?.();
@@ -96,9 +99,24 @@ export function PanelShell({ slot, query, target = false, enabled = true, childr
       className={cn(panelBox, "min-w-0 scroll-mt-20 p-4 transition-opacity", dimmed && "opacity-60", pulse(target), className)}
     >
       <h2 id={titleId} className="mb-3 text-sm font-semibold text-ink">
-        {slot.title}
+        {state === "ok" && slot.area !== "band" ? (
+          // Enter (or a click) on the header flips between the chart and its table (05-ux §5).
+          <button
+            type="button"
+            className={cn("rounded-control text-left", focusRing)}
+            aria-pressed={view === "table"}
+            title={view === "table" ? "Show the chart" : "Show as a table"}
+            onClick={() => setView(view === "table" ? "chart" : "table")}
+            data-testid="panel-header"
+          >
+            {slot.title}
+            <span className="sr-only">{view === "table" ? ", showing the table. Press to show the chart." : ". Press to show as a table."}</span>
+          </button>
+        ) : (
+          slot.title
+        )}
       </h2>
-      {body}
+      <PanelViewContext.Provider value={viewState}>{body}</PanelViewContext.Provider>
     </section>
   );
 }

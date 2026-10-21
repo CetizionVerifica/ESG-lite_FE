@@ -1,107 +1,14 @@
 import { type Page, expect, test } from "@playwright/test";
-import { cardsData, decouplingData, esgRingData, MOCK_SITES, summaryData } from "../src/test/msw/insightsData";
+import { type Call, mockInsightsApi, managerAt } from "./insightsMockApi";
 
 /**
- * IN-0 · The Insights switch, nav, deep links and the page shell on mocks.
- * In-memory API: `/admin/companies` for the Superadmin, `/insights/status`
- * (following the stored switch) and every `/insights` panel for the client's
- * people. Writes are recorded so the tests check what reached the server.
+ * IN-0 · The Insights switch, nav, deep links and the page shell on mocks
+ * (in-memory API: e2e/insightsMockApi.ts).
  */
 
-type Call = { method: string; path: string; body: unknown };
-type Opts = { companies?: Record<string, unknown>[]; insights?: boolean; kpi?: boolean; serverOff?: boolean };
+const PATHWAY_EMPTY = { pathway: { availability: "no_data" as const, reason: "Set an SBTi base year to see your pathway." } };
+const mockApi = (page: Page, role: string, user: object, opts: Parameters<typeof mockInsightsApi>[3] = {}) => mockInsightsApi(page, role, user, { panels: PATHWAY_EMPTY, ...opts });
 
-/** The app's own port (assets); everything else is the API. E2E_PORT lets a lane run on its own dev server. */
-const APP_PORT = process.env.E2E_PORT ?? "4173";
-
-const ACME = { company_id: 1, name: "ACME", status: true, kpi_tracking_enabled: false, design_studio_enabled: false, insights_enabled: false };
-
-const PANEL_DATA: Record<string, (kpi: boolean) => unknown> = {
-  summary: (kpi) => summaryData(kpi),
-  decoupling: () => decouplingData,
-  "esg-ring": () => esgRingData,
-  cards: (kpi) => cardsData(kpi),
-};
-const KPI_PANELS = ["esg-ring", "materiality"];
-const TOTALS = { gross: 0, net: 0, saved: 0, scope_1: 0, scope_2: 0, scope_3: 0, entries: 0, approved_count: 0, pending_count: 0, rejected_count: 0, pending_emission: 0, net_vs_last_year_pct: null };
-const OVERVIEW = { period: { key: "2026-09" }, site_ids: [11, 12, 13], category_id: null, kpis: TOTALS, by_scope: [], by_site: [], by_month: [], yearly_total: 0, by_category: [], submission: { month: "2026-09", submitted: 0, missing: 0, users: [] }, trend: [], last_year: null };
-
-async function mockApi(page: Page, role: string, user: object, opts: Opts = {}) {
-  const calls: Call[] = [];
-  let companies = (opts.companies ?? [ACME]).map((c) => ({ ...c }));
-  const insightsOn = () => opts.insights ?? companies[0]?.insights_enabled === true;
-  const kpi = opts.kpi ?? false;
-  await page.addInitScript(
-    ([r, u]) => {
-      localStorage.setItem("token", "test-token");
-      localStorage.setItem("role", r);
-      localStorage.setItem("user", u);
-    },
-    [role, JSON.stringify(user)],
-  );
-  await page.route(
-    (url) => url.port !== APP_PORT,
-    (route) => {
-      const request = route.request();
-      const url = new URL(request.url());
-      const path = url.pathname;
-      const method = request.method();
-      const json = (body: unknown, status = 200) => route.fulfill({ status, json: body });
-      const body = method === "GET" ? null : (request.postDataJSON() as Record<string, unknown> | null);
-      calls.push({ method, path: `${path}${url.search}`, body });
-
-      if (path.endsWith("/auth/me")) return json({ role, user });
-      if (path.endsWith("/auth/me/appearance")) return json({ appearance: "light" });
-      if (path.endsWith("/brands/mine")) return json({});
-      if (path.endsWith("/notifications/unread")) return json({ count: 0 });
-      if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
-      if (path.endsWith("/kpi/status")) return json({ enabled: kpi, setup_completed: kpi });
-      if (path.endsWith("/studio/status")) return json({ enabled: false, kinds: { ghg: false, sustainability: false } });
-      if (path.endsWith("/insights/status")) return json({ enabled: insightsOn() && !opts.serverOff, kpi_tracking: kpi });
-      if (path.includes("/insights/")) {
-        if (!insightsOn() || opts.serverOff) return json({ code: "IN_OFF", message: "Insights isn't turned on for your company." }, 403);
-        if (path.endsWith("/insights/sites")) return json({ sites: MOCK_SITES });
-        const panel = path.split("/insights/")[1];
-        const year = Number(url.searchParams.get("year")) || new Date().getFullYear();
-        const yearType = url.searchParams.get("yearType") || "CY";
-        const envelope = {
-          panel: panel.replace("-", "_"),
-          period: { year, yearType },
-          sites: "all",
-          label: `${yearType} ${year} · All sites`,
-          pending_not_in: { emissions: 12, kpi_values: kpi ? 3 : 0, link: "/data/approvals" },
-          stamp: "e2e",
-          links: {},
-        };
-        if (KPI_PANELS.includes(panel) && !kpi) return json({ ...envelope, availability: "kpi_off", data: null });
-        if (panel === "pathway") return json({ ...envelope, availability: "no_data", reason: "Set an SBTi base year to see your pathway.", data: null });
-        return json({ ...envelope, availability: "ok", data: PANEL_DATA[panel]?.(kpi) ?? {} });
-      }
-      // Overview (P06), enough for its header: nothing approved yet.
-      if (path.endsWith("/manager/overview")) return json(OVERVIEW);
-      if (path.endsWith("/manager/submission-status")) return json({ users: [] });
-      if (path.endsWith("/user/emissions")) return json({ data: [], total: 0, summary: { total_emission: 0, pending_count: 0, approved_count: 0, rejected_count: 0 } });
-      if (path.endsWith("/user/production-data/manager")) return json([]);
-      const one = /\/admin\/companies\/(\d+)$/.exec(path);
-      if (one && method === "PUT") {
-        companies = companies.map((c) => (c.company_id === Number(one[1]) ? { ...c, ...body } : c));
-        return json({ message: "Company updated" });
-      }
-      if (path.endsWith("/admin/companies")) return json(companies);
-      if (path.endsWith("/admin/sites")) return json([{ site_id: 11, name: "Chennai plant", company: { company_id: 1 }, country: { name: "India" } }]);
-      if (path.endsWith("/admin/users")) return json([]);
-      return json({});
-    },
-  );
-  return calls;
-}
-
-const managerAt = (insights: boolean, kpi = false) => ({
-  user_id: 12,
-  name: "Mia Haddad",
-  email: "mia@acme.example",
-  sites: MOCK_SITES.map((s) => ({ ...s, company: { company_id: 1, name: "ACME", insights_enabled: insights, kpi_tracking_enabled: kpi } })),
-});
 const mainNav = (page: Page) => page.getByRole("navigation", { name: "Main" });
 const writes = (calls: Call[]) => calls.filter((c) => c.method !== "GET" && c.method !== "OPTIONS");
 const SLOT_IDS = ["stripes", "hero", "decoupling", "pathway", "wall", "cards"];

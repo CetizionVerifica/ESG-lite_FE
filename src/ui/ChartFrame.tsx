@@ -38,6 +38,14 @@ export type ChartFrameProps = {
   legend?: ReactNode;
   /** Extra controls in the header (e.g. a SegmentedControl). */
   actions?: ReactNode;
+  /** One sentence summarising the chart for screen readers (on the chart view). */
+  ariaLabel?: string;
+  /** Controlled Chart / Table view (e.g. a panel opens its table on Enter). Uncontrolled when left out. */
+  view?: "chart" | "table";
+  onViewChange?: (view: "chart" | "table") => void;
+  /** Extra ECharts props: events (`onEvents`) and the renderer ("svg" for print). */
+  onEvents?: Record<string, (params: unknown) => void>;
+  renderer?: "canvas" | "svg";
   className?: string;
 };
 
@@ -57,11 +65,21 @@ export function ChartFrame({
   exportName,
   legend,
   actions,
+  ariaLabel,
+  view: viewProp,
+  onViewChange,
+  onEvents,
+  renderer = "canvas",
   className,
 }: ChartFrameProps) {
   const theme = useChartTheme();
   const chartRef = useRef<ReactECharts>(null);
-  const [view, setView] = useState<"chart" | "table">("chart");
+  const [viewState, setViewState] = useState<"chart" | "table">("chart");
+  const view = viewProp ?? viewState;
+  const setView = (v: "chart" | "table") => {
+    setViewState(v);
+    onViewChange?.(v);
+  };
   const ready = !loading && !error && !empty;
   const resolvedOption = typeof option === "function" ? option(theme) : option;
 
@@ -118,7 +136,8 @@ export function ChartFrame({
         theme={theme}
         notMerge
         style={{ height: "100%", width: "100%" }}
-        opts={{ renderer: "canvas" }}
+        opts={{ renderer }}
+        onEvents={onEvents}
       />
     );
 
@@ -156,7 +175,9 @@ export function ChartFrame({
           </Button>
         )}
       </figcaption>
-      <div style={{ height }}>{body}</div>
+      <div style={{ height }} {...(ariaLabel && ready && view === "chart" ? { role: "img", "aria-label": ariaLabel } : {})}>
+        {body}
+      </div>
       {legend && ready && view === "chart" && <div className="mt-3">{legend}</div>}
     </figure>
   );

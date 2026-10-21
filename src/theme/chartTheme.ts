@@ -69,6 +69,13 @@ export function chartTheme(t: ThemeTokens) {
     scopes: { s1: t.s1, s2: t.s2, s3: t.s3 } as ScopeColors,
     /** Not read by ECharts: ESG pillar colours (wave E), for marks only. */
     pillars: { environment: t["pillar-e"], social: t["pillar-s"], governance: t["pillar-g"] },
+    /** Not read by ECharts: status colours (fixed across packs), for marks only. */
+    status: { good: t.good, goodSoft: t["good-soft"], warn: t.warn, warnSoft: t["warn-soft"], bad: t.bad, badSoft: t["bad-soft"], info: t.info, infoSoft: t["info-soft"] },
+    /** Not read by ECharts: the heat ramp (low → high) and the text colour on each step. */
+    heat: [t["heat-1"], t["heat-2"], t["heat-3"], t["heat-4"], t["heat-5"]],
+    onHeat: [t["on-heat-1"], t["on-heat-2"], t["on-heat-3"], t["on-heat-4"], t["on-heat-5"]],
+    /** Not read by ECharts: surface and brand colours for marks, labels and graphics. */
+    ui: { ink: t.ink, muted: t.muted, line: t.line, panel: t.panel, tint: t.tint, brand: t.brand, onBrand: t["on-brand"], accent: t.accent },
   };
 }
 
