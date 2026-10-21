@@ -65,8 +65,8 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
   it("renders the header, filters and every slot, each in its own state", async () => {
     renderPage();
     expect(screen.getByRole("heading", { name: "Insights", level: 1 })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /Present/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: /Export/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /Present/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: /Export/ }) as HTMLButtonElement).disabled).toBe(false);
     const hero = await settled("hero");
     expect(within(hero).getByTestId("hero-strip")).toBeTruthy();
     expect((await screen.findByTestId("pending-banner")).textContent).toContain("12 entries and 3 KPI values waiting for approval aren't in these figures.");
@@ -77,12 +77,9 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     expect(within(await settled("decoupling")).getByTestId("decoupling")).toBeTruthy();
     expect(within(await settled("ring")).getByTestId("esg-ring")).toBeTruthy();
     expect(within(await settled("wall")).getByTestId("target-wall")).toBeTruthy();
-    for (const id of ["stripes"]) {
-      const el = await settled(id);
-      expect(el.getAttribute("data-state"), id).toBe("ok");
-      // No module has filled the slot yet: the shell says which one will.
-      expect(within(el).getByTestId("panel-placeholder").textContent, id).toMatch(/This panel is built in IN-\d/);
-    }
+    expect(within(await settled("stripes")).getByRole("img").getAttribute("aria-label")).toMatch(/^Monthly emissions from Jan 2021 to Sep 2026/);
+    // Every slot is filled by its module now: no placeholder anywhere.
+    for (const id of ["stripes", "hero", "decoupling", "ring", "pathway", "wall", "cards"]) expect(within(await settled(id)).queryByTestId("panel-placeholder"), id).toBeNull();
     // IN-6: the first tab (Data flow) draws its sankey.
     const flow = await settled("flow");
     expect(flow.getAttribute("data-state")).toBe("ok");
@@ -163,7 +160,7 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     await waitFor(() => expect(router.state.location.search).toContain("compare=base"));
     await userEvent.click(screen.getByRole("button", { name: "Chennai plant" }));
     await waitFor(() => expect(router.state.location.search).toContain("sites=11"));
-    await waitFor(() => expect(screen.getByTestId("panel-stripes").textContent).toContain("Chennai plant"));
+    await waitFor(() => expect(screen.getByTestId("panel-pathway").textContent).toContain("Chennai plant"));
     await userEvent.click(screen.getByRole("button", { name: "All sites" }));
     await waitFor(() => expect(router.state.location.search).not.toContain("sites="));
   });

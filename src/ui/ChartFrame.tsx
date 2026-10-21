@@ -1,4 +1,5 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useContext, useRef, useState, type ReactNode } from "react";
+import { ChartFrameDefaults } from "./chartFrameDefaults";
 import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { Download } from "lucide-react";
@@ -59,7 +60,7 @@ export function ChartFrame({
   unit,
   subtitle,
   option,
-  height = 280,
+  height: heightProp = 280,
   loading,
   error,
   onRetry,
@@ -73,9 +74,12 @@ export function ChartFrame({
   view: viewProp,
   onViewChange,
   onEvents,
-  renderer = "canvas",
+  renderer: rendererProp = "canvas",
   className,
 }: ChartFrameProps) {
+  const defaults = useContext(ChartFrameDefaults);
+  const height = defaults.height ? Math.max(defaults.height, heightProp) : heightProp;
+  const renderer = defaults.renderer ?? rendererProp;
   const theme = useChartTheme();
   const chartRef = useRef<ReactECharts>(null);
   const [viewState, setViewState] = useState<"chart" | "table">("chart");
@@ -85,7 +89,8 @@ export function ChartFrame({
     onViewChange?.(v);
   };
   const ready = !loading && !error && !empty;
-  const resolvedOption = typeof option === "function" ? option(theme) : option;
+  const built = typeof option === "function" ? option(theme) : option;
+  const resolvedOption = defaults.static ? { ...built, animation: false } : built;
 
   const exportPng = () => {
     const inst = chartRef.current?.getEchartsInstance();
@@ -174,7 +179,7 @@ export function ChartFrame({
           />
         )}
         {exportName && ready && view === "chart" && (
-          <Button size="sm" variant="ghost" onClick={exportPng} icon={<Download aria-hidden className="size-4" />}>
+          <Button size="sm" variant="ghost" onClick={exportPng} data-chart-export={exportName} icon={<Download aria-hidden className="size-4" />}>
             PNG
           </Button>
         )}

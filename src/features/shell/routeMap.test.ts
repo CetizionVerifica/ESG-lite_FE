@@ -229,6 +229,7 @@ describe("Insights routes (IN-0, 01-contracts §9)", () => {
     expect(insights.map((r) => [r.id, r.path])).toEqual([
       ["insights", "/insights"],
       ["insights-present", "/insights/present"],
+      ["insights-print", "/insights/print"],
     ]);
     for (const r of insights) {
       expect((r as { requires?: string }).requires, r.id).toBe("insights");

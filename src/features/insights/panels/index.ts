@@ -14,6 +14,7 @@ import { PathwayStory } from "./PathwayStory";
 import { DecouplingStory } from "./DecouplingStory";
 import { EsgRing } from "./EsgRing";
 import { TargetWall } from "./TargetWall";
+import { StripesBand } from "../components/Stripes";
 
 /** What a slot's component gets: the envelope (availability 'ok', data present) and the page query. */
 export interface PanelProps<P extends PanelId = PanelId> {
@@ -36,5 +37,5 @@ export const PANELS: Partial<Record<SlotId, PanelComponent>> = {
   completeness: definePanel<"completeness">(Completeness), // IN-4
   flow: definePanel<"flow">(DisclosureFlow), // IN-6
   materiality: definePanel<"materiality">(MaterialityMatrix), // IN-7
-  // IN-8: stripes
+  stripes: definePanel<"stripes">(StripesBand), // IN-8
 };

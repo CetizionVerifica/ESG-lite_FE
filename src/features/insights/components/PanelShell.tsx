@@ -4,7 +4,7 @@ import { Hammer } from "lucide-react";
 import { Button, EmptyState, SkeletonChart, cn, focusRing, panel as panelBox } from "../../../ui";
 import type { InsightsQuery, PanelId } from "../../../lib/insights/contracts";
 import { isInsightsOff } from "../../../lib/insights/switch";
-import { panelFade, pulse } from "../../../lib/insights/motion";
+import { fadeInElement, panelFade, pulse, pulseElement } from "../../../lib/insights/motion";
 import { usePanel } from "../api";
 import { EMPTY_FALLBACK, type SlotDef, shellState } from "../logic";
 import { PANELS } from "../panels";
@@ -42,9 +42,20 @@ export function PanelShell({ slot, query, target = false, enabled = true, childr
     if (q.error && isInsightsOff(q.error)) onSwitchOff?.();
   }, [q.error, onSwitchOff]);
 
+  const settled = state !== "loading";
   useEffect(() => {
-    if (target && state !== "loading") ref.current?.scrollIntoView?.({ block: "start", behavior: "auto" });
-  }, [target, state]);
+    if (!target || !settled) return;
+    ref.current?.scrollIntoView?.({ block: "start", behavior: "auto" });
+    pulseElement(ref.current);
+  }, [target, settled]);
+
+  // One calm fade per panel when its first content lands (05-ux §6).
+  const faded = useRef(false);
+  useEffect(() => {
+    if (state !== "ok" || faded.current) return;
+    faded.current = true;
+    fadeInElement(ref.current);
+  }, [state]);
 
   if (state === "hidden") return null;
 

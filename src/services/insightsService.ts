@@ -69,3 +69,9 @@ export async function updateInsightsEvent(id: number, patch: Partial<EventCreate
 export async function deleteInsightsEvent(id: number, companyId?: number | null): Promise<void> {
   await api.delete(`/insights/events/${id}`, { params: companyParams(companyId) });
 }
+
+/** GET /insights/snapshot.pdf (IN-8): the one-page PDF of the page for the query. */
+export async function getInsightsSnapshot(q: InsightsQuery, companyId?: number | null): Promise<Blob> {
+  const { data } = await api.get("/insights/snapshot.pdf", { params: panelParams(q, {}, companyId), responseType: "blob", timeout: 70_000 });
+  return data as Blob;
+}

@@ -147,6 +147,8 @@ export const SHELL_ROUTES = [
   // (for the chosen client); Users never (I1). Hidden while the company's switch is off.
   { id: "insights", path: "/insights", title: "Insights", crumb: ["Insights"], roles: ["Manager", "Admin", "Superadmin"], spec: "IN-0", clientContext: true, requires: "insights" },
   { id: "insights-present", path: "/insights/present", title: "Present insights", crumb: ["Insights", "Present"], roles: ["Manager", "Admin", "Superadmin"], spec: "IN-8", clientContext: true, requires: "insights" },
+  // IN-8: the print route the backend's printer renders into the PDF snapshot (no nav item).
+  { id: "insights-print", path: "/insights/print", title: "Insights snapshot", crumb: ["Insights", "Snapshot"], roles: ["Manager", "Admin", "Superadmin"], spec: "IN-8", clientContext: true, requires: "insights" },
 ] as const satisfies readonly ShellRoute[];
 
 export type ShellRouteId = (typeof SHELL_ROUTES)[number]["id"];
