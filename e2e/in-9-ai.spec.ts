@@ -17,7 +17,7 @@ test("turning on natural wording asks for ?ai=1, labels AI cards, and 'Show orig
   await page.goto("/insights?year=2026");
   const panel = page.getByTestId("panel-cards");
   await expect(panel).toContainText(RULE_DECOUPLING);
-  await expect(panel.getByText("AI", { exact: true })).toHaveCount(0);
+  await expect(panel.locator('[data-source="ai"]')).toHaveCount(0);
 
   const toggle = panel.getByRole("switch", { name: "Natural wording" });
   await expect(toggle).toHaveAttribute("aria-checked", "false");
@@ -26,12 +26,13 @@ test("turning on natural wording asks for ?ai=1, labels AI cards, and 'Show orig
   await expect.poll(() => calls.some((c) => c.path.includes("/insights/cards") && c.path.includes("ai=1"))).toBe(true);
 
   await expect(panel).toContainText(AI_DECOUPLING);
-  await expect(panel.getByText("AI", { exact: true }).first()).toBeVisible();
+  // AI cards carry the AI chip (word + icon) next to the sentence.
+  await expect(panel.locator('[data-source="ai"]').first()).toContainText("AI");
   // The deliberately invalid AI text never shows: that card keeps its rule sentence.
   await expect(panel).toContainText("Renewable electricity rose from 31% to 47%.");
   await expect(panel).not.toContainText("in 1 year");
 
-  await panel.getByRole("button", { name: "Show original" }).first().click();
+  await panel.locator(`[data-rule="decoupling"]`).getByRole("button", { name: "Show original" }).click();
   await expect(panel).toContainText(RULE_DECOUPLING);
 
   // Remembered for this user.
