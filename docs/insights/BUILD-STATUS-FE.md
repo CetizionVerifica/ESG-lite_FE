@@ -35,7 +35,7 @@ IN-2, IN-3, IN-4, IN-5, IN-6, IN-7 and IN-9 were built in parallel worktrees, ea
 | `npm run build` | built |
 | Playwright, Insights specs (`e2e/in-*.spec.ts`, 12 files) | 52 passed. One run had a race on one assertion; it now polls. |
 | Playwright, neighbours (`kpi-setup`, `shell`, `overview`, `smoke`, `clients`, `kpi-esg`, `theme-preview`, plus the Insights specs) | 106 passed |
-| Playwright, full suite | see "Full e2e run" at the end |
+| Playwright, full suite (`npx playwright test`, 494 tests) | 492 passed, 2 skipped (the repo's existing skips), 0 failed, 11.5 min |
 | `npm run check:insights-contracts` | not runnable here: it reads `../ESG-lite/ci/insights-contracts.json`, and ESG-lite isn't checked out next to this repo. The snapshot test in Vitest (`contracts.test.ts`) passes. |
 
 IN-0's checks were run first on the `in/local` it shipped (`3abea79`): typecheck, lint, 2,046 tests, the build and IN-0's Playwright spec (7/7) were all green. Nothing needed fixing.
@@ -160,4 +160,4 @@ IN-0's checks were run first on the `in/local` it shipped (`3abea79`): typecheck
 
 ## Full e2e run
 
-Running at the time of writing; the result is added in a follow-up commit on `in/local`.
+`npx playwright test` on `in/local` after the last merge: 492 passed, 2 skipped, 0 failed (11.5 min).
