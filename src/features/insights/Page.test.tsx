@@ -55,7 +55,10 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     const hero = await settled("hero");
     expect(within(hero).getByTestId("hero-strip")).toBeTruthy();
     expect((await screen.findByTestId("pending-banner")).textContent).toContain("12 entries and 3 KPI values waiting for approval aren't in these figures.");
-    for (const id of ["stripes", "decoupling", "ring", "pathway", "wall", "cards", "flow"]) {
+    const cards = await settled("cards");
+    expect(cards.getAttribute("data-state")).toBe("ok");
+    expect(within(cards).getAllByTestId("insight-card")).toHaveLength(6);
+    for (const id of ["stripes", "decoupling", "ring", "pathway", "wall", "flow"]) {
       const el = await settled(id);
       expect(el.getAttribute("data-state"), id).toBe("ok");
       // No module has filled the slot yet: the shell says which one will.
@@ -98,6 +101,16 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     renderPage();
     expect(await screen.findByText("Insights isn't turned on for your company.")).toBeTruthy();
     expect(screen.queryByTestId("insights-page")).toBeNull();
+  });
+
+  it("a card's Show targets its panel: ?panel= is set and that panel pulses", async () => {
+    const router = renderPage();
+    const cards = await settled("cards");
+    const card = within(cards).getAllByTestId("insight-card").find((c) => c.dataset.rule === "decoupling")!;
+    expect((await settled("decoupling")).className).not.toContain("ring-2");
+    await userEvent.click(within(card).getByRole("button", { name: "Show" }));
+    await waitFor(() => expect(router.state.location.search).toContain("panel=decoupling"));
+    await waitFor(() => expect(screen.getByTestId("panel-decoupling").className).toContain("ring-2"));
   });
 
   it("filters go to the URL; ?panel= targets a slot and opens its tab", async () => {
