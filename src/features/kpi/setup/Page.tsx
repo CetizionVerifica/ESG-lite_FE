@@ -268,7 +268,7 @@ function Wizard({ setup, catalogue }: { setup: KpiSetup; catalogue: KpiCatalogue
       return esrs ? (
         <>
           <MaterialityStep value={material} onChange={setMaterial} errors={topicErrors} />
-          <MaterialityScores /> {/* DS-2: matrix scores, only with Design Studio on */}
+          <MaterialityScores /> {/* DS-2 / IN-7: matrix scores, with Design Studio or Insights on */}
         </>
       ) : (
         <EmptyState title="Only needed for CSRD (ESRS)." description="You didn't pick CSRD (ESRS), so there's nothing to answer here." compact />

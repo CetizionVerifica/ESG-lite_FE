@@ -27,6 +27,7 @@ import {
   IN_ERROR_STATUS,
   KPI_PANELS,
   PANEL_PATHS,
+  type MaterialityScoresResponse,
   PILLARS,
   type EventCreate,
   type EventRef,
@@ -69,9 +70,17 @@ interface State {
   panels: Partial<Record<PanelId, PanelOverride>>;
   /** Materiality scores entered (IN-7); false → topics listed without positions. */
   scored: boolean;
+  /** The KPI setup topic rows behind GET/PUT /kpi/setup/materiality-scores (IN-7). */
+  topics: MaterialityScoresResponse["topics"];
 }
 
-const initialState = (): State => ({ enabled: true, kpi: true, role: "Manager", events: MOCK_EVENTS.map((e) => ({ ...e })), nextEventId: MOCK_EVENTS.length + 1, panels: {}, scored: true });
+const MOCK_SCORE_TOPICS = (): MaterialityScoresResponse["topics"] => [
+  { esrs_topic: "E1", label: "E1 Climate change", material: true, impact_score: 8, financial_score: 7.5 },
+  { esrs_topic: "E3", label: "E3 Water and marine resources", material: false, impact_score: null, financial_score: null },
+  { esrs_topic: "S1", label: "S1 Own workforce", material: true, impact_score: null, financial_score: null },
+];
+
+const initialState = (): State => ({ enabled: true, kpi: true, role: "Manager", events: MOCK_EVENTS.map((e) => ({ ...e })), nextEventId: MOCK_EVENTS.length + 1, panels: {}, scored: true, topics: MOCK_SCORE_TOPICS() });
 let state = initialState();
 
 export function resetInsightsMocks(): void {
@@ -112,6 +121,7 @@ const MESSAGES: Record<InErrorCode, string> = {
   IN_SCORES_INVALID: "Scores must be between 0 and 10 for a material topic.",
   IN_AI_BUDGET: "This month's AI wording budget is used up; cards show their standard text.",
   IN_SNAPSHOT_TIMEOUT: "The PDF snapshot took too long. Try again with fewer sites.",
+  IN_SNAPSHOT_UNAVAILABLE: "PDF snapshots aren't set up on this server yet.",
   IN_VALIDATION: "The request isn't valid.",
   IN_COMPANY_REQUIRED: "Choose a client (company_id).",
 };
@@ -258,13 +268,20 @@ export const insightsHandlers = [
     return new HttpResponse(null, { status: 204 });
   }),
 
-  // IN-7 · materiality scores (shared with RS-2 / DS-2)
+  // IN-7 · materiality scores in KPI setup (shared with RS-2 / DS-2): GET any role, PUT Admin and Superadmin
+  http.get("*/kpi/setup/materiality-scores", () => HttpResponse.json<MaterialityScoresResponse>({ topics: state.topics })),
   http.put("*/kpi/setup/materiality-scores", async ({ request }) => {
     const body = (await request.json().catch(() => ({}))) as { topics?: { esrs_topic?: string; impact_score?: number | null; financial_score?: number | null }[] };
-    const ok = Array.isArray(body.topics) && body.topics.length > 0 && body.topics.every((t) => !!t.esrs_topic && [t.impact_score, t.financial_score].every((v) => v === null || (typeof v === "number" && v >= 0 && v <= 10)));
+    const material = new Set(state.topics.filter((t) => t.material).map((t) => t.esrs_topic));
+    const ok = Array.isArray(body.topics) && body.topics.length > 0 && body.topics.every((t) => !!t.esrs_topic && material.has(t.esrs_topic) && [t.impact_score, t.financial_score].every((v) => v === null || (typeof v === "number" && v >= 0 && v <= 10)));
     if (!ok) return fail("IN_SCORES_INVALID");
-    state.scored = true;
-    return HttpResponse.json({ topics: body.topics });
+    for (const t of body.topics!) {
+      const row = state.topics.find((x) => x.esrs_topic === t.esrs_topic)!;
+      row.impact_score = t.impact_score ?? null;
+      row.financial_score = t.financial_score ?? null;
+    }
+    state.scored = state.topics.filter((t) => t.material).every((t) => t.impact_score !== null && t.financial_score !== null);
+    return HttpResponse.json<MaterialityScoresResponse>({ topics: state.topics });
   }),
 
   // IN-8 · the PDF snapshot (a tiny placeholder PDF)

@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { ChevronDown, Download } from "lucide-react";
-import { inErrorCode, type InsightsQuery } from "../../../lib/insights/contracts";
+import type { InsightsQuery } from "../../../lib/insights/contracts";
 import { useInsightsCompanyId } from "../../../lib/insights/switch";
 import { getInsightsSnapshot } from "../../../services/insightsService";
 import { Button, Menu, useToast } from "../../../ui";
-import { exportAllChartPngs, snapshotFileName } from "./exportLogic";
+import { exportAllChartPngs, printViewPath, snapshotErrorCode, snapshotErrorText, snapshotFileName } from "./exportLogic";
 
 /**
  * IN-8 · Export ▾ (05-ux §3): "PDF snapshot" (one A4 landscape page from the
- * server's printer) and "PNG of each chart" (ChartFrame's existing export).
+ * server's printer), "Print view" (/insights/print in a new tab, for the
+ * browser's own Print when the server has no printer) and "PNG of each chart"
+ * (ChartFrame's existing export).
  */
 export function ExportMenu({ query }: { query: InsightsQuery }) {
   const companyId = useInsightsCompanyId();
@@ -27,8 +29,7 @@ export function ExportMenu({ query }: { query: InsightsQuery }) {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast({ title: "PDF snapshot downloaded.", tone: "good" });
     } catch (e) {
-      const code = inErrorCode(e);
-      toast({ title: code === "IN_SNAPSHOT_TIMEOUT" ? "The PDF snapshot took too long. Try again with fewer sites." : "Couldn't make the PDF snapshot. Try again.", tone: "bad" });
+      toast({ title: snapshotErrorText(await snapshotErrorCode(e)), tone: "bad" });
     } finally {
       setBusy(false);
     }
@@ -44,6 +45,7 @@ export function ExportMenu({ query }: { query: InsightsQuery }) {
       label="Export"
       items={[
         { label: "PDF snapshot", onSelect: () => void pdf() },
+        { label: "Print view", onSelect: () => window.open(printViewPath(query), "_blank", "noopener") },
         { label: "PNG of each chart", onSelect: pngs },
       ]}
       trigger={(props) => (

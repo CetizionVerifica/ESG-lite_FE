@@ -106,6 +106,26 @@ test("Export: the PDF snapshot downloads for the filters, and PNG of each chart 
   expect(pngs.every((n) => n.endsWith(".png"))).toBe(true);
 });
 
+test("Export: without a PDF printer on the server, the toast points to Print view, which opens the print route for the filters", async ({ page, context }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true });
+  // A server without Chromium answers 503 IN_SNAPSHOT_UNAVAILABLE (registered after the mock, so it wins).
+  await page.route("**/insights/snapshot.pdf*", (route) =>
+    route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "IN_SNAPSHOT_UNAVAILABLE", message: "PDF snapshots aren't set up on this server yet." }) }),
+  );
+  await page.goto("/insights?year=2026&sites=11");
+  await expect(page.getByTestId("panel-decoupling")).toHaveAttribute("data-state", "ok");
+  await page.getByTestId("insights-export").click();
+  await page.getByRole("menuitem", { name: "PDF snapshot" }).click();
+  await expect(page.getByText("PDF snapshots aren't set up on this server yet. Use Print view and your browser's Print instead.")).toBeVisible();
+
+  await page.getByTestId("insights-export").click();
+  const [popup] = await Promise.all([context.waitForEvent("page"), page.getByRole("menuitem", { name: "Print view" }).click()]);
+  await popup.waitForLoadState();
+  expect(new URL(popup.url()).pathname + new URL(popup.url()).search).toBe("/insights/print?sites=11&year=2026");
+  await popup.close();
+});
+
 test("the print route draws the page without app chrome and with the footer", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 900 });
   await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true });

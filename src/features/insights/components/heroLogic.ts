@@ -30,7 +30,10 @@ export function pathwayHint(p: NonNullable<Summary["pathway"]>): string | null {
 
 /** One sentence for screen readers: "69% of KPI values approved: Environment 81%, Social 62%, Governance 55%." */
 export function readinessSentence(r: NonNullable<Summary["readiness"]>): string {
-  const pillars = (Object.keys(r.by_pillar) as (keyof typeof r.by_pillar)[]).map((p) => `${PILLAR_LABEL[p]} ${formatNumber(r.by_pillar[p], 0)}%`);
+  const pillars = (Object.keys(r.by_pillar) as (keyof typeof r.by_pillar)[]).map((p) => {
+    const v = r.by_pillar[p];
+    return v === null ? `${PILLAR_LABEL[p]} not counted yet` : `${PILLAR_LABEL[p]} ${formatNumber(v, 0)}%`;
+  });
   return `${formatNumber(r.pct, 0)}% of KPI values approved: ${pillars.join(", ")}.`;
 }
 

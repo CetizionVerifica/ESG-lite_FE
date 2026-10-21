@@ -1,22 +1,28 @@
 // DS-2 (RS-2 build 7, R9) · "Scores (for the report's materiality chart)": an
-// optional block under the materiality step, shown only when Design Studio is
-// on. Two sliders per saved topic (impact and financial, 0–10); the
-// sustainability report offers its materiality matrix once every material
-// topic has both. Saved on its own (PUT /studio/materiality), since the topic
-// rows are the setup's.
+// optional block under the materiality step, shown when Design Studio's
+// sustainability kind or Insights is on. Two sliders per saved topic (impact and
+// financial, 0–10); the sustainability report and the Insights matrix place a
+// topic once every material topic has both. Read and saved on its own through
+// GET/PUT /kpi/setup/materiality-scores (IN-7), which sits behind KPI tracking
+// only, so it works without Design Studio; the topic rows are the setup's.
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useAuth } from "../../../../context/AuthContext";
 import { useClientContext } from "../../../../lib/clientContext";
 import { useDesignStudio } from "../../../../lib/studio/switch";
 import { useInsights } from "../../../../lib/insights/switch"; // IN-7
-import type { MaterialTopic } from "../../../../lib/studio/contracts";
-import { getMateriality, putMateriality } from "../../../../services/studioService";
+import type { MaterialityScoresResponse } from "../../../../lib/insights/contracts";
+import { ESRS_TOPICS, type EsrsTopic } from "../../../../lib/kpi/contracts";
+import { ESRS_TOPIC_LABEL } from "../../../../lib/kpi/labels";
+import { getMaterialityScores, putMaterialityScores } from "../../../../services/insightsService";
 import { Button, Callout, cn, panel, useToast } from "../../../../ui";
 
 type Scores = Record<string, { impact: number | null; financial: number | null }>;
+type Topic = MaterialityScoresResponse["topics"][number];
 
-const toScores = (topics: MaterialTopic[]): Scores => Object.fromEntries(topics.map((t) => [t.esrs_topic, { impact: t.impact_score, financial: t.financial_score }]));
+const toScores = (topics: Topic[]): Scores => Object.fromEntries(topics.map((t) => [t.esrs_topic, { impact: t.impact_score, financial: t.financial_score }]));
+const topicName = (t: Topic): string => ((ESRS_TOPICS as readonly string[]).includes(t.esrs_topic) ? ESRS_TOPIC_LABEL[t.esrs_topic as EsrsTopic] : t.label);
+const QUERY_KEY = "materiality-scores";
 
 export function MaterialityScores() {
   const studio = useDesignStudio();
@@ -27,15 +33,21 @@ export function MaterialityScores() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const on = (studio.enabled && studio.kinds.sustainability) || insights.enabled; // IN-7: also with Insights on
-  const query = useQuery({ queryKey: ["studio", "materiality", companyId], queryFn: () => getMateriality(companyId), enabled: on });
+  const query = useQuery({ queryKey: ["kpi", QUERY_KEY, companyId], queryFn: () => getMaterialityScores(companyId), enabled: on });
   const [scores, setScores] = useState<Scores>({});
   useEffect(() => {
     if (query.data) setScores(toScores(query.data.topics));
   }, [query.data]);
   const save = useMutation({
-    mutationFn: () => putMateriality(Object.entries(scores).map(([esrs_topic, s]) => ({ esrs_topic, impact_score: s.impact, financial_score: s.financial })), companyId),
+    // Only material topics take scores (the server refuses any other topic).
+    mutationFn: () =>
+      putMaterialityScores(
+        (query.data?.topics ?? []).filter((t) => t.material).map((t) => ({ esrs_topic: t.esrs_topic, impact_score: scores[t.esrs_topic]?.impact ?? null, financial_score: scores[t.esrs_topic]?.financial ?? null })),
+        companyId,
+      ),
     onSuccess: (data) => {
-      qc.setQueryData(["studio", "materiality", companyId], data);
+      qc.setQueryData(["kpi", QUERY_KEY, companyId], data);
+      void qc.invalidateQueries({ queryKey: ["insights", "panel"] }); // the Insights matrix reads the same scores
       toast({ tone: "good", title: "Scores saved" });
     },
     onError: () => toast({ tone: "bad", title: "Scores weren't saved." }),
@@ -63,10 +75,10 @@ export function MaterialityScores() {
       <ul className="space-y-3">
         {material.map((t) => (
           <li key={t.esrs_topic} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr] sm:items-center">
-            <span className="text-sm font-medium text-ink">{t.name}</span>
+            <span className="text-sm font-medium text-ink">{topicName(t)}</span>
             {(["impact", "financial"] as const).map((k) => {
               const v = scores[t.esrs_topic]?.[k] ?? null;
-              const label = `${k === "impact" ? "Impact" : "Financial"} score for ${t.name}`;
+              const label = `${k === "impact" ? "Impact" : "Financial"} score for ${topicName(t)}`;
               return (
                 <label key={k} className="flex items-center gap-2 text-xs text-muted">
                   <span className="w-16">{k === "impact" ? "Impact" : "Financial"}</span>

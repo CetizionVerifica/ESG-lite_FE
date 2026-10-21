@@ -125,13 +125,10 @@ export interface Summary {
   net: { value: number; unit: "tCO2e"; prior: number | null; change_pct: number | null; good: boolean | null };
   pathway: { status: TargetStatus; gap_pct: number | null; target_year: number | null } | null;
   intensity: { value: number | null; unit: string; combined: boolean; change_pct: number | null; good: boolean | null };
-  readiness: { pct: number; by_pillar: Record<Pillar, number> } | null;
-  /**
-   * FE-proposed IN-0 follow-up (IN-1 Build 6): the renewable electricity share
-   * the hero shows in place of readiness when KPI tracking is off. Optional
-   * until the backend sends it; without it the cell says what's needed.
-   */
-  renewable_share_pct?: number | null;
+  /** by_pillar: null for a pillar with nothing counted yet (IN-0 follow-up, IN-1). */
+  readiness: { pct: number; by_pillar: Record<Pillar, number | null> } | null;
+  /** Renewable share of electricity in the period, % (hero cell 3 when KPI tracking is off); null without electricity data. IN-0 follow-up, IN-1. */
+  renewable_share_pct: number | null;
   attention: { total: number; items: { kind: AttentionKind; count: number; link: string }[] };
 }
 
@@ -235,7 +232,8 @@ export interface Bridge {
 }
 
 export interface Flow {
-  nodes: { id: string; label: string; column: 0 | 1 | 2 | 3; kind: "site" | "scope" | "kpi" | "disclosure" }[];
+  /** kind "category": KPI tracking off, column 2 is the top categories (IN-0 follow-up, IN-6). */
+  nodes: { id: string; label: string; column: 0 | 1 | 2 | 3; kind: "site" | "scope" | "kpi" | "disclosure" | "category" }[];
   links: { source: string; target: string; value: number; measure: "tCO2e" | "count"; fit?: "exact" | "partial" | "derived" }[];
 }
 
@@ -317,6 +315,10 @@ export interface EventCreate {
 export interface MaterialityScoresBody {
   topics: { esrs_topic: string; impact_score: number | null; financial_score: number | null }[];
 }
+/** GET and PUT /kpi/setup/materiality-scores answer (IN-7; GET is the follow-up that works without Design Studio). `label` is "E1 Climate change". */
+export interface MaterialityScoresResponse {
+  topics: { esrs_topic: string; label: string; material: boolean; impact_score: number | null; financial_score: number | null }[];
+}
 
 // ---------------------------------------------------------------------------
 // §6 Insight rules
@@ -364,6 +366,7 @@ export const IN_ERROR_STATUS = {
   IN_SCORES_INVALID: 400,
   IN_AI_BUDGET: 429,
   IN_SNAPSHOT_TIMEOUT: 504,
+  IN_SNAPSHOT_UNAVAILABLE: 503,
   IN_VALIDATION: 400,
   IN_COMPANY_REQUIRED: 400,
 } as const;

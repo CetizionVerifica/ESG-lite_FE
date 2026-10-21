@@ -2,7 +2,7 @@
 // IN-0 adds the status and sites calls and one panel getter; panel hooks live in
 // src/features/insights/api.ts (TanStack Query).
 import api from "../api/axios";
-import { PANEL_PATHS, type EventCreate, type EventRef, type InsightsQuery, type InsightsSites, type InsightsStatus, type PanelDataMap, type PanelId, type PanelResponse } from "../lib/insights/contracts";
+import { PANEL_PATHS, type EventCreate, type EventRef, type InsightsQuery, type InsightsSites, type InsightsStatus, type MaterialityScoresBody, type MaterialityScoresResponse, type PanelDataMap, type PanelId, type PanelResponse } from "../lib/insights/contracts";
 
 const companyParams = (companyId: number | null | undefined) => (companyId ? { company_id: companyId } : undefined);
 
@@ -75,4 +75,14 @@ export async function deleteInsightsEvent(id: number, companyId?: number | null)
 export async function getInsightsSnapshot(q: InsightsQuery, companyId?: number | null): Promise<Blob> {
   const { data } = await api.get("/insights/snapshot.pdf", { params: panelParams(q, {}, companyId), responseType: "blob", timeout: 70_000 });
   return data as Blob;
+}
+
+// IN-7 · materiality scores in KPI setup (behind KPI tracking, not Design Studio): GET any role, PUT Admin and Superadmin.
+export async function getMaterialityScores(companyId?: number | null): Promise<MaterialityScoresResponse> {
+  const { data } = await api.get("/kpi/setup/materiality-scores", { params: companyParams(companyId) });
+  return data as MaterialityScoresResponse;
+}
+export async function putMaterialityScores(topics: MaterialityScoresBody["topics"], companyId?: number | null): Promise<MaterialityScoresResponse> {
+  const { data } = await api.put("/kpi/setup/materiality-scores", { topics, ...(companyId ? { company_id: companyId } : {}) }, { params: companyParams(companyId) });
+  return data as MaterialityScoresResponse;
 }
