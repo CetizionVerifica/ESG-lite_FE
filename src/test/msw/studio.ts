@@ -837,12 +837,12 @@ const proShortlist = (b: Partial<TemplateSuggestBody>): { shortlist: TemplateSug
   };
 };
 
-/** AT-2: three layout options for a page, made by moving the same elements (A as is, B mirrored, C flipped). */
+/** AT-2: three layout options for a page, made by moving the same elements (A as is, B mirrored, C flipped); locked elements stay. */
 const proLayoutSuggestion = (row: DocRow, target?: { pageId: string }): Suggestion | Response => {
   const page = row.doc.pages.find((p): p is FreeformPage => p.kind === "freeform" && (!target || p.id === target.pageId));
   if (!page) return error("DS_VALIDATION", { issues: [{ path: "target.pageId", message: "Pick a free-form page" }] });
   const { wMm, hMm } = PAGE_FORMAT_SIZES[row.doc.format];
-  const move = (f: (e: StudioElement) => StudioElement["frame"]): FreeformPage => ({ ...clone(page), elements: page.elements.map((e) => ({ ...clone(e), frame: f(e) })) });
+  const move = (f: (e: StudioElement) => StudioElement["frame"]): FreeformPage => ({ ...clone(page), elements: page.elements.map((e) => ({ ...clone(e), frame: e.locked || e.templateLocked ? clone(e.frame) : f(e) })) });
   const pages = [
     move((e) => ({ ...e.frame })),
     move((e) => ({ ...e.frame, x: Math.max(0, wMm - e.frame.x - e.frame.w) })),

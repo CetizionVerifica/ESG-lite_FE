@@ -17,6 +17,8 @@ import { BudgetMeter } from "./BudgetMeter";
 import { ACTION_TITLES, aboutLabel, aiErrorText, applySuggestion, quickChips, selectionKindOf, textOf } from "./logic";
 import { addTurn, setGhost, takeQueue, uid, updateCard, updateTurn, useAiThread, type Card, type PendingRequest } from "./store";
 import { SuggestionCard } from "./SuggestionCard";
+import { LayoutIdeas } from "../swap/LayoutIdeas"; // AT-2
+import { TemplateSwap } from "../swap/TemplateSwap"; // AT-2
 
 const toCards = (suggestions: Suggestion[], target: AiTarget | null): Card[] => suggestions.map((s) => ({ id: uid("card"), suggestion: s, target, status: "open" }));
 
@@ -127,6 +129,9 @@ export function AiPanel({ docId, editor }: DrawerProps) {
       </header>
 
       <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-3" aria-live="polite" data-testid="ai-thread">
+        {/* AT-2 · Layouts for the page in view and Try another template */}
+        <LayoutIdeas editor={editor} />
+        <TemplateSwap editor={editor} />
         {thread.turns.length === 0 && <p className="text-sm text-muted">Ask about this report or describe a change. Suggestions never change the page until you accept them.</p>}
         {thread.turns.map((t) =>
           t.role === "user" ? (
