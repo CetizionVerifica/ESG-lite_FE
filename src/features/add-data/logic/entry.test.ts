@@ -9,6 +9,7 @@ import {
   periodTotalQuery,
   previousPeriod,
   rowIssue,
+  unitOptionsForRow,
 } from "./entry";
 
 describe("entry period", () => {
@@ -69,6 +70,28 @@ describe("rows", () => {
       message: "Enter activity data",
     });
     expect(rowIssue({ id: 1, emission_category: "Diesel", activity_data_unit: "gallon", quantity: "5" }, calc)).toBeNull();
+  });
+
+  it("offers only the units the activity's factor takes", () => {
+    const units = ["kg", "litre", "gallon", "kWh", "Litre"];
+    // Nothing picked yet: every unit of the category, the method's unit first.
+    expect(unitOptionsForRow({ id: 1 }, calc, units, "tonne.km")).toEqual(["tonne.km", "kg", "litre", "gallon", "kWh"]);
+    // Diesel is per litre: litre and gallon (converts), never kg or kWh; no repeats ignoring case.
+    expect(unitOptionsForRow({ id: 1, emission_category: "Diesel" }, calc, units)).toEqual(["litre", "gallon"]);
+    // The factor's unit is offered even when the category's list lacks it.
+    expect(unitOptionsForRow({ id: 1, emission_category: "HGV [tonne.km]" }, calc, units)).toEqual(["tonne.km"]);
+    // A unit chosen before the activity changed stays shown, so rowIssue can say why it doesn't fit.
+    expect(unitOptionsForRow({ id: 1, emission_category: "Diesel", activity_data_unit: "kWh" }, calc, units)).toEqual(["litre", "gallon", "kWh"]);
+  });
+
+  it("a spend row keeps every currency unit", () => {
+    const spendCalc = createEmissionCalculator({
+      emissionFactors: [
+        { emission_factor_id: 3, emission_category_name: "Chemicals (USEEIO)", factor_value: 0.42, denominator_unit: "USD", year: 2024, factor_type: "eeio_spend", price_currency: "USD" },
+      ],
+      targetYear: 2024,
+    });
+    expect(unitOptionsForRow({ id: 1, emission_category: "Chemicals (USEEIO)" }, spendCalc, ["USD", "INR", "EUR"])).toEqual(["USD", "INR", "EUR"]);
   });
 
   it("a spend row says what is missing under the field the spend form shows", () => {

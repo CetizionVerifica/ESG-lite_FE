@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { applyChange, formColumns, isColumnVisible, toFormModel, useEmissionCalc, type ModalRow } from "../../../lib/emissions";
-import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEmissions, formatNumber } from "../../../ui";
+import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEmissions, formatNumber, unitChoices } from "../../../ui";
 import { useEditSetup } from "../api";
 import { type EditIssue, type EntryUpdate, buildUpdate, editIssue, editedDate, entryMonth, factorYearFor, monthBounds, rowFromEntry } from "../edit";
 import { type EntryRow, periodText } from "../logic";
@@ -98,7 +98,8 @@ function Fields(p: FieldsProps) {
 
   const mapped = Object.keys(model.mapping).length > 0;
   const categoryOptions = [...new Set([...p.factors.map((f) => f.emission_category_name), ...(row.emission_category ? [row.emission_category] : [])])];
-  const unitOptions = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
+  // Only the units the activity's factor takes (editIssue's check).
+  const unitOptions = unitChoices(p.units, expectedUnit, row.activity_data_unit);
   const change = (column: string, value: string) => setRow((r) => applyChange(model, r, column, value));
 
   const submit = (e: React.FormEvent) => {
