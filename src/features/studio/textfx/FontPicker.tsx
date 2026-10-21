@@ -16,7 +16,7 @@ export function FontPicker({ pageId, elements, editor: ed }: TextToolbarSlotProp
     <Select
       label="Font"
       hideLabel
-      className="w-44 flex-none"
+      className="w-32 flex-none"
       value={current}
       disabled={ed.readOnly || !!el.locked || !!el.templateLocked}
       onChange={(v) => ed.commit(setTextFont(ed.doc, pageId, ids, fontRefOf(v)), "Font")}

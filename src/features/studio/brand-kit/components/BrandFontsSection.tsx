@@ -137,6 +137,7 @@ function UploadForm() {
 export function BrandFontsSection() {
   const fonts = useBrandFonts();
   const canEdit = !!fonts.data?.canEdit;
+  const list = fonts.data?.fonts ?? [];
   return (
     <section aria-labelledby="bk-brand-fonts" className="space-y-3 rounded-card border border-line bg-panel p-4">
       <h2 id="bk-brand-fonts" className="text-sm font-semibold text-ink">
@@ -148,11 +149,11 @@ export function BrandFontsSection() {
         <EmptyState compact variant="error" title="Brand fonts couldn't be loaded." description={brandFontErrorMessage(fonts.error, "Try again in a moment.")} action={<Button size="sm" onClick={() => void fonts.refetch()}>Try again</Button>} />
       ) : (
         <>
-          {fonts.data.fonts.length === 0 ? (
+          {list.length === 0 ? (
             <p className="text-sm text-muted">No uploaded fonts yet. {canEdit ? "Upload your brand font so text boxes can use it." : "A Manager can upload your brand font."}</p>
           ) : (
             <ul className="space-y-2">
-              {fonts.data.fonts.map((f) => (
+              {list.map((f) => (
                 <FontRow key={f.id} font={f} canEdit={canEdit} />
               ))}
             </ul>
