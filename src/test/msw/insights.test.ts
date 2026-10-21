@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { setupServer } from "msw/node";
-import { PANEL_PATHS, type Bridge, type PanelId, type PanelResponse, type Summary } from "../../lib/insights/contracts";
+import { PANEL_PATHS, type Bridge, type Cards, type PanelId, type PanelResponse, type Summary } from "../../lib/insights/contracts";
 import { handlers, insightsMockEvents, resetInsightsMocks, setInsightsMockEnabled, setInsightsMockKpi, setInsightsMockPanel, setInsightsMockRole } from "./index";
 
 const server = setupServer(...handlers);
@@ -115,5 +115,16 @@ describe("insights mocks (IN-0)", () => {
     expect(insightsMockEvents().some((e) => e.id === made.body.id)).toBe(false);
     const pathway = await json<PanelResponse<{ events: unknown[] }>>("GET", "/insights/pathway");
     expect(pathway.body.data?.events.length).toBe(insightsMockEvents().length);
+  });
+
+  it("IN-9: cards with ?ai=1 are the same cards, some reworded with tokens; without it all are rule text", async () => {
+    const plain = (await json<PanelResponse<Cards>>("GET", "/insights/cards")).body.data!.cards;
+    expect(plain.every((c) => c.source === "rule" && c.text === undefined)).toBe(true);
+    const ai = (await json<PanelResponse<Cards>>("GET", "/insights/cards?ai=1")).body.data!.cards;
+    expect(ai.map((c) => [c.id, c.params, c.link])).toEqual(plain.map((c) => [c.id, c.params, c.link]));
+    const reworded = ai.filter((c) => c.source === "ai");
+    expect(reworded.map((c) => c.id).sort()).toEqual(["decoupling", "largest_source", "pathway_gap", "renewables_jump"]);
+    expect(ai.find((c) => c.id === "decoupling")?.text).toBe("Since {{v:base_year}}, output grew {{v:output_pct}}% and emissions dropped {{v:emissions_pct}}%.");
+    expect(ai.find((c) => c.id === "renewables_jump")?.text).toMatch(/\d/);
   });
 });
