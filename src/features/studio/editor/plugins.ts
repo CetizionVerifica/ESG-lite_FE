@@ -11,6 +11,7 @@ import { registerChartsPlugins } from "./charts/register"; // DS-8
 import { registerAiPlugins } from "../ai/register"; // DS-9
 import { registerChecksPlugins } from "../checks/register"; // DS-12
 import { registerReviewPlugins } from "../review/register"; // DS-13
+import { registerProTextPlugins } from "../textfx/register"; // PE-2
 import { DataToolbar, MediaToolbar, MultiToolbar, PageToolbar, ShapeToolbar, TextToolbar } from "./toolbars";
 
 let done = false;
@@ -49,6 +50,9 @@ export function registerEditorPlugins(): void {
 
   // DS-13: C + click opens the comment box at the spot; saved threads show as pins.
   registerReviewPlugins();
+
+  // PE-2: Font and Effects on text, "Find and replace" on the text and page toolbars.
+  registerProTextPlugins();
 }
 
 /** Registers the shell's toolbars (fallbacks: real ones from DS-7/DS-8 win). */

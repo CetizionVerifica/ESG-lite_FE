@@ -29,6 +29,8 @@ import { STUDIO_REV_EVENT } from "../panels/data/api"; // DS-12
 import { StatusBar } from "./StatusBar";
 import { TopBar, type SaveState } from "./TopBar";
 import { useStudioCompanyId } from "../../../lib/studio/switch";
+import { FindReplaceHost } from "../find/FindReplacePanel"; // PE-2
+import { useCustomFonts } from "../textfx/useCustomFonts"; // PE-2
 
 /** Narrower than this, the editor is view-only (RS R16). */
 export const EDIT_MIN_WIDTH = 1280;
@@ -116,6 +118,7 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
     const ids = [fonts?.heading, fonts?.body, render.brand?.fontHeading, render.brand?.fontBody].filter((f): f is FontId => !!f);
     void ensureStudioFonts(ids);
   }, [fonts?.heading, fonts?.body, render.brand?.fontHeading, render.brand?.fontBody]);
+  useCustomFonts(); // PE-2: uploaded brand fonts for `custom:<id>` text boxes
 
   // Shortcuts on the window; never while typing in a field, menu or dialog.
   const edRef = useRef<EditorApi>(ed);
@@ -167,6 +170,7 @@ function LoadedEditor({ docId, initial }: { docId: number; initial: StudioDocRes
                 >
                   <Canvas />
                   <FiguresNotice />
+                  <FindReplaceHost /> {/* PE-2: ⌘⇧F */}
                 </div>
               </>
             )}
