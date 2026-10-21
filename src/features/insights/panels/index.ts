@@ -6,6 +6,7 @@ import type { ComponentType } from "react";
 import type { InsightsQuery, PanelDataMap, PanelId, PanelResponse } from "../../../lib/insights/contracts";
 import type { SlotId } from "../logic";
 import { HeroStrip } from "../components/HeroStrip";
+import { DisclosureFlow } from "./DisclosureFlow";
 
 /** What a slot's component gets: the envelope (availability 'ok', data present) and the page query. */
 export interface PanelProps<P extends PanelId = PanelId> {
@@ -23,7 +24,7 @@ export const PANELS: Partial<Record<SlotId, PanelComponent>> = {
   // IN-2: decoupling, ring, wall
   // IN-3: cards
   // IN-4: pathway, completeness
-  // IN-6: flow
+  flow: definePanel<"flow">(DisclosureFlow), // IN-6
   // IN-7: materiality
   // IN-8: stripes
 };
