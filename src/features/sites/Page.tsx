@@ -18,7 +18,7 @@ import {
 import { errorMessage, useAdminUsers, useCategories, useColumnConfigs, useCompanies, useCountries, useDeleteSite, useSaveSite, useSites } from "./api";
 import { SiteDrawer } from "./components/SiteDrawer";
 import { siteColumns } from "./components/columns";
-import { type SiteDraft, type SiteRow, buildRows, cascadeItems, matchesFilters, toIds } from "./logic";
+import { type SiteDraft, type SiteRow, buildRows, cascadeItems, deletedMessage, matchesFilters, toIds } from "./logic";
 
 const FILTER_KEYS = ["client", "country"];
 const OPEN = "open";
@@ -86,8 +86,8 @@ export default function SitesPage() {
     if (!deleting) return;
     setDeleteErr(null);
     remove.mutate(deleting.site_id, {
-      onSuccess: () => {
-        toast({ title: `Site "${deleting.name}" deleted`, tone: "good" });
+      onSuccess: (result) => {
+        toast({ ...deletedMessage(deleting.name, result), tone: "good" });
         setDeleting(null);
         setOpen(null);
       },

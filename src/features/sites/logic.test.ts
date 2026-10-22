@@ -5,6 +5,7 @@ import {
   buildRows,
   cascadeItems,
   coverage,
+  deletedMessage,
   draftFrom,
   emptyDraft,
   groupByScope,
@@ -74,20 +75,26 @@ describe("buildRows", () => {
     expect(bare.users).toEqual([]);
     expect(coverage(bare)).toEqual({ done: 0, total: 5 });
   });
-  it("lists cascades, naming the user accounts that go with the site", () => {
+  it("lists cascades, naming the people who lose access (their accounts stay)", () => {
     const items = cascadeItems(row);
     expect(items).toContain("3 column configs");
     // Every site relation the backend deletes with ON DELETE CASCADE.
     expect(items).toEqual(
       expect.arrayContaining([
-        "All emission entries recorded for this site",
+        "All emission entries recorded for this site, with their evidence",
+        "Its uploaded bills",
         "Its emission factors",
         "Its products and their production data",
         "Its PCF studies",
         "Its site-specific units",
       ]),
     );
-    expect(items[items.length - 1]).toMatch(/^1 user account assigned to this site \(u1@x\.io\)/);
+    expect(items[items.length - 1]).toBe("Access for 1 person assigned to this site (u1@x.io); their accounts stay");
+  });
+  it("says who has no site left after the delete", () => {
+    expect(deletedMessage("Noida", { people_without_site: 0 })).toEqual({ title: 'Site "Noida" deleted' });
+    expect(deletedMessage("Noida", { people_without_site: 2 })).toEqual({ title: 'Site "Noida" deleted', description: "2 people now have no site. Assign one in Users." });
+    expect(deletedMessage("Noida", null)).toEqual({ title: 'Site "Noida" deleted' });
   });
 });
 

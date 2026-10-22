@@ -174,17 +174,32 @@ export function matchesCategory(c: Category, q: string): boolean {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** What deleting the site takes with it (the database cascades all of these). */
+/**
+ * What deleting the site takes with it (the backend deletes all of these). People keep their
+ * accounts: they only lose access to this site (someone whose main site it was moves to another of
+ * their sites, or has none until one is assigned in Users).
+ */
 export function cascadeItems(row: SiteRow): string[] {
   return [
-    "All emission entries recorded for this site",
+    "All emission entries recorded for this site, with their evidence",
+    "Its uploaded bills",
     "Its emission factors",
     `${plural(row.configCount, "column config", "column configs")}`,
     "Its products and their production data",
     "Its PCF studies",
     "Its site-specific units",
+    "Its KPI values, period locks and site mappings",
     row.users.length
-      ? `${plural(row.users.length, "user account", "user accounts")} assigned to this site (${row.users.slice(0, 3).map(personName).join(", ")}${row.users.length > 3 ? ", …" : ""})`
-      : "No user accounts (no one is assigned to this site)",
+      ? `Access for ${plural(row.users.length, "person", "people")} assigned to this site (${row.users.slice(0, 3).map(personName).join(", ")}${row.users.length > 3 ? ", …" : ""}); their accounts stay`
+      : "No one's access (no one is assigned to this site)",
   ];
+}
+
+/** The toast after a delete: the site, and anyone it left without a site to sign in to. */
+export function deletedMessage(name: string, result: { people_without_site?: number } | null | undefined): { title: string; description?: string } {
+  const without = result?.people_without_site ?? 0;
+  return {
+    title: `Site "${name}" deleted`,
+    ...(without > 0 ? { description: `${plural(without, "person now has", "people now have")} no site. Assign one in Users.` } : {}),
+  };
 }
