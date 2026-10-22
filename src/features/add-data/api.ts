@@ -149,9 +149,9 @@ export const warningsOf = (body: SavedBody): string[] =>
   (body?.warnings ?? []).map((w) => w?.message ?? "").filter((m): m is string => m.length > 0);
 
 /** Save one row. A 409 duplicate or mode-lock conflict comes back as an outcome, not a throw. */
-export async function saveRow(payload: EmissionPayload, replace = false): Promise<SaveOutcome> {
+export async function saveRow(payload: EmissionPayload, onDuplicate?: "replace" | "keep_both"): Promise<SaveOutcome> {
   try {
-    const result = (await createEmission(payload, replace)) as SavedBody;
+    const result = (await createEmission(payload, onDuplicate)) as SavedBody;
     return { kind: "saved", emissionId: result?.emission?.pk_id ?? null, warnings: warningsOf(result), status: result?.emission?.status ?? null };
   } catch (err) {
     const e = err as ApiError;

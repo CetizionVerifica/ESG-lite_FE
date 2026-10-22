@@ -232,9 +232,10 @@ export const createEmission = async (
     /** S3-3: the figure is an estimate (the distance helper's estimate flag). */
     is_estimate?: boolean;
   },
-  replace?: boolean
+  /** A duplicate (same site, category, month and activity) replaces the saved entry, or is saved beside it (F-06). */
+  onDuplicate?: "replace" | "keep_both"
 ) => {
-  const params = replace ? { replace: "true" } : {};
+  const params = onDuplicate === "replace" ? { replace: "true" } : onDuplicate === "keep_both" ? { keep_both: "true" } : {};
   const response = await api.post("/user/emissions", data, { params });
   return response.data;
 };

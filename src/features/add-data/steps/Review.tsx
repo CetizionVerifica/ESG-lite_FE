@@ -60,7 +60,8 @@ export function Review(p: Props) {
   const client = useQueryClient();
   const total = p.rows.reduce((sum, r) => sum + (p.calc.calculateEmission(r).value ?? 0), 0);
 
-  const send = async (indexes: number[], replace: boolean, submit = submitAfter) => {
+  // `onDuplicate`: what a duplicate row does on this send (the dialog's Replace or Keep both), else nothing.
+  const send = async (indexes: number[], onDuplicate: (i: number) => "replace" | "keep_both" | undefined, submit = submitAfter) => {
     setSending(true);
     setSubmitAfter(submit);
     const savedNow: SaveOutcome[] = [];
@@ -71,7 +72,7 @@ export function Review(p: Props) {
       const row = p.rows[i];
       setOutcomes((o) => ({ ...o, [row.id]: { kind: "saving" } }));
       const editing = editOf(row);
-      const outcome = editing !== null ? await updateRow(editing, p.payloads[i]) : await saveRow(p.payloads[i], replace);
+      const outcome = editing !== null ? await updateRow(editing, p.payloads[i]) : await saveRow(p.payloads[i], onDuplicate(i));
       setOutcomes((o) => ({ ...o, [row.id]: outcome }));
       savedNow.push(outcome);
       if (outcome.kind === "duplicate") conflicts++;
@@ -109,11 +110,12 @@ export function Review(p: Props) {
   };
 
   const applyDuplicates = async (choices: Record<string, DuplicateChoice>) => {
-    const skip = duplicates.filter((i) => choices[String(p.rows[i].id)] !== "replace");
+    const choice = (i: number) => choices[String(p.rows[i].id)] ?? "skip";
+    const skip = duplicates.filter((i) => choice(i) === "skip");
     setOutcomes((o) => ({ ...o, ...Object.fromEntries(skip.map((i) => [p.rows[i].id, { kind: "skipped" as const }])) }));
     await send(
-      duplicates.filter((i) => choices[String(p.rows[i].id)] === "replace"),
-      true,
+      duplicates.filter((i) => choice(i) !== "skip"),
+      (i) => (choice(i) === "replace" ? "replace" : "keep_both"),
       submitAfter,
     );
   };
@@ -299,11 +301,11 @@ export function Review(p: Props) {
             Back
           </Button>
           {p.workflow && (
-            <Button onClick={() => void send(pending, false, false)} loading={sending && !submitAfter} disabled={pending.length === 0 || sending}>
+            <Button onClick={() => void send(pending, () => undefined, false)} loading={sending && !submitAfter} disabled={pending.length === 0 || sending}>
               Save as draft
             </Button>
           )}
-          <Button variant="primary" onClick={() => void send(pending, false, true)} loading={sending && (!p.workflow || submitAfter)} disabled={pending.length === 0 || sending}>
+          <Button variant="primary" onClick={() => void send(pending, () => undefined, true)} loading={sending && (!p.workflow || submitAfter)} disabled={pending.length === 0 || sending}>
             {Object.keys(outcomes).length > 0 ? "Send the rest" : p.workflow ? "Save and submit" : "Submit for approval"}
           </Button>
         </div>

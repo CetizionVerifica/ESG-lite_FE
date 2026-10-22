@@ -148,11 +148,11 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
         return json({ total_emission: url.searchParams.get("basis") === "approved" ? 4 : 0 });
       }
       if (path.endsWith("/user/emissions") && request.method() === "POST") {
-        if (duplicate && url.searchParams.get("replace") !== "true") {
+        if (duplicate && url.searchParams.get("replace") !== "true" && url.searchParams.get("keep_both") !== "true") {
           duplicate = false;
           return json({ message: "Duplicate", duplicate: true, existing_emission: { pk_id: 1, total_emission: 1.5, status: "pending" } }, 409);
         }
-        created.push({ body: request.postDataJSON(), replace: url.searchParams.get("replace") === "true" });
+        created.push({ body: request.postDataJSON(), replace: url.searchParams.get("replace") === "true", ...(url.searchParams.get("keep_both") === "true" ? { keepBoth: true } : {}) });
         return json({ emission: { pk_id: created.length + 100 } }, 201);
       }
       if (path.endsWith("/user/emissions") && request.method() === "GET") {
@@ -878,6 +878,26 @@ test("after a send the steps are locked and a reload shows an empty form", async
   await page.reload();
   expect(asked).toBe(false);
   await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("");
+});
+
+test("a second bill for the same fuel and month can be kept beside the saved one (F-06)", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean; keepBoth?: boolean }[] = [];
+  await signIn(page, created, true);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Keep both saves the new one as another entry");
+  await dialog.getByRole("radio", { name: "Keep both" }).click();
+  await dialog.getByRole("button", { name: "Apply (keep both 1)" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created).toHaveLength(1);
+  expect(created[0]).toMatchObject({ replace: false, keepBoth: true, body: { date_of_reporting: "2025-09-30" } });
 });
 
 test("when every row is skipped as a duplicate, the draft is cleared and leaving doesn't ask", async ({ page }) => {
