@@ -39,7 +39,7 @@ describe("active company (M6)", () => {
   });
 
   it("puts the chosen company first: its sites first and `company` set", () => {
-    const shown = withActiveCompany(user, 3);
+    const shown = withActiveCompany<typeof user & { company?: object }>(user, 3);
     expect(shown.company).toBe(glochem);
     expect(shown.site).toEqual(user.sites[1]);
     expect(shown.sites.map((s) => s.site_id)).toEqual([23, 16, 17]);
