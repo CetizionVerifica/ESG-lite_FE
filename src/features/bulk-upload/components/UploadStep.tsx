@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { Button, Callout, FileDrop, MonthPicker, exportMatrix, type FileDropItem } from "../../../ui";
+import { Button, Callout, FileDrop, MonthPicker, SegmentedControl, YearPicker, exportMatrix, type FileDropItem } from "../../../ui";
 import { ContextFields } from "./ContextFields";
 import { selectedSite } from "../logic";
 import type { Site } from "../api";
@@ -54,12 +54,50 @@ export function UploadStep(props: {
           contributor={props.contributor}
           categoryLoading={!!site && ctx.categoryId !== null && form.loading}
         />
-        <MonthPicker
-          label="Reporting month"
-          help="Used for rows without their own date. Map a date column to file rows month by month."
-          value={ctx.month}
-          onChange={(v) => v && onContext({ month: v })}
-        />
+        {/* F-21: monthly, or one CY/FY year for every row (as Add data's Period). */}
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-ink">Period</legend>
+          <SegmentedControl
+            label="Report monthly or for a whole year"
+            value={ctx.yearly ? "yearly" : "monthly"}
+            onChange={(m) => onContext({ yearly: m === "yearly" ? { yearType: "FY", year: Number(ctx.month.slice(0, 4)) } : null })}
+            options={[
+              { value: "monthly", label: "Monthly" },
+              { value: "yearly", label: "Yearly" },
+            ]}
+          />
+          {ctx.yearly ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <SegmentedControl
+                label="Calendar"
+                size="sm"
+                value={ctx.yearly.yearType}
+                onChange={(t) => onContext({ yearly: { yearType: t, year: ctx.yearly!.year } })}
+                options={[
+                  { value: "CY", label: "Calendar year" },
+                  { value: "FY", label: "Financial year" },
+                ]}
+              />
+              <YearPicker
+                label="Year"
+                value={ctx.yearly.year}
+                yearType={ctx.yearly.yearType}
+                fyStartMonth={4}
+                onChange={(y) => y && onContext({ yearly: { yearType: ctx.yearly!.yearType, year: y } })}
+              />
+            </div>
+          ) : (
+            <MonthPicker
+              label="Reporting month"
+              help="Used for rows without their own date. Map a date column to file rows month by month."
+              value={ctx.month}
+              onChange={(v) => v && onContext({ month: v })}
+            />
+          )}
+          {ctx.yearly && (
+            <p className="text-xs text-muted">Every row is filed as one entry for the whole year; date cells in the sheet aren&apos;t used. A category is filed either monthly or yearly within a year.</p>
+          )}
+        </fieldset>
       </div>
 
       {noForm && <Callout tone="warn" title="This category has no entry form at this site">{props.contributor ? "Ask your administrator to set one up before uploading rows for it." : "Set one up in Capture, Data-entry forms before uploading rows for it."}</Callout>}

@@ -95,9 +95,19 @@ export interface PreviewArgs {
   siteId: number;
   categoryId: number;
   date: string;
+  /** F-21: a yearly upload's CY/FY year. */
+  yearly?: { yearType: "CY" | "FY"; year: number } | null;
 }
 
-const sheetArgs = (a: PreviewArgs): SheetArgs => ({ documentId: a.documentId, mappings: a.mappings, selectedCategories: a.categories, siteId: a.siteId, categoryId: a.categoryId, dateOfReporting: a.date });
+const sheetArgs = (a: PreviewArgs): SheetArgs => ({
+  documentId: a.documentId,
+  mappings: a.mappings,
+  selectedCategories: a.categories,
+  siteId: a.siteId,
+  categoryId: a.categoryId,
+  dateOfReporting: a.date,
+  yearly: a.yearly ?? null,
+});
 
 export interface PreviewData {
   /** The plan ESG-lite made (null when every row was refused before planning). */
