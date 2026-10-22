@@ -90,7 +90,7 @@ for (const [pack, brand] of Object.entries(PACKS)) {
       await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true, brand, appearance });
       await page.goto("/insights?year=2026");
       await settledPanels(page, STORY);
-      for (const tab of ["Data flow", "Materiality", "Completeness"]) {
+      for (const tab of ["Data flow", "Materiality", "Completeness", "Sites"]) {
         await page.getByRole("tab", { name: tab }).click();
         await expect(page.getByRole("tabpanel").locator("[data-state]").first()).toHaveAttribute("data-state", "ok");
       }
@@ -125,6 +125,38 @@ test("layout: stories 8/4 at 1280, 2-up at 1024, one column at 768 and 390", asy
     }
     expect(await overflowX(page), `${width}: no horizontal scroll`).toBeLessThanOrEqual(1);
   }
+});
+
+test("IN-11 Sites tab: bars by scope per site, a card per site, and a site name opens its Overview", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const errors = watchErrors(page);
+  await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true });
+  await page.goto("/insights?year=2026");
+  await page.getByRole("tab", { name: "Sites" }).click();
+  await expect(page).toHaveURL(/tab=sites|panel=site_compare|insights/);
+  const sites = page.getByTestId("site-compare");
+  await expect(sites.getByRole("img")).toHaveAttribute("aria-label", "Chennai plant is the largest of 3 sites at 61% of net emissions, down 15% on 2025.");
+  await expect(sites.getByTestId("site-compare-row")).toHaveCount(3);
+  await expect(sites.getByRole("link", { name: "Add production data" })).toBeVisible();
+  await expect(sites.getByTestId("site-compare-pending")).toHaveText(["3 pending", "7 pending"]);
+
+  await sites.getByRole("radio", { name: "Table" }).click();
+  await sites.getByRole("table").getByRole("link", { name: "Nagpur plant" }).click();
+  await expect(page).toHaveURL(/\/overview\?period=CY2026&siteIds=12/);
+  expect(errors).toEqual([]);
+});
+
+test("IN-11 Sites tab at 390 px: the tab list offers Sites and the cards stack", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await mockInsightsApi(page, "Manager", managerAt(true, false), { insights: true, kpi: false });
+  await page.goto("/insights?year=2026");
+  await page.getByRole("combobox", { name: "More detail" }).selectOption({ label: "Sites" });
+  const rows = page.getByTestId("site-compare-row");
+  await expect(rows).toHaveCount(3);
+  const first = (await rows.nth(0).boundingBox())!;
+  const second = (await rows.nth(1).boundingBox())!;
+  expect(second.y).toBeGreaterThan(first.y + first.height - 2);
+  expect(await overflowX(page)).toBeLessThanOrEqual(1);
 });
 
 test("without KPI tracking Story 2 is By scope and site, and nothing says KPI tracking is off", async ({ page }) => {

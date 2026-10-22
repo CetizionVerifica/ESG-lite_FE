@@ -11,6 +11,7 @@ describe("Insights layout (05-ux §3)", () => {
     expect(slotForPanel("bridge")).toBe("pathway");
     expect(slotForPanel("esg_ring")).toBe("ring");
     expect(slotForPanel("target_wall")).toBe("wall");
+    expect(slotForPanel("site_compare")).toBe("sites"); // IN-11
     expect(slotForPanel("flow")).toBe("flow");
     expect(slotForPanel(null)).toBeNull();
   });
@@ -26,8 +27,9 @@ describe("Insights layout (05-ux §3)", () => {
   });
 
   it("hides the Materiality tab without KPI tracking", () => {
-    expect(tabsFor(true)).toEqual(["flow", "materiality", "completeness"]);
-    expect(tabsFor(false)).toEqual(["flow", "completeness"]);
+    expect(tabsFor(true)).toEqual(["flow", "materiality", "completeness", "sites"]);
+    // IN-11: the Sites tab isn't KPI-gated.
+    expect(tabsFor(false)).toEqual(["flow", "completeness", "sites"]);
   });
 
   it("maps a query result to the shell's state; kpi_off hides", () => {

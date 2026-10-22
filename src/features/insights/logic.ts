@@ -3,7 +3,7 @@
 // Pure data and helpers only; no figure is computed here.
 import type { PanelId, PanelResponse } from "../../lib/insights/contracts";
 
-export const SLOT_IDS = ["stripes", "hero", "decoupling", "ring", "scopes", "pathway", "wall", "cards", "flow", "materiality", "completeness"] as const;
+export const SLOT_IDS = ["stripes", "hero", "decoupling", "ring", "scopes", "pathway", "wall", "cards", "flow", "materiality", "completeness", "sites"] as const;
 export type SlotId = (typeof SLOT_IDS)[number];
 
 export interface SlotDef {
@@ -34,6 +34,7 @@ export const SLOTS: Record<SlotId, SlotDef> = {
   flow: { id: "flow", panel: "flow", title: "Data flow", module: "IN-6", area: "tab" },
   materiality: { id: "materiality", panel: "materiality", title: "Materiality", module: "IN-7", area: "tab", kpi: true },
   completeness: { id: "completeness", panel: "completeness", title: "Completeness", module: "IN-4", area: "tab" },
+  sites: { id: "sites", panel: "site_compare", title: "Sites", module: "IN-11", area: "tab" },
 };
 
 export const STORY_SLOTS: SlotId[] = ["decoupling", "ring", "pathway", "wall"];
@@ -43,7 +44,7 @@ export const STORY_SLOTS: SlotId[] = ["decoupling", "ring", "pathway", "wall"];
  * instead of the ESG ring.
  */
 export const storySlotsFor = (kpiOn: boolean): SlotId[] => (kpiOn ? STORY_SLOTS : ["decoupling", "scopes", "pathway", "wall"]);
-export const TAB_SLOTS = ["flow", "materiality", "completeness"] as const;
+export const TAB_SLOTS = ["flow", "materiality", "completeness", "sites"] as const;
 export type TabSlot = (typeof TAB_SLOTS)[number];
 
 /** The tabs the company can open: Materiality needs KPI tracking (05-ux §3). */

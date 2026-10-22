@@ -15,6 +15,7 @@ import type {
   Flow,
   Materiality,
   Pathway,
+  SiteCompare,
   Stripes,
   Summary,
   TargetWall,
@@ -316,3 +317,30 @@ export const stripesData: Stripes = (() => {
   const nums = values.filter((v): v is number => v !== null);
   return { months, values, unit: "tCO2e", min: Math.min(...nums), max: Math.max(...nums) };
 })();
+
+/**
+ * IN-11 · the Sites tab: Chennai is the largest and fell; Nagpur has no production (intensity null)
+ * and last year isn't due (prior null); Pune rose and has entries waiting.
+ */
+export const siteCompareData: SiteCompare = {
+  rows: [
+    {
+      site_id: 11, site: "Chennai plant", net: 5200, prior: 6100, change_pct: -14.754, good: true, share_pct: 61.176,
+      scope_1: 2100, scope_2: 2600, scope_3: 500,
+      intensity: { value: 0.42, unit: "tCO2e/t", change_pct: -8.1, good: true },
+      completeness_pct: 92, pending: 3, link: "/overview?period=CY2026&siteIds=11",
+    },
+    {
+      site_id: 12, site: "Nagpur plant", net: 2400, prior: null, change_pct: null, good: null, share_pct: 28.235,
+      scope_1: 900, scope_2: 1300, scope_3: 200,
+      intensity: { value: null, unit: null, change_pct: null, good: null },
+      completeness_pct: 75, pending: 0, link: "/overview?period=CY2026&siteIds=12",
+    },
+    {
+      site_id: 13, site: "Pune plant", net: 900, prior: 850, change_pct: 5.882, good: false, share_pct: 10.588,
+      scope_1: 300, scope_2: 500, scope_3: 100,
+      intensity: { value: 0.9, unit: "tCO2e/t", change_pct: 3.2, good: false },
+      completeness_pct: 40, pending: 7, link: "/overview?period=CY2026&siteIds=13",
+    },
+  ],
+};
