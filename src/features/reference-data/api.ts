@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createCategory, deleteCategory, getCategories, updateCategory } from "../../services/categoryService";
 import { createCountry, deleteCountry, getCountries, updateCountry } from "../../services/countryService";
 import { getSites } from "../../services/siteService";
-import { createUnit, deleteUnit, getUnits, updateUnit } from "../../services/unitService";
+import { createUnit, deleteUnit, getUnitFits, getUnits, updateUnit } from "../../services/unitService";
 import {
   type Category,
   type CategoryDraft,
@@ -46,6 +46,8 @@ export const useSites = () => useQuery<Site[]>({ queryKey: keys.sites(), queryFn
  * so one list keeps every filter combination showing the same columns.
  */
 export const useUnits = () => useQuery<Unit[]>({ queryKey: keys.units(), queryFn: async () => asList<Unit>(await getUnits(), "units") });
+/** #183 U3-FE: what each unit fits (null on an older API); refreshed with the units after a save or delete. */
+export const useUnitFits = () => useQuery({ queryKey: [...keys.units(), "fits"] as const, queryFn: getUnitFits, staleTime: 60_000 });
 
 export function useSaveCountry() {
   const qc = useQueryClient();
