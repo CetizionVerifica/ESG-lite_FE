@@ -127,6 +127,25 @@ export const getEmissionsBySite = async (siteId: string | number) => {
   return response.data;
 };
 
+/**
+ * F-13/F-27: whether a period is already filed the other way (monthly vs yearly) on a site and
+ * category: the save's own mode lock, asked before typing. `message` is null when it is free;
+ * null overall from an API without the check.
+ */
+export const getPeriodMode = async (
+  siteId: number,
+  categoryId: number,
+  period: { reporting_period: "monthly" | "yearly"; year_type?: "CY" | "FY" | null; date_of_reporting: string },
+): Promise<{ message: string | null } | null> => {
+  try {
+    const response = await api.get(`/user/emissions/period-mode/site/${siteId}/category/${categoryId}`, { params: period });
+    return { message: response.data?.message ?? null };
+  } catch (e) {
+    if ((e as { response?: { status?: number } }).response?.status === 404) return null;
+    throw e;
+  }
+};
+
 export const getEmissionsPaginated = async (params: {
   siteId?: number;
   siteIds?: number[];
@@ -213,9 +232,10 @@ export const createEmission = async (
     /** S3-3: the figure is an estimate (the distance helper's estimate flag). */
     is_estimate?: boolean;
   },
-  replace?: boolean
+  /** A duplicate (same site, category, month and activity) replaces the saved entry, or is saved beside it (F-06). */
+  onDuplicate?: "replace" | "keep_both"
 ) => {
-  const params = replace ? { replace: "true" } : {};
+  const params = onDuplicate === "replace" ? { replace: "true" } : onDuplicate === "keep_both" ? { keep_both: "true" } : {};
   const response = await api.post("/user/emissions", data, { params });
   return response.data;
 };

@@ -4,9 +4,12 @@ import {
   formatDate,
   formatDelta,
   formatEmissions,
+  formatEntryEmissions,
+  formatEntryTonnes,
   formatIntensity,
   formatMonth,
   formatNumber,
+  formatQuantity,
   formatReportingYear,
 } from "./format";
 
@@ -48,6 +51,23 @@ describe("formatEmissions", () => {
   });
 });
 
+describe("single entries (F-12, F-17)", () => {
+  it("shows an entry's tCO₂e with the 2 decimals the server stores", () => {
+    expect(formatEntryTonnes(4.02)).toBe("4.02");
+    expect(formatEntryTonnes(4)).toBe("4.00");
+    expect(formatEntryTonnes(4.77)).toBe("4.77");
+    expect(formatEntryTonnes(1234.5)).toBe("1,234.50");
+    expect(formatEntryEmissions(0.07)).toBe("0.07 tCO₂e");
+    expect(formatEntryEmissions(null)).toBe("—");
+  });
+  it("shows a whole quantity without decimals, else 2", () => {
+    expect(formatQuantity(286520)).toBe("286,520");
+    expect(formatQuantity(1.5)).toBe("1.50");
+    expect(formatQuantity(2.0001)).toBe("2");
+    expect(formatQuantity(undefined)).toBe("—");
+  });
+});
+
 describe("formatIntensity", () => {
   it("always shows one decimal", () => {
     expect(formatIntensity(12)).toBe("12.0 tCO₂e/t");
@@ -73,6 +93,11 @@ describe("formatDelta", () => {
   });
   it("flips the tone when higher is better", () => {
     expect(formatDelta(110, 100, { lowerIsBetter: false })).toMatchObject({ tone: "good" });
+  });
+  it("never shows a fall to a non-zero value as 100% (F-20)", () => {
+    expect(formatDelta(897.7, 2_000_000)).toMatchObject({ text: "▼ >99.9%", direction: "down", tone: "good" });
+    expect(formatDelta(0, 500)).toMatchObject({ text: "▼ 100.0%" });
+    expect(formatDelta(897.7, 2_000_000, { decimals: 0 })?.text).toBe("▼ >99%");
   });
   it("is neutral when the change rounds to zero", () => {
     expect(formatDelta(100.01, 100)).toMatchObject({ text: "0.0%", tone: "neutral", direction: "flat" });

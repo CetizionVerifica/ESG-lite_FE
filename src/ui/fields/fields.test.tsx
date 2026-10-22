@@ -137,4 +137,23 @@ describe("MonthPicker", () => {
     await user.selectOptions(screen.getByLabelText("Year"), "2024");
     expect(onChange).toHaveBeenLastCalledWith("2024-03");
   });
+
+  it("keeps a year picked before the month, so Dec of last year can be chosen (F-24)", async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [value, setValue] = useState<string | null>(null);
+      return <MonthPicker label="Month" value={value} min="2020-01" max="2026-10" onChange={setValue} />;
+    }
+    render(<Harness />);
+    const month = screen.getByLabelText("Month", { selector: "select" }) as HTMLSelectElement;
+    const year = screen.getByLabelText("Year") as HTMLSelectElement;
+    expect(year.value).toBe("2026");
+    expect([...month.options].find((o) => o.text === "Dec")?.disabled).toBe(true);
+    await user.selectOptions(year, "2025");
+    expect(year.value).toBe("2025");
+    expect([...month.options].find((o) => o.text === "Dec")?.disabled).toBe(false);
+    await user.selectOptions(month, "12");
+    expect(month.value).toBe("12");
+    expect(year.value).toBe("2025");
+  });
 });

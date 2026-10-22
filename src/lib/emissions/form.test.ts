@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  mappingKeyLabel,
   applyChange,
   autoEmissionCategory,
   columnOptionsFor,
@@ -10,7 +11,7 @@ import {
   toFormModel,
   visibleExtraFields,
 } from "./form";
-import type { ColumnConfig, ColumnEntity } from "./types";
+import type { ColumnConfig, ColumnEntity, ModalRow } from "./types";
 
 const col = (pk_id: number, column_name: string, column_type = "select"): ColumnEntity => ({ pk_id, column_name, column_type });
 
@@ -200,5 +201,54 @@ describe("form model (flat mapping and calculation specs)", () => {
     expect(isColumnVisible(m, m.columns[0], { id: 1 })).toBe(true);
     expect(isColumnVisible(m, m.columns[2], { id: 1 })).toBe(false);
     expect(isColumnVisible(m, m.columns[0], { id: 1, activity_data_unit: "km" })).toBe(false);
+  });
+});
+
+describe("mappingKeyLabel (F-08)", () => {
+  it("reads a mapping key the way people write it", () => {
+    expect(mappingKeyLabel("Spent Carbon|Recover")).toBe("Spent Carbon · Recover");
+    expect(mappingKeyLabel(" Road | Van |Diesel [km] ")).toBe("Road · Van · Diesel [km]");
+    expect(mappingKeyLabel("Diesel")).toBe("Diesel");
+  });
+});
+
+describe("dependent choices filled top to bottom (F-07)", () => {
+  // Glochem's waste form lists "Disposal Method" before the "Waste Type" it depends on.
+  const glochem: ColumnConfig = {
+    pk_id: 9,
+    config_name: "Waste for Glochem",
+    columns: [col(1, "Disposal Method"), col(2, "Waste Type"), col(3, "Amount of waste", "number"), col(4, "emission_category", "text")],
+    column_options: {
+      "1": [{ id: "1", label: "Recycle" }, { id: "3", label: "Recover" }, { id: "5", label: "Landfill" }],
+      "2": [{ id: "2", label: "Spent Carbon" }, { id: "16", label: "Coal ash" }],
+    },
+    column_dependencies: { "Disposal Method": "Waste Type" },
+    dependent_options: {
+      "Disposal Method": {
+        "Spent Carbon": [{ id: "21", label: "Recycle" }, { id: "23", label: "Recover" }],
+        "Coal ash": [{ id: "35", label: "Landfill" }],
+      },
+    },
+  };
+  const m = toFormModel(glochem);
+
+  it("shows a select after the one it depends on", () => {
+    expect(formColumns(m).map((c) => c.column_name)).toEqual(["Waste Type", "Disposal Method", "Amount of waste"]);
+  });
+
+  it("keeps an earlier choice the new parent still offers, under the new list's id", () => {
+    let row: ModalRow = { ...newRow(m, 1), "Disposal Method": "3" }; // "Recover" from the full list
+    row = applyChange(m, row, "Waste Type", "2"); // Spent Carbon still offers Recover
+    expect(row["Disposal Method"]).toBe("23");
+  });
+
+  it("clears a choice the new parent doesn't offer", () => {
+    let row: ModalRow = { ...newRow(m, 1), "Waste Type": "2", "Disposal Method": "23" };
+    row = applyChange(m, row, "Waste Type", "16"); // Coal ash: Landfill only
+    expect(row["Disposal Method"]).toBe("");
+  });
+
+  it("keeps the form's order when nothing depends on a later column", () => {
+    expect(formColumns(toFormModel(waste)).map((c) => c.column_name)).toEqual(["activity_type", "type_of_waste", "disposal_method", "quantity"]);
   });
 });

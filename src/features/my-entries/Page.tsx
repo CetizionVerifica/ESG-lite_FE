@@ -25,7 +25,7 @@ import {
   cn,
   focusRing,
   formatDate,
-  formatEmissions,
+  formatEntryEmissions,
   formatNumber,
   fromEmissionDocument,
   serializePeriod,
@@ -175,8 +175,8 @@ export default function MyEntriesPage() {
       value: (r) => Number(r.total_emission),
       cell: (r) => (
         <div className="whitespace-nowrap">
-          <span>{formatEmissions(Number(r.total_emission))}</span>
-          {detail && r.fera && <p className="text-xs text-muted">+ <InfoTerm>FERA</InfoTerm> {formatEmissions(twinsTotal(r.fera))}</p>}
+          <span>{formatEntryEmissions(Number(r.total_emission))}</span>
+          {detail && r.fera && <p className="text-xs text-muted">+ <InfoTerm>FERA</InfoTerm> {formatEntryEmissions(twinsTotal(r.fera))}</p>}
         </div>
       ),
     },

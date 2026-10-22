@@ -77,6 +77,7 @@ import {
   attentionOn,
   effectiveStatus,
   listParams,
+  foldedTwinNote,
   mergeFera,
   periodQuery,
   rowPeriodLabel,
@@ -224,7 +225,7 @@ function ManagerEmissionsPage({ tab }: { tab: Tab }) {
 
 function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const qc = useQueryClient();
-  const { toast } = useToast();
+  const { toast, dismiss } = useToast();
   const [params, setParams] = useSearchParams();
   const [ctx] = useContextParams();
   const [filters, setFilters] = useFilterParams(FILTER_KEYS[tab]);
@@ -299,10 +300,17 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
     setSelected([]);
   }, [filterKey]);
 
+  // The "Entry approved" toast of each row still in its undo window (F-18: no Undo once it's sent).
+  const undoToasts = useRef(new Map<number, number>());
   const undoable = useUndoableApprove<EmissionStatus>({
     commit: commitApprove,
     onCommitted: () => void review.refresh(),
     onFailed: (_id, e) => toast({ title: "Couldn't approve an entry", description: errorMessage(e, "It is back in the queue."), tone: "bad" }),
+    onSent: (id) => {
+      const toastId = undoToasts.current.get(id);
+      undoToasts.current.delete(id); // data-loss-reviewed: Map entry (UI state), not a record
+      if (toastId !== undefined) dismiss(toastId);
+    },
   });
   const approveAll = useApproveAllReady({
     onDone: async (result) => {
@@ -319,6 +327,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   );
 
   const merged = useMemo(() => mergeFera(list.data?.data ?? [], showFera), [list.data, showFera]);
+  const twinNote = foldedTwinNote(list.data?.summary, list.data?.total ?? 0, showFera);
   const rows = useMemo(
     () => (tab === "approvals" ? merged.rows.filter((r) => statusOf(r) === "pending") : merged.rows),
     [merged.rows, statusOf, tab],
@@ -360,7 +369,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
       return;
     }
     undoable.approve(row.pk_id);
-    toast({
+    const toastId = toast({
       title: "Entry approved",
       description: describe(row),
       tone: "good",
@@ -368,11 +377,14 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
       action: {
         label: "Undo",
         onClick: () => {
+          undoToasts.current.delete(row.pk_id); // data-loss-reviewed: Map entry (UI state), not a record
           // The toast pauses on hover and outlives a tab switch; the approval doesn't wait for it.
           if (!undoable.undo(row.pk_id)) toast({ title: "Too late to undo", description: "This entry was already approved. Reject it if it's wrong." });
         },
       },
     });
+    // When the undo window closes the toast goes, so its Undo is never offered after it can work.
+    undoToasts.current.set(row.pk_id, toastId);
     // An approved row leaves the selection, so bulk actions don't count it as pending again.
     setSelected((s) => s.filter((id) => Number(id) !== row.pk_id));
     if (tab === "approvals") {
@@ -580,6 +592,12 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
       {tab === "approvals" && (
         <p className="hidden text-xs text-muted sm:block" data-testid="shortcuts">
           Keys: <Kbd>J</Kbd>/<Kbd>K</Kbd> move · <Kbd>A</Kbd> approve · <Kbd>R</Kbd> reject · <Kbd>Space</Kbd> select · <Kbd>Enter</Kbd> open
+        </p>
+      )}
+
+      {twinNote && (
+        <p className="text-xs text-muted" data-testid="twin-note">
+          {twinNote}
         </p>
       )}
 

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { applyChange, formColumns, isColumnVisible, offeredUnits, sameUnit, toFormModel, unitsForRow, useEmissionCalc, type ModalRow } from "../../../lib/emissions";
-import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEmissions, formatNumber } from "../../../ui";
+import { applyChange, formColumns, isColumnVisible, mappingKeyLabel, offeredUnits, sameUnit, toFormModel, unitsForRow, useEmissionCalc, type ModalRow } from "../../../lib/emissions";
+import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEntryEmissions } from "../../../ui";
 import { useEditSetup } from "../api";
 import { type EditIssue, type EntryUpdate, buildUpdate, editIssue, editedDate, entryMonth, factorYearFor, monthBounds, rowFromEntry } from "../edit";
 import { type EntryRow, periodText } from "../logic";
@@ -127,7 +127,7 @@ function Fields(p: FieldsProps) {
           <span className="block text-xs font-medium text-muted">Emission category</span>
           {row.emission_category ? (
             <span className="mt-1 inline-flex flex-wrap items-center gap-1 rounded-chip bg-tint px-2 py-1 text-ink">
-              {row._ecmKey || row.emission_category}
+              {row._ecmKey ? mappingKeyLabel(String(row._ecmKey)) : row.emission_category}
             </span>
           ) : (
             <span className={cn("mt-1 block", shown("emission_category") ? "text-bad" : "text-muted")}>Set by your choices below</span>
@@ -193,11 +193,11 @@ function Fields(p: FieldsProps) {
         </div>
         <div className="text-right" aria-live="polite">
           {result.value !== null ? (
-            <p className="font-num text-base font-semibold text-ink">= {formatNumber(result.value, 2)} tCO₂e</p>
+            <p className="font-num text-base font-semibold text-ink">= {formatEntryEmissions(result.value)}</p>
           ) : (
             <p className={cn("text-sm", shown("values") ? "text-bad" : "text-muted")}>{say(result.status)}</p>
           )}
-          <p className="font-num text-xs text-muted">was {formatEmissions(Number(entry.total_emission))}</p>
+          <p className="font-num text-xs text-muted">was {formatEntryEmissions(Number(entry.total_emission))}</p>
         </div>
       </div>
 

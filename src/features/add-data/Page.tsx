@@ -26,6 +26,7 @@ import { EnterRows } from "./steps/EnterRows";
 import { Review } from "./steps/Review";
 import type { RowComparison } from "./components/EntryRow";
 import { ExistingEntries } from "./components/ExistingEntries";
+import { PeriodModeNote } from "./components/PeriodModeNote";
 import { editOf, fixTarget, rowFromEntry, savedExcludingEdits } from "./logic/existing";
 import { isScope2, splitFeraFactors, upstreamSubFor } from "../../lib/scope3/fera";
 import type { Cat3Calc } from "./components/EntryRow";
@@ -319,6 +320,7 @@ export default function AddDataPage() {
           )}
         </Callout>
       )}
+      <PeriodModeNote siteId={site.site_id} categoryId={category.category_id} period={period} />
       <EnterRows
         rows={rows}
         dispatch={dispatch}

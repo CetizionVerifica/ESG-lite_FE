@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ExtractionResponse } from "../../../services/invoiceService";
 import { applyChange, newRow, toFormModel } from "./form";
-import { billOutsidePeriod, billGroups, billOf, billRowsFrom, billWarnings, markEdited } from "./bill";
+import { BILL_UNREADABLE, billErrorMessage, billOutsidePeriod, billGroups, billOf, billRowsFrom, billWarnings, markEdited, uploadedBills } from "./bill";
+import type { Invoice } from "../../../services/invoiceService";
 import { buildPayload, type EntryPeriod } from "./entry";
 import type { ColumnConfig, ColumnEntity, EmissionFactor } from "../types";
 
@@ -181,5 +182,54 @@ describe("bill marks", () => {
     expect(billOutsidePeriod("2026-02-10", { mode: "yearly", yearType: "FY", year: 2025 })).toBeNull();
     expect(billOutsidePeriod("2025-03-31", { mode: "yearly", yearType: "FY", year: 2025 })).not.toBeNull();
     expect(billOutsidePeriod(null, sep)).toBeNull();
+  });
+});
+
+describe("billErrorMessage (F-01)", () => {
+  it("keeps a plain message from the service", () => {
+    expect(billErrorMessage("This file type isn't supported. Upload a PDF or a photo.")).toBe("This file type isn't supported. Upload a PDF or a photo.");
+  });
+  it("replaces server-side detail with plain words", () => {
+    for (const raw of [
+      "tesseract is not installed or it's not in your PATH. See README file for more information.",
+      "Traceback (most recent call last): File \"main.py\"",
+      "Request failed with status code 500",
+      "Network Error",
+      "x".repeat(250),
+      "",
+      undefined,
+    ]) {
+      expect(billErrorMessage(raw)).toBe(BILL_UNREADABLE);
+    }
+  });
+  it("uses the caller's fallback", () => {
+    expect(billErrorMessage("ECONNREFUSED 127.0.0.1:8081", "Couldn't read it")).toBe("Couldn't read it");
+  });
+});
+
+describe("uploadedBills (F-02)", () => {
+  const inv = (invoice_id: number, file_name: string, file_size: number, created_at: string) => ({ invoice_id, file_name, file_size, created_at }) as Invoice;
+
+  it("lists a file once however often it was uploaded, newest upload first", () => {
+    const bills = uploadedBills([
+      inv(1, "HT Billing APRIL 2025.pdf", 2048, "2026-10-01T10:00:00Z"),
+      inv(2, "HT Billing JUNE 2025.pdf", 4096, "2026-10-02T10:00:00Z"),
+      inv(3, "ht billing april 2025.pdf", 2048, "2026-10-21T10:00:00Z"),
+      inv(4, "HT Billing APRIL 2025.pdf", 2048, "2026-10-05T10:00:00Z"),
+    ]);
+    expect(bills.map((b) => [b.latest.invoice_id, b.uploads.map((u) => u.invoice_id)])).toEqual([
+      [3, [3, 4, 1]],
+      [2, [2]],
+    ]);
+  });
+
+  it("keeps files of a different size, or without a size, apart", () => {
+    const bills = uploadedBills([
+      inv(1, "bill.pdf", 2048, "2026-10-01T10:00:00Z"),
+      inv(2, "bill.pdf", 3000, "2026-10-02T10:00:00Z"),
+      inv(3, "scan.jpg", 0, "2026-10-03T10:00:00Z"),
+      inv(4, "scan.jpg", 0, "2026-10-04T10:00:00Z"),
+    ]);
+    expect(bills.map((b) => b.uploads.length)).toEqual([1, 1, 1, 1]);
   });
 });

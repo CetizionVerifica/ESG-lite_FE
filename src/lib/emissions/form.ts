@@ -91,8 +91,30 @@ export const isSelectColumn = (m: FormModel, col: ColumnEntity) =>
   isParentColumn(m, col.column_name) ||
   isDependentColumn(m, col.column_name);
 
-/** Columns shown in a row: every column except emission_category, which the row derives. */
-export const formColumns = (m: FormModel) => m.columns.filter((c) => lower(c.column_name) !== "emission_category");
+/**
+ * Columns shown in a row: every column except emission_category, which the row derives.
+ * A dependent select always comes after the select it depends on, so filling the row top to
+ * bottom never has a later choice reset an earlier one (F-07); otherwise the form's order.
+ */
+export const formColumns = (m: FormModel) => {
+  const cols = m.columns.filter((c) => lower(c.column_name) !== "emission_category");
+  const names = new Set(cols.map((c) => lower(c.column_name)));
+  const placed = new Set<string>();
+  const out: ColumnEntity[] = [];
+  let pending = cols;
+  while (pending.length) {
+    const ready = pending.filter((c) => {
+      const parent = parentColumnOf(m, c.column_name);
+      return !parent || !names.has(lower(parent)) || placed.has(lower(parent));
+    });
+    // A cycle in the config: keep the rest in the form's order.
+    const take = ready.length ? ready.slice(0, 1) : pending.slice(0, 1);
+    out.push(take[0]);
+    placed.add(lower(take[0].column_name));
+    pending = pending.filter((c) => c !== take[0]);
+  }
+  return out;
+};
 
 /** The label of a parent's stored value, looked up the way the legacy page does. */
 function parentLabelOf(m: FormModel, columnName: string, parentValue: string): string {
@@ -182,6 +204,14 @@ function findMapping(mapping: EmissionCategoryMapping, key: string) {
   for (const [k, category] of Object.entries(mapping)) if (lower(k) === lower(key)) return { key: k, category };
   return null;
 }
+
+/** A mapping key as people read it: "Spent Carbon|Recover" → "Spent Carbon · Recover" (F-08). */
+export const mappingKeyLabel = (key: string): string =>
+  key
+    .split("|")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" · ");
 
 /**
  * The emission category a row's selections map to: the dependency chain's
@@ -289,10 +319,19 @@ export function applyChange(m: FormModel, row: ModalRow, column: string, value: 
   const next: ModalRow = { ...row, [column]: value };
 
   if (isParentColumn(m, column)) {
+    const grandparent = parentColumnOf(m, column);
+    const gpValue = grandparent ? String(next[Object.keys(next).find((k) => lower(k) === lower(grandparent)) ?? ""] ?? "") : undefined;
     for (const [child, parent] of Object.entries(m.dependencies)) {
       if (lower(parent) !== lower(column)) continue;
       const key = Object.keys(next).find((k) => lower(k) === lower(child));
-      if (key) next[key] = "";
+      if (!key) continue;
+      // F-07: a choice the new parent still offers (same label) is kept, under the new list's id;
+      // only one it doesn't offer is cleared.
+      const childCol = columnByName(m, child);
+      const stored = String(next[key] ?? "");
+      const before = childCol && stored ? columnOptionsFor(m, childCol, String(row[column] ?? ""), gpValue).find((o) => String(o.id) === stored) : undefined;
+      const after = before && childCol && value ? columnOptionsFor(m, childCol, value, gpValue).find((o) => lower(String(o.label)) === lower(String(before.label))) : undefined;
+      next[key] = after ? String(after.id) : "";
     }
   }
 

@@ -9,6 +9,7 @@ import {
   parseEntryPeriod,
   periodTotalQuery,
   previousPeriod,
+  AMOUNT_NEEDED,
   rowIssue,
   unitNotOfferedMessage,
 } from "./entry";
@@ -68,8 +69,12 @@ describe("rows", () => {
     );
     expect(rowIssue({ id: 1, emission_category: "Diesel", activity_data_unit: "litre" }, calc)).toEqual({
       field: "values",
-      message: "Enter activity data",
+      message: AMOUNT_NEEDED,
     });
+    // 0, a negative number and text typed in get the same plain ask (F-11).
+    for (const quantity of ["0", "-1600", "abc"]) {
+      expect(rowIssue({ id: 1, emission_category: "Diesel", activity_data_unit: "litre", quantity }, calc)?.message).toBe(AMOUNT_NEEDED);
+    }
     expect(rowIssue({ id: 1, emission_category: "Diesel", activity_data_unit: "gallon", quantity: "5" }, calc)).toBeNull();
   });
 
