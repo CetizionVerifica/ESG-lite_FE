@@ -3,7 +3,7 @@ import { useCallback, useMemo } from "react";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { type EmissionDocument, getDocumentsByEmission } from "../../services/documentService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
-import { type UnitData, getUserUnitsBySiteAndCategory } from "../../services/unitService";
+import { type UnitData, getUserUnitOptions, getUserUnitsBySiteAndCategory } from "../../services/unitService";
 import { getThresholdByCompany } from "../../services/thresholdService";
 import { invalidateEmissionQueries } from "../../lib/emissionQueries";
 import { DEFAULT_THRESHOLD_PCT } from "../../lib/scope3/checks";
@@ -36,6 +36,7 @@ export const keys = {
   factor: (id: number) => [...keys.all, "factor", id] as const,
   batches: (siteIds: number[], categoryIds: number[]) => [...keys.all, "batches", siteIds, categoryIds] as const,
   units: (siteId: number, categoryId: number) => ["units", siteId, categoryId] as const,
+  unitOptions: (siteId: number, categoryId: number) => ["unit-options", siteId, categoryId] as const,
   factorNames: (siteId: number, categoryId: number, year: number) => [...keys.all, "factor-names", siteId, categoryId, year] as const,
   // Shared with other pages that read the same config.
   config: (siteId: number, categoryId: number) => ["column-config", siteId, categoryId] as const,
@@ -171,6 +172,16 @@ export function useReviewMutations() {
   const approveMany = useMutation({ mutationFn: (ids: number[]) => bulkApproveEmissions(ids), onSettled: refresh });
   const remove = useMutation({ mutationFn: (ids: number[]) => bulkDeleteEmissions(ids), onSettled: refresh });
   return { reject, approveMany, remove, refresh };
+}
+
+/** #183: the units each emission category may use; null when the API has no list (every unit is offered). */
+export function useUnitOptions(siteId: number | undefined, categoryId: number | undefined) {
+  return useQuery({
+    queryKey: keys.unitOptions(siteId ?? 0, categoryId ?? 0),
+    queryFn: () => getUserUnitOptions(siteId as number, categoryId as number).catch(() => null),
+    enabled: !!siteId && !!categoryId,
+    staleTime: CONFIG_STALE,
+  });
 }
 
 export function useUnits(siteId: number | undefined, categoryId: number | undefined) {

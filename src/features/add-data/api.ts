@@ -2,7 +2,8 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { type SupplierDetail, createSupplier, getSupplier, getSuppliers } from "../../services/scope3SuppliersService";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
-import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
+import { getUserUnitOptions, getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
+import type { UnitOptionsByActivity } from "../../lib/emissions/unitOptions";
 import { getMappingsByCompany, type CategoryMapping } from "../../services/categoryMappingService";
 
 export type { CategoryMapping };
@@ -32,7 +33,10 @@ import type { ColumnConfig, EmissionFactor } from "./types";
 export interface EntrySetup {
   config: ColumnConfig | null;
   factors: EmissionFactor[];
+  /** Every unit of the form (the admin's list); the bill reader reads units against it. */
   units: string[];
+  /** #183: the units each emission category may use; null when the API has no list (every unit is offered). */
+  unitOptions: UnitOptionsByActivity | null;
   mappings: CategoryMapping[];
   /** FERA factors when the site has a FERA category (the backend adds the FERA row on save). */
   feraFactors: EmissionFactor[];
@@ -54,28 +58,24 @@ export function useEntrySetup(args: {
     queryFn: async (): Promise<EntrySetup> => {
       const site = siteId as number;
       const category = categoryId as number;
-      const [configs, factors, units, mappings, fera] = await Promise.all([
+      const [configs, factors, units, unitOptions, mappings, feraFactors] = await Promise.all([
         getUserColumnConfigsBySiteAndCategory(site, category) as Promise<ColumnConfig[]>,
         getUserEmissionFactorsBySiteAndCategory(site, category) as Promise<EmissionFactor[]>,
         getUserUnitsBySiteAndCategory(site, category) as Promise<UnitData[]>,
         // Optional extras: the form still works without them.
+        getUserUnitOptions(site, category).catch(() => null),
         companyId ? getMappingsByCompany(companyId, site, category).catch(() => []) : Promise.resolve([]),
-        feraCategoryId
-          ? Promise.all([
-              getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId).catch(() => []),
-              getUserUnitsBySiteAndCategory(site, feraCategoryId).catch(() => []),
-            ])
-          : Promise.resolve([[], []] as [EmissionFactor[], UnitData[]]),
+        // The FERA rows are added by the server on save and never take a unit chosen here, so
+        // only their factors are read (for the Category 3 preview), not their units.
+        feraCategoryId ? getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId).catch(() => []) : Promise.resolve([] as EmissionFactor[]),
       ]);
-      const names = unitNames(units);
-      const known = new Set(names.map((n) => n.toLowerCase()));
-      const feraUnits = unitNames(fera[1] as UnitData[]).filter((n) => !known.has(n.toLowerCase()));
       return {
         config: configs[0] ?? null,
         factors,
-        units: [...names, ...feraUnits],
+        units: unitNames(units),
+        unitOptions,
         mappings,
-        feraFactors: fera[0] as EmissionFactor[],
+        feraFactors: feraFactors as EmissionFactor[],
       };
     },
   });

@@ -128,6 +128,17 @@ describe("editIssue", () => {
     expect(editIssue(row, calc, "pending", "")).toBeNull();
   });
 
+  it("#183: stops on a unit the emission category doesn't offer, but the entry's own unit can stay as it was", () => {
+    // The factor is per tonne; kg and lb convert to it, but this form offers tonne and kg only.
+    const units = { offered: ["tonne", "kg"], stored: "kg" };
+    expect(editIssue({ ...row, activity_data_unit: "lb" }, calc, "pending", "", units)).toEqual({
+      field: "activity_data_unit",
+      message: "lb isn't a unit for Metal: open loop recycling. Choose tonne or kg.",
+    });
+    expect(editIssue(row, calc, "pending", "", { offered: ["tonne"], stored: "kg" })).toBeNull();
+    expect(editIssue({ ...row, activity_data_unit: "lb" }, calc, "pending", "", { offered: null })).toBeNull();
+  });
+
   it("stops on a unit the factor can't take", () => {
     expect(editIssue({ ...row, activity_data_unit: "kWh" }, calc, "pending", "")?.field).toBe("activity_data_unit");
   });

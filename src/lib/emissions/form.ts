@@ -8,6 +8,7 @@
 // on the legacy page.
 import { ROW_METHOD_COLUMN, resolveSpecMethod, specNumericColumns } from "./emissionCalc";
 import { type MethodOptions, readMethodOptions, unitsForMethod } from "../scope3/dq";
+import { unitForCategory, unitsForRow, withMethodUnits, type UnitOptionsByActivity } from "./unitOptions";
 import type {
   CalculationSpec,
   ColumnConfig,
@@ -31,9 +32,11 @@ export interface FormModel {
   spec: CalculationSpec | null;
   /** S3-3: the methods the form offers, most specific first, with their units; empty when it doesn't limit them. */
   methodOptions: MethodOptions;
+  /** #183: the units each emission category may use, from the server; null keeps the form's flat unit list. */
+  unitOptions: UnitOptionsByActivity | null;
 }
 
-export const toFormModel = (config: ColumnConfig | null | undefined): FormModel => ({
+export const toFormModel = (config: ColumnConfig | null | undefined, unitOptions: UnitOptionsByActivity | null = null): FormModel => ({
   columns: config?.columns ?? [],
   columnOptions: config?.column_options ?? {},
   dependencies: config?.column_dependencies ?? {},
@@ -42,6 +45,7 @@ export const toFormModel = (config: ColumnConfig | null | undefined): FormModel 
   extraFields: config?.extra_fields ?? [],
   spec: config?.calculation ?? null,
   methodOptions: readMethodOptions(config?.method_options),
+  unitOptions,
 });
 
 /**
@@ -331,7 +335,26 @@ export function applyChange(m: FormModel, row: ModalRow, column: string, value: 
     next.emission_category = "";
     next._ecmKey = "";
   }
+
+  // #183: a new emission category keeps the unit only while it still offers it, and picks the only
+  // unit it offers. A spend row's unit is its currency (S3-5) and stays as it is.
+  const spendRow = next[ROW_METHOD_COLUMN] === "spend_based" || !!next.currency;
+  if (m.unitOptions && next.emission_category && next.emission_category !== row.emission_category && !spendRow) {
+    next.activity_data_unit = unitForCategory(m.unitOptions, String(next.emission_category), next.activity_data_unit, methodUnitsOf(m, next)) ?? "";
+  }
   return next;
+}
+
+/** The units of the form's methods that name them: the row's method, else every method (SE-1 picks the method by unit). */
+const methodUnitsOf = (m: FormModel, row: ModalRow): string[] => unitsForMethod(m.methodOptions, String(row[ROW_METHOD_COLUMN] ?? "")) ?? m.methodOptions.flatMap((o) => o.units);
+
+/**
+ * #183: the units the row's emission category offers (narrowed to the method's units when the form
+ * names them), or null when there's no list to check against (no options, or no emission category yet).
+ */
+export function offeredUnits(m: FormModel, row: ModalRow, methodUnits?: string[] | null): string[] | null {
+  const units = row.emission_category ? unitsForRow(m.unitOptions, row.emission_category) : null;
+  return units ? withMethodUnits(units.units, methodUnits ?? methodUnitsOf(m, row)) : null;
 }
 
 export const setExtraField = (row: ModalRow, key: string, value: string): ModalRow => ({

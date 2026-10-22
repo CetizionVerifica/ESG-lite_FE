@@ -46,7 +46,8 @@ const dieselConfig = {
 };
 const dieselFactors = [{ emission_factor_id: 5, emission_category_name: "Diesel", factor_value: 2.68, denominator_unit: "litre", year: 2024 }];
 
-async function signIn(page: Page, requests: URLSearchParams[] = [], saved: { url: string; body: unknown }[] = []) {
+/** `unitOptions` (#183): what GET …/units/…/by-activity answers; without it the plain unit list below answers (an older API). */
+async function signIn(page: Page, requests: URLSearchParams[] = [], saved: { url: string; body: unknown }[] = [], unitOptions?: unknown) {
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "User");
@@ -90,6 +91,7 @@ async function signIn(page: Page, requests: URLSearchParams[] = [], saved: { url
       if (url.pathname.endsWith("/user/column-configs/site/7/category/1")) return json([dieselConfig]);
       if (url.pathname.includes("/user/column-configs/")) return json([]);
       if (url.pathname.endsWith("/user/emission-factors/site/7/category/1")) return json(dieselFactors);
+      if (url.pathname.endsWith("/by-activity") && unitOptions) return json(unitOptions);
       if (url.pathname.includes("/user/units/site/7/category/1")) return json([{ unit_name: "litre" }]);
       if (url.pathname.includes("/user/documents/emission/")) return json([]);
       if (url.pathname.includes("/audit-logs")) return json([]);
@@ -169,6 +171,25 @@ test("a rejected entry is fixed and resubmitted in the drawer", async ({ page })
     date_of_reporting: "2025-09-30",
     reason: "Corrected the litres",
   });
+});
+
+test("#183: an entry whose unit the form no longer offers keeps it, says so, and saves unchanged", async ({ page }) => {
+  const saved: { url: string; body: unknown }[] = [];
+  // The form now fixes the unit to kl; the rejected entry was saved in litre.
+  await signIn(page, [], saved, { fixed_unit: "kl", all_units: ["litre", "kl"], activities: [{ name: "Diesel", factor_unit: "litre", units: ["kl"] }] });
+  await page.goto("/data/mine");
+  await page.getByRole("table", { name: "My entries" }).getByRole("row").filter({ hasText: "Wrong unit" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByRole("button", { name: "Fix and resubmit" }).click();
+
+  const unit = drawer.getByLabel("Unit");
+  await expect(unit).toHaveValue("litre");
+  await expect(unit.locator("option")).toHaveText(["Choose a unit", "kl", "litre (no longer offered)"]);
+
+  await drawer.getByLabel("What did you change?").fill("Checked the litres again");
+  await drawer.getByRole("button", { name: "Resubmit" }).click();
+  await expect(page.getByText("Resubmitted for review")).toBeVisible();
+  expect(saved[0]?.body).toMatchObject({ activity_data_unit: "litre", reason: "Checked the litres again" });
 });
 
 test("editing an entry with no factor in the factor year uses the newest one from another year, as the save does", async ({ page }) => {
