@@ -77,6 +77,7 @@ import {
   attentionOn,
   effectiveStatus,
   listParams,
+  foldedTwinNote,
   mergeFera,
   periodQuery,
   rowPeriodLabel,
@@ -326,6 +327,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   );
 
   const merged = useMemo(() => mergeFera(list.data?.data ?? [], showFera), [list.data, showFera]);
+  const twinNote = foldedTwinNote(list.data?.summary, list.data?.total ?? 0, showFera);
   const rows = useMemo(
     () => (tab === "approvals" ? merged.rows.filter((r) => statusOf(r) === "pending") : merged.rows),
     [merged.rows, statusOf, tab],
@@ -590,6 +592,12 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
       {tab === "approvals" && (
         <p className="hidden text-xs text-muted sm:block" data-testid="shortcuts">
           Keys: <Kbd>J</Kbd>/<Kbd>K</Kbd> move · <Kbd>A</Kbd> approve · <Kbd>R</Kbd> reject · <Kbd>Space</Kbd> select · <Kbd>Enter</Kbd> open
+        </p>
+      )}
+
+      {twinNote && (
+        <p className="text-xs text-muted" data-testid="twin-note">
+          {twinNote}
         </p>
       )}
 
