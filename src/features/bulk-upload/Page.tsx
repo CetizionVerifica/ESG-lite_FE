@@ -11,7 +11,7 @@ import { UploadStep } from "./components/UploadStep";
 import { SmartImportFlow } from "./components/smart/SmartImportFlow";
 import { useUploadContext } from "./hooks/useUploadContext";
 import { smartImportEnabled } from "./smart/logic";
-import { type ImportResult, type MapField, STEPS, autoMap, buildFields, contributorSites, fileProblem, mappingsFor, monthEndDate, sessionCompany, setHeader, skippedMatrix, toggleSkip, withClientSites } from "./logic";
+import { DATE_KEY, type ImportResult, type MapField, STEPS, autoMap, buildFields, contributorSites, fileProblem, mappingsFor, monthEndDate, sessionCompany, setHeader, skippedMatrix, toggleSkip, withClientSites } from "./logic";
 import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 
 type Sheet = { documentId: number; headers: string[]; fileName: string };
@@ -87,7 +87,9 @@ export default function BulkUploadPage() {
   // The plan of the last preview of this upload, cancelled when a new preview is made.
   const lastPlan = useRef<string | null>(null);
 
-  const mappings = useMemo(() => mappingsFor(fields), [fields]);
+  // F-21: a yearly upload files every row for the year, so no date column is read.
+  const shownFields = useMemo(() => (ctx.yearly ? fields.filter((f) => f.key !== DATE_KEY) : fields), [fields, ctx.yearly]);
+  const mappings = useMemo(() => mappingsFor(shownFields), [shownFields]);
   const sheetCategories = useSheetCategories(sheet?.documentId ?? null, mappings);
   const categoryList = sheetCategories.data?.unique_categories ?? null;
   const selected = useMemo(() => new Set((categoryList ?? []).filter((c) => !excluded.has(c))), [categoryList, excluded]);
@@ -147,6 +149,7 @@ export default function BulkUploadPage() {
       siteId: ctx.siteId,
       categoryId: ctx.categoryId,
       date: monthEndDate(ctx.month),
+      yearly: ctx.yearly,
     });
     setStep(2);
   };
@@ -268,7 +271,7 @@ export default function BulkUploadPage() {
           <MapStep
             fileName={sheet.fileName}
             headers={sheet.headers}
-            fields={fields}
+            fields={shownFields}
             onHeader={(key, header) => setFields((f) => setHeader(f, key, header))}
             onSkip={(key) => setFields((f) => toggleSkip(f, key))}
             categories={{

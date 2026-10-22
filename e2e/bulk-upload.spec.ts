@@ -289,3 +289,42 @@ test("the Add data link opens bulk upload for a contributor's own site", async (
   await page.getByRole("button", { name: "Upload and map columns" }).click();
   await expect(page.locator("[aria-current=step]")).toContainText("Map columns");
 });
+
+test("a yearly choice from Add data opens a yearly upload that files every row for the year (F-21)", async ({ page }) => {
+  const { ai } = await signIn(page, "User", CONTRIBUTOR);
+  await page.goto("/capture/upload?site=1&category=1&period=CY2025");
+  await expect(page.getByRole("radio", { name: "Yearly" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("radio", { name: "Calendar year" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByText("Every row is filed as one entry for the whole year")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Reporting month" })).toHaveCount(0);
+
+  await page.locator('input[type="file"]').setInputFiles({ name: "fuel-2025.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("x") });
+  await page.getByRole("button", { name: "Upload and map columns" }).click();
+  await expect(page.locator("[aria-current=step]")).toContainText("Map columns");
+  // No date column is read in a yearly upload.
+  await expect(page.getByLabel("Sheet column for Reporting date")).toHaveCount(0);
+  await page.getByLabel("Sheet column for Activity unit").selectOption("Unit");
+  await page.getByRole("button", { name: "Preview rows" }).click();
+  await expect(page.getByRole("table", { name: "Preview of the rows to import" })).toBeVisible();
+  const sent = ai.find((c) => c.path.endsWith("/preview"))?.body as Record<string, unknown>;
+  expect(sent).toMatchObject({ site_id: 1, category_id: 1, reporting_period: "yearly", year_type: "CY", year: 2025 });
+  expect(Object.keys(sent.mappings as object)).not.toContain("date_of_reporting");
+});
+
+test("switching to yearly keeps the year and writes it in the link; back to monthly sends no year", async ({ page }) => {
+  const { ai } = await signIn(page, "User", CONTRIBUTOR);
+  await page.goto("/capture/upload?site=1&category=1&period=2025-08");
+  await page.getByRole("radio", { name: "Yearly" }).click();
+  await page.getByRole("radio", { name: "Calendar year" }).click();
+  await expect(page).toHaveURL(/period=CY2025/);
+  await page.getByRole("radio", { name: "Monthly" }).click();
+  await expect(page.getByRole("group", { name: "Reporting month" })).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles({ name: "fuel.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("x") });
+  await page.getByRole("button", { name: "Upload and map columns" }).click();
+  await page.getByLabel("Sheet column for Activity unit").selectOption("Unit");
+  await page.getByRole("button", { name: "Preview rows" }).click();
+  await expect(page.getByRole("table", { name: "Preview of the rows to import" })).toBeVisible();
+  const sent = ai.find((c) => c.path.endsWith("/preview"))?.body as Record<string, unknown>;
+  expect(sent.reporting_period).toBeUndefined();
+  expect(sent.date_of_reporting).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+});

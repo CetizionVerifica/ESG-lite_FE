@@ -127,6 +127,8 @@ export interface SheetArgs {
   categoryId: number;
   /** The date rows without a date cell are filed on (the chosen month's last day). */
   dateOfReporting: string;
+  /** F-21: file every row for this CY/FY year instead (date cells aren't read). */
+  yearly?: { yearType: "CY" | "FY"; year: number } | null;
 }
 
 const sheetBody = (a: SheetArgs) => ({
@@ -136,6 +138,7 @@ const sheetBody = (a: SheetArgs) => ({
   site_id: a.siteId,
   category_id: a.categoryId,
   date_of_reporting: a.dateOfReporting,
+  ...(a.yearly ? { reporting_period: "yearly", year_type: a.yearly.yearType, year: a.yearly.year } : {}),
 });
 
 /**

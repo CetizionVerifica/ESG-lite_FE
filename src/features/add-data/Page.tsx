@@ -237,7 +237,8 @@ export default function AddDataPage() {
   // Rows without their own date are filed in the month the period ends, as here.
   const bulkUploadHref =
     contextReady && period
-      ? `/capture/upload?${new URLSearchParams({ site: String(site.site_id), category: String(category.category_id), period: entryDate(period).slice(0, 7) })}`
+      ? // F-21: a yearly choice opens a yearly upload (?period=CY2025), as Add data's own links name it.
+        `/capture/upload?${new URLSearchParams({ site: String(site.site_id), category: String(category.category_id), period: period.mode === "yearly" ? `${period.yearType}${period.year}` : entryDate(period).slice(0, 7) })}`
       : "/capture/upload";
 
   const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
