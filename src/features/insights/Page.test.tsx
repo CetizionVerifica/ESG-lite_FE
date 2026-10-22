@@ -157,7 +157,7 @@ describe("InsightsPage (IN-0 shell on mocks)", () => {
     expect(within(completeness).getByTestId("completeness")).toBeTruthy(); // IN-4
     await userEvent.click(await screen.findByRole("button", { name: "Social" }));
     await waitFor(() => expect(router.state.location.search).toContain("pillar=social"));
-    await userEvent.click(screen.getByRole("radio", { name: "Base year" }));
+    await userEvent.click(screen.getByRole("radio", { name: "vs base year" }));
     await waitFor(() => expect(router.state.location.search).toContain("compare=base"));
     await userEvent.click(screen.getByRole("button", { name: "Chennai plant" }));
     await waitFor(() => expect(router.state.location.search).toContain("sites=11"));

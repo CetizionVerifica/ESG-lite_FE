@@ -10,6 +10,14 @@ export function compareLabel(q: Pick<InsightsQuery, "year" | "yearType" | "compa
   return q.yearType === "FY" ? `FY ${q.year - 1}` : String(q.year - 1);
 }
 
+/** The "Compare with" options (G3): the year itself, as the brief writes it ("vs 2025", "vs FY 2025"), or "vs base year". */
+export function compareOptions(q: Pick<InsightsQuery, "year" | "yearType">): { value: InsightsQuery["compare"]; label: string }[] {
+  return [
+    { value: "prior", label: `vs ${q.yearType === "FY" ? "FY " : ""}${q.year - 1}` },
+    { value: "base", label: "vs base year" },
+  ];
+}
+
 /** Intensity decimals: 3 below 1, 2 below 10, 1 above (a display rule; the value is the server's). */
 export function intensityDecimals(v: number | null): number {
   if (v === null) return 1;

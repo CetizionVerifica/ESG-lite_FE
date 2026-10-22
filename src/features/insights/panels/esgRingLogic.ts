@@ -4,7 +4,7 @@
 // only arithmetic is the display mapping coverage → opacity.
 import type { EChartsOption } from "echarts";
 import type { EsgRing, EsgRingTopic, Pillar } from "../../../lib/insights/contracts";
-import { entrance } from "../../../lib/insights/motion";
+import { entrance, morph } from "../../../lib/insights/motion";
 import { PILLAR_LABEL, PILLAR_LETTER } from "../../../lib/kpi/labels";
 import { formatNumber } from "../../../ui/format";
 import type { ChartTableColumn } from "../../../ui";
@@ -19,7 +19,7 @@ export const AUTO_GLYPH = "⛁";
 /** The sunburst node, with what a click needs to know. */
 export type RingNode =
   | { kind: "pillar"; id: string; pillar: Pillar; name: string; value: number; children: RingNode[]; itemStyle: Record<string, unknown>; label: Record<string, unknown> }
-  | { kind: "topic"; id: string; pillar: Pillar; name: string; value: number; topic: EsgRingTopic; itemStyle: Record<string, unknown>; label: Record<string, unknown> };
+  | { kind: "topic"; id: string; groupId: string; pillar: Pillar; name: string; value: number; topic: EsgRingTopic; itemStyle: Record<string, unknown>; label: Record<string, unknown> };
 
 /** The pillars on show: the page's `pillar` zooms the ring onto that one (all of them when it isn't in the data). */
 export function visiblePillars(data: EsgRing, pillar: Pillar | null): RingPillar[] {
@@ -59,6 +59,8 @@ export function ringNodes(data: EsgRing, pillar: Pillar | null, t: ChartTheme): 
       name: topic.label,
       value: topic.kpis,
       topic,
+      // G2: the same id on the topic bars, so the ring morphs into them.
+      groupId: `topic:${p.pillar}:${topic.topic}`,
       itemStyle: { color: t.pillars[p.pillar], opacity: topicOpacity(topic.coverage_pct), borderColor: t.ui.panel, borderWidth: 1 },
       label: { formatter: topicLabel(topic) },
     })),
@@ -125,7 +127,8 @@ export function ringOption(data: EsgRing, pillar: Pillar | null, t: ChartTheme, 
     series: [
       {
         type: "sunburst",
-        id: "esg-ring",
+        id: RING_SERIES_ID,
+        ...morph(),
         nodeClick: "rootToNode",
         // Keep the server's order (pillars E, S, G; topics as sent).
         sort: () => 0,
@@ -145,6 +148,57 @@ export function ringOption(data: EsgRing, pillar: Pillar | null, t: ChartTheme, 
             label: { rotate: "radial", color: t.ui.ink, fontSize: 11, minAngle: 12, width: 70, overflow: "truncate", textBorderColor: t.ui.panel, textBorderWidth: 2 },
           },
         ],
+      },
+    ],
+  } as EChartsOption;
+}
+
+/** The ring and the topic bars share this series id, so ECharts morphs one into the other (G2). */
+export const RING_SERIES_ID = "esg-ring";
+
+/** A topic bar: what a click and the tooltip need, as on the ring's topic nodes. */
+export type TopicBar = { kind: "topic"; id: string; groupId: string; pillar: Pillar; name: string; value: number; topic: EsgRingTopic; itemStyle: Record<string, unknown> };
+
+/**
+ * The topic bars (G2, 05-ux §6): one horizontal bar per topic of the pillars on show, its length the
+ * server's coverage %, grouped by pillar (E, S, G) and lowest coverage first within each. The pillar
+ * letter is in the bar's label, so colour is never the only signal.
+ */
+export function topicBars(data: EsgRing, pillar: Pillar | null, t: ChartTheme): TopicBar[] {
+  return visiblePillars(data, pillar).flatMap((p) =>
+    [...p.topics]
+      .sort((a, b) => a.coverage_pct - b.coverage_pct)
+      .map((topic) => ({
+        kind: "topic" as const,
+        id: `topic:${p.pillar}:${topic.topic}`,
+        groupId: `topic:${p.pillar}:${topic.topic}`,
+        pillar: p.pillar,
+        name: `${PILLAR_LETTER[p.pillar]} · ${topicLabel(topic)}`,
+        value: topic.coverage_pct,
+        topic,
+        itemStyle: { color: t.pillars[p.pillar], opacity: topicOpacity(topic.coverage_pct) },
+      })),
+  );
+}
+
+/** The bars option: the same series id and per-topic group ids as the ring, so switching morphs. */
+export function topicBarsOption(data: EsgRing, pillar: Pillar | null, t: ChartTheme): EChartsOption {
+  // The first bar is drawn at the bottom of a category axis: reverse, so the list reads top-down.
+  const bars = topicBars(data, pillar, t).reverse();
+  return {
+    ...entrance(1),
+    tooltip: { trigger: "item", formatter: (p: unknown) => ringTooltip((p as { data?: RingNode }).data, data) },
+    grid: { left: 8, right: 48, top: 8, bottom: 8, containLabel: true },
+    xAxis: { type: "value", min: 0, max: 100, axisLabel: { formatter: "{value}%", color: t.ui.muted }, splitLine: { lineStyle: { color: t.ui.line } } },
+    yAxis: { type: "category", data: bars.map((b) => b.name), axisLabel: { color: t.ui.ink, fontSize: 11, width: 150, overflow: "truncate" }, axisTick: { show: false } },
+    series: [
+      {
+        type: "bar",
+        id: RING_SERIES_ID,
+        ...morph(),
+        barMaxWidth: 16,
+        data: bars as never,
+        label: { show: true, position: "right", color: t.ui.ink, fontSize: 11, formatter: (p: unknown) => pctText((p as { value: number }).value) },
       },
     ],
   } as EChartsOption;

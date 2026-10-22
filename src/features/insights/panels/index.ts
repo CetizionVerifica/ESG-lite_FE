@@ -16,6 +16,7 @@ import { EsgRing } from "./EsgRing";
 import { TargetWall } from "./TargetWall";
 import { StripesBand } from "../components/Stripes";
 import { ScopeSiteTreemap } from "./ScopeSiteTreemap";
+import { SiteCompare } from "./SiteCompare"; // IN-11
 
 /** What a slot's component gets: the envelope (availability 'ok', data present) and the page query. */
 export interface PanelProps<P extends PanelId = PanelId> {
@@ -40,4 +41,5 @@ export const PANELS: Partial<Record<SlotId, PanelComponent>> = {
   materiality: definePanel<"materiality">(MaterialityMatrix), // IN-7
   stripes: definePanel<"stripes">(StripesBand), // IN-8
   scopes: definePanel<"flow">(ScopeSiteTreemap), // IN-10 (05-ux §3: Story 2 without KPI tracking)
+  sites: definePanel<"site_compare">(SiteCompare), // IN-11
 };

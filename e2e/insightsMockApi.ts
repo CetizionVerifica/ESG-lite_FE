@@ -10,6 +10,7 @@ import {
   flowData,
   materialityData,
   pathwayData,
+  siteCompareData,
   stripesData,
   summaryData,
   targetWallData,
@@ -70,6 +71,7 @@ export async function mockInsightsApi(page: Page, role: string, user: object, op
     flow: () => flowData(kpi),
     materiality: () => materialityData(opts.scored ?? true),
     stripes: () => stripesData,
+    "site-compare": () => siteCompareData, // IN-11
   };
   await page.addInitScript(
     ([r, u]) => {

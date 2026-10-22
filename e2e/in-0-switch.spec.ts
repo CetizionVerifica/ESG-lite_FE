@@ -57,7 +57,7 @@ test("with the switch on, Insights is the manager's second nav item and the page
   // Filters live in the URL.
   await page.getByRole("group", { name: "Pillar" }).getByRole("button", { name: "Social" }).click();
   await expect(page).toHaveURL(/pillar=social/);
-  await page.getByRole("radiogroup", { name: "Compare with" }).getByRole("radio", { name: "Base year" }).click();
+  await page.getByRole("radiogroup", { name: "Compare with" }).getByRole("radio", { name: "vs base year" }).click();
   await expect(page).toHaveURL(/compare=base/);
   await page.getByRole("group", { name: "Sites" }).getByRole("button", { name: "Pune plant" }).click();
   await expect(page).toHaveURL(/sites=13/);
