@@ -299,6 +299,12 @@ export function quantityOf(fields: ActivityField[]): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** The quantity shown: the server's (worked out from the entry's form, as My entries shows it), else the first numeric field. */
+export function rowQuantity(row: Pick<EmissionData, "quantity">, fields: ActivityField[]): number | null {
+  const server = row.quantity === null || row.quantity === undefined ? NaN : Number(row.quantity);
+  return Number.isFinite(server) ? server : quantityOf(fields);
+}
+
 // ── Display ─────────────────────────────────────────────────────────────────
 
 /** "Sep 2025" for monthly rows; "CY 2025" / "FY 2024-25" for yearly rows (dated at the period end). */

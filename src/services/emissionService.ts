@@ -16,6 +16,8 @@ export interface EmissionData {
   reporting_period?: "monthly" | "yearly";
   year_type?: "CY" | "FY" | null;
   activity_data_unit?: string;
+  /** The entry's quantity in `activity_data_unit`, worked out by the server from its form (GET /user/emissions); null when it has none. Absent from older APIs. */
+  quantity?: number | null;
   status: EmissionStatus;
   review_comment?: string;
   reviewed_at?: string;

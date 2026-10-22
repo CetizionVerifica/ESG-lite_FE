@@ -46,10 +46,11 @@ import {
   STATUS_VALUES,
   attachFera,
   categoriesFor,
+  entryQuantity,
   keyActivity,
+  quantityDecimals,
   parseStatus,
   periodText,
-  quantityOf,
   serverPeriod,
   toSupportedPeriod,
   userSites,
@@ -156,12 +157,12 @@ export default function MyEntriesPage() {
       id: "quantity",
       header: "Quantity",
       numeric: true,
-      value: (r) => quantityOf(r.activity_data),
+      value: (r) => entryQuantity(r),
       cell: (r) => {
-        const q = quantityOf(r.activity_data);
+        const q = entryQuantity(r);
         return q === null ? "—" : (
           <span className="whitespace-nowrap">
-            {formatNumber(q, Number.isInteger(q) ? 0 : 2)} <span className="text-xs text-muted">{r.activity_data_unit ?? ""}</span>
+            {formatNumber(q, quantityDecimals(q))} <span className="text-xs text-muted">{r.activity_data_unit ?? ""}</span>
           </span>
         );
       },
