@@ -47,6 +47,8 @@ type Props = {
   /** Clears the server error once the form changes. */
   onEdit: () => void;
   onDelete: () => void;
+  /** N4: recalculate the saved entries this factor applies to. */
+  onRecalculate?: () => void;
 };
 
 /** Add / edit one factor. Mount with a `key` per factor so each open starts from its saved values. */
@@ -141,6 +143,11 @@ export function FactorDrawer(props: Props) {
             {!creating && (
               <Button variant="danger" onClick={props.onDelete} disabled={props.saving}>
                 Delete factor
+              </Button>
+            )}
+            {!creating && props.onRecalculate && (
+              <Button onClick={props.onRecalculate} disabled={props.saving || dirty}>
+                Recalculate entries
               </Button>
             )}
             <div className="ml-auto flex gap-2">

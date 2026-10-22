@@ -99,7 +99,8 @@ function aiParse(reanalysed: boolean) {
   };
 }
 
-async function signIn(page: Page) {
+/** `recalcUses`: N4, how many saved entries factor 1 is used by (none unless a test says so). */
+async function signIn(page: Page, recalcUses = 0) {
   let factors = makeFactors();
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
   const lists: URLSearchParams[] = [];
@@ -134,6 +135,13 @@ async function signIn(page: Page) {
       if (path.endsWith("/v1/emission-factors/re-analyze")) return json(aiParse(true));
       if (/\/v1\/emission-factors\/uploads\/\d+$/.test(path)) return json({ id: 9 });
       if (path.endsWith("/admin/emission-factors/batches")) return json(BATCHES);
+      // N4: factor 1 (Hidd, Fuel, 2024) is used by `recalcUses` saved entries; the others by none.
+      const recalc = /\/admin\/emission-factors\/(\d+)\/recalculate$/.exec(path);
+      if (recalc) {
+        const uses = recalc[1] === "1" ? recalcUses : 0;
+        const changes = uses ? [{ pk_id: 11, status: "approved", date_of_reporting: "2025-03-31", old_total: 0.07, new_total: 71 }, { pk_id: 12, status: "pending", date_of_reporting: "2025-04-30", old_total: 0.14, new_total: 142 }] : [];
+        return json({ factor: { emission_factor_id: Number(recalc[1]) }, recalculated: method === "POST", uses_factor: uses, changed: uses, unchanged: 0, locked: uses ? 1 : 0, failed: 0, before_tco2e: uses ? 0.21 : 0, after_tco2e: uses ? 213 : 0, changes });
+      }
 
       if (path.endsWith("/admin/emission-factors/bulk") && method === "POST") {
         const sent = (request.postDataJSON() as { factors: unknown[] }).factors;
@@ -255,6 +263,33 @@ test("a superadmin filters factors by client and year, and adds one", async ({ p
   await expect(table.getByRole("row", { name: /Petrol/ })).toContainText("2.31");
 });
 
+test("after a factor's value is corrected, its saved entries are recalculated (N4)", async ({ page }) => {
+  const { calls } = await signIn(page, 2);
+  await page.goto("/factors");
+  await page.getByRole("button", { name: "Edit Hidd, Fuel, 2024" }).click();
+  const drawer = page.getByRole("dialog", { name: "Edit factor" });
+  await drawer.getByRole("textbox", { name: "Factor", exact: true }).fill("2680");
+  await drawer.getByRole("button", { name: "Save" }).click();
+
+  const modal = page.getByRole("dialog", { name: "Recalculate entries?" });
+  await expect(modal).toContainText("The factor is saved. Entries already calculated with it still show their old totals.");
+  await expect(modal.getByTestId("recalc-preview")).toContainText("2 entries would change: 0.21 → 213.00 tCO₂e in total.");
+  await expect(modal).toContainText("1 of them is approved and stays approved");
+  await expect(modal).toContainText("1 entry is in a locked month and won't change.");
+  await modal.getByRole("button", { name: "Recalculate 2 entries" }).click();
+  await expect(page.getByText("2 entries recalculated")).toBeVisible();
+  await expect(modal).toBeHidden();
+  expect(calls.at(-1)).toMatchObject({ method: "POST", path: expect.stringMatching(/\/admin\/emission-factors\/1\/recalculate$/) });
+
+  // From the drawer at any time; "Not now" leaves the entries as they are.
+  await page.getByRole("button", { name: "Edit Hidd, Fuel, 2024" }).click();
+  await page.getByRole("dialog", { name: "Edit factor" }).getByRole("button", { name: "Recalculate entries" }).click();
+  await expect(modal).not.toContainText("The factor is saved");
+  await modal.getByRole("button", { name: "Not now" }).click();
+  await expect(modal).toBeHidden();
+  expect(calls.filter((c) => c.path.endsWith("/recalculate"))).toHaveLength(1);
+});
+
 test("a superadmin edits a factor, deletes it after confirming, and sees imports", async ({ page }) => {
   const { calls } = await signIn(page);
   await page.goto("/factors");
@@ -264,7 +299,8 @@ test("a superadmin edits a factor, deletes it after confirming, and sees imports
   await drawer.getByRole("textbox", { name: "Factor", exact: true }).fill("2.7");
   await drawer.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Factor saved")).toBeVisible();
-  expect(calls.at(-1)).toMatchObject({ method: "PUT", path: expect.stringMatching(/\/admin\/emission-factors\/1$/), body: { factor_value: 2.7 } });
+  // A factor with no saved entries doesn't ask to recalculate.
+  await expect(page.getByRole("dialog", { name: "Recalculate entries?" })).toHaveCount(0);
 
   await factorsTable(page).getByRole("row", { name: /Diesel/ }).click();
   await page.getByRole("dialog", { name: "Edit factor" }).getByRole("button", { name: "Delete factor" }).click();
