@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareLabel, intensityDecimals, intensityUnit, pathwayHint, pendingSentence, readinessSentence } from "./heroLogic";
+import { compareLabel, compareOptions, intensityDecimals, intensityUnit, pathwayHint, pendingSentence, readinessSentence } from "./heroLogic";
 
 describe("hero words (IN-1)", () => {
   it("names what a change is compared with", () => {
@@ -30,5 +30,15 @@ describe("hero words (IN-1)", () => {
   it("summarises readiness for screen readers", () => {
     expect(readinessSentence({ pct: 68.5, by_pillar: { environment: 81.2, social: 62, governance: 54.5 } })).toBe("69% of KPI values approved: Environment 81%, Social 62%, Governance 55%.");
     expect(readinessSentence({ pct: 40, by_pillar: { environment: 40, social: null, governance: null } })).toBe("40% of KPI values approved: Environment 40%, Social not counted yet, Governance not counted yet.");
+  });
+});
+
+describe("compareOptions (G3)", () => {
+  it("names the year compared with, CY or FY, and the base year", () => {
+    expect(compareOptions({ year: 2026, yearType: "CY" })).toEqual([
+      { value: "prior", label: "vs 2025" },
+      { value: "base", label: "vs base year" },
+    ]);
+    expect(compareOptions({ year: 2026, yearType: "FY" })[0].label).toBe("vs FY 2025");
   });
 });
