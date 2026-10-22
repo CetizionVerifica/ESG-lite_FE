@@ -4,7 +4,8 @@ import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConf
 import { deleteDocument, getDocumentsByEmission, uploadMultipleDocuments } from "../../services/documentService";
 import { getEmissionBreakdown } from "../../services/emissionBreakdownService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
-import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
+import { getUserUnitOptions, getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
+import type { UnitOptionsByActivity } from "../../lib/emissions";
 import type { ColumnConfig, EmissionFactor } from "../../lib/emissions";
 import type { EntryUpdate } from "./edit";
 import type { LabelConfig } from "./logic";
@@ -88,7 +89,13 @@ export function useRemoveEvidence(entryId: number | null) {
 }
 
 /** What the edit form needs for one site × category. Factors come for every year, as the backend falls back to other years when saving. */
-export type EditSetup = { config: ColumnConfig | null; factors: EmissionFactor[]; units: string[] };
+export type EditSetup = {
+  config: ColumnConfig | null;
+  factors: EmissionFactor[];
+  units: string[];
+  /** #183: the units each emission category may use; null when the API has no list (every unit is offered). */
+  unitOptions: UnitOptionsByActivity | null;
+};
 
 export function useEditSetup(siteId: number | undefined, categoryId: number | undefined, factorYear: number | null) {
   return useQuery({
@@ -98,12 +105,13 @@ export function useEditSetup(siteId: number | undefined, categoryId: number | un
     queryFn: async (): Promise<EditSetup> => {
       const site = siteId as number;
       const category = categoryId as number;
-      const [configs, factors, units] = await Promise.all([
+      const [configs, factors, units, unitOptions] = await Promise.all([
         getUserColumnConfigsBySiteAndCategory(site, category) as Promise<ColumnConfig[] | null>,
         getUserEmissionFactorsBySiteAndCategory(site, category) as Promise<EmissionFactor[]>,
         getUserUnitsBySiteAndCategory(site, category) as Promise<UnitData[]>,
+        getUserUnitOptions(site, category).catch(() => null),
       ]);
-      return { config: configs?.[0] ?? null, factors: factors ?? [], units: (units ?? []).map((u) => u.unit_name) };
+      return { config: configs?.[0] ?? null, factors: factors ?? [], units: (units ?? []).map((u) => u.unit_name), unitOptions };
     },
   });
 }

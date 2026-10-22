@@ -76,3 +76,9 @@ export function unitForCategory(options: UnitOptionsByActivity | null | undefine
   if (unit && units.some((u) => sameUnit(u, unit))) return unit;
   return units.length === 1 ? units[0] : "";
 }
+
+/** "kWh isn't a unit for Diesel. Choose litre, kl or gallon." */
+export function unitNotOfferedMessage(unit: string, emissionCategory: string, offered: string[]): string {
+  const list = offered.length > 1 ? `${offered.slice(0, -1).join(", ")} or ${offered[offered.length - 1]}` : offered[0];
+  return `${unit} isn't a unit for ${emissionCategory}.${list ? ` Choose ${list}.` : ""}`;
+}

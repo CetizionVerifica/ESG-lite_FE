@@ -8,7 +8,9 @@ import { SUPPLIER_ROW_KEYS, supplierMethodOf, supplierPayload } from "./supplier
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isRowMethod } from "../../../lib/scope3/dq";
 import { offeredUnits, type FormModel } from "../../../lib/emissions/form";
-import { sameUnit } from "../../../lib/emissions/unitOptions";
+import { sameUnit, unitNotOfferedMessage } from "../../../lib/emissions/unitOptions";
+
+export { unitNotOfferedMessage };
 
 /** What is being reported: a month, or a CY/FY year (yearly batches). */
 export type EntryPeriod =
@@ -112,12 +114,6 @@ export function rowIssue(row: ModalRow, calc: EmissionCalculator, model?: FormMo
   }
   const result = calc.calculateEmission(row);
   return result.value === null ? { field: "values", message: result.status } : null;
-}
-
-/** "kWh isn't a unit for Diesel. Choose litre, kl or gallon." */
-export function unitNotOfferedMessage(unit: string, emissionCategory: string, offered: string[]): string {
-  const list = offered.length > 1 ? `${offered.slice(0, -1).join(", ")} or ${offered[offered.length - 1]}` : offered[0];
-  return `${unit} isn't a unit for ${emissionCategory}.${list ? ` Choose ${list}.` : ""}`;
 }
 
 export interface EmissionPayload {
