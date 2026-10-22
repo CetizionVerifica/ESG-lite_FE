@@ -1,4 +1,5 @@
 import api from "../api/axios";
+import { readUnitOptions, type UnitOptionsByActivity } from "../lib/emissions/unitOptions";
 
 export interface UnitData {
   unit_id: number;
@@ -68,4 +69,19 @@ export const getUserUnitsBySiteAndCategory = async (
 ) => {
   const response = await api.get(`/user/units/site/${siteId}/category/${categoryId}`);
   return response.data;
+};
+
+/**
+ * #183: the units each emission category of a site × category may use. Null when the API
+ * answers something else (an older backend): the forms then offer every unit, as before.
+ */
+export const getUserUnitOptions = async (siteId: string | number, categoryId: string | number): Promise<UnitOptionsByActivity | null> => {
+  const response = await api.get(`/user/units/site/${siteId}/category/${categoryId}/by-activity`);
+  return readUnitOptions(response.data);
+};
+
+/** The Superadmin twin of getUserUnitOptions (Capture setup's test row). */
+export const getAdminUnitOptions = async (siteId: string | number, categoryId: string | number): Promise<UnitOptionsByActivity | null> => {
+  const response = await api.get(`/admin/units/site/${siteId}/category/${categoryId}/by-activity`);
+  return readUnitOptions(response.data);
 };

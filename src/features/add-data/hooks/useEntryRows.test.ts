@@ -56,3 +56,40 @@ describe("an estimated distance (S3-3 is_estimate, S3-8)", () => {
     expect(isEstimated(typed.rows[0])).toBe(false);
   });
 });
+
+describe("the unit follows the emission category (#183)", () => {
+  const fuel: ColumnConfig = { pk_id: 2, config_name: "Fuel", columns: [col(5, "quantity", "number")], column_options: {} };
+  const unitOptions = {
+    fixed_unit: null,
+    all_units: ["litre", "kWh", "SCM"],
+    activities: [
+      { name: "Diesel", factor_unit: "litre", units: ["litre", "kl"] },
+      { name: "Natural gas", factor_unit: "cubic meter", units: ["SCM", "litre"] },
+      { name: "Grid electricity", factor_unit: "kWh", units: ["kWh"] },
+    ],
+  };
+  const m = toFormModel(fuel, unitOptions);
+
+  it("keeps a unit the new emission category still offers and clears one it doesn't", () => {
+    const row = { id: 1, emission_category: "Diesel", activity_data_unit: "litre", quantity: "10" };
+    expect(editRow(m, row, "emission_category", "Natural gas").activity_data_unit).toBe("litre");
+    expect(editRow(m, { ...row, activity_data_unit: "kl" }, "emission_category", "Natural gas").activity_data_unit).toBe("");
+  });
+
+  it("picks the only unit an emission category offers", () => {
+    expect(editRow(m, { id: 1, emission_category: "", activity_data_unit: "" }, "emission_category", "Grid electricity").activity_data_unit).toBe("kWh");
+  });
+
+  it("leaves a spend row's currency alone, and every row alone without a list (older API)", () => {
+    const spend = { id: 1, emission_category: "Diesel", activity_data_unit: "INR", currency: "INR", "@method": "spend_based" };
+    expect(editRow(m, spend, "emission_category", "Natural gas").activity_data_unit).toBe("INR");
+    expect(editRow(toFormModel(fuel), { id: 1, emission_category: "Diesel", activity_data_unit: "kl" }, "emission_category", "Natural gas").activity_data_unit).toBe("kl");
+  });
+
+  it("narrows a method's units to those the emission category allows", () => {
+    const withMethods = toFormModel({ ...fuel, method_options: [{ method: "fuel_based", units: ["kl", "SCM"] }] }, unitOptions);
+    const row = { id: 1, emission_category: "Diesel", activity_data_unit: "kl", "@method": "fuel_based" };
+    // Natural gas allows SCM and litre; of the method's kl and SCM only SCM is left, so it's picked.
+    expect(editRow(withMethods, row, "emission_category", "Natural gas").activity_data_unit).toBe("SCM");
+  });
+});

@@ -7,6 +7,8 @@ import type { ModalRow } from "../types";
 import { SUPPLIER_ROW_KEYS, supplierMethodOf, supplierPayload } from "./supplier";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import { isRowMethod } from "../../../lib/scope3/dq";
+import { offeredUnits, type FormModel } from "../../../lib/emissions/form";
+import { sameUnit } from "../../../lib/emissions/unitOptions";
 
 /** What is being reported: a month, or a CY/FY year (yearly batches). */
 export type EntryPeriod =
@@ -69,8 +71,10 @@ export type RowIssue = { field: "emission_category" | "activity_data_unit" | "cu
 /**
  * Why a row can't be saved yet, or null when it can. Same checks and order as
  * the legacy page's validateRows, reported per field instead of one block.
+ * With the form model, a unit the emission category doesn't offer (#183) is
+ * an issue too, before the server refuses it.
  */
-export function rowIssue(row: ModalRow, calc: EmissionCalculator): RowIssue | null {
+export function rowIssue(row: ModalRow, calc: EmissionCalculator, model?: FormModel | null): RowIssue | null {
   if (!row.emission_category) return { field: "emission_category", message: "Choose what this row is" };
   // S3-5: a spend row needs its amount and currency; the server looks the rate up, so a rate still loading doesn't block.
   const spend = calc.spendDetail(row);
@@ -100,8 +104,20 @@ export function rowIssue(row: ModalRow, calc: EmissionCalculator): RowIssue | nu
         : `The factor is per ${expected} and ${row.activity_data_unit} can't be converted to it.`,
     };
   }
+  // #183: what the emission category offers, beyond the factor check above (a fixed unit, the method's units).
+  const offered = model ? offeredUnits(model, row) : null;
+  if (offered && !offered.some((u) => sameUnit(u, row.activity_data_unit))) {
+    // A User reads the plain unit message instead (plainProblem).
+    return { field: "activity_data_unit", message: unitNotOfferedMessage(row.activity_data_unit, row.emission_category, offered) };
+  }
   const result = calc.calculateEmission(row);
   return result.value === null ? { field: "values", message: result.status } : null;
+}
+
+/** "kWh isn't a unit for Diesel. Choose litre, kl or gallon." */
+export function unitNotOfferedMessage(unit: string, emissionCategory: string, offered: string[]): string {
+  const list = offered.length > 1 ? `${offered.slice(0, -1).join(", ")} or ${offered[offered.length - 1]}` : offered[0];
+  return `${unit} isn't a unit for ${emissionCategory}.${list ? ` Choose ${list}.` : ""}`;
 }
 
 export interface EmissionPayload {
