@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { resetMotionPreference } from "../../../lib/insights/motion";
 import { esgRingData } from "../../../test/msw/insightsData";
-import { AUTO_GLYPH, centreText, pillarAfterClick, ringAria, ringNodes, ringOption, ringTable, ringTooltip, topicOpacity, visiblePillars, zoomedPillar } from "./esgRingLogic";
+import { AUTO_GLYPH, RING_SERIES_ID, centreText, topicBars, topicBarsOption, pillarAfterClick, ringAria, ringNodes, ringOption, ringTable, ringTooltip, topicOpacity, visiblePillars, zoomedPillar } from "./esgRingLogic";
 import { testTheme as t } from "./testTheme";
 
 type Opt = { series: Array<Record<string, unknown>>; graphic: { elements: Array<Record<string, unknown>> }; tooltip: { formatter: (p: unknown) => string } };
@@ -98,5 +99,42 @@ describe("esgRingLogic (IN-2 A)", () => {
     expect(pillarAfterClick({ kind: "topic", pillar: "social" }, null)).toBe("social");
     expect(pillarAfterClick({ kind: "topic", pillar: "social" }, "social")).toBeUndefined();
     expect(pillarAfterClick(undefined, "social")).toBeUndefined();
+  });
+});
+
+describe("ring ⇄ topic bars (G2)", () => {
+  afterEach(() => resetMotionPreference(null));
+  type Series = { id: string; type: string; data: Array<{ id: string; groupId: string }>; universalTransition: { enabled: boolean } };
+  const seriesOf = (o: unknown) => (o as { series: Series[] }).series[0];
+
+  it("gives each topic bar the id and group id of its ring node, under the ring's series id", () => {
+    const ringTopics = ringNodes(esgRingData, null, t).flatMap((p) => (p.kind === "pillar" ? p.children : []));
+    const bars = topicBars(esgRingData, null, t);
+    expect(new Set(bars.map((b) => b.groupId))).toEqual(new Set(ringTopics.map((n) => (n as { groupId: string }).groupId)));
+    expect(bars.every((b) => b.groupId === b.id)).toBe(true);
+    expect(seriesOf(ringOption(esgRingData, null, t)).id).toBe(RING_SERIES_ID);
+    expect(seriesOf(topicBarsOption(esgRingData, null, t))).toMatchObject({ id: RING_SERIES_ID, type: "bar" });
+  });
+
+  it("groups the bars by pillar, lowest coverage first, with the pillar letter in each label", () => {
+    const bars = topicBars(esgRingData, null, t);
+    const pillars = bars.map((b) => b.pillar);
+    expect(pillars).toEqual([...pillars].sort((a, b) => ["environment", "social", "governance"].indexOf(a) - ["environment", "social", "governance"].indexOf(b)));
+    for (const p of new Set(pillars)) {
+      const values = bars.filter((b) => b.pillar === p).map((b) => b.value);
+      expect(values).toEqual([...values].sort((a, b) => a - b));
+    }
+    expect(bars.every((b) => /^[ESG] · /.test(b.name))).toBe(true);
+    // Zoomed on a pillar: its topics only.
+    expect(new Set(topicBars(esgRingData, "social", t).map((b) => b.pillar))).toEqual(new Set(["social"]));
+  });
+
+  it("morphs when motion is allowed and swaps at once under reduced motion", () => {
+    resetMotionPreference(false);
+    expect(seriesOf(ringOption(esgRingData, null, t)).universalTransition.enabled).toBe(true);
+    expect(seriesOf(topicBarsOption(esgRingData, null, t)).universalTransition.enabled).toBe(true);
+    resetMotionPreference(true);
+    expect(seriesOf(ringOption(esgRingData, null, t)).universalTransition.enabled).toBe(false);
+    expect(seriesOf(topicBarsOption(esgRingData, null, t)).universalTransition.enabled).toBe(false);
   });
 });

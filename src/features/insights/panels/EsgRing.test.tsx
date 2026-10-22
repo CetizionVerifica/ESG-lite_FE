@@ -99,6 +99,22 @@ describe("EsgRing (IN-2 A)", () => {
     expect(router.state.location.search).toBe("?pillar=environment");
   });
 
+  it("G2: Ring | Bars switches the chart to one bar per topic and back, keeping the table view", async () => {
+    renderRing();
+    const seriesType = () => (chart.last!.option.series[0] as { type?: string }).type;
+    expect(seriesType()).toBe("sunburst");
+    await userEvent.click(screen.getByRole("radio", { name: "Bars" }));
+    expect(screen.getByTestId("esg-ring").dataset.shape).toBe("bars");
+    expect(seriesType()).toBe("bar");
+    expect(chart.last!.option.series[0].data.length).toBe(esgRingData.pillars.reduce((n, p) => n + p.topics.length, 0));
+    await userEvent.click(screen.getByRole("radio", { name: "Ring" }));
+    expect(seriesType()).toBe("sunburst");
+    cleanup();
+    renderRing("/insights", "table");
+    expect(screen.getByRole("radiogroup", { name: "Ring or bars" })).toBeTruthy();
+    expect(screen.getByRole("table")).toBeTruthy();
+  });
+
   it("table view lists topics with coverage and the share from data", () => {
     renderRing("/insights", "table");
     const table = screen.getByRole("table");
