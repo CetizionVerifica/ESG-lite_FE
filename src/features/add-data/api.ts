@@ -9,7 +9,7 @@ export type { CategoryMapping };
 import { createEmission, getEmissionsPaginated, getPeriodMode, getPeriodTotal, updateEmission } from "../../services/emissionService";
 import { getThresholdByCompany } from "../../services/thresholdService";
 import { getSiteById } from "../../services/siteService";
-import { linkInvoiceDocuments, uploadMultipleDocuments } from "../../services/documentService";
+import { type BackedEntry, findBackedEntries, linkInvoiceDocuments, uploadMultipleDocuments } from "../../services/documentService";
 import { calculateRoadDistance, calculateSeaDistance } from "../../services/distanceService";
 import { resolveLocationFromBackend, type ResolvedLocation } from "../../services/locationService";
 import {
@@ -22,9 +22,9 @@ import {
   type Invoice,
 } from "../../services/invoiceService";
 import { entryDate, periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPeriod } from "./logic/entry";
-import { entriesQuery, entryInPeriod, type SavedEntry } from "./logic/existing";
-import { BILL_UNREADABLE, billErrorMessage } from "./logic/bill";
-import type { ColumnConfig, EmissionFactor } from "./types";
+import { editOf, entriesQuery, entryInPeriod, type SavedEntry } from "./logic/existing";
+import { BILL_UNREADABLE, billErrorMessage, billOf } from "./logic/bill";
+import type { ColumnConfig, EmissionFactor, ModalRow } from "./types";
 
 /**
  * Everything the form needs for one site × category. Factors come for every
@@ -313,6 +313,52 @@ export function useDeleteBill() {
     },
     onSuccess: () => client.invalidateQueries({ queryKey: ["add-data", "bills"] }),
   });
+}
+
+/** Per row: the saved entries of the period that its bill or files already back (F-16). */
+export type AlreadyBacking = Map<number, { fileName: string; entries: BackedEntry[] }[]>;
+
+/**
+ * F-16: before sending, which rows' bill or files already back another entry of the same site,
+ * category and period (the same bill under two disposal methods). A warning; nothing blocks.
+ * Entries being edited don't count; off once a send starts, so the rows never match themselves.
+ */
+export function useAlreadyBacking(rows: ModalRow[], payloads: EmissionPayload[], filesOf: (rowId: number) => File[], enabled: boolean): AlreadyBacking {
+  type Body = Parameters<typeof findBackedEntries>[0] & { exclude_ids: number[] };
+  const byDate = new Map<string, Body>();
+  rows.forEach((row, i) => {
+    const payload = payloads[i];
+    if (!payload) return;
+    const bill = billOf(row);
+    const files = bill ? [] : filesOf(row.id);
+    const items = [
+      ...(bill?.invoiceId != null ? [{ ref: String(row.id), invoice_id: bill.invoiceId }] : []),
+      ...files.map((f, k) => ({ ref: `${row.id}:${k}`, file_name: f.name, file_size: f.size })),
+    ];
+    if (items.length === 0) return;
+    const date = String(payload.date_of_reporting).slice(0, 10);
+    const body = byDate.get(date) ?? { site_id: payload.site_id, category_id: payload.category_id, date_of_reporting: date, files: [], exclude_ids: [] };
+    body.files.push(...items);
+    const editing = editOf(row);
+    if (editing !== null) body.exclude_ids.push(editing);
+    byDate.set(date, body);
+  });
+  const results = useQueries({
+    queries: [...byDate.values()].map((body) => ({
+      queryKey: ["add-data", "already-backing", body],
+      queryFn: () => findBackedEntries(body),
+      enabled,
+      staleTime: 30_000,
+    })),
+  });
+  const out: AlreadyBacking = new Map();
+  for (const r of results) {
+    for (const match of r.data ?? []) {
+      const rowId = Number(match.ref.split(":")[0]);
+      out.set(rowId, [...(out.get(rowId) ?? []), { fileName: match.file_name ?? "", entries: match.entries }]);
+    }
+  }
+  return out;
 }
 
 /** Attach a bill as evidence to the rows saved from it (B8). Resolves to false when that failed. */

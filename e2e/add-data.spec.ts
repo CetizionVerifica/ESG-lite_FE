@@ -102,6 +102,8 @@ type Extra = {
   /** F-02: My bills' list; deleted id lists are pushed to `deletedBills`. */
   bills?: unknown[];
   deletedBills?: number[][];
+  /** F-16: the already-backing answer, by file name; the bodies asked are pushed to `asked`. */
+  backing?: { byName: Record<string, unknown[]>; asked: unknown[] };
 };
 
 async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>, extra: Extra = {}) {
@@ -198,6 +200,12 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
         return json({ success: true, data: { mode: "road", distanceMeters: 21500, durationText: "25 mins", encodedPolyline: null, duration: null, origin: "", destination: "" } });
       }
       if (path.endsWith("/v1/invoices") && request.method() === "GET") return json(extra.bills ?? []);
+      if (path.endsWith("/user/documents/already-backing")) {
+        const body = request.postDataJSON() as { files: { ref: string; file_name?: string }[] };
+        extra.backing?.asked.push(body);
+        const matches = body.files.flatMap((f) => (extra.backing?.byName[f.file_name ?? ""] ? [{ ref: f.ref, file_name: f.file_name, entries: extra.backing.byName[f.file_name ?? ""] }] : []));
+        return json({ matches });
+      }
       if (path.endsWith("/v1/invoices/bulk") && request.method() === "DELETE") {
         const ids = (request.postDataJSON() as { ids: number[] }).ids;
         extra.deletedBills?.push(ids);
@@ -992,6 +1000,45 @@ test("files picked on a typed row are attached to it after it is saved", async (
   expect(uploads).toHaveLength(1);
   expect(uploads[0]).toContain("meter-sep.pdf");
   expect(uploads[0]).toContain("101");
+});
+
+test("Review warns when a file already backs another entry of the period, and still sends (F-16)", async ({ page }) => {
+  const created: unknown[] = [];
+  const backing = { byName: { "spent-carbon-dec.pdf": [{ pk_id: 77, emission_category: "Recycle", total_emission: 0.05, status: "approved" }] }, asked: [] as unknown[] };
+  await signIn(page, created, false, [], undefined, { uploads: [], backing });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("100");
+  await row.getByLabel("Unit").selectOption("litre");
+  await row.getByText("Evidence", { exact: true }).click();
+  await row.locator('input[type="file"]').setInputFiles({ name: "spent-carbon-dec.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
+  await page.getByRole("button", { name: "Review" }).click();
+
+  await expect(page.getByText("This evidence already backs another entry")).toBeVisible();
+  await expect(page.getByText(/Row 1 · Diesel: spent-carbon-dec\.pdf is already the evidence of Recycle \(0\.05 tCO₂e, Approved\) for Sep 2025\./)).toBeVisible();
+  await expect(page.getByText("Already the evidence of a saved entry")).toBeVisible();
+  expect(backing.asked[0]).toMatchObject({ site_id: 4, category_id: 9, date_of_reporting: "2025-09-30", files: [{ ref: expect.stringMatching(/:0$/), file_name: "spent-carbon-dec.pdf", file_size: 8 }] });
+
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  await expect(page.getByText("This evidence already backs another entry")).toHaveCount(0);
+  expect(created).toHaveLength(1);
+});
+
+test("a file no other entry uses shows no evidence warning", async ({ page }) => {
+  const backing = { byName: {}, asked: [] as unknown[] };
+  await signIn(page, [], false, [], undefined, { uploads: [], backing });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("100");
+  await row.getByLabel("Unit").selectOption("litre");
+  await row.getByText("Evidence", { exact: true }).click();
+  await row.locator('input[type="file"]').setInputFiles({ name: "meter-sep.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect.poll(() => backing.asked.length).toBeGreaterThan(0);
+  await expect(page.getByText(/already backs/)).toHaveCount(0);
 });
 
 test("a Scope 2 row previews its Category 3 rows: upstream of electricity and T&D losses", async ({ page }) => {
