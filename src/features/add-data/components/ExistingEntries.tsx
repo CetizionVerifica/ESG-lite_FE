@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Button, Callout, Skeleton, StatusPill, cn, formatEmissions, panel } from "../../../ui";
+import { Button, Callout, Skeleton, StatusPill, cn, formatEntryEmissions, panel } from "../../../ui";
 import { useExistingEntries } from "../api";
 import { canChange, type SavedEntry } from "../logic/existing";
 import type { EntryPeriod } from "../logic/entry";
@@ -65,7 +65,7 @@ export function ExistingEntries({ siteId, categoryId, period, periodLabel, onLoa
                     {nameOf(e)}
                     {e.status === "rejected" && e.review_comment && <p className="text-xs text-bad">Reason: {e.review_comment}</p>}
                   </td>
-                  <td className="py-2 pr-3 text-right font-num text-ink">{formatEmissions(Number(e.total_emission))}</td>
+                  <td className="py-2 pr-3 text-right font-num text-ink">{formatEntryEmissions(Number(e.total_emission))}</td>
                   <td className="py-2 pr-3">
                     <StatusPill status={e.status} size="sm" />
                   </td>

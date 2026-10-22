@@ -46,6 +46,27 @@ export function formatEmissions(tonnes: number | null | undefined): string {
   return value === EMPTY_VALUE ? value : `${value} ${unit}`;
 }
 
+/**
+ * One entry's tCO₂e as the server stores it, 2 decimals: "4.02", "4.00", "0.07" — the figure Add
+ * data shows before saving. Lists of single entries (Add data, My entries, Approvals) use it so one
+ * entry reads the same everywhere (F-12, F-17); totals and KPIs keep `formatEmissions`.
+ */
+export function formatEntryTonnes(tonnes: number | null | undefined): string {
+  return isNum(tonnes) ? nf(2, 2).format(tonnes) : EMPTY_VALUE;
+}
+
+/** `formatEntryTonnes` with its unit: "4.02 tCO₂e". */
+export function formatEntryEmissions(tonnes: number | null | undefined): string {
+  const value = formatEntryTonnes(tonnes);
+  return value === EMPTY_VALUE ? value : `${value} tCO₂e`;
+}
+
+/** An entry's quantity: whole numbers without decimals, else 2: "286,520", "1.50" (F-17). */
+export function formatQuantity(quantity: number | null | undefined): string {
+  if (!isNum(quantity)) return EMPTY_VALUE;
+  return formatNumber(quantity, Number.isInteger(Math.round(quantity * 100) / 100) ? 0 : 2);
+}
+
 /** Intensity, always 1 decimal: "12.3 tCO₂e/t". */
 export function formatIntensity(value: number | null | undefined, unit = "tCO₂e/t"): string {
   if (!isNum(value)) return EMPTY_VALUE;

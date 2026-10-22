@@ -4,9 +4,12 @@ import {
   formatDate,
   formatDelta,
   formatEmissions,
+  formatEntryEmissions,
+  formatEntryTonnes,
   formatIntensity,
   formatMonth,
   formatNumber,
+  formatQuantity,
   formatReportingYear,
 } from "./format";
 
@@ -45,6 +48,23 @@ describe("formatEmissions", () => {
     expect(formatNumber(-0.4)).toBe("0");
     expect(formatNumber(-0.004, 2)).toBe("0.00");
     expect(formatIntensity(-0.04)).toBe("0.0 tCO₂e/t");
+  });
+});
+
+describe("single entries (F-12, F-17)", () => {
+  it("shows an entry's tCO₂e with the 2 decimals the server stores", () => {
+    expect(formatEntryTonnes(4.02)).toBe("4.02");
+    expect(formatEntryTonnes(4)).toBe("4.00");
+    expect(formatEntryTonnes(4.77)).toBe("4.77");
+    expect(formatEntryTonnes(1234.5)).toBe("1,234.50");
+    expect(formatEntryEmissions(0.07)).toBe("0.07 tCO₂e");
+    expect(formatEntryEmissions(null)).toBe("—");
+  });
+  it("shows a whole quantity without decimals, else 2", () => {
+    expect(formatQuantity(286520)).toBe("286,520");
+    expect(formatQuantity(1.5)).toBe("1.50");
+    expect(formatQuantity(2.0001)).toBe("2");
+    expect(formatQuantity(undefined)).toBe("—");
   });
 });
 

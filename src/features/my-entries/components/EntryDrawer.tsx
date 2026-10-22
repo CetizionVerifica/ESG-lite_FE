@@ -19,7 +19,7 @@ import {
   formatBytes,
   formatDate,
   formatDateTime,
-  formatEmissions,
+  formatEntryEmissions,
   formatNumber,
   fromEmissionDocument,
   useToast,
@@ -270,7 +270,7 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
                       </Row>
                     )}
                     <Row label="Emissions">
-                      <span className="font-num font-semibold tabular-nums">{formatEmissions(Number(entry.total_emission))}</span>
+                      <span className="font-num font-semibold tabular-nums">{formatEntryEmissions(Number(entry.total_emission))}</span>
                     </Row>
                     {quality?.show && (
                       <>
@@ -294,7 +294,7 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
                     {entry.supplier && <Row label="Supplier">{entry.supplier.name}</Row>}
                     {calcDetail && entry.fera?.map((f) => (
                       <Row key={f.pk_id} label={feraSubLabel(f.scope3_sub)}>
-                        <span className="font-num tabular-nums">{formatEmissions(Number(f.total_emission))}</span>
+                        <span className="font-num tabular-nums">{formatEntryEmissions(Number(f.total_emission))}</span>
                       </Row>
                     ))}
                     <Row label="Filed">{entry.reporting_period === "yearly" ? `Yearly · ${periodText(entry)}` : `Monthly · ${periodText(entry)}`}</Row>

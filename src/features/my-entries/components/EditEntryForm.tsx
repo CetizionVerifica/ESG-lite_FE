@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { applyChange, formColumns, isColumnVisible, mappingKeyLabel, toFormModel, useEmissionCalc, type ModalRow } from "../../../lib/emissions";
-import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEmissions, formatNumber } from "../../../ui";
+import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEntryEmissions } from "../../../ui";
 import { useEditSetup } from "../api";
 import { type EditIssue, type EntryUpdate, buildUpdate, editIssue, editedDate, entryMonth, factorYearFor, monthBounds, rowFromEntry } from "../edit";
 import { type EntryRow, periodText } from "../logic";
@@ -180,11 +180,11 @@ function Fields(p: FieldsProps) {
         </div>
         <div className="text-right" aria-live="polite">
           {result.value !== null ? (
-            <p className="font-num text-base font-semibold text-ink">= {formatNumber(result.value, 2)} tCO₂e</p>
+            <p className="font-num text-base font-semibold text-ink">= {formatEntryEmissions(result.value)}</p>
           ) : (
             <p className={cn("text-sm", shown("values") ? "text-bad" : "text-muted")}>{say(result.status)}</p>
           )}
-          <p className="font-num text-xs text-muted">was {formatEmissions(Number(entry.total_emission))}</p>
+          <p className="font-num text-xs text-muted">was {formatEntryEmissions(Number(entry.total_emission))}</p>
         </div>
       </div>
 
