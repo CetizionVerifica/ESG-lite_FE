@@ -3,6 +3,7 @@ import { APPEARANCES, type ShellUser, initials } from "../account";
 import type { Appearance } from "../../../theme";
 import { GLOSSARY_LOCALES, LOCALE_NAMES, Menu, infoLanguageEnabled, setGlossaryLocale, useGlossaryLocale, type MenuEntry } from "../../../ui";
 import { chromeIconButton } from "./styles";
+import { useCompanyChoice } from "../useCompanyChoice";
 
 interface AvatarMenuProps {
   user: ShellUser;
@@ -14,6 +15,7 @@ interface AvatarMenuProps {
 export default function AvatarMenu({ user, appearance, onAppearance, onSignOut }: AvatarMenuProps) {
   const navigate = useNavigate();
   const infoLocale = useGlossaryLocale();
+  const company = useCompanyChoice();
   const entries: MenuEntry[] = [
     {
       kind: "heading",
@@ -25,6 +27,18 @@ export default function AvatarMenu({ user, appearance, onAppearance, onSignOut }
         </div>
       ),
     },
+    // M6: people with sites at several clients work in one company at a time.
+    ...(company.companies.length > 0
+      ? ([
+          { kind: "separator" },
+          { kind: "heading", content: <div className="text-[11px] font-semibold uppercase tracking-wide text-(--t-muted)">Company</div> },
+          ...company.companies.map((c) => ({
+            label: c.name,
+            checked: company.current === c.company_id,
+            onSelect: () => company.choose(c.company_id),
+          })),
+        ] satisfies MenuEntry[])
+      : []),
     { kind: "separator" },
     { kind: "heading", content: <div className="text-[11px] font-semibold uppercase tracking-wide text-(--t-muted)">Appearance</div> },
     ...APPEARANCES.map((a) => ({

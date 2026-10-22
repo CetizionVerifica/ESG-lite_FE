@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from "axios";
+import { activeCompanyHeader } from "../lib/activeCompany";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -9,6 +10,9 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // M6: the company chosen in the account menu (only for people with sites at several clients).
+  const company = activeCompanyHeader();
+  if (company) config.headers["X-Company-Id"] = company;
   return config;
 });
 
