@@ -290,6 +290,19 @@ test("after a factor's value is corrected, its saved entries are recalculated (N
   expect(calls.filter((c) => c.path.endsWith("/recalculate"))).toHaveLength(1);
 });
 
+test("selected factors' entries are recalculated together (N4)", async ({ page }) => {
+  const { calls } = await signIn(page, 2);
+  await page.goto("/factors");
+  await factorsTable(page).getByRole("checkbox", { name: "Select all rows on this page" }).check();
+  await page.getByRole("button", { name: "Recalculate entries" }).click();
+  const modal = page.getByRole("dialog", { name: "Recalculate the entries of 3 factors?" });
+  await expect(modal).toContainText("Approved entries stay approved");
+  await modal.getByRole("button", { name: "Recalculate" }).click();
+  await expect(page.getByText("2 entries recalculated across 3 factors")).toBeVisible();
+  await expect(page.getByText("1 in locked months were left as they are.")).toBeVisible();
+  expect(calls.filter((c) => c.method === "POST" && c.path.endsWith("/recalculate")).map((c) => c.path.split("/").at(-2)).sort()).toEqual(["1", "2", "3"]);
+});
+
 test("a superadmin edits a factor, deletes it after confirming, and sees imports", async ({ page }) => {
   const { calls } = await signIn(page);
   await page.goto("/factors");

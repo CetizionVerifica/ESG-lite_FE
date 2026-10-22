@@ -116,6 +116,31 @@ export function useRecalculate() {
   });
 }
 
+/**
+ * N4: recalculate the entries of several factors, one factor after the other (each runs the engine
+ * over its site and category). Stops at the first failure and says how far it got.
+ */
+export function useRecalculateMany() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: number[]) => {
+      let changed = 0;
+      let locked = 0;
+      for (const [i, id] of ids.entries()) {
+        try {
+          const r = await recalculateFactorEntries(id, true);
+          changed += r.changed;
+          locked += r.locked;
+        } catch (e) {
+          throw new Error(`${errorMessage(e, "Recalculating stopped.")} ${i} of ${ids.length} factors were done (${changed.toLocaleString("en-US")} entries).`);
+        }
+      }
+      return { changed, locked, factors: ids.length };
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: [...keys.all, "recalc"] }),
+  });
+}
+
 export function useRemoveFactor() {
   const qc = useQueryClient();
   return useMutation({

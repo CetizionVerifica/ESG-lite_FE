@@ -32,6 +32,7 @@ import {
   useRemoveBatch,
   useRemoveFactor,
   useRemoveFactors,
+  useRecalculateMany,
   useSaveFactor,
   useSites,
   useUploads,
@@ -109,6 +110,20 @@ export default function EmissionFactorsPage() {
   const save = useSaveFactor();
   // N4: the factor whose saved entries to recalculate (offered right after its value changes).
   const [recalc, setRecalc] = useState<{ id: number; label: string; justSaved: boolean } | null>(null);
+  // N4: the selected factors whose entries to recalculate.
+  const [bulkRecalc, setBulkRecalc] = useState<number[] | null>(null);
+  const recalcMany = useRecalculateMany();
+  const runBulkRecalc = (ids: number[]) =>
+    recalcMany.mutate(ids, {
+      onSuccess: (r) => {
+        setBulkRecalc(null);
+        toast({
+          title: `${r.changed.toLocaleString("en-US")} ${r.changed === 1 ? "entry" : "entries"} recalculated across ${r.factors} ${r.factors === 1 ? "factor" : "factors"}`,
+          description: r.locked > 0 ? `${r.locked.toLocaleString("en-US")} in locked months were left as they are.` : undefined,
+          tone: "good",
+        });
+      },
+    });
   const removeOne = useRemoveFactor();
   const removeMany = useRemoveFactors();
   const removeBatch = useRemoveBatch();
@@ -333,9 +348,20 @@ export default function EmissionFactorsPage() {
           selectedIds={selected}
           onSelectionChange={setSelected}
           bulkActions={(_rows, _clear, ids) => (
-            <Button variant="danger" size="sm" onClick={() => askDelete({ kind: "many", ids: ids.map(Number) })}>
-              Delete {ids.length}
-            </Button>
+            <>
+              <Button
+                size="sm"
+                onClick={() => {
+                  recalcMany.reset();
+                  setBulkRecalc(ids.map(Number));
+                }}
+              >
+                Recalculate entries
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => askDelete({ kind: "many", ids: ids.map(Number) })}>
+                Delete {ids.length}
+              </Button>
+            </>
           )}
           pagination={{ mode: "server", page, pageSize: PAGE_SIZE, total, onPageChange: (p) => setPaging({ key: filterKey, page: p }) }}
           onRowClick={(r) => openDrawer(r)}
@@ -376,6 +402,16 @@ export default function EmissionFactorsPage() {
         onDelete={() => editing && editing !== "new" && askDelete({ kind: "one", row: editing })}
         onRecalculate={() => editing && editing !== "new" && setRecalc({ id: editing.emission_factor_id, label: factorSummary(editing), justSaved: false })}
       />
+      <Modal
+        open={!!bulkRecalc}
+        onClose={() => !recalcMany.isPending && setBulkRecalc(null)}
+        title={`Recalculate the entries of ${bulkRecalc?.length ?? 0} ${bulkRecalc?.length === 1 ? "factor" : "factors"}?`}
+        description="Saved entries calculated with these factors get totals from their current values."
+        error={recalcMany.isError ? recalcMany.error.message : undefined}
+        primaryAction={{ label: "Recalculate", loading: recalcMany.isPending, disabled: recalcMany.isPending, onClick: () => bulkRecalc && runBulkRecalc(bulkRecalc) }}
+      >
+        <p className="text-sm text-muted">Approved entries stay approved, and each change is in the entry&apos;s history. Entries in a locked month are left as they are.</p>
+      </Modal>
       <RecalculateModal
         factor={recalc}
         justSaved={recalc?.justSaved}
