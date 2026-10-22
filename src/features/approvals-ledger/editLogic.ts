@@ -4,6 +4,7 @@
  * clears, and how the emission category follows the selects when the form
  * has a category mapping.
  */
+import { sameUnit, unitNotOfferedMessage } from "../../lib/emissions/unitOptions";
 import { type ColumnConfig, META_KEYS, humanize } from "./logic";
 
 type Option = { id: string | number; label: string };
@@ -278,6 +279,15 @@ export function editErrors(reason: string, category = "x", mapped = true, unit =
       ? "Choose a unit, without one the total would be 0"
       : "This entry has no unit and none are set up for its category, so its values can't be recalculated";
   return errors;
+}
+
+/**
+ * #183: a unit the emission factor doesn't offer stops the save, unless it is the entry's own
+ * unit kept as it was (shown as "(no longer offered)"), so saving unchanged values works as before.
+ */
+export function unitOfferError(unit: string, category: string, offered: string[] | null, stored: string): string | undefined {
+  if (!offered || !unit.trim() || sameUnit(unit, stored) || offered.some((u) => sameUnit(u, unit))) return undefined;
+  return unitNotOfferedMessage(unit, category, offered);
 }
 
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);

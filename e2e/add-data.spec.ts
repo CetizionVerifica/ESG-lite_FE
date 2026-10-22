@@ -104,6 +104,8 @@ type Extra = {
   deletedBills?: number[][];
   /** F-16: the already-backing answer, by file name; the bodies asked are pushed to `asked`. */
   backing?: { byName: Record<string, unknown[]>; asked: unknown[] };
+  /** #183: what GET …/units/…/by-activity answers; without it the mock below answers a plain unit list (an older API). */
+  unitOptions?: unknown;
 };
 
 async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>, extra: Extra = {}) {
@@ -139,6 +141,7 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
         const year = Number(url.searchParams.get("year") ?? 2024);
         return json(factors.map((f) => ({ ...f, year })));
       }
+      if (path.endsWith("/by-activity") && extra.unitOptions) return json(extra.unitOptions);
       if (path.includes("/user/units/site/4/category/")) return json([{ unit_id: 1, unit_name: "litre" }, { unit_id: 2, unit_name: "gallon" }]);
       if (path.includes("/user/category-mappings/")) return json([]);
       if (path.includes("/user/thresholds/company/1")) return json({ threshold_percentage: 5 });
@@ -330,6 +333,42 @@ const routeTransport = async (page: Page, form: Record<string, unknown> = transp
     route.fulfill({ json: ["km", "tonne.km", "litre"].map((unit_name, i) => ({ unit_id: 50 + i, unit_name })) }),
   );
 };
+
+test("#183: the Unit select offers only the units the row's emission category takes", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  const unitOptions = {
+    fixed_unit: null,
+    all_units: ["litre", "gallon", "kWh", "kg"],
+    activities: [
+      { name: "Diesel (avg biofuel blend)", factor_unit: "litre", units: ["litre", "gallon"] },
+      { name: "LPG", factor_unit: "litre", units: ["litre"] },
+    ],
+  };
+  await signIn(page, created, false, [], undefined, { unitOptions });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  const unit = row.getByLabel("Unit");
+
+  // Nothing to choose until the row says what it is.
+  await expect(unit).toBeDisabled();
+  await expect(unit).toContainText("Make your choices above first");
+
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await expect(unit).toBeEnabled();
+  await expect(unit.locator("option")).toHaveText(["Choose a unit", "litre", "gallon"]);
+  await unit.selectOption("gallon");
+
+  // LPG takes litre only: gallon goes and litre is picked.
+  await row.getByLabel("Fuel Type").selectOption({ label: "LPG" });
+  await expect(unit).toHaveValue("litre");
+  await expect(unit.locator("option")).toHaveText(["Choose a unit", "litre"]);
+
+  await row.getByLabel("Quantity").fill("100");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0].body).toMatchObject({ activity_data_unit: "litre", activity_data: { emission_category: "LPG" } });
+});
 
 test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends what the engine saves (S3-8)", async ({ page }) => {
   const created: { body: Record<string, unknown>; replace: boolean }[] = [];

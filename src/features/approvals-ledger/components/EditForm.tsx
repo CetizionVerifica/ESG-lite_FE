@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { Button, Callout, Select, SkeletonText, TextField, Textarea } from "../../../ui";
-import { errorMessage, useColumnConfig, useFactorNames, useManagerEdit, useUnits } from "../api";
+import { errorMessage, useColumnConfig, useFactorNames, useManagerEdit, useUnitOptions, useUnits } from "../api";
+import { sameUnit, unitForCategory, unitsForRow } from "../../../lib/emissions/unitOptions";
 import {
   type Activity,
   type EditStart,
@@ -15,6 +16,7 @@ import {
   isNumberField,
   initialActivity,
   parentPrompt,
+  unitOfferError,
 } from "../editLogic";
 import { type ColumnConfig, type LedgerRow, humanize } from "../logic";
 import { EditPeriodField } from "./EditPeriodField";
@@ -53,6 +55,7 @@ function Loaded({
 
   const hasMapping = Object.keys(config?.emission_category_mapping ?? {}).length > 0;
   const units = useUnits(siteId, categoryId);
+  const unitOptions = useUnitOptions(siteId, categoryId);
   const factorYear = new Date(row.date_of_reporting).getFullYear() - 1;
   const names = useFactorNames(siteId, categoryId, factorYear, !hasMapping);
   const save = useManagerEdit();
@@ -62,8 +65,14 @@ function Loaded({
   const sendsValues = !!payload.activity_data;
   // Amounts are checked only when the values are sent (a date-only fix keeps them as stored).
   const amounts = sendsValues ? amountErrors(config, activity, start.activity) : {};
+  // #183: the units the edited emission factor offers; the entry's own unit stays as "(no longer offered)".
+  const unitLists = unitOptions.data ?? null;
+  const offered = category ? (unitsForRow(unitLists, category)?.units ?? null) : null;
+  const notOffered = offered && unit && !offered.some((u) => sameUnit(u, unit)) ? unit : null;
+  const offerError = sendsValues ? unitOfferError(unit, category, offered, start.unit) : undefined;
   const errors = {
     ...editErrors(reason, sendsValues ? category : "x", hasMapping, sendsValues ? unit : "x", units.isSuccess ? units.data.length > 0 : true),
+    ...(offerError ? { unit: offerError } : {}),
     ...(Object.keys(amounts).length > 0 ? { amount: AMOUNT_ERROR } : {}),
   };
   const notSaved = tried ? blockedMessage(errors) : null;
@@ -73,6 +82,13 @@ function Loaded({
   const formRef = useRef<HTMLFormElement>(null);
   // Older entries have no stored factor; say where the one shown came from.
   const derivedFactor = sendsValues && !row.activity_data?.emission_category && !!category;
+
+  // A new emission factor keeps the unit while it still offers it, picks its only unit, else clears it.
+  const changeActivity = (next: Activity) => {
+    const nextCategory = String(next.emission_category ?? "");
+    if (nextCategory !== category) setUnit((u) => unitForCategory(unitLists, nextCategory, u) ?? "");
+    setActivity(next);
+  };
 
   const submit = () => {
     setTried(true);
@@ -119,7 +135,7 @@ function Loaded({
           loading={names.isPending && !names.isError}
           options={[...new Set([...(names.data ?? []), ...(category ? [category] : [])])].map((n) => ({ value: n, label: n }))}
           emptyText="No factors for this site and category"
-          onChange={(v) => setActivity((a) => ({ ...a, emission_category: v ?? "" }))}
+          onChange={(v) => changeActivity({ ...activity, emission_category: v ?? "" })}
           error={tried ? errors.category : undefined}
         />
       )}
@@ -130,7 +146,7 @@ function Loaded({
           const options = fieldOptions(config, key, activity);
           const waiting = parentPrompt(config, key);
           const blocked = !!waiting && !options;
-          const set = (v: string) => setActivity((a) => applyChange(config, a, key, v));
+          const set = (v: string) => changeActivity(applyChange(config, activity, key, v));
           if (options || blocked)
             return (
               <Select<string>
@@ -158,7 +174,18 @@ function Loaded({
             />
           );
         })}
-        {units.data && units.data.length > 0 ? (
+        {unitLists ? (
+          <Select<string>
+            id={unitId}
+            label="Unit"
+            error={tried ? errors.unit : undefined}
+            value={category ? unit || null : null}
+            placeholder="Choose a unit"
+            emptyText={hasMapping ? "Choose the options above first" : "Choose the emission factor first"}
+            options={(category ? [...(offered ?? []), ...(notOffered ? [notOffered] : [])] : []).map((u) => ({ value: u, label: u === notOffered ? `${u} (no longer offered)` : u }))}
+            onChange={(v) => setUnit(v ?? "")}
+          />
+        ) : units.data && units.data.length > 0 ? (
           <Select<string>
             id={unitId}
             label="Unit"

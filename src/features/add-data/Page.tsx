@@ -87,7 +87,7 @@ export default function AddDataPage() {
     feraCategoryId: fera?.category_id ?? null,
   });
   const threshold = useThreshold(site?.company_id ?? null);
-  const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
+  const model = useMemo(() => (setup.data ? toFormModel(setup.data.config, setup.data.unitOptions) : null), [setup.data]);
   // S3-3: the data quality preview scores a factor for the site's own country best; Scope 3 only.
   const siteCountry = useSiteCountry(site?.site_id ?? null, contextReady && category?.ghg_category != null);
   // Rows the server refused for their method (METHOD_NOT_ALLOWED), shown on the row's method cards.
@@ -195,7 +195,7 @@ export default function AddDataPage() {
     return bill ? bill.confirmed : rowHasInput(r) || !hasBills;
   };
   const activeRows = rows.filter(sendable);
-  const issues = rows.map((r) => (billOf(r) || sendable(r) ? rowIssue(r, calc) : null));
+  const issues = rows.map((r) => (billOf(r) || sendable(r) ? rowIssue(r, calc, model) : null));
   const unconfirmedBills = billGroups(rows).filter((g) => !g.bill.confirmed).length;
 
   // S3-15 live checks, with the review workflow on: complete rows as Save would send them.

@@ -11,7 +11,8 @@ import {
   updateColumnConfig,
 } from "../../services/columnConfigService";
 import { getEmissionCategoryNames, getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
-import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
+import { getAdminUnitOptions, getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
+import type { UnitOptionsByActivity } from "../../lib/emissions/unitOptions";
 import type { EmissionFactor } from "../../lib/emissions/types";
 import { createColumn, deleteColumn, getColumns, updateColumn } from "../../services/columnService";
 import { getSites } from "../../services/siteService";
@@ -108,16 +109,21 @@ export const useFactorNames = (categoryId: number | null | undefined, siteId: nu
     retry: 1,
   });
 
-/** Every factor year for this site and category, and its units: what the Test tab calculates with. */
+/**
+ * Every factor year for this site and category, and its units: what the Test tab calculates with.
+ * `unitOptions` (#183, the Superadmin endpoint) offers each emission category's units as a User's
+ * row does; null when the API has no list.
+ */
 export const useTestSetup = (siteId: number | null | undefined, categoryId: number | null | undefined) =>
-  useQuery<{ factors: EmissionFactor[]; units: string[] }>({
+  useQuery<{ factors: EmissionFactor[]; units: string[]; unitOptions: UnitOptionsByActivity | null }>({
     queryKey: [...keys.all, "test-setup", siteId, categoryId],
     queryFn: async () => {
-      const [factors, units] = await Promise.all([
+      const [factors, units, unitOptions] = await Promise.all([
         getUserEmissionFactorsBySiteAndCategory(siteId as number, categoryId as number) as Promise<EmissionFactor[]>,
         getUserUnitsBySiteAndCategory(siteId as number, categoryId as number) as Promise<UnitData[]>,
+        getAdminUnitOptions(siteId as number, categoryId as number).catch(() => null),
       ]);
-      return { factors: Array.isArray(factors) ? factors : [], units: Array.isArray(units) ? units.map((u) => u.unit_name) : [] };
+      return { factors: Array.isArray(factors) ? factors : [], units: Array.isArray(units) ? units.map((u) => u.unit_name) : [], unitOptions };
     },
     enabled: !!siteId && !!categoryId,
     staleTime: 5 * 60_000,

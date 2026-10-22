@@ -3,7 +3,8 @@ import { ChevronDown, Copy, Trash2 } from "lucide-react";
 import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
-import { formColumns, isColumnVisible, mappingKeyLabel, rowMethodChoices, visibleExtraFields, type FormModel } from "../logic/form";
+import { formColumns, isColumnVisible, mappingKeyLabel, offeredUnits, rowMethodChoices, visibleExtraFields, type FormModel } from "../logic/form";
+import { sameUnit, unitsForRow } from "../../../lib/emissions/unitOptions";
 import type { RowIssue } from "../logic/entry";
 import type { CategoryMapping } from "../api";
 import type { EmissionFactor, ModalRow } from "../types";
@@ -157,10 +158,24 @@ export function EntryRow(p: Props) {
   // The spend form's own fields replace the form's older "Spent value" / "Currency" extras.
   const extras = spendForm ? allExtras.filter((f) => !SPEND_EXTRA_KEYS.has(f.key)) : allExtras;
   const firstSelect = visible.find((c) => c.column_type === "select")?.column_name;
-  // A method that names its units (S3-3 method_options) offers only those.
-  const unitOptions = [
-    ...new Set([...(methodUnits ?? [...(expectedUnit ? [expectedUnit] : []), ...p.units]), ...(row.activity_data_unit ? [row.activity_data_unit] : [])]),
-  ];
+  // #183: the units the server lists for the row's emission category (narrowed to the method's units when
+  // the form names them). Without a list (an older API) every unit of the form, as before; a method
+  // that names its units (S3-3 method_options) then offers only those.
+  const offered = offeredUnits(model, row, methodUnits);
+  const factorUnit = unitsForRow(model.unitOptions, row.emission_category)?.factorUnit || expectedUnit;
+  const currentUnit = row.activity_data_unit || "";
+  const notOffered = offered && currentUnit && !offered.some((u) => sameUnit(u, currentUnit)) ? currentUnit : null;
+  // No list until the row says what it is: the unit depends on it.
+  const unitsWaitForCategory = !!model.unitOptions && !row.emission_category;
+  const unitOptions = unitsWaitForCategory
+    ? []
+    : offered
+      ? [...offered, ...(notOffered ? [notOffered] : [])]
+      : [...new Set([...(methodUnits ?? [...(expectedUnit ? [expectedUnit] : []), ...p.units]), ...(currentUnit ? [currentUnit] : [])])];
+  const aiUnit = isAiField(row, "activity_data_unit");
+  // A saved entry's unit stays selected and says so; a bill's unit keeps its AI chip and the field error.
+  const unitLabel = (u: string) =>
+    u === notOffered ? (aiUnit ? u : `${u} (no longer offered)`) : p.showCalcDetail && sameUnit(u, factorUnit) ? `${u} (factor unit)` : u;
 
   return (
     <section aria-label={`Row ${p.index + 1}`} className={cn(panel, "space-y-4 p-4")}>
@@ -266,14 +281,15 @@ export function EntryRow(p: Props) {
           <SpendFields row={row} onChange={p.onChange} amountError={fieldError("values")} currencyError={fieldError("currency")} showCalcDetail={p.showCalcDetail} />
         ) : (
           <Select<string>
-            label={<AiLabel text="Unit" ai={isAiField(row, "activity_data_unit")} />}
-            value={row.activity_data_unit || null}
+            label={<AiLabel text="Unit" ai={aiUnit} />}
+            value={unitsWaitForCategory ? null : row.activity_data_unit || null}
             onChange={(v) => p.onChange("activity_data_unit", v ?? "")}
-            options={unitOptions.map((u) => ({ value: u, label: p.showCalcDetail && u === expectedUnit ? `${u} (factor unit)` : u }))}
+            options={unitOptions.map((u) => ({ value: u, label: unitLabel(u) }))}
             placeholder="Choose a unit"
+            emptyText={mapped ? "Make your choices above first" : "Choose the emission category first"}
             help={
               transportUnitHelp(model.spec, row.activity_data_unit, row[TRANSPORT_MODE_COLUMN]) ??
-              (p.showCalcDetail && expectedUnit ? `The factor is per ${expectedUnit}; other units are converted where possible.` : undefined)
+              (p.showCalcDetail && factorUnit ? `The factor is per ${factorUnit}; other units are converted where possible.` : undefined)
             }
             error={fieldError("activity_data_unit")}
           />

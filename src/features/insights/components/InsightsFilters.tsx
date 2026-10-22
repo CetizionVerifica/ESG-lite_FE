@@ -1,4 +1,5 @@
 import { PILLARS, type Compare, type InsightsQuery, type Pillar, type YearType } from "../../../lib/insights/contracts";
+import { compareOptions } from "./heroLogic";
 import { PILLAR_COLOR, PILLAR_LABEL, PILLAR_LETTER } from "../../../lib/kpi/labels";
 import type { InsightsPatch } from "../../../lib/insights/query";
 import { SegmentedControl, Select, Skeleton, cn, focusRing } from "../../../ui";
@@ -86,10 +87,7 @@ export function InsightsFilters({ query, sites, pillars, onChange, thisYear }: I
         size="sm"
         value={query.compare}
         onChange={(compare) => onChange({ compare })}
-        options={[
-          { value: "prior", label: "Last year" },
-          { value: "base", label: "Base year" },
-        ]}
+        options={compareOptions(query)}
       />
     </div>
   );

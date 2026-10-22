@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Calculator, RotateCcw } from "lucide-react";
-import { applyChange, formColumns, isColumnVisible, newRow, toFormModel } from "../../../../lib/emissions/form";
+import { applyChange, formColumns, isColumnVisible, newRow, offeredUnits, toFormModel } from "../../../../lib/emissions/form";
+import { sameUnit, type UnitOptionsByActivity } from "../../../../lib/emissions/unitOptions";
 import { calculateEmission, findEmissionFactor, resolveSpecMethod, type EmissionCalcInput } from "../../../../lib/emissions/emissionCalc";
 import type { EmissionFactor, ModalRow } from "../../../../lib/emissions/types";
 import { Button, DynamicField, EmptyState, Select, SkeletonText, cn } from "../../../../ui";
@@ -10,7 +11,7 @@ import { describeResult, factorYears, factorsFor } from "../../sampleCalc";
 export type TestTabProps = {
   draft: BuilderDraft;
   formId: number;
-  setup: { factors: EmissionFactor[]; units: string[] } | undefined;
+  setup: { factors: EmissionFactor[]; units: string[]; unitOptions?: UnitOptionsByActivity | null } | undefined;
   loading: boolean;
   error: boolean;
   onRetry: () => void;
@@ -21,7 +22,8 @@ export type TestTabProps = {
  * the calculator Add data uses. Nothing typed here is saved.
  */
 export function TestTab({ draft, formId, setup, loading, error, onRetry }: TestTabProps) {
-  const model = useMemo(() => toFormModel(toPreviewConfig(draft, formId)), [draft, formId]);
+  // #183: the saved form's unit lists, so the test row offers what a User's row offers.
+  const model = useMemo(() => toFormModel(toPreviewConfig(draft, formId), setup?.unitOptions ?? null), [draft, formId, setup?.unitOptions]);
   const [row, setRow] = useState<ModalRow>(() => newRow(model, 1));
   const years = useMemo(() => factorYears(setup?.factors ?? []), [setup]);
   const [pickedYear, setYear] = useState<number | null>(null);
@@ -43,7 +45,15 @@ export function TestTab({ draft, formId, setup, loading, error, onRetry }: TestT
   const mapped = Object.keys(model.mapping).length > 0;
   const factor = row.emission_category ? findEmissionFactor(input, row.emission_category) : undefined;
   const expectedUnit = factor?.denominator_unit ?? (model.spec?.mode === "per_method" ? resolveSpecMethod(model.spec, row)?.method.activity_unit : undefined) ?? null;
-  const units = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...setup.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
+  const offered = offeredUnits(model, row);
+  const currentUnit = row.activity_data_unit || "";
+  const notOffered = offered && currentUnit && !offered.some((u) => sameUnit(u, currentUnit)) ? currentUnit : null;
+  const unitsWaitForCategory = !!model.unitOptions && !row.emission_category;
+  const units = unitsWaitForCategory
+    ? []
+    : offered
+      ? [...offered, ...(notOffered ? [notOffered] : [])]
+      : [...new Set([...(expectedUnit ? [expectedUnit] : []), ...setup.units, ...(currentUnit ? [currentUnit] : [])])];
   const outcome = describeResult(calculateEmission(input, row), factor);
   const change = (name: string, value: string) => setRow((r) => applyChange(model, r, name, value));
 
@@ -88,10 +98,11 @@ export function TestTab({ draft, formId, setup, loading, error, onRetry }: TestT
           ))}
         <Select<string>
           label="Unit"
-          value={row.activity_data_unit || null}
+          value={unitsWaitForCategory ? null : row.activity_data_unit || null}
           onChange={(v) => change("activity_data_unit", v ?? "")}
-          options={units.map((u) => ({ value: u, label: u === expectedUnit ? `${u} (factor unit)` : u }))}
+          options={units.map((u) => ({ value: u, label: u === notOffered ? `${u} (not offered)` : sameUnit(u, expectedUnit) ? `${u} (factor unit)` : u }))}
           placeholder="Select…"
+          emptyText={mapped ? "Make the choices above first" : "Choose the emission category first"}
         />
       </div>
 

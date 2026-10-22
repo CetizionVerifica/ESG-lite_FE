@@ -10,6 +10,8 @@ import {
   isDependentColumn,
   parentColumnOf,
   rowValue,
+  sameUnit,
+  unitNotOfferedMessage,
 } from "../../lib/emissions";
 import { canConvert, unitsMatchExact } from "../../ui";
 import type { EmissionData } from "../../services/emissionService";
@@ -100,8 +102,18 @@ export type EditIssue = {
   message: string;
 };
 
-/** The first thing stopping a save, or null. A rejected entry needs a note on what changed. */
-export function editIssue(row: ModalRow, calc: EmissionCalculator, status: EmissionData["status"], reason: string): EditIssue | null {
+/**
+ * The first thing stopping a save, or null. A rejected entry needs a note on what changed.
+ * `units` (#183): what the emission category offers, and the entry's stored unit, which stays
+ * allowed even when no longer offered, so saving it unchanged works as before.
+ */
+export function editIssue(
+  row: ModalRow,
+  calc: EmissionCalculator,
+  status: EmissionData["status"],
+  reason: string,
+  units?: { offered: string[] | null; stored?: string | null },
+): EditIssue | null {
   if (!row.emission_category)
     return {
       field: "emission_category",
@@ -114,6 +126,10 @@ export function editIssue(row: ModalRow, calc: EmissionCalculator, status: Emiss
       field: "activity_data_unit",
       message: `The factor is per ${expected} and ${row.activity_data_unit} can't be converted to it.`,
     };
+  }
+  const offered = units?.offered;
+  if (offered && !offered.some((u) => sameUnit(u, row.activity_data_unit)) && !sameUnit(units?.stored, row.activity_data_unit)) {
+    return { field: "activity_data_unit", message: unitNotOfferedMessage(row.activity_data_unit, row.emission_category, offered) };
   }
   const result = calc.calculateEmission(row);
   if (result.value === null) return { field: "values", message: result.status };

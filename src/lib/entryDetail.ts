@@ -52,7 +52,7 @@ export function plainProblem(message: string): string {
   if (/couldn't load the exchange rate/i.test(message)) return USER_TOTAL_ON_SEND;
   if (/exchange rate|fx rate|deflator/i.test(message)) return USER_MISSING_FACTOR;
   if (/no emission factor|no factor|factor has no unit|emission factor .* has no unit/i.test(message)) return USER_MISSING_FACTOR;
-  if (/unit mismatch|can't be converted|cannot be converted|no conversion|is per |unit is not configured/i.test(message)) return USER_UNIT_CANNOT_CONVERT;
+  if (/unit mismatch|can't be converted|cannot be converted|no conversion|is per |unit is not configured|isn't a unit for/i.test(message)) return USER_UNIT_CANNOT_CONVERT;
   return message;
 }
 

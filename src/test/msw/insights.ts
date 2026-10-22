@@ -54,6 +54,7 @@ import {
   flowData,
   materialityData,
   pathwayData,
+  siteCompareData,
   stripesData,
   summaryData,
   targetWallData,
@@ -178,6 +179,7 @@ function dataFor<P extends PanelId>(panel: P, request: Request): PanelDataMap[P]
     flow: () => flowData(kpi),
     materiality: () => materialityData(state.scored),
     stripes: () => stripesData,
+    site_compare: () => siteCompareData, // IN-11
   };
   return data[panel]() as PanelDataMap[P];
 }
