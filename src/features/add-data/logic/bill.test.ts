@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ExtractionResponse } from "../../../services/invoiceService";
 import { applyChange, newRow, toFormModel } from "./form";
-import { BILL_UNREADABLE, billErrorMessage, billOutsidePeriod, billGroups, billOf, billRowsFrom, billWarnings, markEdited } from "./bill";
+import { BILL_UNREADABLE, billErrorMessage, billOutsidePeriod, billGroups, billOf, billRowsFrom, billWarnings, markEdited, uploadedBills } from "./bill";
+import type { Invoice } from "../../../services/invoiceService";
 import { buildPayload, type EntryPeriod } from "./entry";
 import type { ColumnConfig, ColumnEntity, EmissionFactor } from "../types";
 
@@ -203,5 +204,32 @@ describe("billErrorMessage (F-01)", () => {
   });
   it("uses the caller's fallback", () => {
     expect(billErrorMessage("ECONNREFUSED 127.0.0.1:8081", "Couldn't read it")).toBe("Couldn't read it");
+  });
+});
+
+describe("uploadedBills (F-02)", () => {
+  const inv = (invoice_id: number, file_name: string, file_size: number, created_at: string) => ({ invoice_id, file_name, file_size, created_at }) as Invoice;
+
+  it("lists a file once however often it was uploaded, newest upload first", () => {
+    const bills = uploadedBills([
+      inv(1, "HT Billing APRIL 2025.pdf", 2048, "2026-10-01T10:00:00Z"),
+      inv(2, "HT Billing JUNE 2025.pdf", 4096, "2026-10-02T10:00:00Z"),
+      inv(3, "ht billing april 2025.pdf", 2048, "2026-10-21T10:00:00Z"),
+      inv(4, "HT Billing APRIL 2025.pdf", 2048, "2026-10-05T10:00:00Z"),
+    ]);
+    expect(bills.map((b) => [b.latest.invoice_id, b.uploads.map((u) => u.invoice_id)])).toEqual([
+      [3, [3, 4, 1]],
+      [2, [2]],
+    ]);
+  });
+
+  it("keeps files of a different size, or without a size, apart", () => {
+    const bills = uploadedBills([
+      inv(1, "bill.pdf", 2048, "2026-10-01T10:00:00Z"),
+      inv(2, "bill.pdf", 3000, "2026-10-02T10:00:00Z"),
+      inv(3, "scan.jpg", 0, "2026-10-03T10:00:00Z"),
+      inv(4, "scan.jpg", 0, "2026-10-04T10:00:00Z"),
+    ]);
+    expect(bills.map((b) => b.uploads.length)).toEqual([1, 1, 1, 1]);
   });
 });

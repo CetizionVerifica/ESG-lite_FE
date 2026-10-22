@@ -13,6 +13,7 @@ import { linkInvoiceDocuments, uploadMultipleDocuments } from "../../services/do
 import { calculateRoadDistance, calculateSeaDistance } from "../../services/distanceService";
 import { resolveLocationFromBackend, type ResolvedLocation } from "../../services/locationService";
 import {
+  bulkDeleteInvoices,
   deleteInvoice,
   getInvoices,
   reextractInvoice,
@@ -306,8 +307,10 @@ export function useBills(siteId: number | null, categoryId: number | null, enabl
 export function useDeleteBill() {
   const client = useQueryClient();
   return useMutation({
-    // data-loss-reviewed: deletes one uploaded bill after the user confirms; files still linked as evidence are kept by the AI service
-    mutationFn: (invoiceId: number) => deleteInvoice(invoiceId),
+    // data-loss-reviewed: deletes one bill's uploads (every re-upload of the same file, F-02) after the user confirms; files still linked as evidence are kept by the AI service
+    mutationFn: async (invoiceIds: number[]): Promise<void> => {
+      await (invoiceIds.length === 1 ? deleteInvoice(invoiceIds[0]) : bulkDeleteInvoices(invoiceIds));
+    },
     onSuccess: () => client.invalidateQueries({ queryKey: ["add-data", "bills"] }),
   });
 }

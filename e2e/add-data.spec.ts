@@ -99,6 +99,9 @@ type Extra = {
   entryDetail?: "full";
   /** F-13/F-27: the server's mode-lock message for the chosen period; the queries asked are pushed here. */
   periodMode?: { message: string; asked: Record<string, string>[] };
+  /** F-02: My bills' list; deleted id lists are pushed to `deletedBills`. */
+  bills?: unknown[];
+  deletedBills?: number[][];
 };
 
 async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>, extra: Extra = {}) {
@@ -193,6 +196,12 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       }
       if (path.endsWith("/user/emissions/calculate-distance")) {
         return json({ success: true, data: { mode: "road", distanceMeters: 21500, durationText: "25 mins", encodedPolyline: null, duration: null, origin: "", destination: "" } });
+      }
+      if (path.endsWith("/v1/invoices") && request.method() === "GET") return json(extra.bills ?? []);
+      if (path.endsWith("/v1/invoices/bulk") && request.method() === "DELETE") {
+        const ids = (request.postDataJSON() as { ids: number[] }).ids;
+        extra.deletedBills?.push(ids);
+        return json({ message: "Deleted", deleted: ids.length });
       }
       if (path.endsWith("/v1/invoices/upload")) {
         if (uploadGate) await uploadGate;
@@ -591,6 +600,36 @@ test("a bill is read into a row that is checked before it is sent, then attached
   });
   expect(JSON.stringify(created[0].body)).not.toContain("_bill");
   expect(linked).toEqual([{ invoice_id: 41, emission_ids: [101] }]);
+});
+
+test("My bills lists a re-uploaded file once and deletes every upload of it (F-02)", async ({ page }) => {
+  const bill = (invoice_id: number, file_name: string, file_size: number, created_at: string) => ({
+    invoice_id, file_name, file_size, created_at, cloudinary_url: `/files/${invoice_id}.pdf`, file_type: "application/pdf", site_id: 4, category_id: 9,
+  });
+  const deletedBills: number[][] = [];
+  const bills = [
+    bill(1, "HT Billing APRIL 2025.pdf", 2048, "2026-10-01T10:00:00Z"),
+    bill(2, "HT Billing JUNE 2025.pdf", 4096, "2026-10-02T10:00:00Z"),
+    bill(3, "HT Billing APRIL 2025.pdf", 2048, "2026-10-21T10:00:00Z"),
+    bill(4, "HT Billing APRIL 2025.pdf", 2048, "2026-10-05T10:00:00Z"),
+  ];
+  await signIn(page, [], false, [], undefined, { bills, deletedBills });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await page.getByRole("tab", { name: /Start from a bill/ }).click();
+  await page.getByRole("button", { name: "My bills" }).click();
+
+  const drawer = page.getByRole("dialog", { name: "My bills" });
+  await expect(drawer.getByRole("listitem")).toHaveCount(2);
+  await expect(drawer.getByRole("listitem").first()).toContainText("HT Billing APRIL 2025.pdf");
+  await expect(drawer.getByRole("listitem").first()).toContainText("Uploaded 3 times, last");
+  await expect(drawer.getByRole("listitem").nth(1)).not.toContainText("Uploaded");
+
+  await drawer.getByRole("button", { name: "Delete HT Billing APRIL 2025.pdf" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Delete this bill?" });
+  await expect(confirm).toContainText("HT Billing APRIL 2025.pdf (all 3 uploads) leaves My bills.");
+  await confirm.getByRole("button", { name: "Delete bill" }).click();
+  await expect(confirm).toBeHidden();
+  expect(deletedBills).toEqual([[3, 4, 1]]);
 });
 
 test("a bill dated outside the period can't be used on this page", async ({ page }) => {
