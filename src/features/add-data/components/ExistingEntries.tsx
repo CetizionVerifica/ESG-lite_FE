@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button, Callout, Skeleton, StatusPill, cn, formatEntryEmissions, panel } from "../../../ui";
-import { useExistingEntries } from "../api";
+import { useExistingEntries, usePeriodMode } from "../api";
 import { canChange, type SavedEntry } from "../logic/existing";
 import type { EntryPeriod } from "../logic/entry";
 
@@ -18,6 +18,8 @@ const nameOf = (e: SavedEntry) => String(e.activity_data?.emission_category ?? "
 /** "Already entered for Sep 2025": what is saved for this context, with Fix/Edit for rows that can still change. */
 export function ExistingEntries({ siteId, categoryId, period, periodLabel, onLoad }: Props) {
   const entries = useExistingEntries(siteId, categoryId, period);
+  // F-13/F-27: entries filed the other way (monthly vs yearly) aren't in this list (PeriodModeNote says why).
+  const otherWay = !!usePeriodMode(siteId, categoryId, period).data?.message;
 
   if (entries.isPending) {
     return <Skeleton className="h-24 w-full rounded-card" />;
@@ -45,7 +47,16 @@ export function ExistingEntries({ siteId, categoryId, period, periodLabel, onLoa
         </p>
       )}
       {list.length === 0 ? (
-        <p className="mt-1 text-sm text-muted">Nothing yet for this category and period.</p>
+        <p className="mt-1 text-sm text-muted">
+          {otherWay ? (
+            <>
+              No {period.mode} entry for {periodLabel}: it is filed {period.mode === "yearly" ? "monthly" : "yearly"}. See those entries in{" "}
+              <Link className="font-medium text-brand-text underline" to="/data/mine">My entries</Link>.
+            </>
+          ) : (
+            "Nothing yet for this category and period."
+          )}
+        </p>
       ) : (
         <div className="mt-2 overflow-x-auto">
           <table className="w-full text-sm">

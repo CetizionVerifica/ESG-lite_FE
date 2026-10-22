@@ -97,6 +97,8 @@ type Extra = {
   checked?: unknown[][];
   /** SE-1: the company's entry_detail; "full" shows a User the calculation detail. */
   entryDetail?: "full";
+  /** F-13/F-27: the server's mode-lock message for the chosen period; the queries asked are pushed here. */
+  periodMode?: { message: string; asked: Record<string, string>[] };
 };
 
 async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>, extra: Extra = {}) {
@@ -135,6 +137,10 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       if (path.includes("/user/units/site/4/category/")) return json([{ unit_id: 1, unit_name: "litre" }, { unit_id: 2, unit_name: "gallon" }]);
       if (path.includes("/user/category-mappings/")) return json([]);
       if (path.includes("/user/thresholds/company/1")) return json({ threshold_percentage: 5 });
+      if (path.includes("/user/emissions/period-mode/site/4/category/")) {
+        extra.periodMode?.asked.push(Object.fromEntries(url.searchParams));
+        return json({ conflict: extra.periodMode ? {} : null, message: extra.periodMode?.message ?? null });
+      }
       if (path.endsWith("/user/emissions/period-total")) {
         return json({ total_emission: url.searchParams.get("basis") === "approved" ? 4 : 0 });
       }
@@ -519,6 +525,29 @@ test("an incomplete row blocks review and a duplicate can be replaced", async ({
     replace: true,
     body: { date_of_reporting: "2026-03-31", reporting_period: "yearly", year_type: "FY" },
   });
+});
+
+test("a year already filed monthly says so before anything is typed (F-13/F-27)", async ({ page }) => {
+  const message = "This category is already filed monthly for CY 2025 (57 monthly entries). Keep entering it monthly, or delete those entries first to file the year as one entry.";
+  const periodMode = { message, asked: [] as Record<string, string>[] };
+  await signIn(page, [], false, [], undefined, { periodMode });
+  await page.goto("/data/new?site=4&category=9&period=CY2025");
+
+  await expect(page.getByText("Filed monthly for this year")).toBeVisible();
+  await expect(page.getByText(message)).toBeVisible();
+  // The note comes before the rows; the saved list says why it is empty.
+  const note = await page.getByText("Filed monthly for this year").boundingBox();
+  const firstRow = await page.getByRole("region", { name: "Row 1" }).boundingBox();
+  expect(note!.y).toBeLessThan(firstRow!.y);
+  await expect(page.getByText("No yearly entry for CY 2025: it is filed monthly.")).toBeVisible();
+  expect(periodMode.asked).toContainEqual({ reporting_period: "yearly", year_type: "CY", date_of_reporting: "2025-12-31" });
+});
+
+test("a period filed the same way shows no lock note", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await expect(page.getByRole("heading", { name: /Already entered for/ })).toBeVisible();
+  await expect(page.getByText(/^Filed (monthly|yearly) for/)).toHaveCount(0);
 });
 
 test("a bill is read into a row that is checked before it is sent, then attached as evidence", async ({ page }) => {

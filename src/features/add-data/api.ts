@@ -6,7 +6,7 @@ import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/uni
 import { getMappingsByCompany, type CategoryMapping } from "../../services/categoryMappingService";
 
 export type { CategoryMapping };
-import { createEmission, getEmissionsPaginated, getPeriodTotal, updateEmission } from "../../services/emissionService";
+import { createEmission, getEmissionsPaginated, getPeriodMode, getPeriodTotal, updateEmission } from "../../services/emissionService";
 import { getThresholdByCompany } from "../../services/thresholdService";
 import { getSiteById } from "../../services/siteService";
 import { linkInvoiceDocuments, uploadMultipleDocuments } from "../../services/documentService";
@@ -20,7 +20,7 @@ import {
   type ExtractionResponse,
   type Invoice,
 } from "../../services/invoiceService";
-import { periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPeriod } from "./logic/entry";
+import { entryDate, periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPeriod } from "./logic/entry";
 import { entriesQuery, entryInPeriod, type SavedEntry } from "./logic/existing";
 import { BILL_UNREADABLE, billErrorMessage } from "./logic/bill";
 import type { ColumnConfig, EmissionFactor } from "./types";
@@ -231,6 +231,22 @@ export function useExistingEntries(siteId: number | null, categoryId: number | n
       const entries = (result.data as unknown as SavedEntry[]).filter((e) => entryInPeriod(e, period as EntryPeriod));
       // More than one page: the list says so instead of showing a short count.
       return { entries, more: result.total > result.data.length };
+    },
+  });
+}
+
+/** F-13/F-27: the save's mode lock for the chosen period, before typing ("already filed monthly for CY 2025 (57 …)"). */
+export function usePeriodMode(siteId: number | null, categoryId: number | null, period: EntryPeriod | null) {
+  return useQuery({
+    queryKey: ["add-data", "period-mode", siteId, categoryId, period],
+    enabled: siteId !== null && categoryId !== null && period !== null,
+    queryFn: () => {
+      const p = period as EntryPeriod;
+      return getPeriodMode(siteId as number, categoryId as number, {
+        reporting_period: p.mode,
+        ...(p.mode === "yearly" ? { year_type: p.yearType } : {}),
+        date_of_reporting: entryDate(p),
+      });
     },
   });
 }
