@@ -56,7 +56,7 @@ export const SHELL_ROUTES = [
   { id: "production", path: "/production", title: "Production", crumb: ["Production"], roles: ["User"], spec: "P05" },
 
   // Manager
-  { id: "overview", path: "/overview", title: "Overview", crumb: ["Overview"], roles: ["Manager"], spec: "P06" },
+  { id: "overview", path: "/overview", title: "Overview", crumb: ["Overview"], roles: ["Manager", "Admin"], spec: "P06" }, // M5: Admins read-only
   // D18: a Superadmin opens only the KPIs tab (`?view=kpi`), for the chosen client.
   { id: "approvals", path: "/data/approvals", title: "Approvals", crumb: ["Data", "Approvals"], roles: ["Manager", "Superadmin"], spec: "P07", clientContext: true },
   { id: "ledger", path: "/data/ledger", title: "Emissions ledger", crumb: ["Data", "Emissions ledger"], roles: ["Manager"], spec: "P07" },

@@ -3,7 +3,7 @@ import { Button, EmptyState, SkeletonText, cn, focusRing, formatEmissions } from
 import type { CategoryBar } from "../logic";
 
 /** Top categories as horizontal bars; each bar opens the ledger for that category. */
-export function CategoryBars(props: { bars: CategoryBar[]; loading: boolean; error: string | null; onRetry: () => void; linkFor: (id: number) => string }) {
+export function CategoryBars(props: { bars: CategoryBar[]; loading: boolean; error: string | null; onRetry: () => void; linkFor?: (id: number) => string }) {
   const { bars, loading, error, onRetry, linkFor } = props;
   const max = Math.max(0, ...bars.map((b) => b.total));
   return (
@@ -33,7 +33,7 @@ export function CategoryBars(props: { bars: CategoryBar[]; loading: boolean; err
             );
             return (
               <li key={b.id}>
-                {b.id === "other" ? (
+                {b.id === "other" || !linkFor ? (
                   <div className="px-1 py-0.5">{body}</div>
                 ) : (
                   <Link to={linkFor(b.id)} className={cn("block rounded px-1 py-0.5 hover:bg-tint", focusRing)}>

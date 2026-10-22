@@ -12,18 +12,18 @@ function Row({ item }: { item: AttentionItem }) {
     <>
       <span aria-hidden className={cn("size-2 shrink-0 rounded-full", dot[item.tone])} />
       <span className="min-w-0 flex-1">{item.text}</span>
-      <ChevronRight aria-hidden className="size-4 shrink-0 text-muted" />
+      {item.to && <ChevronRight aria-hidden className="size-4 shrink-0 text-muted" />}
     </>
   );
 }
 
-/** What needs the manager today; every row is a link with its count. */
-export function AttentionList(props: { items: AttentionItem[]; loading: boolean; error: string | null; onRetry: () => void; className?: string }) {
+/** What needs the manager today; every row is a link with its count (plain text where `to` is empty: a read-only Admin, M5). */
+export function AttentionList(props: { items: AttentionItem[]; loading: boolean; error: string | null; onRetry: () => void; className?: string; title?: string }) {
   const total = props.items.reduce((s, i) => s + i.count, 0);
   return (
     <section aria-labelledby="overview-attention" className={cn("rounded-card border border-line bg-panel p-4", props.className)}>
       <h3 id="overview-attention" className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
-        Needs your attention
+        {props.title ?? "Needs your attention"}
         {!props.loading && total > 0 && <span className="rounded-full bg-warn-soft px-2 py-0.5 font-num text-xs text-warn">{total}</span>}
       </h3>
       {props.loading ? (
@@ -39,7 +39,11 @@ export function AttentionList(props: { items: AttentionItem[]; loading: boolean;
         <ul className="-mx-1 divide-y divide-line">
           {props.items.map((item) => (
             <li key={item.id}>
-              {item.to.startsWith("#") ? (
+              {!item.to ? (
+                <div className={cn(rowClass, "hover:bg-transparent")}>
+                  <Row item={item} />
+                </div>
+              ) : item.to.startsWith("#") ? (
                 // A section on this page: a plain anchor so the browser scrolls to it.
                 <a href={item.to} className={rowClass}>
                   <Row item={item} />

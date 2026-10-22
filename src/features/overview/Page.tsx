@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { Building2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { feraCategoryIds } from "../../lib/emissions/pendingCount";
 import { useInsightsNavOn } from "../../lib/insights/switch"; // IN-0
+import { getCompanySites } from "../../services/companyAdminService";
 import { useFyStartMonth } from "../../lib/fiscalYear";
 import {
   Button,
@@ -14,6 +16,7 @@ import {
   KpiStrip,
   PageHeader,
   ScopeBar,
+  SkeletonText,
   cn,
   focusRing,
   formatNumber,
@@ -50,12 +53,19 @@ import {
 
 type SiteOption = { site_id: number; name: string; company?: { company_id: number; name: string }; categories?: { category_id: number; category_name: string }[] };
 
-function useManagerSites(): SiteOption[] {
+/** A Manager's own sites; a company Admin's are every site of their company (M5, read-only). */
+function useOverviewSites(admin: boolean): { sites: SiteOption[]; loading: boolean } {
   const { user } = useAuth();
-  return useMemo(() => {
+  const company = useQuery({ queryKey: ["overview", "company-sites"], queryFn: getCompanySites, enabled: admin, staleTime: 5 * 60_000 });
+  const sites = useMemo(() => {
+    if (admin) {
+      const c = (user as { company?: { company_id: number; name?: string } } | null)?.company;
+      return ((company.data ?? []) as SiteOption[]).map((s) => ({ ...s, company: c ? { company_id: c.company_id, name: c.name ?? "" } : s.company }));
+    }
     const list = (user?.sites as SiteOption[] | undefined) ?? [];
     return list.length > 0 ? list : user?.site ? [user.site as SiteOption] : [];
-  }, [user]);
+  }, [admin, company.data, user]);
+  return { sites, loading: admin && company.isPending };
 }
 
 const LOAD_ERROR = "Couldn't load this panel.";
@@ -66,7 +76,10 @@ const LOAD_ERROR = "Couldn't load this panel.";
  */
 export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
   const navigate = useNavigate();
-  const sites = useManagerSites();
+  const { role } = useAuth();
+  // M5: a company Admin reads the page; the lists it links to are a Manager's, so nothing links there.
+  const readOnly = role === "Admin";
+  const { sites, loading: sitesLoading } = useOverviewSites(readOnly);
   const now = useMemo(() => new Date(), []);
   const fallback = useMemo(() => defaultPeriod(now), [now]);
   const [ctx] = useContextParams({ period: fallback });
@@ -115,6 +128,13 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
     />
   );
 
+  if (sites.length === 0 && sitesLoading)
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Overview" />
+        <SkeletonText lines={4} />
+      </div>
+    );
   if (sites.length === 0)
     return (
       <div className="space-y-6">
@@ -123,14 +143,23 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
       </div>
     );
 
-  const links = {
-    approvals: listLink("/data/approvals", { siteIds: ctx.siteIds }),
-    approvalsInPeriod: listLink("/data/approvals", { siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period }),
-    approved: listLink("/data/ledger", { siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period, status: "approved" }),
-    site: (id: number) => listLink("/data/ledger", { siteIds: [id], categoryIds: ctx.categoryIds, period, status: "approved" }),
-    category: (id: number) => listLink("/data/ledger", { siteIds: ctx.siteIds, categoryIds: [id], period, status: "approved" }),
-    production: listLink("/data/production", { siteIds: ctx.siteIds, status: "pending" }),
-  };
+  const links: {
+    approvals: string;
+    approvalsInPeriod: string;
+    approved: string;
+    site?: (id: number) => string;
+    category?: (id: number) => string;
+    production: string;
+  } = readOnly
+    ? { approvals: "", approvalsInPeriod: "", approved: "", production: "" }
+    : {
+        approvals: listLink("/data/approvals", { siteIds: ctx.siteIds }),
+        approvalsInPeriod: listLink("/data/approvals", { siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period }),
+        approved: listLink("/data/ledger", { siteIds: ctx.siteIds, categoryIds: ctx.categoryIds, period, status: "approved" }),
+        site: (id: number) => listLink("/data/ledger", { siteIds: [id], categoryIds: ctx.categoryIds, period, status: "approved" }),
+        category: (id: number) => listLink("/data/ledger", { siteIds: ctx.siteIds, categoryIds: [id], period, status: "approved" }),
+        production: listLink("/data/production", { siteIds: ctx.siteIds, status: "pending" }),
+      };
 
   const k = data?.kpis;
   const nothingApproved = !!k && k.approved_count === 0;
@@ -149,11 +178,15 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
       previous: lyNet,
       compareLabel: lyCaption ?? undefined,
       primary: true,
-      hint: k && (
-        <Link to={links.approved} className={cn("relative rounded underline-offset-2 hover:underline", focusRing)}>
-          {k.approved_count} approved {k.approved_count === 1 ? "entry" : "entries"}
-        </Link>
-      ),
+      hint:
+        k &&
+        (readOnly ? (
+          `${k.approved_count} approved ${k.approved_count === 1 ? "entry" : "entries"}`
+        ) : (
+          <Link to={links.approved} className={cn("relative rounded underline-offset-2 hover:underline", focusRing)}>
+            {k.approved_count} approved {k.approved_count === 1 ? "entry" : "entries"}
+          </Link>
+        )),
     },
     {
       label: "Intensity",
@@ -162,7 +195,9 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
       decimals: 3,
       unit: intensity.data ? (intensity.data.combined ? "tCO₂e/unit, combined" : `tCO₂e/${intensity.data.unit}`) : undefined,
       hint:
-        intensity.isSuccess && !intensity.data ? (
+        intensity.isSuccess && !intensity.data && readOnly ? (
+          "No production data yet"
+        ) : intensity.isSuccess && !intensity.data ? (
           <Link to="/data/production" className={cn("relative rounded underline-offset-2 hover:underline", focusRing)}>
             Add production data
           </Link>
@@ -199,7 +234,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
     overThreshold: alerts,
     threshold: threshold.data ?? null,
     previousLabel: comparable ? periodLabel(previousPeriod, fyStartMonth) : null,
-    links: { approvals: links.approvals, production: links.production, team: "#submission-status", category: links.category },
+    links: { approvals: links.approvals, production: links.production, team: "#submission-status", category: links.category ?? (() => "") },
   });
   const insight = data ? insightText(data.by_category, data.kpis.gross) : null;
 
@@ -227,7 +262,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
           tone="info"
           title={`Nothing approved for ${title} yet.`}
           action={
-            waiting > 0 ? (
+            waiting > 0 && !readOnly ? (
               <Button size="sm" onClick={() => navigate(links.approvalsInPeriod)}>
                 Review entries
               </Button>
@@ -235,7 +270,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
           }
         >
           {waiting > 0
-            ? `${waiting} ${waiting === 1 ? "entry" : "entries"} from this period ${waiting === 1 ? "is" : "are"} waiting for you.`
+            ? `${waiting} ${waiting === 1 ? "entry" : "entries"} from this period ${waiting === 1 ? "is" : "are"} waiting for ${readOnly ? "approval" : "you"}.`
             : "No entries from this period are waiting for approval."}
         </Callout>
       )}
@@ -245,6 +280,7 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
         <AttentionList
           className="lg:col-span-2 lg:col-start-4 lg:row-start-1 lg:self-start"
           items={attention}
+          title={readOnly ? "Needs attention" : undefined}
           loading={overview.isPending || pendingEntries.isPending}
           error={overview.isError || pendingEntries.isError ? LOAD_ERROR : null}
           onRetry={() => {
