@@ -31,6 +31,7 @@ import {
   optionLabel,
   periodQuery,
   quantityOf,
+  rowQuantity,
   reportOptions,
   rowPeriodLabel,
   scopeNumber,
@@ -185,6 +186,18 @@ describe("optionLabel", () => {
     expect(optionLabel(fuelConfig, "grade", "11", {})).toBe("Ultra low sulphur");
     expect(optionLabel(fuelConfig, "fuel_type", "Kerosene", {})).toBe("Kerosene");
     expect(optionLabel(undefined, "fuel_type", "1", {})).toBe("1");
+  });
+});
+
+describe("rowQuantity", () => {
+  const fields = [{ key: "Distance travelled", label: "Distance travelled", value: "500", numeric: true }];
+  it("prefers the server's quantity (a Smart transport row's tonne.km, not its first number field)", () => {
+    expect(rowQuantity({ quantity: 1000 }, fields)).toBe(1000);
+  });
+  it("falls back to the first numeric field when the server sends none", () => {
+    expect(rowQuantity({}, fields)).toBe(500);
+    expect(rowQuantity({ quantity: null }, fields)).toBe(500);
+    expect(rowQuantity({ quantity: null }, [])).toBeNull();
   });
 });
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import type { EmissionBreakdown } from "../../../services/emissionBreakdownService";
 import { Button, EmptyState, SegmentedControl, SkeletonText, cn, formatEmissions, formatNumber, panel } from "../../../ui";
-import { type BreakdownMetric, breakdownRows } from "../logic";
+import { type BreakdownMetric, breakdownRows, quantityDecimals } from "../logic";
 
 type Props = {
   categoryName: string | null;
@@ -68,7 +68,7 @@ export function BreakdownPanel(p: Props) {
                       </span>
                     </th>
                     <td className="whitespace-nowrap py-2 text-right font-num tabular-nums text-ink">
-                      {metric === "emissions" ? formatEmissions(r.value) : formatNumber(r.value, Number.isInteger(r.value) ? 0 : 2)}
+                      {metric === "emissions" ? formatEmissions(r.value) : formatNumber(r.value, quantityDecimals(r.value))}
                       {metric === "consumption" && r.unit && <span className="ml-1 text-xs text-muted">{r.unit}</span>}
                     </td>
                     <td className="py-2 text-right font-num tabular-nums text-muted">{r.share === null ? "—" : `${r.share}%`}</td>

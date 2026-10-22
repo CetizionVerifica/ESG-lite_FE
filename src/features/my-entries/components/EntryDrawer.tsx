@@ -10,6 +10,8 @@ import {
   Drawer,
   EmptyState,
   EntityAuditTimeline,
+  FileDrop,
+  type FileDropItem,
   SkeletonText,
   StatusPill,
   type ViewerFile,
@@ -22,11 +24,12 @@ import {
   fromEmissionDocument,
   useToast,
 } from "../../../ui";
-import { useEntryDocuments, useLabelConfig, useUpdateEntry } from "../api";
+import { useAddEvidence, useEntryDocuments, useLabelConfig, useRemoveEvidence, useUpdateEntry } from "../api";
 import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
 import { type EntryUpdate, canEdit, saveErrorMessage } from "../edit";
 import { EDIT_FORM_ID, EditEntryForm } from "./EditEntryForm";
-import { type EntryRow, activityFields, keyActivity, periodText, quantityOf } from "../logic";
+import { type EntryRow, activityFields, entryQuantity, keyActivity, periodText, quantityDecimals } from "../logic";
+import type { EmissionDocument } from "../../../services/documentService";
 import { feraSubLabel } from "../../../lib/scope3/fera";
 import { rowQuality } from "../../../lib/scope3/dq";
 
@@ -45,6 +48,112 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <dt className="text-muted">{label}</dt>
       <dd className="min-w-0 text-right text-ink">{children}</dd>
     </div>
+  );
+}
+
+const EVIDENCE_TYPES = ["application/pdf", "image/*", ".xlsx", ".xls", ".csv", ".doc", ".docx"];
+
+/**
+ * The entry's documents. While it can still change (pending, or sent back) the User adds
+ * and removes files here; each change is saved at once, apart from the entry itself.
+ */
+function Evidence({ entry, onOpen }: { entry: EntryRow; onOpen: (file: ViewerFile, files: ViewerFile[]) => void }) {
+  const docs = useEntryDocuments(entry.pk_id);
+  const add = useAddEvidence(entry.pk_id);
+  const remove = useRemoveEvidence(entry.pk_id);
+  const { toast } = useToast();
+  const [adding, setAdding] = useState<FileDropItem[]>([]);
+  const [confirming, setConfirming] = useState<number | null>(null);
+  const changeable = canEdit(entry);
+  const list: EmissionDocument[] = docs.data ?? [];
+  const files = list.map(fromEmissionDocument);
+
+  const upload = (picked: File[]) => {
+    const items = picked.map((file, i): FileDropItem => ({ id: `${Date.now()}-${i}`, file, status: "uploading" }));
+    setAdding((cur) => [...cur, ...items]);
+    add.mutate(picked, {
+      onSuccess: () => {
+        setAdding((cur) => cur.filter((x) => !items.includes(x)));
+        toast({ title: picked.length === 1 ? "File attached" : `${picked.length} files attached`, tone: "good" });
+      },
+      onError: () =>
+        setAdding((cur) => cur.map((x) => (items.includes(x) ? { ...x, status: "error", error: "Couldn't attach this file. Try again." } : x))),
+    });
+  };
+
+  const removeFile = (doc: EmissionDocument) =>
+    remove.mutate(doc.document_id, {
+      onSuccess: () => {
+        setConfirming(null);
+        toast({ title: `Removed ${doc.original_name}`, tone: "good" });
+      },
+      onError: () => toast({ title: "Couldn't remove the file. Try again.", tone: "bad" }),
+    });
+
+  return (
+    <Section title="Evidence">
+      {docs.isPending ? (
+        <SkeletonText lines={2} />
+      ) : docs.isError ? (
+        <EmptyState compact variant="error" title="Couldn't load the documents." action={<Button size="sm" onClick={() => void docs.refetch()}>Try again</Button>} />
+      ) : list.length === 0 ? (
+        <p className="text-sm text-muted">No documents attached.</p>
+      ) : (
+        <ul className="space-y-2">
+          {list.map((doc, i) => {
+            const f = files[i];
+            const asking = confirming === doc.document_id;
+            return (
+              <li key={doc.document_id} className="rounded-control border border-line p-2.5">
+                <div className="flex items-center gap-3">
+                  <FileText aria-hidden className="size-4 shrink-0 text-muted" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-ink">{f.name}</p>
+                    {f.size ? <p className="text-xs text-muted">{formatBytes(f.size)}</p> : null}
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => onOpen(f, files)} aria-label={`Open ${f.name}`}>
+                    Open
+                  </Button>
+                  {changeable && !asking && (
+                    <Button size="sm" variant="ghost" onClick={() => setConfirming(doc.document_id)} aria-label={`Remove ${f.name}`}>
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                {asking && (
+                  <div className="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-2" role="group" aria-label={`Remove ${f.name}?`}>
+                    <p className="mr-auto text-sm text-ink">Remove this file from the entry?</p>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirming(null)} disabled={remove.isPending}>
+                      Keep
+                    </Button>
+                    <Button size="sm" variant="danger" onClick={() => removeFile(doc)} loading={remove.isPending}>
+                      Remove file
+                    </Button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {changeable && !docs.isError && (
+        <FileDrop
+          label="Add evidence"
+          help={
+            entry.status === "rejected"
+              ? "PDF, image or spreadsheet, up to 10 MB each. Files are saved straight away; resubmit the entry when you're done."
+              : "PDF, image or spreadsheet, up to 10 MB each. Files are saved straight away."
+          }
+          accept={EVIDENCE_TYPES}
+          maxSize={10 * 1024 * 1024}
+          multiple
+          items={adding}
+          onAdd={upload}
+          onRemove={(id) => setAdding((cur) => cur.filter((x) => x.id !== id || x.status === "uploading"))}
+          disabled={add.isPending}
+        />
+      )}
+    </Section>
   );
 }
 
@@ -101,11 +210,14 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
   );
 
   const config = useLabelConfig(entry?.site?.site_id, entry?.category?.category_id);
-  const docs = useEntryDocuments(entry?.pk_id ?? null);
   const [viewing, setViewing] = useState<ViewerFile | null>(null);
+  const [viewerFiles, setViewerFiles] = useState<ViewerFile[]>([]);
+  const openFile = (file: ViewerFile, files: ViewerFile[]) => {
+    setViewerFiles(files);
+    setViewing(file);
+  };
 
-  const files = (docs.data ?? []).map(fromEmissionDocument);
-  const quantity = entry ? quantityOf(entry.activity_data) : null;
+  const quantity = entry ? entryQuantity(entry) : null;
   // SE-1: a User sees the entry and its total; the calculation (category match, method and data quality,
   // Category 3 rows) is for Managers and above (or a company set to full detail).
   const calcDetail = useCalcDetailForSite(entry?.site?.site_id ?? null);
@@ -141,7 +253,10 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
             )}
 
             {editing ? (
-              <EditEntryForm entry={entry} saveError={saveError} onSubmit={save} />
+              <>
+                <EditEntryForm entry={entry} saveError={saveError} onSubmit={save} />
+                <Evidence entry={entry} onOpen={openFile} />
+              </>
             ) : (
               <>
                 <Section title={calcDetail ? "Calculation" : "Entry"}>
@@ -150,7 +265,7 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
                     {calcDetail && (
                       <Row label="Quantity">
                         <span className="font-num tabular-nums">
-                          {quantity === null ? "—" : formatNumber(quantity, Number.isInteger(quantity) ? 0 : 2)} {entry.activity_data_unit ?? ""}
+                          {quantity === null ? "—" : formatNumber(quantity, quantityDecimals(quantity))} {entry.activity_data_unit ?? ""}
                         </span>
                       </Row>
                     )}
@@ -206,30 +321,7 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
                   )}
                 </Section>
 
-                <Section title="Evidence">
-                  {docs.isPending ? (
-                    <SkeletonText lines={2} />
-                  ) : docs.isError ? (
-                    <EmptyState compact variant="error" title="Couldn't load the documents." action={<Button size="sm" onClick={() => void docs.refetch()}>Try again</Button>} />
-                  ) : files.length === 0 ? (
-                    <p className="text-sm text-muted">No documents attached.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {files.map((f, i) => (
-                        <li key={`${f.url}-${i}`} className="flex items-center gap-3 rounded-control border border-line p-2.5">
-                          <FileText aria-hidden className="size-4 shrink-0 text-muted" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm text-ink">{f.name}</p>
-                            {f.size ? <p className="text-xs text-muted">{formatBytes(f.size)}</p> : null}
-                          </div>
-                          <Button size="sm" variant="ghost" onClick={() => setViewing(f)} aria-label={`Open ${f.name}`}>
-                            Open
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Section>
+                <Evidence entry={entry} onOpen={openFile} />
 
                 <Section title="History">
                   <EntityAuditTimeline entityType="emission" entityId={entry.pk_id} />
@@ -239,7 +331,7 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
           </div>
         )}
       </Drawer>
-      <DocumentViewer open={viewing !== null} onClose={() => setViewing(null)} file={viewing} files={files} onNavigate={setViewing} />
+      <DocumentViewer open={viewing !== null} onClose={() => setViewing(null)} file={viewing} files={viewerFiles} onNavigate={setViewing} />
     </>
   );
 }
