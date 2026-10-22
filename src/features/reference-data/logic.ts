@@ -310,3 +310,15 @@ export function isUnitDirty(d: UnitDraft, u: Unit | null): boolean {
 export function unitPayload(d: UnitDraft) {
   return { unit_name: d.unit_name.trim(), description: d.description.trim(), site_id: d.site_id as number, category_id: d.category_id as number };
 }
+
+/**
+ * #183 U3-FE: the Units list's "Fits" cell. `null` while unknown (loading, older API); `none` when the
+ * unit fits no emission category of its site × category, so a row can't use it in Add data.
+ */
+export function fitsText(activities: string[] | undefined | null): { text: string; title: string; none: boolean } | null {
+  if (!activities) return null;
+  if (activities.length === 0) return { text: "Fits no emission category", title: "No emission category of this site and category can use this unit.", none: true };
+  const names = [...activities].sort((a, b) => a.localeCompare(b));
+  const shown = names.slice(0, 2).join(", ");
+  return { text: names.length > 2 ? `${shown} +${names.length - 2} more` : shown, title: names.join(", "), none: false };
+}
