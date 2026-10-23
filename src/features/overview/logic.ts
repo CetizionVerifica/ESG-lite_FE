@@ -85,17 +85,21 @@ export type SiteStatus = { status: "approved" | "pending" | "missing" | "rejecte
 
 /** Status pill for a site row: pending first, then people missing, then rejections. */
 export function siteStatus(site: OverviewSite, missingPeople: number): SiteStatus {
-  if (site.pending > 0) return { status: "pending", label: `${site.pending} pending` };
+  const pending = site.pending_review ?? site.pending;
+  if (pending > 0) return { status: "pending", label: `${pending} pending` };
   if (missingPeople > 0) return { status: "missing", label: `${missingPeople} missing` };
   if (site.entries === 0) return { status: "missing", label: "No entries" };
   if (site.rejected > 0 && site.approved === 0) return { status: "rejected", label: `${site.rejected} rejected` };
   return { status: "approved", label: "Approved" };
 }
 
-/** People missing per site name, from a submission list. */
+/** The site names a person is listed under: each of their sites (an older API sends one name). */
+const siteNamesOf = (u: SubmissionUser): string[] => (u.site_names?.length ? u.site_names : [u.site_name]);
+
+/** People missing per site name, from a submission list; someone on two sites counts at both. */
 export function missingBySite(users: SubmissionUser[]): Map<string, number> {
   const out = new Map<string, number>();
-  for (const u of users) if (u.status === "missing") out.set(u.site_name, (out.get(u.site_name) ?? 0) + 1);
+  for (const u of users) if (u.status === "missing") for (const name of siteNamesOf(u)) out.set(name, (out.get(name) ?? 0) + 1);
   return out;
 }
 
@@ -103,7 +107,7 @@ export function missingBySite(users: SubmissionUser[]): Map<string, number> {
 export function usersOnSites(users: SubmissionUser[], siteNames: string[] | null): SubmissionUser[] {
   if (!siteNames) return users;
   const names = new Set(siteNames);
-  return users.filter((u) => names.has(u.site_name));
+  return users.filter((u) => siteNamesOf(u).some((name) => names.has(name)));
 }
 
 /** Last `n` months before the current one, newest first, as YYYY-MM. */

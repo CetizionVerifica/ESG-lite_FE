@@ -36,7 +36,10 @@ export interface OverviewSite {
   net: number;
   entries: number;
   approved: number;
+  /** Every pending row, FERA twins included. */
   pending: number;
+  /** Pending as the approvals list shows it (a twin folds into its entry). Absent from older APIs. */
+  pending_review?: number;
   rejected: number;
   net_vs_last_year_pct: number | null;
 }
@@ -52,7 +55,11 @@ export interface SubmissionUser {
   user_id: number;
   name: string;
   email: string;
+  /** The caller's sites the person works on, joined for display ("Plant A, Plant B"). */
   site_name: string;
+  /** The same sites, one per entry. Absent from older APIs (site_name was a single site). */
+  site_ids?: number[];
+  site_names?: string[];
   submission_count: number;
   status: "submitted" | "missing";
 }

@@ -122,11 +122,27 @@ describe("sites", () => {
     expect(siteStatus(site(), 0)).toEqual({ status: "approved", label: "Approved" });
   });
 
+  it("counts pending as the approvals list does (a FERA twin folds into its entry) when the API says", () => {
+    expect(siteStatus(site({ pending: 40, pending_review: 38 }), 0)).toEqual({ status: "pending", label: "38 pending" });
+    // An older API sends pending only.
+    expect(siteStatus(site({ pending: 3 }), 0)).toEqual({ status: "pending", label: "3 pending" });
+  });
+
   it("counts missing people per site and narrows to chosen sites", () => {
     const users = [user("a", "Hidd", "missing"), user("bb", "Hidd", "missing"), user("ccc", "Sitra", "submitted")];
     expect([...missingBySite(users)]).toEqual([["Hidd", 2]]);
     expect(usersOnSites(users, ["Sitra"]).map((u) => u.name)).toEqual(["ccc"]);
     expect(usersOnSites(users, null)).toHaveLength(3);
+  });
+
+  it("counts someone on two sites at each of them", () => {
+    const both: SubmissionUser = { ...user("dddd", "Hidd, Sitra", "missing"), site_ids: [1, 2], site_names: ["Hidd", "Sitra"] };
+    const users = [user("a", "Hidd", "missing"), both];
+    expect([...missingBySite(users)]).toEqual([
+      ["Hidd", 2],
+      ["Sitra", 1],
+    ]);
+    expect(usersOnSites(users, ["Sitra"]).map((u) => u.name)).toEqual(["dddd"]);
   });
 });
 
