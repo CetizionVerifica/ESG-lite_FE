@@ -101,7 +101,10 @@ describe("buildRows", () => {
     expect(items[items.length - 1]).toBe("Access for 4 people assigned to this site (u1@x.io, u4@x.io, u5@x.io, …); their accounts stay, but 2 of them have no other site");
   });
   it("says when the site is someone's only one", () => {
-    const only = (people: AdminUser[]) => cascadeItems(buildRows([site], people)[0]).at(-1);
+    const only = (people: AdminUser[]) => {
+      const items = cascadeItems(buildRows([site], people)[0]);
+      return items[items.length - 1];
+    };
     expect(only([user(4, { sites: [{ site_id: 1 }] })])).toBe("Access for 1 person assigned to this site (u4@x.io); their accounts stay, but they have no other site");
     expect(only([user(4, { sites: [{ site_id: 1 }] }), user(7, { role: "Manager", sites: [{ site_id: 1 }] })])).toBe(
       "Access for 2 people assigned to this site (u4@x.io, u7@x.io); their accounts stay, but none of them has another site",
