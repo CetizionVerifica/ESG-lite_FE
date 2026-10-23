@@ -317,6 +317,8 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
                           {f.value}
                         </Row>
                       ))}
+                      {/* The unit picked beside the quantity is stored apart from the form's fields. */}
+                      {entry.activity_data_unit && <Row label="Unit">{entry.activity_data_unit}</Row>}
                     </dl>
                   )}
                 </Section>

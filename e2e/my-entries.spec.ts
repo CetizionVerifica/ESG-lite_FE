@@ -224,6 +224,10 @@ test("a My month link filters by site, category and month; a row opens its drawe
   const drawer = page.getByRole("dialog");
   await expect(drawer.getByText("Sent back to you")).toBeVisible();
   await expect(drawer.getByText("No documents attached.")).toBeVisible();
+  // The unit picked beside the quantity is listed with what was entered.
+  const entered = drawer.locator("section").filter({ has: page.getByRole("heading", { name: "What was entered" }) });
+  await expect(entered.getByRole("term").filter({ hasText: "Unit" })).toBeVisible();
+  await expect(entered.getByRole("definition").filter({ hasText: "litre" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(drawer).toHaveCount(0);
 });
