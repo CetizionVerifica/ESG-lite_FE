@@ -50,9 +50,13 @@ describe("scopes", () => {
 
 describe("buildRows", () => {
   const users = [
+    // The older single site field only.
     user(1, { site: { site_id: 1 } }),
     user(2, { role: "Manager", sites: [{ site_id: 1 }, { site_id: 2 }] }),
     user(3, { site: { site_id: 2 } }),
+    // Most people today: Users get their sites through `sites` too.
+    user(4, { sites: [{ site_id: 1 }] }),
+    user(5, { sites: [{ site_id: 1 }, { site_id: 2 }] }),
   ];
   const configs = [
     { pk_id: 1, config_name: "a", site: { site_id: 1 }, category: { category_id: 1 } },
@@ -62,9 +66,13 @@ describe("buildRows", () => {
   ];
   const [row] = buildRows([site], users, configs);
 
-  it("splits users and managers per site", () => {
-    expect(row.users.map((u) => u.user_id)).toEqual([1]);
+  it("splits users and managers per site by role, whichever field holds the site", () => {
+    expect(row.users.map((u) => u.user_id)).toEqual([1, 4, 5]);
     expect(row.managers.map((u) => u.user_id)).toEqual([2]);
+  });
+  it("lists a person once when both fields name the site", () => {
+    const [one] = buildRows([site], [user(6, { site: { site_id: 1 }, sites: [{ site_id: 1 }] })]);
+    expect(one.users.map((u) => u.user_id)).toEqual([6]);
   });
   it("counts coverage over the site's own categories", () => {
     expect(coverage(row)).toEqual({ done: 2, total: 5 });
@@ -89,7 +97,17 @@ describe("buildRows", () => {
         "Its site-specific units",
       ]),
     );
-    expect(items[items.length - 1]).toBe("Access for 1 person assigned to this site (u1@x.io); their accounts stay");
+    // Users and Managers both lose access; 1 and 4 have no other site.
+    expect(items[items.length - 1]).toBe("Access for 4 people assigned to this site (u1@x.io, u4@x.io, u5@x.io, …); their accounts stay, but 2 of them have no other site");
+  });
+  it("says when the site is someone's only one", () => {
+    const only = (people: AdminUser[]) => cascadeItems(buildRows([site], people)[0]).at(-1);
+    expect(only([user(4, { sites: [{ site_id: 1 }] })])).toBe("Access for 1 person assigned to this site (u4@x.io); their accounts stay, but they have no other site");
+    expect(only([user(4, { sites: [{ site_id: 1 }] }), user(7, { role: "Manager", sites: [{ site_id: 1 }] })])).toBe(
+      "Access for 2 people assigned to this site (u4@x.io, u7@x.io); their accounts stay, but none of them has another site",
+    );
+    expect(only([user(5, { sites: [{ site_id: 1 }, { site_id: 2 }] })])).toBe("Access for 1 person assigned to this site (u5@x.io); their accounts stay");
+    expect(only([])).toBe("No one's access (no one is assigned to this site)");
   });
   it("says who has no site left after the delete", () => {
     expect(deletedMessage("Noida", { people_without_site: 0 })).toEqual({ title: 'Site "Noida" deleted' });

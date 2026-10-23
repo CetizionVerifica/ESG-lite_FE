@@ -18,9 +18,9 @@ export type AdminUser = {
   last_name?: string | null;
   email: string;
   role: string;
-  /** The one site a data-entry user reports for. */
+  /** Older single-site field; most people have none. */
   site?: { site_id: number } | null;
-  /** Sites a manager looks after. */
+  /** Every site the person works on (Users and Managers alike). */
   sites?: { site_id: number }[] | null;
 };
 export type ColumnConfig = {
@@ -55,6 +55,13 @@ export function groupByScope(categories: Category[]): { key: ScopeKey; items: Ca
   })).filter((g) => g.items.length > 0);
 }
 
+/** Every site the person can open: their sites plus the older single site, once each. */
+export function siteIdsOf(u: AdminUser): Set<number> {
+  const ids = new Set((u.sites ?? []).map((s) => s.site_id));
+  if (u.site?.site_id) ids.add(u.site.site_id);
+  return ids;
+}
+
 export function personName(u: AdminUser): string {
   const full = [u.name, u.last_name].filter(Boolean).join(" ").trim();
   return full || u.email;
@@ -74,9 +81,9 @@ export function buildRows(sites: Site[], users: AdminUser[] = [], configs: Colum
   const usersBy = new Map<number, AdminUser[]>();
   const managersBy = new Map<number, AdminUser[]>();
   const push = (m: Map<number, AdminUser[]>, id: number, u: AdminUser) => m.set(id, [...(m.get(id) ?? []), u]);
+  // A person is listed once per site, under their role (Managers vs everyone else).
   for (const u of users) {
-    if (u.site?.site_id) push(usersBy, u.site.site_id, u);
-    for (const s of u.sites ?? []) push(managersBy, s.site_id, u);
+    for (const id of siteIdsOf(u)) push(u.role === "Manager" ? managersBy : usersBy, id, u);
   }
   const configsBy = new Map<number, ColumnConfig[]>();
   for (const c of configs) {
@@ -173,6 +180,13 @@ export function matchesCategory(c: Category, q: string): boolean {
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** ", but 4 of them have no other site" (they can't sign in to anything until one is assigned). */
+function noOtherSite(without: number, people: number): string {
+  if (without === 0) return "";
+  if (people === 1) return ", but they have no other site";
+  if (without === people) return ", but none of them has another site";
+  return `, but ${without} of them ${without === 1 ? "has" : "have"} no other site`;
+}
 
 /**
  * What deleting the site takes with it (the backend deletes all of these). People keep their
@@ -180,6 +194,8 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  * their sites, or has none until one is assigned in Users).
  */
 export function cascadeItems(row: SiteRow): string[] {
+  const people = [...row.users, ...row.managers];
+  const leftWithout = people.filter((u) => [...siteIdsOf(u)].every((id) => id === row.site_id)).length;
   return [
     "All emission entries recorded for this site, with their evidence",
     "Its uploaded bills",
@@ -189,8 +205,8 @@ export function cascadeItems(row: SiteRow): string[] {
     "Its PCF studies",
     "Its site-specific units",
     "Its KPI values, period locks and site mappings",
-    row.users.length
-      ? `Access for ${plural(row.users.length, "person", "people")} assigned to this site (${row.users.slice(0, 3).map(personName).join(", ")}${row.users.length > 3 ? ", …" : ""}); their accounts stay`
+    people.length
+      ? `Access for ${plural(people.length, "person", "people")} assigned to this site (${people.slice(0, 3).map(personName).join(", ")}${people.length > 3 ? ", …" : ""}); their accounts stay${noOtherSite(leftWithout, people.length)}`
       : "No one's access (no one is assigned to this site)",
   ];
 }

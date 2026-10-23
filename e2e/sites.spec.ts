@@ -220,7 +220,10 @@ test("a superadmin edits a site, sees its people and deletes it after typing its
   await page.getByRole("row", { name: /Hidd/ }).click();
   await page.getByRole("dialog", { name: "Hidd" }).getByRole("button", { name: "Delete site" }).click();
   const confirm = page.getByRole("alertdialog", { name: 'Delete site "Hidd"?' });
-  await expect(confirm.getByTestId("delete-cascades")).toContainText("Access for 1 person assigned to this site (Omar Saleh); their accounts stay");
+  // The Manager loses access too; Hidd is Omar's only site.
+  await expect(confirm.getByTestId("delete-cascades")).toContainText(
+    "Access for 2 people assigned to this site (Omar Saleh, Mia Manager); their accounts stay, but 1 of them has no other site",
+  );
   const del = confirm.getByRole("button", { name: "Delete site" });
   await expect(del).toBeDisabled();
   await confirm.getByLabel(/Type Hidd to confirm/).fill("hidd");
