@@ -21,7 +21,9 @@ export function Tabs<V extends string>({ label, items, value, onChange, idBase, 
   const base = idBase ?? auto;
   const { refs, onKeyDown } = useRovingKeys(items, value, onChange);
   return (
-    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className={cn("flex gap-1 overflow-x-auto border-b border-line", className)}>
+    // overflow-y-hidden: the tabs' -mb-px overlaps the border by 1px, which overflow-x-auto alone
+    // turns into a vertical scrollbar wherever scrollbars always show (Windows).
+    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className={cn("flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line", className)}>
       {items.map((t) => {
         const selected = t.value === value;
         return (
