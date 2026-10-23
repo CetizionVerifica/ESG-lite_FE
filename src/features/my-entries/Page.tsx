@@ -305,7 +305,8 @@ export default function MyEntriesPage() {
             onRetry={() => void query.refetch()}
             sort={sort}
             onSortChange={setSort}
-            pagination={{ mode: "server", page, pageSize: PAGE_SIZE, total: query.data?.total ?? 0, onPageChange: (p) => setPaging({ key: shapeKey, page: p }) }}
+            // /user/emissions counts pages from 1, DataTable from 0.
+            pagination={{ mode: "server", page: page - 1, pageSize: PAGE_SIZE, total: query.data?.total ?? 0, onPageChange: (p) => setPaging({ key: shapeKey, page: p + 1 }) }}
             onRowClick={setOpen}
             storageKey="my-entries"
             toolbar={<FilterBar filters={filterDefs} value={filters} onChange={setFilters} searchPlaceholder="Search entries" />}

@@ -244,3 +244,27 @@ test("the breakdown panel shows consumption and emissions by type for the chosen
   await panel.getByRole("button", { name: "Close breakdown" }).click();
   await expect(panel).toHaveCount(0);
 });
+
+test("the pager starts at 1–25 and Next reaches the last page (/user/emissions pages count from 1)", async ({ page }) => {
+  const requests: URLSearchParams[] = [];
+  await signIn(page);
+  const many = Array.from({ length: 30 }, (_, i) => row({ pk_id: 100 + i, total_emission: i + 1, status: "pending" }));
+  await page.route((url) => url.pathname.endsWith("/user/emissions"), (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url.searchParams);
+    const p = Number(url.searchParams.get("page"));
+    const limit = Number(url.searchParams.get("limit"));
+    const data = many.slice((p - 1) * limit, p * limit);
+    return route.fulfill({ json: { data, total: many.length, summary: { total_emission: 465, pending_count: 30, approved_count: 0, rejected_count: 0 } } });
+  });
+  await page.goto("/data/mine");
+  const pager = page.getByRole("navigation", { name: "Pagination" });
+  await expect(pager).toContainText("1–25 of 30");
+  await expect(pager.getByRole("button", { name: "Previous page" })).toBeDisabled();
+
+  await pager.getByRole("button", { name: "Next page" }).click();
+  await expect(pager).toContainText("26–30 of 30");
+  await expect(pager.getByRole("button", { name: "Next page" })).toBeDisabled();
+  expect(requests.at(-1)?.get("page")).toBe("2");
+  await expect(page.getByRole("table", { name: "My entries" }).getByRole("row")).toHaveCount(6);
+});
