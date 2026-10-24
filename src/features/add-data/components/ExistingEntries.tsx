@@ -3,6 +3,7 @@ import { Button, Callout, Skeleton, StatusPill, cn, formatEntryEmissions, panel 
 import { useExistingEntries, usePeriodMode } from "../api";
 import { canChange, type SavedEntry } from "../logic/existing";
 import type { EntryPeriod } from "../logic/entry";
+import { filedAs } from "../logic/periodLock";
 
 type Props = {
   siteId: number;
@@ -19,7 +20,8 @@ const nameOf = (e: SavedEntry) => String(e.activity_data?.emission_category ?? "
 export function ExistingEntries({ siteId, categoryId, period, periodLabel, onLoad }: Props) {
   const entries = useExistingEntries(siteId, categoryId, period);
   // F-13/F-27: entries filed the other way (monthly vs yearly) aren't in this list (PeriodModeNote says why).
-  const otherWay = !!usePeriodMode(siteId, categoryId, period).data?.message;
+  const lock = usePeriodMode(siteId, categoryId, period).data;
+  const otherWay = !!lock?.message;
 
   if (entries.isPending) {
     return <Skeleton className="h-24 w-full rounded-card" />;
@@ -50,7 +52,7 @@ export function ExistingEntries({ siteId, categoryId, period, periodLabel, onLoa
         <p className="mt-1 text-sm text-muted">
           {otherWay ? (
             <>
-              No {period.mode} entry for {periodLabel}: it is filed {period.mode === "yearly" ? "monthly" : "yearly"}. See those entries in{" "}
+              No {period.mode} entry for {periodLabel}: it is filed {filedAs(period.mode, lock?.conflict)}. See those entries in{" "}
               <Link className="font-medium text-brand-text underline" to="/data/mine">My entries</Link>.
             </>
           ) : (

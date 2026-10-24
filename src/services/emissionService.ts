@@ -127,19 +127,26 @@ export const getEmissionsBySite = async (siteId: string | number) => {
   return response.data;
 };
 
+/** What the period is already filed as: monthly rows, or yearly data (of this or the other calendar). */
+export interface PeriodModeConflict {
+  conflicting_period: "monthly" | "yearly";
+  /** Set when yearly data of the other calendar (CY vs FY) overlaps the year. */
+  conflicting_year_type?: "CY" | "FY" | null;
+}
+
 /**
  * F-13/F-27: whether a period is already filed the other way (monthly vs yearly) on a site and
- * category: the save's own mode lock, asked before typing. `message` is null when it is free;
- * null overall from an API without the check.
+ * category: the save's own mode lock, asked before typing. `message` and `conflict` are null when
+ * it is free; null overall from an API without the check.
  */
 export const getPeriodMode = async (
   siteId: number,
   categoryId: number,
   period: { reporting_period: "monthly" | "yearly"; year_type?: "CY" | "FY" | null; date_of_reporting: string },
-): Promise<{ message: string | null } | null> => {
+): Promise<{ message: string | null; conflict: PeriodModeConflict | null } | null> => {
   try {
     const response = await api.get(`/user/emissions/period-mode/site/${siteId}/category/${categoryId}`, { params: period });
-    return { message: response.data?.message ?? null };
+    return { message: response.data?.message ?? null, conflict: response.data?.conflict ?? null };
   } catch (e) {
     if ((e as { response?: { status?: number } }).response?.status === 404) return null;
     throw e;
