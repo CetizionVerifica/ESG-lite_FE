@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 import { Button, Callout, EmptyState, Loading, Modal, PageHeader, Skeleton, Stepper, useUnsavedGuard } from "../../ui";
-import { useCreateSupplier, useEntrySetup, useExistingEntries, usePeriodTotals, useSiteCountry, useSupplierDetails, useSupplierOptions, useThreshold } from "./api";
+import { useCreateSupplier, useEntrySetup, useExistingEntries, usePeriodMode, usePeriodTotals, useSiteCountry, useSupplierDetails, useSupplierOptions, useThreshold } from "./api";
 import { SupplierFields } from "./components/SupplierFields";
 import { hasSupplierField, supplierIdOf, withSuppliers } from "./logic/supplier";
 import { errorMessage as supplierError } from "../../services/scope3SuppliersService";
@@ -235,6 +235,8 @@ export default function AddDataPage() {
   });
 
   const periodLabel = period ? entryPeriodLabel(period) : "";
+  // #255: step 2's "filed the other way" answer (the same query), so Review doesn't offer rows the save would refuse.
+  const periodLock = usePeriodMode(contextReady ? site.site_id : null, category?.category_id ?? null, period).data?.message ?? null;
   // Rows without their own date are filed in the month the period ends, as here.
   const bulkUploadHref =
     contextReady && period
@@ -260,6 +262,7 @@ export default function AddDataPage() {
       }}
       onFinished={markSent}
       workflow={workflow}
+      periodLock={periodLock}
       onAnother={() => {
         startAnother();
         setContext({ category: null });

@@ -841,6 +841,47 @@ test("a passenger.km row works the distance out in the drawer", async ({ page })
   expect(created[0].body).not.toHaveProperty("is_estimate");
 });
 
+test("Review doesn't offer rows a period filed the other way would refuse (#255)", async ({ page }) => {
+  const message = "This category is already filed monthly for CY 2025 (57 monthly entries). Keep entering it monthly, or delete those entries first to file the year as one entry.";
+  const created: unknown[] = [];
+  await signIn(page, created, false, [], undefined, { periodMode: { message, asked: [] } });
+  await page.goto("/data/new?site=4&category=9&period=CY2025");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("100");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+
+  await expect(page.getByText("Can't be sent: this period is filed the other way")).toBeVisible();
+  await expect(page.getByText("These rows can't be sent")).toBeVisible();
+  await expect(page.getByText(message).last()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit for approval" })).toBeDisabled();
+  expect(created).toEqual([]);
+});
+
+test("after the save refuses a row for the period lock, there's no \"Send the rest\" with nothing left (#255)", async ({ page }) => {
+  await signIn(page, []);
+  // An API whose pre-check missed the lock: the save itself refuses the row.
+  await page.route(
+    (url) => url.port !== "4173" && url.pathname.endsWith("/user/emissions"),
+    (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({ status: 409, json: { message: "This category already has a yearly batch for CY 2025. Delete the yearly data first, or file this entry under a different period.", mode_lock: true } })
+        : route.fallback(),
+  );
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("100");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+
+  await expect(page.getByText(/already has a yearly batch for CY 2025/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send the rest" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Submit for approval" })).toHaveCount(0);
+});
+
 test("a rail estimate from the distance drawer is saved as an estimate (S3-3)", async ({ page }) => {
   const created: { body: Record<string, unknown>; replace: boolean }[] = [];
   await signIn(page, created);
