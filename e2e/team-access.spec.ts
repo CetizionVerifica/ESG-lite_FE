@@ -53,6 +53,7 @@ function makeTeam(): TeamUser[] {
 async function signIn(page: Page, opts: { failSave?: boolean; extra?: TeamUser[] } = {}) {
   const team = [...makeTeam(), ...(opts.extra ?? [])];
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  const months: string[] = [];
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "Manager");
@@ -74,6 +75,7 @@ async function signIn(page: Page, opts: { failSave?: boolean; extra?: TeamUser[]
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
       if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
       if (path.endsWith("/manager/submission-status")) {
+        months.push(url.searchParams.get("month") ?? "");
         return json({
           month: url.searchParams.get("month"),
           users: [
@@ -94,19 +96,26 @@ async function signIn(page: Page, opts: { failSave?: boolean; extra?: TeamUser[]
       return json({});
     },
   );
-  return { calls };
+  return { calls, months };
 }
+
+// #244: the month being filed (the last full month), as Overview's Submission status picks it.
+const filing = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+const FILING_KEY = `${filing.getFullYear()}-${String(filing.getMonth() + 1).padStart(2, "0")}`;
+const FILING_NAME = `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][filing.getMonth()]} ${filing.getFullYear()}`;
 
 const teamTable = (page: Page) => page.getByRole("table", { name: "Team" });
 
 test("a manager searches the team and changes one person's category access", async ({ page }) => {
-  const { calls } = await signIn(page);
+  const { calls, months } = await signIn(page);
   // The old path still lands here.
   await page.goto("/manage-users");
   await expect(page).toHaveURL(/\/team/);
   const table = teamTable(page);
   await expect(table.getByRole("row")).toHaveCount(3);
-  await expect(page.getByTestId("people-count")).toHaveText("2 people · 1 missing this month");
+  await expect(page.getByTestId("people-count")).toHaveText(`2 people · 1 missing ${FILING_NAME}`);
+  expect(months).toContain(FILING_KEY);
+  await expect(table.getByRole("columnheader", { name: FILING_NAME })).toBeVisible();
   const omar = table.getByRole("row", { name: /Omar Saleh/ });
   await expect(omar).toContainText("3 of 4");
   await expect(omar).toContainText("Submitted");
