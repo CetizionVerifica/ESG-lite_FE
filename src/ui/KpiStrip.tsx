@@ -90,7 +90,8 @@ export function KpiStrip({ items, loading, error, onRetry, className }: KpiStrip
               />
             )}
             <dt className="relative flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted">
-              <span className="truncate">{k.label}</span>
+              {/* #251: a long label wraps onto a second line in a narrow tile instead of being cut ("Emission f…"). */}
+              <span className="line-clamp-2">{k.label}</span>
               {/* Above the full-cell toggle and clickable even though the dt ignores pointer events. */}
               <AutoInfoTip label={k.label} className="pointer-events-auto" />
             </dt>

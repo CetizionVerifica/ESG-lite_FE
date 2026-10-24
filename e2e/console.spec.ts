@@ -160,6 +160,18 @@ test("an older backend without the summary still shows factor uploads", async ({
   await expect(clientsTable(page).getByRole("columnheader", { name: "This month" })).toHaveCount(0);
 });
 
+test("at tablet width the headline tiles show their whole labels (#251)", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await signIn(page);
+  await page.goto("/console");
+  await expect(clientsTable(page).getByRole("row", { name: /Glochem/ })).toBeVisible();
+  const labels = await page.locator("dl dt > span:first-child").evaluateAll((spans) =>
+    spans.map((s) => ({ text: s.textContent, cut: s.scrollWidth > s.clientWidth + 1 || s.scrollHeight > s.clientHeight + 1 })),
+  );
+  expect(labels.map((l) => l.text)).toEqual(expect.arrayContaining(["Emission factors", "Entries this month"]));
+  expect(labels.filter((l) => l.cut)).toEqual([]);
+});
+
 for (const width of [1280, 1024, 768, 390]) {
   test(`fits ${width}px without horizontal scroll`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
