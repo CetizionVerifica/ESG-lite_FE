@@ -2,7 +2,11 @@ import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { FileQuestion, Save } from "lucide-react";
 import { Button, Callout, EmptyState, Modal, PageHeader, SkeletonText, TabPanel, Tabs, cn, panel, useToast, useUnsavedGuard } from "../../ui";
-import { useFactorNames, useForm, useLibrary, useSaveForm, useTestSetup } from "./api";
+import { useAddLibraryColumns, useFactorNames, useForm, useLibrary, useSaveForm, useTestSetup } from "./api";
+import { applyRecipe, formSettingsIssues, missingRecipeColumns, setChoiceColumn, setFieldSetting } from "./formSettings";
+import { recipeFor } from "../../lib/forms/recipes";
+import type { RowMethod } from "../../lib/scope3/dq";
+import { addField, type ColumnEntity } from "./builder";
 import { type BuilderDraft, type BuilderTab, type SourceConfig, draftFromConfig, hasRemovals, isDirty, renameMap, savedRemovals, toUpdatePayload, validateBuilder } from "./builder";
 import { CalcTab } from "./components/builder/CalcTab";
 import { ChoicesTab } from "./components/builder/ChoicesTab";
@@ -85,7 +89,43 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
 
   const dirty = isDirty(draft, initial);
   const blocker = useUnsavedGuard(dirty && !save.isPending);
-  const issues = validateBuilder(draft, library.data ?? []);
+  const issues = [...validateBuilder(draft, library.data ?? []), ...formSettingsIssues(draft)];
+  const addColumns = useAddLibraryColumns();
+  const ghg = source.category?.ghg_category ?? null;
+
+  // SE-3: a recipe's fields and formula; fields the library lacks are created first.
+  const onApplyRecipe = (method: RowMethod) => {
+    const recipe = recipeFor(method);
+    if (!recipe) return;
+    const lib = (library.data ?? []) as ColumnEntity[];
+    const missing = missingRecipeColumns(draft, recipe, lib);
+    const apply = (cols: ColumnEntity[]) => {
+      update((d) => applyRecipe(d, recipe, cols));
+      toast({ title: `Recipe added: ${recipe.fields.map((f) => f.name).join(", ") || "formula"}`, tone: "neutral" });
+    };
+    if (!missing.length) return apply(lib);
+    addColumns.mutate(
+      missing.map((f) => ({ column_name: f.name, column_type: f.type })),
+      {
+        onSuccess: (created) => apply([...lib, ...(created as ColumnEntity[])]),
+        onError: (e) => setSaveErr(errorMessage(e, "The recipe's fields couldn't be added to the column library. Try again.")),
+      },
+    );
+  };
+
+  // SE-3: the method question, an ordinary choice field worded for the client.
+  const QUESTION = "Record type";
+  const onAddQuestion = () => {
+    const lib = (library.data ?? []) as ColumnEntity[];
+    const askWith = (col: ColumnEntity) =>
+      update((d) => setFieldSetting(setChoiceColumn(addField(d, col), col.column_name, ghg), col.column_name, { label: "What does your record show?" }));
+    const existing = lib.find((c) => c.column_name.toLowerCase() === QUESTION.toLowerCase() && c.column_type === "select");
+    if (existing) return askWith(existing);
+    addColumns.mutate([{ column_name: QUESTION, column_type: "select" }], {
+      onSuccess: (created) => created[0] && askWith(created[0] as ColumnEntity),
+      onError: (e) => setSaveErr(errorMessage(e, "The question couldn't be added to the column library. Try again.")),
+    });
+  };
   const renames = renameMap(draft);
   const removals = savedRemovals(initial, draft);
   const removes = hasRemovals(removals);
@@ -192,7 +232,7 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
             <ExtraTab draft={draft} onChange={update} savedKeys={savedExtraKeys} />
           </TabPanel>
           <TabPanel idBase="builder" value="calculation" current={tab}>
-            <CalcTab draft={draft} onChange={update} ghgCategory={source.category?.ghg_category ?? null} />
+            <CalcTab draft={draft} onChange={update} ghgCategory={ghg} onApplyRecipe={onApplyRecipe} onAddQuestion={onAddQuestion} busy={addColumns.isPending} />
           </TabPanel>
           <TabPanel idBase="builder" value="test" current={tab}>
             <TestTab

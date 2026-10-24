@@ -6,6 +6,8 @@ import { type EditIssue, type EntryUpdate, buildUpdate, editIssue, editedDate, e
 import { type EntryRow, periodText } from "../logic";
 import { plainProblem } from "../../../lib/entryDetail";
 import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
+import { columnTitle } from "../../../lib/emissions/form";
+import { settingFor } from "../../../lib/forms/settings";
 
 export const EDIT_FORM_ID = "edit-entry-form";
 
@@ -146,9 +148,19 @@ function Fields(p: FieldsProps) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         {formColumns(model)
-          .filter((c) => isColumnVisible(model, c, row))
+          .filter((c) => isColumnVisible(model, c, row) && !settingFor(model.settings.fieldSettings, c.column_name)?.hidden)
           .map((c) => (
-            <DynamicField key={c.pk_id} model={model} column={c} row={row} onChange={change} />
+            <DynamicField
+              key={c.pk_id}
+              model={model}
+              column={c}
+              row={row}
+              onChange={change}
+              // SE-3: the form's own words, help and read-only fields, as in Add data.
+              labelText={settingFor(model.settings.fieldSettings, c.column_name)?.label ?? columnTitle(c.column_name)}
+              help={settingFor(model.settings.fieldSettings, c.column_name)?.help}
+              readOnly={!!settingFor(model.settings.fieldSettings, c.column_name)?.readonly}
+            />
           ))}
         <Select<string>
           label="Unit"

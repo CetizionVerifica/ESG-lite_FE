@@ -13,6 +13,10 @@ type Props = {
   labelExtra?: ReactNode;
   /** Help line under a select or number field. */
   help?: string;
+  /** SE-3: the label in the client's words (the form's field settings); else the field's title. */
+  labelText?: string;
+  /** SE-3: shown with its value, not editable (the form's field settings). */
+  readOnly?: boolean;
 };
 
 const toNumber = (text: unknown): number | null => {
@@ -21,9 +25,9 @@ const toNumber = (text: unknown): number | null => {
 };
 
 /** One ColumnConfig column: a (dependent) select, a number or text. */
-export function DynamicField({ model, column, row, onChange, error, labelExtra, help }: Props) {
+export function DynamicField({ model, column, row, onChange, error, labelExtra, help, labelText, readOnly }: Props) {
   const name = column.column_name;
-  const title = columnTitle(name);
+  const title = labelText ?? columnTitle(name);
   const label = labelExtra ? (
     <span className="inline-flex items-center gap-1.5">
       {title}
@@ -48,7 +52,7 @@ export function DynamicField({ model, column, row, onChange, error, labelExtra, 
         options={options.map((o) => ({ value: String(o.id), label: o.label }))}
         placeholder={`Select ${title.toLowerCase()}`}
         emptyText={waiting && parent ? `Select ${columnTitle(parent).toLowerCase()} first` : "No options"}
-        disabled={waiting}
+        disabled={waiting || readOnly}
         help={help}
       />
     );
@@ -63,9 +67,10 @@ export function DynamicField({ model, column, row, onChange, error, labelExtra, 
         min={0}
         error={error}
         help={help}
+        disabled={readOnly}
       />
     );
   }
 
-  return <TextField label={label} value={value} onChange={(v) => onChange(name, v)} type={column.column_type === "date" ? "date" : "text"} />;
+  return <TextField label={label} value={value} onChange={(v) => onChange(name, v)} type={column.column_type === "date" ? "date" : "text"} help={help} disabled={readOnly} />;
 }

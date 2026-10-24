@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { createEmissionCalculator } from "./emissionCalc";
 import { factorYearForDate, yearlyPeriodEndDate } from "./reportingPeriod";
+import { withDefaults } from "../forms/settings";
 import type { CalculationSpec, ColumnEntity, EmissionCategoryMapping, EmissionFactor, ModalRow } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -250,6 +251,31 @@ describe("Context 4 · Bahrain × FERA (fallbackToRaw) · monthly 2025-09", () =
           { id: 2, emission_category: "Natural gas", quantity: "12", activity_data_unit: "mwh" },
           { id: 3, emission_category: "Natural gas", quantity: "12000", activity_data_unit: "kwh" },
           { id: 4, emission_category: "LPG", quantity: "5", activity_data_unit: "litre" },
+        ],
+      ),
+    ).toMatchSnapshot();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Context 5 · SE-3: rows start with what the form fills in (SE-2 field settings):
+// a hidden "share of the load" defaulting to 100 % and a fixed unit, as the
+// server fills them, so the preview total is the saved one.
+// ---------------------------------------------------------------------------
+describe("Context 5 · Bahrain × Upstream transport · a form's hidden default and fixed unit (SE-3)", () => {
+  const fuelSpec: CalculationSpec = {
+    mode: "per_unit",
+    methods: { litre: { multiply: ["Fuel used (litres)", "Your share of the load (%)"], percent: ["Your share of the load (%)"], activity_unit: "litre" } },
+  };
+  const settings = { "Your share of the load (%)": { hidden: true, default: 100 } };
+  const start = (row: ModalRow) => ({ ...withDefaults(row, settings, []), activity_data_unit: "litre" });
+  it("matches the golden outputs", () => {
+    expect(
+      run(
+        { factors: [ef("Fuel - Diesel (average biofuel blend) [litre]", 3.1238, "litre", 2024)], targetYear: 2024, columns: [col(30, "Fuel used (litres)"), col(31, "Your share of the load (%)")], spec: fuelSpec },
+        [
+          start({ id: 1, emission_category: "Fuel - Diesel (average biofuel blend) [litre]", "Fuel used (litres)": "1000", "Your share of the load (%)": "" }), // the hidden default: 100 %
+          start({ id: 2, emission_category: "Fuel - Diesel (average biofuel blend) [litre]", "Fuel used (litres)": "1000", "Your share of the load (%)": "50" }), // a value the row has is kept
         ],
       ),
     ).toMatchSnapshot();

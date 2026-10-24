@@ -400,6 +400,20 @@ test("a superadmin turns Smart import on for a client from its overview", async 
   expect(calls).toContainEqual({ method: "PUT", path: expect.stringMatching(/\/admin\/companies\/1$/), body: { ai_import_enabled: true } });
 });
 
+test("a superadmin sets what the client's contributors see and its default currency (SE-3)", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/clients/1");
+  const entry = page.getByTestId("entry-settings");
+  await expect(entry.getByRole("radio", { name: "Total only" })).toHaveAttribute("aria-checked", "true");
+  await expect(entry.getByText("Their fields and the tCO₂e total, like the old screens.")).toBeVisible();
+  await entry.getByRole("radio", { name: "Full calculation" }).click();
+  await expect(page.getByText("Midal Cables: contributors see the full calculation")).toBeVisible();
+  expect(calls).toContainEqual({ method: "PUT", path: expect.stringMatching(/\/admin\/companies\/1$/), body: { entry_detail: "full" } });
+  await entry.getByLabel("Default currency").selectOption("USD");
+  await expect(page.getByText("Midal Cables: default currency USD")).toBeVisible();
+  expect(calls).toContainEqual({ method: "PUT", path: expect.stringMatching(/\/admin\/companies\/1$/), body: { default_currency: "USD" } });
+});
+
 test("a superadmin onboards a client that starts from another client's setup", async ({ page }) => {
   const { calls } = await signIn(page);
   await page.goto("/clients/new");

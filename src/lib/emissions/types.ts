@@ -71,6 +71,12 @@ export interface ModalRow {
   _invoiceDate?: string;
   _totalAmount?: number;
   _currency?: string;
+  /**
+   * SE-3: what the form filled in on a new row (its field defaults, fixed unit and the
+   * emission category they map to), so a row holding only those isn't something
+   * the person typed. Extra fields are keyed `_extra_data.<key>`. Never sent.
+   */
+  _defaults?: Record<string, string>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- rows carry ColumnConfig-defined fields
   [key: string]: any;
 }
@@ -124,4 +130,15 @@ export interface ColumnConfig {
    * `readMethodOptions` (src/lib/scope3/dq.ts), which also takes bare keys.
    */
   method_options?: unknown;
+  /**
+   * SE-2: what the form fixes for the person entering data: a choice whose
+   * answers pick the method, per-field settings, a fixed unit and currency.
+   * Read with `readFormSettings` (src/lib/forms/settings.ts).
+   */
+  method_by_choice?: unknown;
+  field_settings?: unknown;
+  units?: unknown;
+  currency?: unknown;
+  /** SE-2: bumped when the form is published (SE-4). */
+  version?: number;
 }

@@ -52,6 +52,8 @@ type Props = {
   methodErrors?: Record<number, { method: string; message: string }>;
   /** SE-1: Managers and above (or a company set to full detail) see the method and data quality. */
   showCalcDetail?: boolean;
+  /** SE-2/SE-3: the client's default currency, for spend rows on a form that fixes none. */
+  defaultCurrency?: string | null;
   onBack: () => void;
   onNext: () => void;
 };
@@ -99,6 +101,8 @@ export function EnterRows(p: Props) {
         methodError={p.methodErrors?.[row.id]?.method === row[ROW_METHOD_COLUMN] ? p.methodErrors?.[row.id]?.message : undefined}
         onChange={(column, value) => p.dispatch({ type: "change", model: p.model, id: row.id, column, value })}
         onRowMethod={(method) => p.dispatch({ type: "patch", id: row.id, patch: { [ROW_METHOD_COLUMN]: method } })}
+        onPatch={(patch) => p.dispatch({ type: "patch", id: row.id, patch })}
+        defaultCurrency={p.defaultCurrency}
         onExtraChange={(key, value) => p.dispatch({ type: "extra", id: row.id, key, value })}
         onDuplicate={() => p.dispatch({ type: "duplicate", id: row.id })}
         onRemove={() => p.dispatch({ type: "remove", id: row.id })}

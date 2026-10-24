@@ -8,6 +8,7 @@
 // on the legacy page.
 import { ROW_METHOD_COLUMN, resolveSpecMethod, specNumericColumns } from "./emissionCalc";
 import { type MethodOptions, readMethodOptions, unitsForMethod } from "../scope3/dq";
+import { type FormSettings, readFormSettings, withDefaults } from "../forms/settings";
 import { unitForCategory, unitsForRow, withMethodUnits, type UnitOptionsByActivity } from "./unitOptions";
 import type {
   CalculationSpec,
@@ -32,6 +33,8 @@ export interface FormModel {
   spec: CalculationSpec | null;
   /** S3-3: the methods the form offers, most specific first, with their units; empty when it doesn't limit them. */
   methodOptions: MethodOptions;
+  /** SE-2/SE-3: field settings, the method question, a fixed unit and currency (src/lib/forms/settings.ts). */
+  settings: FormSettings;
   /** #183: the units each emission category may use, from the server; null keeps the form's flat unit list. */
   unitOptions: UnitOptionsByActivity | null;
 }
@@ -45,6 +48,7 @@ export const toFormModel = (config: ColumnConfig | null | undefined, unitOptions
   extraFields: config?.extra_fields ?? [],
   spec: config?.calculation ?? null,
   methodOptions: readMethodOptions(config?.method_options),
+  settings: readFormSettings(config),
   unitOptions,
 });
 
@@ -306,7 +310,21 @@ export function newRow(m: FormModel, id: number): ModalRow {
     const only = rowMethodChoices(m);
     if (only.length === 1) row[ROW_METHOD_COLUMN] = only[0];
   }
-  return row;
+  // SE-3: the form's defaults (hidden ones too, as the server fills them) and its fixed unit, with
+  // the emission category they map to. `_defaults` keeps them from counting as typed input.
+  const out = withDefaults(row, m.settings.fieldSettings, m.extraFields.map((f) => f.key));
+  if (m.settings.fixedUnit) {
+    out.activity_data_unit = m.settings.fixedUnit;
+    out._defaults = { ...(out._defaults ?? {}), activity_data_unit: m.settings.fixedUnit };
+  }
+  const auto = out._defaults ? autoEmissionCategory(m, out) : null;
+  if (auto) {
+    out.emission_category = auto.category;
+    out._ecmKey = auto.key;
+    out._defaults = { ...out._defaults, emission_category: auto.category };
+  }
+  // A form with no defaults keeps the row exactly as before.
+  return out._defaults ? out : row;
 }
 
 /**
@@ -376,9 +394,10 @@ export function applyChange(m: FormModel, row: ModalRow, column: string, value: 
   }
 
   // #183: a new emission category keeps the unit only while it still offers it, and picks the only
-  // unit it offers. A spend row's unit is its currency (S3-5) and stays as it is.
+  // unit it offers. A spend row's unit is its currency (S3-5) and stays as it is, and so does a
+  // form's fixed unit (SE-3): the Superadmin set it, so a choice never swaps it.
   const spendRow = next[ROW_METHOD_COLUMN] === "spend_based" || !!next.currency;
-  if (m.unitOptions && next.emission_category && next.emission_category !== row.emission_category && !spendRow) {
+  if (m.unitOptions && !m.settings.fixedUnit && next.emission_category && next.emission_category !== row.emission_category && !spendRow) {
     next.activity_data_unit = unitForCategory(m.unitOptions, String(next.emission_category), next.activity_data_unit, methodUnitsOf(m, next)) ?? "";
   }
   return next;

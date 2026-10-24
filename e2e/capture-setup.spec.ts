@@ -58,7 +58,8 @@ async function signIn(page: Page, opts: { onlyFirstForm?: boolean } = {}) {
       if (path.endsWith("/admin/column-configs")) return json(configs);
       if (path.endsWith("/admin/columns") && method === "POST") {
         const body = request.postDataJSON();
-        columns = [...columns, { pk_id: 103, ...body }];
+        // Each new column gets the next id (the first is 103).
+        columns = [...columns, { pk_id: 100 + columns.length, ...body }];
         return json(columns.at(-1), 201);
       }
       if (path.endsWith("/admin/columns")) return json(columns);
@@ -444,4 +445,85 @@ test("form builder: edits show in the preview and save in one request", async ({
   expect((body.dependent_options as Record<string, Record<string, unknown[]>>).vehicle.Boat).toEqual([]);
   expect(body.rename_map).toBeUndefined();
   await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+});
+
+// SE-3: a Scope 3 freight form (Category 4) for the Method section, recipes and field settings.
+const freight = {
+  pk_id: 8,
+  config_name: "Hidd freight",
+  site: { site_id: 1, name: "Hidd" },
+  category: { category_id: 31, category_name: "Upstream transportation and distribution", scope: "Scope 3", ghg_category: 4 },
+  columns: [{ pk_id: 1, column_name: "mode", column_type: "select" }],
+  column_options: { "1": [{ id: "road", label: "Road" }] },
+  column_dependencies: {},
+  dependent_options: {},
+  emission_category_mapping: { road: "Diesel used [litre]" },
+  extra_fields: [{ key: "paid_by", label: "Who paid?", type: "select", required: false, options: ["We paid", "Customer or other"] }],
+  calculation: null,
+  method_options: null,
+};
+
+test("form builder: one method from its recipe, fields in the client's words, a fixed unit (SE-3)", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.route(/\/admin\/column-configs\/8$/, (route) =>
+    route.request().method() === "PUT"
+      ? (calls.push({ method: "PUT", path: "/admin/column-configs/8", body: route.request().postDataJSON() }), route.fulfill({ json: { message: "updated", columnConfig: { ...freight, ...route.request().postDataJSON() } } }))
+      : route.fulfill({ json: freight }),
+  );
+  await page.route(/\/admin\/emission-factors\/category-names/, (route) => route.fulfill({ json: ["Diesel used [litre]"] }));
+  await page.goto("/capture/forms/8?tab=calculation");
+  const section = page.getByTestId("method-section");
+  await expect(section).toContainText("Category 4 · Upstream transportation and distribution");
+
+  // One method; its recipe adds the fields the library lacks and the formula.
+  await section.getByRole("radio", { name: "One method" }).click();
+  await section.getByLabel("Method", { exact: true }).selectOption("fuel_based");
+  await expect(section.getByLabel("Units for From fuel used")).toHaveValue("litre");
+  await section.locator('[data-recipe="fuel_based"]').getByRole("button", { name: "Add its fields and formula" }).click();
+  await expect(page.getByText("Recipe added: Fuel used (litres), Your share of the load (%)")).toBeVisible();
+  const preview = page.getByTestId("form-preview");
+  await expect(preview.getByLabel("Fuel Used (Litres)")).toBeVisible();
+  // A fixed unit is shown as text.
+  await page.getByTestId("unit-currency").getByLabel("Unit").selectOption("litre");
+  await expect(preview.getByText("(fixed)")).toBeVisible();
+
+  // Fields tab: the share is hidden with 100, the mode is asked in the client's words.
+  await page.getByRole("tab", { name: "Fields" }).click();
+  const share = page.locator('[data-field="Your share of the load (%)"]');
+  await share.getByRole("button", { name: /What contributors see/ }).click();
+  await share.getByLabel("Default").fill("100");
+  await share.getByRole("switch", { name: "Hide Your Share Of The Load (%)" }).click();
+  const mode = page.locator('[data-field="mode"]');
+  await mode.getByRole("button", { name: /What contributors see/ }).click();
+  await mode.getByLabel("Label contributors see").fill("How did it travel?");
+  await mode.getByLabel("Help").fill("As on the delivery note");
+  await expect(preview.getByLabel("How did it travel?")).toBeVisible();
+  await expect(preview.getByText("As on the delivery note")).toBeVisible();
+  await expect(preview.getByLabel("Your Share Of The Load (%)")).toHaveCount(0);
+  // The reviewer view shows the hidden field, marked.
+  await preview.getByRole("radio", { name: "Reviewer view" }).click();
+  await expect(preview.getByText("Hidden from contributors")).toBeVisible();
+  await expect(preview.getByTestId("method-line")).toContainText("From fuel used");
+
+  await page.getByRole("button", { name: "Save form" }).click();
+  await expect(page.getByText('Form "Hidd freight" saved')).toBeVisible();
+  const body = calls.find((c) => c.method === "PUT")?.body as Record<string, unknown>;
+  expect(body.column_ids).toEqual([1, 103, 104]);
+  expect(body.method_options).toEqual([{ method: "fuel_based", units: ["litre"] }]);
+  expect(body.method_by_choice).toBeNull();
+  expect(body.calculation).toEqual({
+    mode: "per_unit",
+    methods: { litre: { multiply: ["Fuel used (litres)", "Your share of the load (%)"], percent: ["Your share of the load (%)"], activity_unit: "litre" } },
+  });
+  expect(body.field_settings).toEqual({
+    "Your share of the load (%)": { default: "100", hidden: true },
+    mode: { label: "How did it travel?", help: "As on the delivery note" },
+  });
+  expect(body.units).toEqual({ fixed: "litre" });
+  expect(body.currency).toBeNull();
+  // The library got the recipe's two new number fields.
+  expect(calls.filter((c) => c.method === "POST" && c.path.endsWith("/admin/columns")).map((c) => c.body)).toEqual([
+    { column_name: "Fuel used (litres)", column_type: "number", dropdown_options: null },
+    { column_name: "Your share of the load (%)", column_type: "number", dropdown_options: null },
+  ]);
 });

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, X } from "lucide-react";
 import { Badge, Combobox, TextField, cn, focusRing, inputBase } from "../../../../ui";
-import { type BuilderDraft, type ColumnEntity, type LibraryName, addField, fieldNameError, fieldTitle, moveField, removeField, renameField } from "../../builder";
+import { type BuilderDraft, type ColumnEntity, type LibraryName, addField, fieldNameError, fieldTitle, isNumber, isSelect, moveField, removeField, renameField } from "../../builder";
 import { typeLabel } from "../../logic";
+import { choiceAnswers } from "../../formSettings";
+import { FieldSettingsEditor } from "./FieldSettingsEditor";
 
 export type FieldsTabProps = {
   draft: BuilderDraft;
@@ -14,6 +16,15 @@ export type FieldsTabProps = {
 /** Form name, the ordered field list, add from the library, keys under "Advanced". */
 export function FieldsTab({ draft, onChange, library, libraryLoading }: FieldsTabProps) {
   const [advanced, setAdvanced] = useState(false);
+  // SE-3: which fields have "What contributors see" open.
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const toggleOpen = (key: string) => setOpen((prev) => (prev.has(key) ? new Set([...prev].filter((k) => k !== key)) : new Set([...prev, key])));
+  const summary = (key: string) => {
+    const st = draft.fieldSettings[key];
+    if (!st) return null;
+    const parts = [st.label && `"${st.label}"`, st.hidden && "hidden", st.readonly && "read-only", st.required && "required", st.default !== undefined && `default ${st.default}`].filter(Boolean);
+    return parts.length ? parts.join(" · ") : null;
+  };
   const available = library
     .filter((c) => !draft.fields.some((f) => f.pk_id === c.pk_id))
     .map((c) => ({ value: c.pk_id, label: `${fieldTitle(c.column_name)} · ${typeLabel(c.column_type)}` }))
@@ -50,6 +61,25 @@ export function FieldsTab({ draft, onChange, library, libraryLoading }: FieldsTa
                     <Badge tone="neutral">{typeLabel(f.column_type)}</Badge>
                   </div>
                   {advanced && <KeyInput draft={draft} field={f} library={library} onCommit={(name) => onChange((d) => renameField(d, f.pk_id, name))} />}
+                  <button
+                    type="button"
+                    onClick={() => toggleOpen(f.column_name)}
+                    aria-expanded={open.has(f.column_name)}
+                    className={cn("inline-flex items-center gap-1 rounded-control px-1 py-0.5 text-xs text-brand-text hover:underline", focusRing)}
+                  >
+                    {open.has(f.column_name) ? <ChevronDown aria-hidden className="size-3.5" /> : <ChevronRight aria-hidden className="size-3.5" />}
+                    What contributors see{summary(f.column_name) ? `: ${summary(f.column_name)}` : ""}
+                  </button>
+                  {open.has(f.column_name) && (
+                    <FieldSettingsEditor
+                      draft={draft}
+                      onChange={onChange}
+                      fieldKey={f.column_name}
+                      title={fieldTitle(f.column_name)}
+                      numeric={isNumber(f)}
+                      choices={isSelect(f) ? choiceAnswers(draft, f.column_name).map((o) => ({ value: o.id, label: o.label })) : undefined}
+                    />
+                  )}
                 </div>
                 <div className="flex items-center">
                   <button type="button" aria-label={`Move ${fieldTitle(f.column_name)} up`} disabled={i === 0} onClick={() => onChange((d) => moveField(d, i, i - 1))} className={cn("rounded-control p-1.5 text-muted hover:bg-tint disabled:opacity-30", focusRing)}>
@@ -91,6 +121,42 @@ export function FieldsTab({ draft, onChange, library, libraryLoading }: FieldsTa
           help="Select fields bring their library choices; change them on the Choices tab."
         />
       </section>
+
+      {draft.extraFields.some((f) => f.key.trim()) && (
+        <section aria-labelledby="extra-settings-title" className="space-y-2">
+          <h3 id="extra-settings-title" className="text-sm font-medium text-ink">
+            Extra details: what contributors see
+          </h3>
+          <ul className="space-y-2">
+            {draft.extraFields
+              .filter((f) => f.key.trim())
+              .map((f) => (
+                <li key={f.key} className="space-y-1" data-extra-field={f.key}>
+                  <button
+                    type="button"
+                    onClick={() => toggleOpen(`extra:${f.key}`)}
+                    aria-expanded={open.has(`extra:${f.key}`)}
+                    className={cn("inline-flex items-center gap-1 rounded-control px-1 py-0.5 text-sm text-ink hover:underline", focusRing)}
+                  >
+                    {open.has(`extra:${f.key}`) ? <ChevronDown aria-hidden className="size-3.5" /> : <ChevronRight aria-hidden className="size-3.5" />}
+                    {f.label || f.key}
+                    {summary(f.key) && <span className="text-xs text-muted">· {summary(f.key)}</span>}
+                  </button>
+                  {open.has(`extra:${f.key}`) && (
+                    <FieldSettingsEditor
+                      draft={draft}
+                      onChange={onChange}
+                      fieldKey={f.key}
+                      title={f.label || f.key}
+                      numeric={f.type === "number"}
+                      choices={f.type === "select" ? (f.options ?? []).filter((o) => o.trim()).map((o) => ({ value: o, label: o })) : undefined}
+                    />
+                  )}
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }
