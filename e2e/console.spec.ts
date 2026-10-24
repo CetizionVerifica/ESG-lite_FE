@@ -152,6 +152,22 @@ test("onboard client opens the onboarding page and load errors offer a retry", a
   await expect(page).toHaveURL(/\/clients\/new$/);
 });
 
+test("the factors tile counts site factors as the Factors page does and names the global spend library (#253)", async ({ page }) => {
+  await signIn(page);
+  await page.route(
+    (url) => url.port !== "4173" && url.pathname.endsWith("/admin/console"),
+    (route) => {
+      const s = summary();
+      return route.fulfill({ json: { ...s, totals: { ...s.totals, emission_factors: 312, site_emission_factors: 300, global_emission_factors: 12 } } });
+    },
+  );
+  await page.goto("/console");
+  const tile = page.locator("dl > div").filter({ hasText: "Emission factors" });
+  await expect(tile).toContainText("300");
+  await expect(tile).toContainText("+ 12 global spend factors");
+  await expect(tile).not.toContainText("312");
+});
+
 test("an older backend without the summary still shows factor uploads", async ({ page }) => {
   await signIn(page, { noSummary: true });
   await page.goto("/console");

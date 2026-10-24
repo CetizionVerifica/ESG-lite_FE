@@ -19,7 +19,7 @@ import {
 import { RecentActivity } from "./components/RecentActivity";
 import { SetupGaps } from "./components/SetupGaps";
 import { clientColumns } from "./components/columns";
-import { type ClientRow, buildClientRows, recentActivity, setupGaps, summaryActivity, withMonth } from "./logic";
+import { type ClientRow, buildClientRows, factorTile, recentActivity, setupGaps, summaryActivity, withMonth } from "./logic";
 
 /** P16 `/console`: which clients are healthy, which are stuck in setup, and what needs PlanetPulse staff today. */
 export default function ConsolePage() {
@@ -69,11 +69,13 @@ export default function ConsolePage() {
   const columns = useMemo(() => clientColumns({ month: !!summary.data }), [summary.data]);
 
   const activeClients = (companies.data ?? []).filter((c) => c.status !== false).length;
+  const factors = factorTile(summary.data?.totals, factorTotal.data);
   const kpis: Kpi[] = [
     { label: "Clients (active)", value: companies.data ? activeClients : null, primary: true, hint: companies.data ? `${formatNumber(companies.data.length)} in total` : undefined },
     { label: "Sites", value: sites.data?.length },
     { label: "Users", value: users.data ? users.data.filter((u) => u.role !== "Superadmin").length : null },
-    { label: "Emission factors", value: summary.data?.totals.emission_factors ?? factorTotal.data ?? null },
+    // #253: the Factors page's count, with the global spend library (no site) said beside it.
+    { label: "Emission factors", value: factors.value, hint: factors.global ? `+ ${formatNumber(factors.global)} global spend factors` : undefined },
     summary.data
       ? { label: "Entries this month", value: summary.data.totals.entries_this_month, hint: `${formatNumber(summary.data.totals.pending_entries)} pending review` }
       : { label: "Entries this month", value: null, hint: summary.isPending ? undefined : "Couldn't load" },
