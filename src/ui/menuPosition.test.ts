@@ -7,23 +7,30 @@ const panel = { width: 180, height: 80 };
 describe("menuPosition", () => {
   it("opens below the trigger, aligned to its end edge", () => {
     const trigger = { top: 100, bottom: 130, left: 1000, right: 1030 };
-    expect(menuPosition(trigger, panel, viewport, "end")).toEqual({ top: 134, left: 850 });
+    expect(menuPosition(trigger, panel, viewport, "end")).toMatchObject({ top: 134, left: 850 });
   });
 
   it("aligns to the start edge", () => {
     const trigger = { top: 100, bottom: 130, left: 40, right: 70 };
-    expect(menuPosition(trigger, panel, viewport, "start")).toEqual({ top: 134, left: 40 });
+    expect(menuPosition(trigger, panel, viewport, "start")).toMatchObject({ top: 134, left: 40 });
   });
 
   it("flips above when it doesn't fit below", () => {
     const trigger = { top: 740, bottom: 770, left: 1000, right: 1030 };
-    expect(menuPosition(trigger, panel, viewport, "end")).toEqual({ top: 656, left: 850 });
+    expect(menuPosition(trigger, panel, viewport, "end")).toMatchObject({ top: 656, left: 850 });
   });
 
   it("stays below when neither side fits better", () => {
     const tall = { width: 180, height: 700 };
     const trigger = { top: 300, bottom: 330, left: 1000, right: 1030 };
     expect(menuPosition(trigger, tall, viewport, "end").top).toBe(334);
+  });
+
+  it("caps a tall menu to the room below, so its end stays on screen (the editor's Layout list)", () => {
+    const tall = { width: 180, height: 700 };
+    const trigger = { top: 300, bottom: 330, left: 1000, right: 1030 };
+    const pos = menuPosition(trigger, tall, viewport, "end");
+    expect(pos.top + pos.maxHeight).toBeLessThanOrEqual(viewport.height - 8);
   });
 
   it("keeps the panel inside the viewport horizontally", () => {

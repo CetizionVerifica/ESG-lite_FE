@@ -5,6 +5,7 @@ import {
   applyChange,
   blockedMessage,
   editErrors,
+  unitOfferError,
   editPayload,
   sameActivity,
   editableKeys,
@@ -275,5 +276,18 @@ describe("amountErrors", () => {
 describe("blockedMessage with an amount", () => {
   it("names the amount", () => {
     expect(blockedMessage({ amount: AMOUNT_ERROR })).toBe("Not saved yet: enter an amount greater than 0.");
+  });
+});
+
+describe("unitOfferError (#183)", () => {
+  it("stops a unit the emission factor doesn't offer, but not the entry's own unit kept as it was", () => {
+    expect(unitOfferError("kWh", "Diesel", ["litre", "kl"], "litre")).toBe("kWh isn't a unit for Diesel. Choose litre or kl.");
+    expect(unitOfferError("gallon", "Diesel", ["litre", "kl"], "gallon")).toBeUndefined();
+    expect(unitOfferError("KL", "Diesel", ["litre", "kl"], "litre")).toBeUndefined();
+  });
+
+  it("says nothing without a list (older API) or a unit (editErrors asks for one)", () => {
+    expect(unitOfferError("kWh", "Diesel", null, "litre")).toBeUndefined();
+    expect(unitOfferError(" ", "Diesel", ["litre"], "litre")).toBeUndefined();
   });
 });

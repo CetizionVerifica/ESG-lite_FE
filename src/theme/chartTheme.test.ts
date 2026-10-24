@@ -17,6 +17,10 @@ describe("chartTheme", () => {
     expect(theme.tooltip.backgroundColor).toBe(t.panel);
     expect(theme.valueAxis.axisLabel.color).toBe(t.muted);
     expect(theme.scopes).toEqual({ s1: t.s1, s2: t.s2, s3: t.s3 });
+    expect(theme.status.bad).toBe(t.bad);
+    expect(theme.heat).toEqual([t["heat-1"], t["heat-2"], t["heat-3"], t["heat-4"], t["heat-5"]]);
+    expect(theme.onHeat[4]).toBe(t["on-heat-5"]);
+    expect(theme.ui.brand).toBe(t.brand);
   });
 
   it("rounds bars with ECharts 5+'s borderRadius", () => {

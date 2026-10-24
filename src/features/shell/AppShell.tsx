@@ -3,11 +3,16 @@ import { Outlet, useLocation, useMatches, useNavigate, useParams } from "react-r
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../context/AuthContext";
 import { useClientContext } from "../../lib/clientContext";
+import { KpiClientPickerContext } from "../../lib/kpi/clientPicker";
+import { useKpiNavOn } from "../../lib/kpi/switch";
+import { useStudioNavOn } from "../../lib/studio/switch"; // DS-0
+import { useInsightsNavOn } from "../../lib/insights/switch"; // IN-0
 import { useTheme } from "../../theme";
 import { CommandPalette } from "../../ui";
 import { shellUser } from "./account";
 import { brandForUser } from "./brand";
 import { type Command, routeCommands } from "./commands";
+import ClientSwitcher from "./components/ClientSwitcher";
 import ContextBar from "./components/ContextBar";
 import MobileNav from "./components/MobileNav";
 import TopBar from "./components/TopBar";
@@ -69,8 +74,13 @@ export default function AppShell() {
   }, [role, urlClientId, clientId, setClientId]);
 
   const previewStyle = usePreviewStyle(clientId, clientScoped, resolvedAppearance);
-  const nav = navFor(role);
-  const commands = useMemo(() => routeCommands(role, clientId), [role, clientId]);
+  // KPI-1: items behind a company switch show only while it's on (D18: for a Superadmin, also before a client is chosen).
+  const kpi = useKpiNavOn();
+  const { studio } = useStudioNavOn(); // DS-0: Design Studio nav item and palette entries
+  const insights = useInsightsNavOn(); // IN-0: the Insights nav item and palette entry
+  const flags = useMemo(() => ({ kpi, studio, insights }), [kpi, studio, insights]);
+  const nav = navFor(role, flags);
+  const commands = useMemo(() => routeCommands(role, clientId, flags), [role, clientId, flags]);
   const account = shellUser(user, rawRole);
 
   const onClientPicked = (id: number) => {
@@ -136,9 +146,11 @@ export default function AppShell() {
       />
       <main id="main" tabIndex={-1} className="mx-auto max-w-[1440px] px-4 pb-10 outline-none sm:px-6">
         <ContextBar showClientSwitcher={clientScoped} onClientPicked={onClientPicked} />
-        <Suspense fallback={<PageSkeleton />}>
-          <Outlet />
-        </Suspense>
+        <KpiClientPickerContext.Provider value={role === "Superadmin" ? <ClientSwitcher onPicked={onClientPicked} /> : null}>
+          <Suspense fallback={<PageSkeleton />}>
+            <Outlet />
+          </Suspense>
+        </KpiClientPickerContext.Provider>
       </main>
     </div>
   );

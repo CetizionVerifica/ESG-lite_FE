@@ -190,6 +190,18 @@ test("superadmin switches client and jumps with Ctrl+K", async ({ page }) => {
   await expect(page).toHaveURL(/\/factors\/thresholds$/);
 });
 
+test("staff see the ESGLite wordmark in the logo slot", async ({ page }) => {
+  await signIn(page, "Superadmin");
+  await page.goto("/clients/3");
+  await expect(page.getByRole("link", { name: "ESGLite home" }).getByRole("img", { name: "ESGLite" })).toBeVisible();
+});
+
+test("client users see their company name in the logo slot", async ({ page }) => {
+  await signIn(page, "Manager");
+  await page.goto("/overview");
+  await expect(page.getByRole("link", { name: "Glochem home" })).toHaveText("Glochem");
+});
+
 for (const width of [1280, 1024, 768, 390]) {
   test(`fits ${width}px without horizontal scroll`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
@@ -210,3 +222,52 @@ for (const width of [1280, 1024, 768, 390]) {
     }
   });
 }
+
+test("someone with sites at two clients switches company in the account menu (M6)", async ({ page }) => {
+  const midal = { company_id: 1, name: "Midal Cables" };
+  const user = { user_id: 9, role: "Manager", name: "Mia Manager", email: "mia@example.com", sites: [{ site_id: 1, company }, { site_id: 16, company: midal }] };
+  const headers: Array<string | undefined> = [];
+  await page.addInitScript((u) => {
+    localStorage.setItem("token", "test-token");
+    localStorage.setItem("role", "Manager");
+    localStorage.setItem("user", u);
+  }, JSON.stringify(user));
+  await page.route(
+    (url) => url.port !== "4173",
+    (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const json = (body: unknown) => route.fulfill({ json: body });
+      if (path.endsWith("/auth/me")) return json({ role: "Manager", user });
+      if (path.endsWith("/auth/me/appearance")) return json({ appearance: "light" });
+      if (path.endsWith("/brands/mine")) {
+        const chosen = route.request().headers()["x-company-id"];
+        headers.push(chosen);
+        return json(chosen === "1" ? { companyId: 1, name: "Midal Cables", logoUrl: null } : glochem);
+      }
+      if (path.endsWith("/notifications/unread")) return json({ count: 0 });
+      if (path.endsWith("/notifications")) return json({ total: 0, notifications: [] });
+      return json({});
+    },
+  );
+  await page.goto("/overview");
+  await expect(page.getByRole("link", { name: /Glochem/ }).first()).toBeVisible();
+  expect(headers[0]).toBeUndefined();
+
+  await page.getByRole("button", { name: "Account menu for Mia Manager" }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Glochem" })).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("menuitemradio", { name: "Midal Cables" }).click();
+  await expect(page.getByRole("link", { name: /Midal Cables/ }).first()).toBeVisible();
+  expect(headers.at(-1)).toBe("1");
+
+  // The choice stays after a reload.
+  await page.reload();
+  await expect(page.getByRole("link", { name: /Midal Cables/ }).first()).toBeVisible();
+});
+
+test("someone at one client sees no company choice", async ({ page }) => {
+  await signIn(page, "Manager");
+  await page.goto("/overview");
+  await page.getByRole("button", { name: "Account menu for Mia Manager" }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Glochem" })).toHaveCount(0);
+  await expect(page.getByText("Company", { exact: true })).toHaveCount(0);
+});

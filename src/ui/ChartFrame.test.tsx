@@ -54,4 +54,13 @@ describe("ChartFrame", () => {
     rerender(<ChartFrame title="T" option={{}} error="Couldn't load the chart." />);
     expect(screen.getByRole("alert")).toBeTruthy();
   });
+
+  it("labels the chart for screen readers and can be driven from outside (controlled view)", () => {
+    const onViewChange = vi.fn();
+    const { rerender } = render(<ChartFrame title="Wall" option={{}} table={table} ariaLabel="Three targets, one off track." view="chart" onViewChange={onViewChange} />);
+    expect(screen.getByRole("img", { name: "Three targets, one off track." })).toBeTruthy();
+    rerender(<ChartFrame title="Wall" option={{}} table={table} ariaLabel="Three targets, one off track." view="table" onViewChange={onViewChange} />);
+    expect(screen.getByRole("table", { name: "Wall" })).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Three targets, one off track." })).toBeNull();
+  });
 });

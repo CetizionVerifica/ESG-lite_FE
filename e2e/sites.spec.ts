@@ -111,7 +111,7 @@ async function signIn(page: Page) {
       }
       if (one && method === "DELETE") {
         sites = sites.filter((s) => s.site_id !== Number(one[1]));
-        return json({ message: "Site deleted successfully" });
+        return json({ message: "Site deleted successfully", deleted: { entries: 12, bills: 1 }, people_kept: 1, people_without_site: 1 });
       }
       if (path.endsWith("/admin/sites") && method === "POST") {
         const site = fill(body!, 3);
@@ -220,12 +220,13 @@ test("a superadmin edits a site, sees its people and deletes it after typing its
   await page.getByRole("row", { name: /Hidd/ }).click();
   await page.getByRole("dialog", { name: "Hidd" }).getByRole("button", { name: "Delete site" }).click();
   const confirm = page.getByRole("alertdialog", { name: 'Delete site "Hidd"?' });
-  await expect(confirm.getByTestId("delete-cascades")).toContainText("1 user account assigned to this site (Omar Saleh)");
+  await expect(confirm.getByTestId("delete-cascades")).toContainText("Access for 1 person assigned to this site (Omar Saleh); their accounts stay");
   const del = confirm.getByRole("button", { name: "Delete site" });
   await expect(del).toBeDisabled();
   await confirm.getByLabel(/Type Hidd to confirm/).fill("hidd");
   await del.click();
   await expect(page.getByText('Site "Hidd" deleted')).toBeVisible();
+  await expect(page.getByText("1 person now has no site. Assign one in Users.")).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ method: "DELETE", path: expect.stringMatching(/\/admin\/sites\/1$/) });
   await expect(sitesTable(page).getByRole("row")).toHaveCount(2);
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Layers, SearchX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -59,7 +59,12 @@ import { feraCategoryIds } from "../../lib/emissions/pendingCount";
 import { BatchesView } from "./components/BatchesView";
 import { CloseMonthView } from "./components/CloseMonthView";
 import { useReviewWorkflow } from "../../lib/reviewWorkflow";
+import { useKpiTracking } from "../../lib/kpi/switch";
+import { getKpiValues } from "../../services/kpiService";
+import { hasModuleSlot } from "../../routes/moduleSlots";
+import { ModuleSlot } from "../../routes/ModuleSlot";
 import { ReportMenu } from "./components/ReportMenu";
+import { StaffKpiApprovals } from "./components/StaffKpiApprovals";
 import { RecordDrawer } from "./components/RecordDrawer";
 import { ledgerColumns } from "./components/columns";
 import {
@@ -72,6 +77,7 @@ import {
   attentionOn,
   effectiveStatus,
   listParams,
+  foldedTwinNote,
   mergeFera,
   periodQuery,
   rowPeriodLabel,
@@ -112,18 +118,29 @@ const TAB_FILTERS: Record<Tab, FilterDef[]> = { approvals: [METHOD_FILTER, DQ_FI
 
 const describe = (r: LedgerRow) => `${r.category?.category_name ?? "Entry"} · ${r.site?.name ?? "—"} · ${rowPeriodLabel(r)}`;
 
-/** `close`: S3-15 Close month, only with the company's review workflow on. */
-type View = Tab | "batches" | "close";
+/** `close`: S3-15 Close month, only with the company's review workflow on. `kpi`: KPI-8, only with KPI tracking on. */
+type View = Tab | "batches" | "close" | "kpi";
 
-/** P07: `/data/approvals` (Approvals; `?view=batches` Upload batches, `?view=close` Close month) and `/data/ledger`. */
+/**
+ * P07: `/data/approvals` (Approvals; `?view=batches` Upload batches, `?view=close` Close month) and `/data/ledger`.
+ * D18: a Superadmin gets the KPIs tab only, for the chosen client.
+ */
 export default function EmissionsPage({ tab }: { tab: Tab }) {
+  const { role } = useAuth();
+  return role === "Superadmin" ? <StaffKpiApprovals /> : <ManagerEmissionsPage tab={tab} />;
+}
+
+function ManagerEmissionsPage({ tab }: { tab: Tab }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const sites = useManagerSites();
   const [ctx] = useContextParams();
   const workflow = useReviewWorkflow();
+  const kpiOn = useKpiTracking() && hasModuleSlot("approvals-kpi");
   const viewParam = tab === "approvals" ? params.get("view") : null;
-  const view: View = viewParam === "batches" ? "batches" : viewParam === "close" && workflow ? "close" : tab;
+  const view: View = viewParam === "batches" ? "batches" : viewParam === "close" && workflow ? "close" : viewParam === "kpi" && kpiOn ? "kpi" : tab;
+  // KPI-8: values waiting for review (the KPIs tab reads the same query).
+  const kpiPending = useQuery({ queryKey: ["kpi", "review", "pending", null], queryFn: () => getKpiValues({ status: "pending" }), enabled: kpiOn, staleTime: 15_000, retry: false });
 
   const categories = useMemo(() => {
     const inScope = ctx.siteIds.length ? sites.filter((s) => ctx.siteIds.includes(s.site_id)) : sites;
@@ -153,23 +170,29 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
       const v = params.get(k);
       if (v) keep.set(k, v);
     }
-    if (next === "batches" || next === "close") keep.set("view", next);
-    navigate({ pathname: TAB_PATH[next === "batches" || next === "close" ? "approvals" : next], search: keep.toString() });
+    if (next === "batches" || next === "close" || next === "kpi") keep.set("view", next);
+    if (next === "kpi") keep.delete("category"); // data-loss-reviewed: URL param, not a record
+    navigate({ pathname: TAB_PATH[next === "batches" || next === "close" || next === "kpi" ? "approvals" : next], search: keep.toString() });
   };
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Emissions"
+        title={view === "kpi" ? "Approvals" : "Emissions"}
+        description={view === "kpi" ? "KPI values from your sites, reviewed the same way as emissions." : undefined}
         context={
-          <ContextChips
-            chips={["site", "category", "period"]}
-            sites={sites.map((s) => ({ value: s.site_id, label: s.name }))}
-            categories={categories}
-            periodKinds={["month", "cy"]}
-            allowAnyPeriod
-            multiCategory
-          />
+          view === "kpi" ? (
+            <ContextChips chips={["site", "period"]} sites={sites.map((s) => ({ value: s.site_id, label: s.name }))} periodKinds={["month"]} allowAnyPeriod />
+          ) : (
+            <ContextChips
+              chips={["site", "category", "period"]}
+              sites={sites.map((s) => ({ value: s.site_id, label: s.name }))}
+              categories={categories}
+              periodKinds={["month", "cy"]}
+              allowAnyPeriod
+              multiCategory
+            />
+          )
         }
       />
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -182,11 +205,14 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
             { value: "ledger", label: "Ledger" },
             { value: "batches", label: "Upload batches", count: batches.data?.filter((b) => b.pending_count > 0).length },
             ...(workflow ? [{ value: "close" as const, label: "Close month" }] : []),
+            ...(kpiOn ? [{ value: "kpi" as const, label: "KPIs", count: kpiPending.data?.length }] : []),
           ]}
         />
-        <ReportMenu siteIds={ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)} categoryIds={ctx.categoryIds} period={ctx.period} />
+        {view !== "kpi" && <ReportMenu siteIds={ctx.siteIds.length ? ctx.siteIds : sites.map((s) => s.site_id)} categoryIds={ctx.categoryIds} period={ctx.period} />}
       </div>
-      {view === "batches" ? (
+      {view === "kpi" ? (
+        <ModuleSlot id="approvals-kpi" />
+      ) : view === "batches" ? (
         <BatchesView siteIds={scopeSites} categoryIds={ctx.categoryIds} />
       ) : view === "close" ? (
         <CloseMonthView siteIds={ctx.siteIds} />
@@ -199,7 +225,7 @@ export default function EmissionsPage({ tab }: { tab: Tab }) {
 
 function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const qc = useQueryClient();
-  const { toast } = useToast();
+  const { toast, dismiss } = useToast();
   const [params, setParams] = useSearchParams();
   const [ctx] = useContextParams();
   const [filters, setFilters] = useFilterParams(FILTER_KEYS[tab]);
@@ -274,10 +300,17 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
     setSelected([]);
   }, [filterKey]);
 
+  // The "Entry approved" toast of each row still in its undo window (F-18: no Undo once it's sent).
+  const undoToasts = useRef(new Map<number, number>());
   const undoable = useUndoableApprove<EmissionStatus>({
     commit: commitApprove,
     onCommitted: () => void review.refresh(),
     onFailed: (_id, e) => toast({ title: "Couldn't approve an entry", description: errorMessage(e, "It is back in the queue."), tone: "bad" }),
+    onSent: (id) => {
+      const toastId = undoToasts.current.get(id);
+      undoToasts.current.delete(id); // data-loss-reviewed: Map entry (UI state), not a record
+      if (toastId !== undefined) dismiss(toastId);
+    },
   });
   const approveAll = useApproveAllReady({
     onDone: async (result) => {
@@ -294,6 +327,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   );
 
   const merged = useMemo(() => mergeFera(list.data?.data ?? [], showFera), [list.data, showFera]);
+  const twinNote = foldedTwinNote(list.data?.summary, list.data?.total ?? 0, showFera);
   const rows = useMemo(
     () => (tab === "approvals" ? merged.rows.filter((r) => statusOf(r) === "pending") : merged.rows),
     [merged.rows, statusOf, tab],
@@ -335,7 +369,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
       return;
     }
     undoable.approve(row.pk_id);
-    toast({
+    const toastId = toast({
       title: "Entry approved",
       description: describe(row),
       tone: "good",
@@ -343,11 +377,14 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
       action: {
         label: "Undo",
         onClick: () => {
+          undoToasts.current.delete(row.pk_id); // data-loss-reviewed: Map entry (UI state), not a record
           // The toast pauses on hover and outlives a tab switch; the approval doesn't wait for it.
           if (!undoable.undo(row.pk_id)) toast({ title: "Too late to undo", description: "This entry was already approved. Reject it if it's wrong." });
         },
       },
     });
+    // When the undo window closes the toast goes, so its Undo is never offered after it can work.
+    undoToasts.current.set(row.pk_id, toastId);
     // An approved row leaves the selection, so bulk actions don't count it as pending again.
     setSelected((s) => s.filter((id) => Number(id) !== row.pk_id));
     if (tab === "approvals") {
@@ -555,6 +592,12 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
       {tab === "approvals" && (
         <p className="hidden text-xs text-muted sm:block" data-testid="shortcuts">
           Keys: <Kbd>J</Kbd>/<Kbd>K</Kbd> move · <Kbd>A</Kbd> approve · <Kbd>R</Kbd> reject · <Kbd>Space</Kbd> select · <Kbd>Enter</Kbd> open
+        </p>
+      )}
+
+      {twinNote && (
+        <p className="text-xs text-muted" data-testid="twin-note">
+          {twinNote}
         </p>
       )}
 

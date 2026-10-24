@@ -17,6 +17,7 @@ import type { Look } from "../../theme";
 import { SaveError, fetchReportPdf, useClientBrand, useOwnBrand, useSaveBrand } from "./api";
 import { Editor } from "./components/Editor";
 import { PreviewPane } from "./components/PreviewPane";
+import { BrandKitLink } from "./components/BrandKitLink"; // DS-3
 import { useObjectUrl } from "./hooks/useObjectUrl";
 import {
   type BrandDraft,
@@ -217,6 +218,7 @@ function BrandThemeEditor({ companyId, saved, readOnly }: { companyId: number; s
           {saveError}
         </Callout>
       )}
+      <BrandKitLink /> {/* DS-3 */}
 
       <div className="grid items-start gap-5 lg:grid-cols-[380px_minmax(0,1fr)]">
         <Editor

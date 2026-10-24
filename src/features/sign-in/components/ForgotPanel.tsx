@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
-import { Button, TextField } from "../../../ui";
+import { Button, TextField, cn, focusRing } from "../../../ui";
 import { forgotPassword } from "../api";
 import { errorStatus } from "../logic";
 import { FormError, FormHeading, FormNote } from "./FormBits";
@@ -10,7 +10,7 @@ import { FormError, FormHeading, FormNote } from "./FormBits";
  * Forgot-password panel, swapped in place of the sign-in form. The reply never
  * says whether the address has an account.
  */
-export function ForgotPanel({ initialEmail, onBack }: { initialEmail: string; onBack: () => void }) {
+export function ForgotPanel({ initialEmail, onBack, onUseCode }: { initialEmail: string; onBack: () => void; onUseCode: () => void }) {
   const [email, setEmail] = useState(initialEmail);
   const send = useMutation({
     mutationFn: (address: string) => forgotPassword(address),
@@ -39,6 +39,12 @@ export function ForgotPanel({ initialEmail, onBack }: { initialEmail: string; on
           </Button>
         </form>
       )}
+      <p className="mt-4 text-sm text-muted">
+        Need to get in now?{" "}
+        <button type="button" onClick={onUseCode} className={cn("rounded-chip font-medium text-brand-text underline-offset-2 hover:underline", focusRing)}>
+          Email me a sign-in code
+        </button>
+      </p>
       <Button variant="ghost" size="sm" className="mt-4" icon={<ArrowLeft aria-hidden className="size-4" />} onClick={onBack}>
         Back to sign in
       </Button>

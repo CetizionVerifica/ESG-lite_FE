@@ -83,6 +83,20 @@
   --t-series-6: #5f7f1f;
   --t-series-7: #b5452c;
   --t-series-8: #3d7ea6;
+  /* ESG pillars and the heat ramp (wave E, fixed in every pack) */
+  --t-pillar-e: #00927a;
+  --t-pillar-s: #6e56cf;
+  --t-pillar-g: #c2621a;
+  --t-heat-1: #86b6ef;
+  --t-heat-2: #5598e7;
+  --t-heat-3: #256abf;
+  --t-heat-4: #184f95;
+  --t-heat-5: #0d366b;
+  --t-on-heat-1: #16202e;
+  --t-on-heat-2: #16202e;
+  --t-on-heat-3: #ffffff;
+  --t-on-heat-4: #ffffff;
+  --t-on-heat-5: #ffffff;
   /* Status (fixed, never brand-coloured) */
   --t-good: #16794c;
   --t-good-soft: #e1f3ea;
@@ -134,6 +148,20 @@
   --t-series-6: #9cc35a;
   --t-series-7: #ef8a6f;
   --t-series-8: #7fb6d9;
+  /* ESG pillars and the heat ramp (wave E, fixed in every pack) */
+  --t-pillar-e: #1fa68c;
+  --t-pillar-s: #8a74e0;
+  --t-pillar-g: #c87533;
+  --t-heat-1: #184f95;
+  --t-heat-2: #256abf;
+  --t-heat-3: #3987e5;
+  --t-heat-4: #6da7ec;
+  --t-heat-5: #9ec5f4;
+  --t-on-heat-1: #ffffff;
+  --t-on-heat-2: #ffffff;
+  --t-on-heat-3: #0b1222;
+  --t-on-heat-4: #0b1222;
+  --t-on-heat-5: #0b1222;
   /* Status (fixed, never brand-coloured) */
   --t-good: #4ccf8f;
   --t-good-soft: #123527;
@@ -203,6 +231,19 @@
   --color-series-6: var(--t-series-6);
   --color-series-7: var(--t-series-7);
   --color-series-8: var(--t-series-8);
+  --color-pillar-e: var(--t-pillar-e);
+  --color-pillar-s: var(--t-pillar-s);
+  --color-pillar-g: var(--t-pillar-g);
+  --color-heat-1: var(--t-heat-1);
+  --color-heat-2: var(--t-heat-2);
+  --color-heat-3: var(--t-heat-3);
+  --color-heat-4: var(--t-heat-4);
+  --color-heat-5: var(--t-heat-5);
+  --color-on-heat-1: var(--t-on-heat-1);
+  --color-on-heat-2: var(--t-on-heat-2);
+  --color-on-heat-3: var(--t-on-heat-3);
+  --color-on-heat-4: var(--t-on-heat-4);
+  --color-on-heat-5: var(--t-on-heat-5);
   --color-good: var(--t-good);
   --color-good-soft: var(--t-good-soft);
   --color-warn: var(--t-warn);

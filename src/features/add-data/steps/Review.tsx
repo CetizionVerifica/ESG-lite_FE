@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
-import { Button, Callout, EmptyState, cn, formatNumber, panel } from "../../../ui";
+import { Button, Callout, EmptyState, cn, formatEntryTonnes, formatNumber, panel } from "../../../ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateEmissionQueries } from "../../../lib/emissionQueries";
-import { linkBillEvidence, saveRow, updateRow, uploadRowEvidence, type SaveOutcome } from "../api";
+import { linkBillEvidence, saveRow, updateRow, uploadRowEvidence, useAlreadyBacking, type SaveOutcome } from "../api";
 import { submitEmissions } from "../../../services/reviewService";
 import { type SubmitTally, draftIdsToSubmit, finishCopy, mergeSubmit } from "../logic/submit";
 import { editOf } from "../logic/existing";
@@ -15,6 +15,7 @@ import type { EmissionPayload } from "../logic/entry";
 import type { ModalRow } from "../types";
 import { DuplicateDialog, type DuplicateChoice } from "../components/DuplicateDialog";
 import { plainProblem } from "../../../lib/entryDetail";
+import { mappingKeyLabel } from "../logic/form";
 
 type Outcome = SaveOutcome | { kind: "skipped" } | { kind: "saving" };
 type Evidence = "attached" | "failed";
@@ -45,7 +46,7 @@ type Props = {
   workflow?: boolean;
 };
 
-const label = (row: ModalRow) => (row._ecmKey as string) || row.emission_category || "—";
+const label = (row: ModalRow) => (row._ecmKey ? mappingKeyLabel(String(row._ecmKey)) : row.emission_category) || "—";
 
 /** Step 3: what will be sent, then send it row by row. */
 export function Review(p: Props) {
@@ -58,8 +59,13 @@ export function Review(p: Props) {
   const [tally, setTally] = useState<SubmitTally>({ submitted: [], refused: [], failed: false });
   const client = useQueryClient();
   const total = p.rows.reduce((sum, r) => sum + (p.calc.calculateEmission(r).value ?? 0), 0);
+  // F-16: a bill or file that already backs another entry of the period; asked until the first send.
+  const unsent = Object.keys(outcomes).length === 0 && !sending;
+  const backing = useAlreadyBacking(p.rows, p.payloads, p.evidenceFiles, unsent);
+  const backed = unsent ? p.rows.map((row, i) => ({ row, i, uses: backing.get(row.id) ?? [] })).filter((b) => b.uses.length > 0) : [];
 
-  const send = async (indexes: number[], replace: boolean, submit = submitAfter) => {
+  // `onDuplicate`: what a duplicate row does on this send (the dialog's Replace or Keep both), else nothing.
+  const send = async (indexes: number[], onDuplicate: (i: number) => "replace" | "keep_both" | undefined, submit = submitAfter) => {
     setSending(true);
     setSubmitAfter(submit);
     const savedNow: SaveOutcome[] = [];
@@ -70,7 +76,7 @@ export function Review(p: Props) {
       const row = p.rows[i];
       setOutcomes((o) => ({ ...o, [row.id]: { kind: "saving" } }));
       const editing = editOf(row);
-      const outcome = editing !== null ? await updateRow(editing, p.payloads[i]) : await saveRow(p.payloads[i], replace);
+      const outcome = editing !== null ? await updateRow(editing, p.payloads[i]) : await saveRow(p.payloads[i], onDuplicate(i));
       setOutcomes((o) => ({ ...o, [row.id]: outcome }));
       savedNow.push(outcome);
       if (outcome.kind === "duplicate") conflicts++;
@@ -108,11 +114,12 @@ export function Review(p: Props) {
   };
 
   const applyDuplicates = async (choices: Record<string, DuplicateChoice>) => {
-    const skip = duplicates.filter((i) => choices[String(p.rows[i].id)] !== "replace");
+    const choice = (i: number) => choices[String(p.rows[i].id)] ?? "skip";
+    const skip = duplicates.filter((i) => choice(i) === "skip");
     setOutcomes((o) => ({ ...o, ...Object.fromEntries(skip.map((i) => [p.rows[i].id, { kind: "skipped" as const }])) }));
     await send(
-      duplicates.filter((i) => choices[String(p.rows[i].id)] === "replace"),
-      true,
+      duplicates.filter((i) => choice(i) !== "skip"),
+      (i) => (choice(i) === "replace" ? "replace" : "keep_both"),
       submitAfter,
     );
   };
@@ -240,7 +247,10 @@ export function Review(p: Props) {
                   </td>
                   <td className="px-3 py-2 text-muted">{row.activity_data_unit}</td>
                   <td className="px-3 py-2 text-right font-num text-ink">{formatNumber(p.calc.calculateEmission(row).value, 2)}</td>
-                  <td className="px-3 py-2">{evidenceText(row)}</td>
+                  <td className="px-3 py-2">
+                    {evidenceText(row)}
+                    {unsent && backing.has(row.id) && <span className="block text-xs text-warn">Already the evidence of a saved entry</span>}
+                  </td>
                   <td className="px-3 py-2" aria-live="polite">
                     {!o && <span className="text-muted">Ready</span>}
                     {o?.kind === "saving" && <span className="text-muted">Sending…</span>}
@@ -280,6 +290,25 @@ export function Review(p: Props) {
         </Callout>
       )}
 
+      {backed.length > 0 && (
+        <Callout tone="warn" title={backed.length === 1 ? "This evidence already backs another entry" : "Some evidence already backs other entries"}>
+          <ul className="space-y-1">
+            {backed.flatMap(({ row, i, uses }) =>
+              uses.map((u) => (
+                <li key={`${row.id}-${u.fileName}`}>
+                  Row {i + 1} · {label(row)}: {u.fileName || "this file"} is already the evidence of{" "}
+                  {u.entries
+                    .map((e) => `${e.emission_category ?? "an entry"} (${e.total_emission === null ? "—" : `${formatEntryTonnes(e.total_emission)} tCO₂e`}, ${e.status.charAt(0).toUpperCase()}${e.status.slice(1)})`)
+                    .join(", ")}{" "}
+                  for {p.periodLabel}.
+                </li>
+              )),
+            )}
+          </ul>
+          <p className="mt-1">If it is the same purchase, it would be counted twice. You can still send.</p>
+        </Callout>
+      )}
+
       <DuplicateDialog
         open={askDuplicates && duplicates.length > 0}
         periodLabel={p.periodLabel}
@@ -298,11 +327,11 @@ export function Review(p: Props) {
             Back
           </Button>
           {p.workflow && (
-            <Button onClick={() => void send(pending, false, false)} loading={sending && !submitAfter} disabled={pending.length === 0 || sending}>
+            <Button onClick={() => void send(pending, () => undefined, false)} loading={sending && !submitAfter} disabled={pending.length === 0 || sending}>
               Save as draft
             </Button>
           )}
-          <Button variant="primary" onClick={() => void send(pending, false, true)} loading={sending && (!p.workflow || submitAfter)} disabled={pending.length === 0 || sending}>
+          <Button variant="primary" onClick={() => void send(pending, () => undefined, true)} loading={sending && (!p.workflow || submitAfter)} disabled={pending.length === 0 || sending}>
             {Object.keys(outcomes).length > 0 ? "Send the rest" : p.workflow ? "Save and submit" : "Submit for approval"}
           </Button>
         </div>

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { EsgLiteLogo } from "../../../ui";
 import { type Look, type ShellBrand, pickLogo } from "../brand";
 
 export default function LogoSlot({ brand, look, home }: { brand: ShellBrand; look: Look; home: string }) {
@@ -11,6 +12,8 @@ export default function LogoSlot({ brand, look, home }: { brand: ShellBrand; loo
     >
       {logo.kind === "image" ? (
         <img src={logo.src} alt={logo.alt} className="h-7 max-w-40 object-contain" />
+      ) : logo.kind === "platform" ? (
+        <EsgLiteLogo tone={look === "light" ? "brand" : "inherit"} className="text-[22px]" />
       ) : (
         <span className="max-w-48 truncate text-[15px] font-semibold tracking-tight text-(--t-chrome-fg)">{logo.name}</span>
       )}

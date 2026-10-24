@@ -136,6 +136,29 @@ export const getFileIcon = (fileType: string): string => {
   return "file";
 };
 
+/** An entry that a file already backs as evidence (F-16). */
+export type BackedEntry = { pk_id: number; emission_category: string | null; total_emission: number | null; status: string };
+
+/**
+ * F-16: which of these files (a picked file's name and size, or a bill's invoice id) already back
+ * another entry of the same site, category and period. Saves nothing; null from an API without the check.
+ */
+export const findBackedEntries = async (body: {
+  site_id: number;
+  category_id: number;
+  date_of_reporting: string;
+  files: { ref: string; file_name?: string; file_size?: number; invoice_id?: number }[];
+  exclude_ids?: number[];
+}): Promise<{ ref: string; file_name: string | null; entries: BackedEntry[] }[] | null> => {
+  try {
+    const response = await api.post<{ matches: { ref: string; file_name: string | null; entries: BackedEntry[] }[] }>("/user/documents/already-backing", body);
+    return response.data.matches ?? [];
+  } catch (e) {
+    if ((e as { response?: { status?: number } }).response?.status === 404) return null;
+    throw e;
+  }
+};
+
 /**
  * Attach a bill the AI service read (its invoice row) as evidence to the
  * emissions saved from it (B8). Idempotent per emission and invoice.

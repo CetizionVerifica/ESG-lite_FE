@@ -28,7 +28,7 @@ import type { EmissionStatus } from "../../../services/emissionService";
 import { type LedgerDocument, useColumnConfig, useDocuments, useEntryHistory, useFactor } from "../api";
 import { EditForm } from "./EditForm";
 import { deflatorLine, drawerRateTerm, fxLine } from "../../../lib/scope3/spend";
-import { type FactorSnapshot, type LedgerRow, activityFields, formatFactorValue, importProvenance, matchedByText, quantityOf, rowMonth, rowPeriodLabel } from "../logic";
+import { type FactorSnapshot, type LedgerRow, activityFields, formatFactorValue, importProvenance, matchedByText, rowMonth, rowPeriodLabel, rowQuantity } from "../logic";
 import { feraSubLabel } from "../../../lib/scope3/fera";
 import { rowQuality } from "../../../lib/scope3/dq";
 
@@ -195,7 +195,7 @@ function Body({ row, fera, status, checkContext }: { row: LedgerRow; fera: Ledge
       </Section>
 
       <Section title="Calculation">
-        <Calculation row={row} quantity={quantityOf(fields)} />
+        <Calculation row={row} quantity={rowQuantity(row, fields)} />
         <Quality row={row} />
       </Section>
 

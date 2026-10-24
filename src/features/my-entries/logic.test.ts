@@ -6,9 +6,11 @@ import {
   breakdownRows,
   attachFera,
   categoriesFor,
+  entryQuantity,
   keyActivity,
   optionLabel,
   parseStatus,
+  quantityDecimals,
   periodText,
   quantityOf,
   serverPeriod,
@@ -100,6 +102,31 @@ describe("rows", () => {
     expect(quantityOf({ consumption: "12.5", amount: "" })).toBe(12.5);
     expect(quantityOf({ "Units consumed": "25000" })).toBeNull();
     expect(quantityOf(null)).toBeNull();
+  });
+
+  it("the table shows the server's quantity, which knows the form's own number fields", () => {
+    // "Amount of gas" has no canonical name: only the server, reading the form, finds it.
+    expect(entryQuantity({ quantity: 1000, activity_data: { Refrigerant: "R-404A", "Amount of gas": "1000" } })).toBe(1000);
+    expect(entryQuantity({ quantity: "12.5" as unknown as number, activity_data: {} })).toBe(12.5);
+    // An older API sends none: the canonical-key guess, as before.
+    expect(entryQuantity({ activity_data: { Quantity: "20" } })).toBe(20);
+    expect(entryQuantity({ quantity: null, activity_data: { Quantity: "20" } })).toBe(20);
+    expect(entryQuantity({ quantity: null, activity_data: { "Amount of gas": "1000" } })).toBeNull();
+  });
+
+  it("shows a worked-out whole number without decimals", () => {
+    expect(quantityDecimals(999596100.0000001)).toBe(0);
+    expect(quantityDecimals(1000)).toBe(0);
+    expect(quantityDecimals(41130.08)).toBe(2);
+    expect(quantityDecimals(12.5)).toBe(2);
+  });
+
+  it("a spend row's quantity is its amount spent (in its currency, the row's unit)", () => {
+    // As the spend form saves it (S3-5), and as an older Category 1 form did.
+    expect(quantityOf({ emission_category: "Chemicals (USEEIO)", "@method": "spend_based", spent_value: "1240000", currency: "INR" })).toBe(1240000);
+    expect(quantityOf({ "Spent value": "1000", emission_category: "AMC Charges" })).toBe(1000);
+    // An older form's informational "Spent value" never replaces the row's own quantity.
+    expect(quantityOf({ Quantity: "20", "Spent value": "5000" })).toBe(20);
   });
 
   it("reads the emission category and status", () => {

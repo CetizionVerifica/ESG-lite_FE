@@ -1,4 +1,4 @@
-import { useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "./Button";
@@ -8,6 +8,8 @@ import { cn } from "./cn";
 import { useFocusTrap } from "./hooks/useFocusTrap";
 import { useLockBodyScroll } from "./hooks/useLockBodyScroll";
 import { focusRing } from "./styles";
+import { portalRoot } from "./portalRoot";
+import { rightDrawerOpened } from "./drawerStack";
 
 export type DrawerProps = {
   open: boolean;
@@ -54,6 +56,8 @@ export function Drawer({
   const titleId = useId();
   const trap = useFocusTrap(ref, open, onClose);
   useLockBodyScroll(open);
+  // Toasts move clear of a right-side drawer's footer while it is open.
+  useEffect(() => (open && side === "right" ? rightDrawerOpened() : undefined), [open, side]);
   if (!open) return null;
 
   let body = children;
@@ -107,6 +111,6 @@ export function Drawer({
         )}
       </aside>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

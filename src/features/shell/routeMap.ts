@@ -29,6 +29,21 @@ export interface ShellRoute {
   clientContext?: boolean;
   /** Roles that land somewhere else instead of seeing the 403 page. */
   roleRedirect?: Partial<Record<Role, string>>;
+  /** A company switch the route needs (KPI-1); while it's off the route shows "not available". */
+  requires?: Requirement;
+}
+
+/**
+ * Company switches nav items and routes can depend on (KPI-1: `"kpi"` = `kpi_tracking_enabled`;
+ * DS-0: `"studio"` = `design_studio_enabled`; IN-0: `"insights"` = `insights_enabled`).
+ */
+export const REQUIREMENTS = ["kpi", "studio", "insights"] as const;
+export type Requirement = (typeof REQUIREMENTS)[number];
+/** Which switches are on for the signed-in user; a missing key is off. */
+export type FeatureFlags = Partial<Record<Requirement, boolean>>;
+
+export function meetsRequirement(requires: Requirement | undefined, flags: FeatureFlags): boolean {
+  return !requires || flags[requires] === true;
 }
 
 const ALL: readonly Role[] = ROLES;
@@ -41,8 +56,9 @@ export const SHELL_ROUTES = [
   { id: "production", path: "/production", title: "Production", crumb: ["Production"], roles: ["User"], spec: "P05" },
 
   // Manager
-  { id: "overview", path: "/overview", title: "Overview", crumb: ["Overview"], roles: ["Manager"], spec: "P06" },
-  { id: "approvals", path: "/data/approvals", title: "Approvals", crumb: ["Data", "Approvals"], roles: ["Manager"], spec: "P07" },
+  { id: "overview", path: "/overview", title: "Overview", crumb: ["Overview"], roles: ["Manager", "Admin"], spec: "P06" }, // M5: Admins read-only
+  // D18: a Superadmin opens only the KPIs tab (`?view=kpi`), for the chosen client.
+  { id: "approvals", path: "/data/approvals", title: "Approvals", crumb: ["Data", "Approvals"], roles: ["Manager", "Superadmin"], spec: "P07", clientContext: true },
   { id: "ledger", path: "/data/ledger", title: "Emissions ledger", crumb: ["Data", "Emissions ledger"], roles: ["Manager"], spec: "P07" },
   { id: "production-review", path: "/data/production", title: "Production data", crumb: ["Data", "Production data"], roles: ["Manager"], spec: "P08" },
   { id: "team", path: "/team", title: "Team", crumb: ["Team"], roles: ["Manager"], spec: "P09" },
@@ -104,6 +120,35 @@ export const SHELL_ROUTES = [
   { id: "capture-form", path: "/capture/forms/:id", title: "Form", crumb: ["Capture", "Data-entry forms", "Edit"], roles: ["Superadmin"], spec: "P24" },
   // Contributors reach it from Add data, for their own sites (P27).
   { id: "bulk-upload", path: "/capture/upload", title: "Bulk upload", crumb: ["Capture", "Bulk upload"], roles: ["Superadmin", "Admin", "Manager", "User"], spec: "P27" },
+
+  // KPI tracking (docs/kpi/01-contracts.md §6). Every route but the library is hidden while the company's switch is off (KPI-1).
+  // kpi-review is a tab of Approvals (/data/approvals?view=kpi), not a route of its own.
+  { id: "kpi-my", path: "/kpi", title: "My KPIs", crumb: ["My KPIs"], roles: ["User", "Manager", "Admin"], spec: "KPI-7", requires: "kpi" },
+  { id: "kpi-setup", path: "/kpi/setup", title: "KPI setup", crumb: ["Settings", "KPI setup"], roles: ["Admin", "Superadmin"], spec: "KPI-3", clientContext: true, requires: "kpi" },
+  { id: "kpi-targets", path: "/kpi/targets", title: "KPI targets", crumb: ["KPIs", "Targets"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-9", clientContext: true, requires: "kpi" },
+  { id: "kpi-dashboard", path: "/kpi/dashboard", title: "KPIs", crumb: ["Data", "KPIs"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-10", clientContext: true, requires: "kpi" },
+  // Wave E: the ESG dashboard (E / S / G) for managers and above.
+  { id: "kpi-esg", path: "/kpi/esg", title: "ESG dashboard", crumb: ["KPIs", "ESG dashboard"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-ESG", clientContext: true, requires: "kpi" },
+  { id: "kpi-reports", path: "/reports/kpi/:framework", title: "Framework reports", crumb: ["Reports", "Framework reports"], roles: ["Manager", "Admin", "Superadmin"], spec: "KPI-11", clientContext: true, requires: "kpi" },
+  { id: "kpi-library", path: "/setup/kpi-library", title: "KPI library", crumb: ["Setup", "KPI library"], roles: ["Superadmin"], spec: "KPI-2" },
+
+  // DS-0: Design Studio (docs/design-studio/01-contracts.md §9). Admins, Managers and the Superadmin
+  // (for the chosen client); hidden while the company's switch is off. Sustainability designs also
+  // need KPI tracking (checked per kind by the pages). /s/:token (public viewer) is DS-11's, outside the shell.
+  { id: "studio-home", path: "/studio", title: "Design Studio", crumb: ["Reports", "Design Studio"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-5", clientContext: true, requires: "studio" },
+  { id: "studio-new", path: "/studio/new", title: "New design", crumb: ["Reports", "Design Studio", "New design"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-5", clientContext: true, requires: "studio" },
+  { id: "studio-brand-kit", path: "/studio/brand-kit", title: "Brand kit", crumb: ["Reports", "Design Studio", "Brand kit"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-3", clientContext: true, requires: "studio" },
+  { id: "studio-editor", path: "/studio/:id", title: "Design", crumb: ["Reports", "Design Studio", "Design"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-6", clientContext: true, requires: "studio" },
+  { id: "studio-preview", path: "/studio/:id/preview", title: "Page view", crumb: ["Reports", "Design Studio", "Page view"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-11", clientContext: true, requires: "studio" },
+  { id: "studio-present", path: "/studio/:id/present", title: "Present", crumb: ["Reports", "Design Studio", "Present"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-11", clientContext: true, requires: "studio" },
+  { id: "studio-versions", path: "/studio/:id/versions", title: "Versions", crumb: ["Reports", "Design Studio", "Versions"], roles: ["Manager", "Admin", "Superadmin"], spec: "DS-13", clientContext: true, requires: "studio" },
+
+  // IN-0: Insights (docs/insights/01-contracts.md §9). Managers (their sites), Admins and the Superadmin
+  // (for the chosen client); Users never (I1). Hidden while the company's switch is off.
+  { id: "insights", path: "/insights", title: "Insights", crumb: ["Insights"], roles: ["Manager", "Admin", "Superadmin"], spec: "IN-0", clientContext: true, requires: "insights" },
+  { id: "insights-present", path: "/insights/present", title: "Present insights", crumb: ["Insights", "Present"], roles: ["Manager", "Admin", "Superadmin"], spec: "IN-8", clientContext: true, requires: "insights" },
+  // IN-8: the print view (Export ▾ "Print view"; the browser prints it when the server has no PDF printer). No nav item.
+  { id: "insights-print", path: "/insights/print", title: "Insights snapshot", crumb: ["Insights", "Snapshot"], roles: ["Manager", "Admin", "Superadmin"], spec: "IN-8", clientContext: true, requires: "insights" },
 ] as const satisfies readonly ShellRoute[];
 
 export type ShellRouteId = (typeof SHELL_ROUTES)[number]["id"];

@@ -10,6 +10,8 @@ import {
   isDependentColumn,
   parentColumnOf,
   rowValue,
+  sameUnit,
+  unitNotOfferedMessage,
 } from "../../lib/emissions";
 import { canConvert, unitsMatchExact } from "../../ui";
 import type { EmissionData } from "../../services/emissionService";
@@ -45,17 +47,30 @@ export function prefillSelects(m: FormModel, row: ModalRow): ModalRow {
   if (!stored) return row;
   const hit = Object.entries(m.mapping).find(([, category]) => lower(category) === lower(stored));
   if (!hit) return row;
-  const next: ModalRow = { ...row, _ecmKey: row._ecmKey || hit[0] };
+  const next: ModalRow = { ...row };
   const labels = hit[0].split("|");
-  selectChain(m).forEach((col, i) => {
-    const label = labels[i];
-    if (label === undefined || rowValue(next, col.column_name)) return;
+  const chain = selectChain(m);
+  const optionsOf = (col: ColumnEntity) => {
     const parent = isDependentColumn(m, col.column_name) ? parentColumnOf(m, col.column_name) : null;
     const parentValue = parent ? rowValue(next, parent) : undefined;
-    const option = columnOptionsFor(m, col, parentValue || undefined).find((o) => lower(o.label) === lower(label));
+    return columnOptionsFor(m, col, parentValue || undefined);
+  };
+  chain.forEach((col, i) => {
+    const label = labels[i];
+    if (label === undefined || rowValue(next, col.column_name)) return;
+    const option = optionsOf(col).find((o) => lower(o.label) === lower(label));
     if (option) next[col.column_name] = String(option.id);
   });
-  return next;
+  // The row's activity counts as picked by its selects (_ecmKey) only when every select holds the option
+  // its key names. An option since removed or renamed, or a select the entry already holds differently,
+  // leaves the stored activity as it is: editing another field must not clear it (applyChange clears an
+  // activity with an _ecmKey once the selects no longer map to it).
+  const resolved = labels.every((label, i) => {
+    const col = chain[i];
+    const value = col ? rowValue(next, col.column_name) : undefined;
+    return !!value && optionsOf(col).some((o) => String(o.id) === String(value) && lower(o.label) === lower(label));
+  });
+  return resolved ? { ...next, _ecmKey: row._ecmKey || hit[0] } : next;
 }
 
 /** The entry as a form row: what the user entered, its unit and extra fields, bookkeeping left out. */
@@ -87,8 +102,18 @@ export type EditIssue = {
   message: string;
 };
 
-/** The first thing stopping a save, or null. A rejected entry needs a note on what changed. */
-export function editIssue(row: ModalRow, calc: EmissionCalculator, status: EmissionData["status"], reason: string): EditIssue | null {
+/**
+ * The first thing stopping a save, or null. A rejected entry needs a note on what changed.
+ * `units` (#183): what the emission category offers, and the entry's stored unit, which stays
+ * allowed even when no longer offered, so saving it unchanged works as before.
+ */
+export function editIssue(
+  row: ModalRow,
+  calc: EmissionCalculator,
+  status: EmissionData["status"],
+  reason: string,
+  units?: { offered: string[] | null; stored?: string | null },
+): EditIssue | null {
   if (!row.emission_category)
     return {
       field: "emission_category",
@@ -101,6 +126,10 @@ export function editIssue(row: ModalRow, calc: EmissionCalculator, status: Emiss
       field: "activity_data_unit",
       message: `The factor is per ${expected} and ${row.activity_data_unit} can't be converted to it.`,
     };
+  }
+  const offered = units?.offered;
+  if (offered && !offered.some((u) => sameUnit(u, row.activity_data_unit)) && !sameUnit(units?.stored, row.activity_data_unit)) {
+    return { field: "activity_data_unit", message: unitNotOfferedMessage(row.activity_data_unit, row.emission_category, offered) };
   }
   const result = calc.calculateEmission(row);
   if (result.value === null) return { field: "values", message: result.status };

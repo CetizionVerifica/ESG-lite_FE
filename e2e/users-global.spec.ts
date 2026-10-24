@@ -25,7 +25,7 @@ function makeUsers() {
   return [
     { user_id: 4, name: "Omar", last_name: "Saleh", email: "omar@example.com", role: "User", site: null, sites: [SITES[0]], categories: [FUEL], last_login_at: null },
     { user_id: 5, name: "Mia", last_name: "Khan", email: "mia@example.com", role: "Manager", site: null, sites: [SITES[0], SITES[1]], categories: [FUEL, POWER, TRAVEL], last_login_at: new Date().toISOString() },
-    { user_id: 6, name: "Ravi", email: "ravi@example.com", role: "Admin", site: SITES[2], sites: [], categories: [], last_login_at: null },
+    { user_id: 6, name: "Ravi", email: "ravi@example.com", role: "Admin", company: COMPANIES[1], site: null, sites: [], categories: [], last_login_at: null },
     { user_id: 1, name: "Sam", last_name: "Staff", email: "sam@example.com", role: "Superadmin", site: null, sites: [], categories: [], last_login_at: null },
   ];
 }

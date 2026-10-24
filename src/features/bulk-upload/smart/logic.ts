@@ -502,3 +502,22 @@ export function forgetErrorMessage(e: unknown): string {
   if (err.status === 404) return "This mapping was already forgotten.";
   return smartErrorMessage(e, "The mapping couldn't be forgotten. Try again.");
 }
+
+/**
+ * #183: the category a plan row belongs to, from the confirmed mapping: the sheet activity whose
+ * factor name or sheet wording is the row's activity, else the one category every included sheet
+ * names. Null when the mapping doesn't say (the unit stays free text).
+ */
+export function categoryForRow(p: MappingProposal | null, activityName: string): number | null {
+  if (!p) return null;
+  const name = activityName.trim().toLowerCase();
+  const sheets = p.sheets.filter((s) => !s.excluded);
+  const match = name ? sheets.flatMap((s) => s.activities).find((a) => [a.factor_name, a.sheet_text].some((t) => (t ?? "").trim().toLowerCase() === name)) : undefined;
+  if (match) return match.category_id;
+  const fixed = [...new Set(sheets.map((s) => (s.category.kind === "fixed" ? s.category.id : null)))];
+  return fixed.length === 1 ? fixed[0] : null;
+}
+
+/** The engine's unit issue on a plan row (UNIT_NOT_CONVERTIBLE), shown on the Unit field. */
+export const rowUnitIssue = (row: PreviewRow | null): string | null =>
+  (row?.issues ?? []).find((i) => i.code === "UNIT_NOT_CONVERTIBLE" || i.field === "activity_unit")?.message ?? null;

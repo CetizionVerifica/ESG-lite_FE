@@ -45,3 +45,8 @@ Midal user sees Midal cover and logo; contrast passes; works at 390px; no `alert
 - Forgot password never says whether the address exists; only a 5xx or network error is shown.
 - Min password length lives in `logic.ts` (`MIN_PASSWORD_LENGTH`). Onboarding's 6 is fixed when P17 (client onboarding) is rebuilt.
 - Legacy Login/AdminLogin/ResetPassword stay until the route switch for good (flag off = unchanged).
+
+## Sign in with an email code (forgot password, 2026-10-19)
+- "Email me a sign-in code" on the sign-in form and in the forgot-password panel swaps in `CodePanel`: email → `POST /auth/login-otp/request`, then a 6-digit code → `POST /auth/login-otp/verify`, which answers like `/auth/login` (`AuthContext.loginWithCode`).
+- Same door rules as a password sign-in (`useSignIn` takes `{ email, code }` too). Codes expire in 10 minutes, work once, 5 wrong tries clear the code; a new code replaces the old one.
+- Never says whether the address exists: only 503 (email not set up), 429 and 5xx/network errors are shown on the request step.

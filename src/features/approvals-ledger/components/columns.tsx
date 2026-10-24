@@ -1,10 +1,10 @@
 import type { EmissionStatus } from "../../../services/emissionService";
-import { type Column, CheckChip, DataQualityBadge, ReadyChip, StatusPill, UncheckedChip, cn, formatDate, formatEmissions, formatNumber } from "../../../ui";
+import { type Column, CheckChip, DataQualityBadge, ReadyChip, StatusPill, UncheckedChip, cn, formatDate, formatEntryEmissions, formatEntryTonnes, formatQuantity } from "../../../ui";
 import { dqLabel, readDq } from "../../../lib/scope3/dq";
 import { type CheckContext, factorYearFor, heldChip, isReady, readChecks } from "../../../lib/scope3/checks";
 import { type RowActions, RowMenu } from "./RowMenu";
 import { feraSubLabel, feraSubShort, twinsTotal } from "../../../lib/scope3/fera";
-import { type ColumnConfig, type LedgerRow, activityFields, activitySummary, quantityOf, rowPeriodLabel, scopeNumber } from "../logic";
+import { type ColumnConfig, type LedgerRow, activityFields, activitySummary, rowPeriodLabel, rowQuantity, scopeNumber } from "../logic";
 
 const SCOPE_DOT: Record<1 | 2 | 3, string> = { 1: "bg-s1", 2: "bg-s2", 3: "bg-s3" };
 
@@ -75,10 +75,10 @@ export function ledgerColumns({
       id: "quantity",
       header: "Quantity",
       numeric: true,
-      value: (r) => quantityOf(fieldsOf(r)),
+      value: (r) => rowQuantity(r, fieldsOf(r)),
       cell: (r) => {
-        const q = quantityOf(fieldsOf(r));
-        return q === null ? "—" : `${formatNumber(q, 2)} ${r.activity_data_unit ?? ""}`.trim();
+        const q = rowQuantity(r, fieldsOf(r));
+        return q === null ? "—" : `${formatQuantity(q)} ${r.activity_data_unit ?? ""}`.trim();
       },
     },
     {
@@ -91,10 +91,10 @@ export function ledgerColumns({
         const fera = feraOf.get(r.pk_id);
         return (
           <span className="flex flex-col items-end leading-tight">
-            <span>{formatNumber(Number(r.total_emission), 3)}</span>
+            <span>{formatEntryTonnes(Number(r.total_emission))}</span>
             {fera && (
-              <span className="text-xs text-muted" title={fera.map((f) => `${feraSubLabel(f.scope3_sub)}: ${formatEmissions(Number(f.total_emission))}`).join("\n")}>
-                +{formatEmissions(twinsTotal(fera))} FERA
+              <span className="text-xs text-muted" title={fera.map((f) => `${feraSubLabel(f.scope3_sub)}: ${formatEntryEmissions(Number(f.total_emission))}`).join("\n")}>
+                +{formatEntryEmissions(twinsTotal(fera))} FERA
               </span>
             )}
           </span>

@@ -148,6 +148,11 @@ test("a contributor enters values only: the form's method is sent, no method cho
   await expect(drawer.getByText("Emissions")).toBeVisible();
   await expect(drawer.getByTestId("entry-method")).toHaveCount(0);
   await expect(drawer.getByTestId("dq-badge")).toHaveCount(0);
+  // Nor can they turn on a Data quality column in the list.
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Columns" }).click();
+  await expect(page.getByRole("checkbox", { name: "Period" })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "Data quality" })).toHaveCount(0);
 });
 
 test("on a company set to full detail, a contributor saves a spend-based row and the drawer shows the method and Poor", async ({ page }) => {
@@ -187,6 +192,9 @@ test("on a company set to full detail, a contributor saves a spend-based row and
   await expect(drawer.getByTestId("dq-badge")).toHaveText("Poor");
   await expect(drawer.getByTestId("dq-badge")).toHaveAttribute("aria-label", /Technology: Poor, Geography: Poor, Time: Poor, Completeness: Good, Reliability: Poor/);
   await expect(drawer.getByText("Secondary data")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Columns" }).click();
+  await expect(page.getByRole("checkbox", { name: "Data quality" })).toBeVisible();
 });
 
 test("on a company set to full detail, a method the form refuses goes back to the method cards", async ({ page }) => {

@@ -3,10 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { type Door, returnPath, wrongDoor } from "../logic";
 
-export interface Credentials {
-  email: string;
-  password: string;
-}
+/** A password, or a one-time code sent by email. */
+export type Credentials = { email: string; password: string } | { email: string; code: string };
 
 /** Outcome of a sign-in: signed in, or turned away at the wrong door (and signed out). */
 export type SignInResult = { ok: true } | { ok: false; rightDoor: Door };
@@ -18,12 +16,13 @@ export type SignInResult = { ok: true } | { ok: false; rightDoor: Door };
  * straight away.
  */
 export function useSignIn(door: Door) {
-  const { login, logout } = useAuth();
+  const { login, loginWithCode, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   return useMutation<SignInResult, unknown, Credentials>({
-    mutationFn: async ({ email, password }) => {
-      const role = await login(email.trim(), password);
+    mutationFn: async (credentials) => {
+      const email = credentials.email.trim();
+      const role = "code" in credentials ? await loginWithCode(email, credentials.code) : await login(email, credentials.password);
       const rightDoor = wrongDoor(role, door);
       if (rightDoor) {
         logout();

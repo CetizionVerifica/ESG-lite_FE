@@ -10,6 +10,7 @@ import {
   canAccess,
   clientIdFromRoute,
   homeFor,
+  meetsRequirement,
   pathForClient,
   resolveLegacyRedirect,
   withClientId,
@@ -70,9 +71,13 @@ describe("route map", () => {
 });
 
 describe("nav per role", () => {
+  // With every switch off and with KPI tracking on (KPI-1).
+  const FLAGS = [{}, { kpi: true }, { kpi: true, studio: true }, { kpi: true, studio: true, insights: true }]; // DS-0: and the studio on; IN-0: and Insights
+
   it("only links to pages the role may open", () => {
+    for (const flags of FLAGS)
     for (const role of ROLES) {
-      for (const link of navLinks(role)) {
+      for (const link of navLinks(role, flags)) {
         const route = routeFor(resolveNavTo(link.to, 7));
         expect(route, `${role}: ${link.to}`).toBeDefined();
         expect(canAccess(role, route as (typeof SHELL_ROUTES)[number]), `${role}: ${link.to}`).toBe(true);
@@ -81,15 +86,46 @@ describe("nav per role", () => {
   });
 
   it("hides every other role's pages", () => {
+    for (const flags of FLAGS)
     for (const role of ROLES) {
-      const mine = new Set(navLinks(role).map((l) => resolveNavTo(l.to, 7).split("?")[0]));
+      const mine = new Set(navLinks(role, flags).map((l) => resolveNavTo(l.to, 7).split("?")[0]));
       for (const other of ROLES.filter((r) => r !== role)) {
-        for (const link of navLinks(other)) {
+        for (const link of navLinks(other, flags)) {
           const route = routeFor(resolveNavTo(link.to, 7)) as (typeof SHELL_ROUTES)[number];
           if (!canAccess(role, route)) expect(mine.has(resolveNavTo(link.to, 7).split("?")[0])).toBe(false);
         }
       }
     }
+  });
+});
+
+describe("KPI routes (01-contracts §6)", () => {
+  it("registers every KPI route behind the switch, except the global library", () => {
+    const kpi = SHELL_ROUTES.filter((r) => r.id.startsWith("kpi-"));
+    expect(kpi.map((r) => [r.id, r.path])).toEqual([
+      ["kpi-my", "/kpi"],
+      ["kpi-setup", "/kpi/setup"],
+      ["kpi-targets", "/kpi/targets"],
+      ["kpi-dashboard", "/kpi/dashboard"],
+      ["kpi-esg", "/kpi/esg"],
+      ["kpi-reports", "/reports/kpi/:framework"],
+      ["kpi-library", "/setup/kpi-library"],
+    ]);
+    for (const r of kpi) expect((r as { requires?: string }).requires, r.id).toBe(r.id === "kpi-library" ? undefined : "kpi");
+  });
+
+  it("gives each KPI route the §6 roles", () => {
+    const roles = (id: string) => SHELL_ROUTES.find((r) => r.id === id)?.roles;
+    expect(roles("kpi-my")).toEqual(["User", "Manager", "Admin"]);
+    expect(roles("kpi-setup")).toEqual(["Admin", "Superadmin"]);
+    expect(roles("kpi-library")).toEqual(["Superadmin"]);
+  });
+
+  it("meets a requirement only when its switch is on", () => {
+    expect(meetsRequirement(undefined, {})).toBe(true);
+    expect(meetsRequirement("kpi", {})).toBe(false);
+    expect(meetsRequirement("kpi", { kpi: false })).toBe(false);
+    expect(meetsRequirement("kpi", { kpi: true })).toBe(true);
   });
 });
 
@@ -151,5 +187,62 @@ describe("client context from the URL", () => {
     expect(pathForClient(byPath("/clients/:clientId/brand"), 9)).toBe("/clients/9/brand");
     expect(pathForClient(byPath("/capture/forms/:id"), 9)).toBeNull();
     expect(pathForClient(byPath("/reports/ghg"), 9)).toBeNull();
+  });
+});
+
+describe("Design Studio routes (DS-0, 01-contracts §9)", () => {
+  it("registers every studio route behind the studio switch, for Admins, Managers and the Superadmin", () => {
+    const studio = SHELL_ROUTES.filter((r) => r.id.startsWith("studio-"));
+    expect(studio.map((r) => [r.id, r.path])).toEqual([
+      ["studio-home", "/studio"],
+      ["studio-new", "/studio/new"],
+      ["studio-brand-kit", "/studio/brand-kit"],
+      ["studio-editor", "/studio/:id"],
+      ["studio-preview", "/studio/:id/preview"],
+      ["studio-present", "/studio/:id/present"],
+      ["studio-versions", "/studio/:id/versions"],
+    ]);
+    for (const r of studio) {
+      expect((r as { requires?: string }).requires, r.id).toBe("studio");
+      expect(r.roles, r.id).toEqual(["Manager", "Admin", "Superadmin"]);
+      expect(canAccess("User", r), r.id).toBe(false);
+    }
+  });
+
+  it("sends /studio/new and /studio/brand-kit to their own pages, not the editor", () => {
+    expect(routeFor("/studio/new?kind=ghg")?.id).toBe("studio-new");
+    expect(routeFor("/studio/brand-kit")?.id).toBe("studio-brand-kit");
+    expect(routeFor("/studio/12")?.id).toBe("studio-editor");
+    expect(routeFor("/studio/12/present")?.id).toBe("studio-present");
+  });
+
+  it("meets the studio requirement only when its switch is on", () => {
+    expect(meetsRequirement("studio", {})).toBe(false);
+    expect(meetsRequirement("studio", { kpi: true })).toBe(false);
+    expect(meetsRequirement("studio", { studio: true })).toBe(true);
+  });
+});
+
+describe("Insights routes (IN-0, 01-contracts §9)", () => {
+  it("registers /insights and /insights/present behind the Insights switch, for Managers, Admins and the Superadmin", () => {
+    const insights = SHELL_ROUTES.filter((r) => r.id.startsWith("insights"));
+    expect(insights.map((r) => [r.id, r.path])).toEqual([
+      ["insights", "/insights"],
+      ["insights-present", "/insights/present"],
+      ["insights-print", "/insights/print"],
+    ]);
+    for (const r of insights) {
+      expect((r as { requires?: string }).requires, r.id).toBe("insights");
+      expect(r.roles, r.id).toEqual(["Manager", "Admin", "Superadmin"]);
+      expect(canAccess("User", r), r.id).toBe(false);
+    }
+    expect(routeFor("/insights?year=2025&panel=bridge")?.id).toBe("insights");
+    expect(routeFor("/insights/present")?.id).toBe("insights-present");
+  });
+
+  it("meets the insights requirement only when its switch is on", () => {
+    expect(meetsRequirement("insights", {})).toBe(false);
+    expect(meetsRequirement("insights", { kpi: true, studio: true })).toBe(false);
+    expect(meetsRequirement("insights", { insights: true })).toBe(true);
   });
 });

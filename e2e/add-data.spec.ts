@@ -97,6 +97,15 @@ type Extra = {
   checked?: unknown[][];
   /** SE-1: the company's entry_detail; "full" shows a User the calculation detail. */
   entryDetail?: "full";
+  /** F-13/F-27: the server's mode-lock message for the chosen period; the queries asked are pushed here. */
+  periodMode?: { message: string; asked: Record<string, string>[] };
+  /** F-02: My bills' list; deleted id lists are pushed to `deletedBills`. */
+  bills?: unknown[];
+  deletedBills?: number[][];
+  /** F-16: the already-backing answer, by file name; the bodies asked are pushed to `asked`. */
+  backing?: { byName: Record<string, unknown[]>; asked: unknown[] };
+  /** #183: what GET …/units/…/by-activity answers; without it the mock below answers a plain unit list (an older API). */
+  unitOptions?: unknown;
 };
 
 async function signIn(page: Page, created: unknown[], duplicateOnce = false, linked: unknown[] = [], uploadGate?: Promise<void>, extra: Extra = {}) {
@@ -132,18 +141,23 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
         const year = Number(url.searchParams.get("year") ?? 2024);
         return json(factors.map((f) => ({ ...f, year })));
       }
+      if (path.endsWith("/by-activity") && extra.unitOptions) return json(extra.unitOptions);
       if (path.includes("/user/units/site/4/category/")) return json([{ unit_id: 1, unit_name: "litre" }, { unit_id: 2, unit_name: "gallon" }]);
       if (path.includes("/user/category-mappings/")) return json([]);
       if (path.includes("/user/thresholds/company/1")) return json({ threshold_percentage: 5 });
+      if (path.includes("/user/emissions/period-mode/site/4/category/")) {
+        extra.periodMode?.asked.push(Object.fromEntries(url.searchParams));
+        return json({ conflict: extra.periodMode ? {} : null, message: extra.periodMode?.message ?? null });
+      }
       if (path.endsWith("/user/emissions/period-total")) {
         return json({ total_emission: url.searchParams.get("basis") === "approved" ? 4 : 0 });
       }
       if (path.endsWith("/user/emissions") && request.method() === "POST") {
-        if (duplicate && url.searchParams.get("replace") !== "true") {
+        if (duplicate && url.searchParams.get("replace") !== "true" && url.searchParams.get("keep_both") !== "true") {
           duplicate = false;
           return json({ message: "Duplicate", duplicate: true, existing_emission: { pk_id: 1, total_emission: 1.5, status: "pending" } }, 409);
         }
-        created.push({ body: request.postDataJSON(), replace: url.searchParams.get("replace") === "true" });
+        created.push({ body: request.postDataJSON(), replace: url.searchParams.get("replace") === "true", ...(url.searchParams.get("keep_both") === "true" ? { keepBoth: true } : {}) });
         return json({ emission: { pk_id: created.length + 100 } }, 201);
       }
       if (path.endsWith("/user/emissions") && request.method() === "GET") {
@@ -187,6 +201,18 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       }
       if (path.endsWith("/user/emissions/calculate-distance")) {
         return json({ success: true, data: { mode: "road", distanceMeters: 21500, durationText: "25 mins", encodedPolyline: null, duration: null, origin: "", destination: "" } });
+      }
+      if (path.endsWith("/v1/invoices") && request.method() === "GET") return json(extra.bills ?? []);
+      if (path.endsWith("/user/documents/already-backing")) {
+        const body = request.postDataJSON() as { files: { ref: string; file_name?: string }[] };
+        extra.backing?.asked.push(body);
+        const matches = body.files.flatMap((f) => (extra.backing?.byName[f.file_name ?? ""] ? [{ ref: f.ref, file_name: f.file_name, entries: extra.backing.byName[f.file_name ?? ""] }] : []));
+        return json({ matches });
+      }
+      if (path.endsWith("/v1/invoices/bulk") && request.method() === "DELETE") {
+        const ids = (request.postDataJSON() as { ids: number[] }).ids;
+        extra.deletedBills?.push(ids);
+        return json({ message: "Deleted", deleted: ids.length });
       }
       if (path.endsWith("/v1/invoices/upload")) {
         if (uploadGate) await uploadGate;
@@ -307,6 +333,42 @@ const routeTransport = async (page: Page, form: Record<string, unknown> = transp
     route.fulfill({ json: ["km", "tonne.km", "litre"].map((unit_name, i) => ({ unit_id: 50 + i, unit_name })) }),
   );
 };
+
+test("#183: the Unit select offers only the units the row's emission category takes", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean }[] = [];
+  const unitOptions = {
+    fixed_unit: null,
+    all_units: ["litre", "gallon", "kWh", "kg"],
+    activities: [
+      { name: "Diesel (avg biofuel blend)", factor_unit: "litre", units: ["litre", "gallon"] },
+      { name: "LPG", factor_unit: "litre", units: ["litre"] },
+    ],
+  };
+  await signIn(page, created, false, [], undefined, { unitOptions });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  const unit = row.getByLabel("Unit");
+
+  // Nothing to choose until the row says what it is.
+  await expect(unit).toBeDisabled();
+  await expect(unit).toContainText("Make your choices above first");
+
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await expect(unit).toBeEnabled();
+  await expect(unit.locator("option")).toHaveText(["Choose a unit", "litre", "gallon"]);
+  await unit.selectOption("gallon");
+
+  // LPG takes litre only: gallon goes and litre is picked.
+  await row.getByLabel("Fuel Type").selectOption({ label: "LPG" });
+  await expect(unit).toHaveValue("litre");
+  await expect(unit.locator("option")).toHaveText(["Choose a unit", "litre"]);
+
+  await row.getByLabel("Quantity").fill("100");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created[0].body).toMatchObject({ activity_data_unit: "litre", activity_data: { emission_category: "LPG" } });
+});
 
 test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends what the engine saves (S3-8)", async ({ page }) => {
   const created: { body: Record<string, unknown>; replace: boolean }[] = [];
@@ -521,6 +583,29 @@ test("an incomplete row blocks review and a duplicate can be replaced", async ({
   });
 });
 
+test("a year already filed monthly says so before anything is typed (F-13/F-27)", async ({ page }) => {
+  const message = "This category is already filed monthly for CY 2025 (57 monthly entries). Keep entering it monthly, or delete those entries first to file the year as one entry.";
+  const periodMode = { message, asked: [] as Record<string, string>[] };
+  await signIn(page, [], false, [], undefined, { periodMode });
+  await page.goto("/data/new?site=4&category=9&period=CY2025");
+
+  await expect(page.getByText("Filed monthly for this year")).toBeVisible();
+  await expect(page.getByText(message)).toBeVisible();
+  // The note comes before the rows; the saved list says why it is empty.
+  const note = await page.getByText("Filed monthly for this year").boundingBox();
+  const firstRow = await page.getByRole("region", { name: "Row 1" }).boundingBox();
+  expect(note!.y).toBeLessThan(firstRow!.y);
+  await expect(page.getByText("No yearly entry for CY 2025: it is filed monthly.")).toBeVisible();
+  expect(periodMode.asked).toContainEqual({ reporting_period: "yearly", year_type: "CY", date_of_reporting: "2025-12-31" });
+});
+
+test("a period filed the same way shows no lock note", async ({ page }) => {
+  await signIn(page, []);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await expect(page.getByRole("heading", { name: /Already entered for/ })).toBeVisible();
+  await expect(page.getByText(/^Filed (monthly|yearly) for/)).toHaveCount(0);
+});
+
 test("a bill is read into a row that is checked before it is sent, then attached as evidence", async ({ page }) => {
   const created: { body: Record<string, unknown>; replace: boolean }[] = [];
   const linked: unknown[] = [];
@@ -562,6 +647,36 @@ test("a bill is read into a row that is checked before it is sent, then attached
   });
   expect(JSON.stringify(created[0].body)).not.toContain("_bill");
   expect(linked).toEqual([{ invoice_id: 41, emission_ids: [101] }]);
+});
+
+test("My bills lists a re-uploaded file once and deletes every upload of it (F-02)", async ({ page }) => {
+  const bill = (invoice_id: number, file_name: string, file_size: number, created_at: string) => ({
+    invoice_id, file_name, file_size, created_at, cloudinary_url: `/files/${invoice_id}.pdf`, file_type: "application/pdf", site_id: 4, category_id: 9,
+  });
+  const deletedBills: number[][] = [];
+  const bills = [
+    bill(1, "HT Billing APRIL 2025.pdf", 2048, "2026-10-01T10:00:00Z"),
+    bill(2, "HT Billing JUNE 2025.pdf", 4096, "2026-10-02T10:00:00Z"),
+    bill(3, "HT Billing APRIL 2025.pdf", 2048, "2026-10-21T10:00:00Z"),
+    bill(4, "HT Billing APRIL 2025.pdf", 2048, "2026-10-05T10:00:00Z"),
+  ];
+  await signIn(page, [], false, [], undefined, { bills, deletedBills });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  await page.getByRole("tab", { name: /Start from a bill/ }).click();
+  await page.getByRole("button", { name: "My bills" }).click();
+
+  const drawer = page.getByRole("dialog", { name: "My bills" });
+  await expect(drawer.getByRole("listitem")).toHaveCount(2);
+  await expect(drawer.getByRole("listitem").first()).toContainText("HT Billing APRIL 2025.pdf");
+  await expect(drawer.getByRole("listitem").first()).toContainText("Uploaded 3 times, last");
+  await expect(drawer.getByRole("listitem").nth(1)).not.toContainText("Uploaded");
+
+  await drawer.getByRole("button", { name: "Delete HT Billing APRIL 2025.pdf" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Delete this bill?" });
+  await expect(confirm).toContainText("HT Billing APRIL 2025.pdf (all 3 uploads) leaves My bills.");
+  await confirm.getByRole("button", { name: "Delete bill" }).click();
+  await expect(confirm).toBeHidden();
+  expect(deletedBills).toEqual([[3, 4, 1]]);
 });
 
 test("a bill dated outside the period can't be used on this page", async ({ page }) => {
@@ -812,6 +927,26 @@ test("after a send the steps are locked and a reload shows an empty form", async
   await expect(page.getByRole("region", { name: "Row 1" }).getByLabel("Quantity")).toHaveValue("");
 });
 
+test("a second bill for the same fuel and month can be kept beside the saved one (F-06)", async ({ page }) => {
+  const created: { body: Record<string, unknown>; replace: boolean; keepBoth?: boolean }[] = [];
+  await signIn(page, created, true);
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("1600");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Keep both saves the new one as another entry");
+  await dialog.getByRole("radio", { name: "Keep both" }).click();
+  await dialog.getByRole("button", { name: "Apply (keep both 1)" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  expect(created).toHaveLength(1);
+  expect(created[0]).toMatchObject({ replace: false, keepBoth: true, body: { date_of_reporting: "2025-09-30" } });
+});
+
 test("when every row is skipped as a duplicate, the draft is cleared and leaving doesn't ask", async ({ page }) => {
   await signIn(page, [], true);
   await page.goto("/data/new?site=4&category=9&period=2025-09");
@@ -904,6 +1039,45 @@ test("files picked on a typed row are attached to it after it is saved", async (
   expect(uploads).toHaveLength(1);
   expect(uploads[0]).toContain("meter-sep.pdf");
   expect(uploads[0]).toContain("101");
+});
+
+test("Review warns when a file already backs another entry of the period, and still sends (F-16)", async ({ page }) => {
+  const created: unknown[] = [];
+  const backing = { byName: { "spent-carbon-dec.pdf": [{ pk_id: 77, emission_category: "Recycle", total_emission: 0.05, status: "approved" }] }, asked: [] as unknown[] };
+  await signIn(page, created, false, [], undefined, { uploads: [], backing });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("100");
+  await row.getByLabel("Unit").selectOption("litre");
+  await row.getByText("Evidence", { exact: true }).click();
+  await row.locator('input[type="file"]').setInputFiles({ name: "spent-carbon-dec.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
+  await page.getByRole("button", { name: "Review" }).click();
+
+  await expect(page.getByText("This evidence already backs another entry")).toBeVisible();
+  await expect(page.getByText(/Row 1 · Diesel: spent-carbon-dec\.pdf is already the evidence of Recycle \(0\.05 tCO₂e, Approved\) for Sep 2025\./)).toBeVisible();
+  await expect(page.getByText("Already the evidence of a saved entry")).toBeVisible();
+  expect(backing.asked[0]).toMatchObject({ site_id: 4, category_id: 9, date_of_reporting: "2025-09-30", files: [{ ref: expect.stringMatching(/:0$/), file_name: "spent-carbon-dec.pdf", file_size: 8 }] });
+
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+  await expect(page.getByText("1 row sent for approval")).toBeVisible();
+  await expect(page.getByText("This evidence already backs another entry")).toHaveCount(0);
+  expect(created).toHaveLength(1);
+});
+
+test("a file no other entry uses shows no evidence warning", async ({ page }) => {
+  const backing = { byName: {}, asked: [] as unknown[] };
+  await signIn(page, [], false, [], undefined, { uploads: [], backing });
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("100");
+  await row.getByLabel("Unit").selectOption("litre");
+  await row.getByText("Evidence", { exact: true }).click();
+  await row.locator('input[type="file"]').setInputFiles({ name: "meter-sep.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect.poll(() => backing.asked.length).toBeGreaterThan(0);
+  await expect(page.getByText(/already backs/)).toHaveCount(0);
 });
 
 test("a Scope 2 row previews its Category 3 rows: upstream of electricity and T&D losses", async ({ page }) => {

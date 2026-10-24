@@ -2,12 +2,14 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useState,
   ReactNode,
 } from "react";
 import axios from "axios";
 import api from "../api/axios";
 import { clearEntryDrafts } from "../lib/entryDrafts";
+import { saveActiveCompany, storedActiveCompany, withActiveCompany } from "../lib/activeCompany";
 
 const baseUrl = import.meta.env.VITE_API_URL;
 
@@ -16,9 +18,14 @@ interface AuthContextType {
   role: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<string>;
+  /** Signs in with a one-time code sent by email (POST /auth/login-otp/verify). */
+  loginWithCode: (email: string, code: string) => Promise<string>;
   logout: () => void;
   user: any;
   loading: boolean;
+  /** M6: the company chosen in the account menu (people with sites at several clients); else null. */
+  activeCompanyId: number | null;
+  setActiveCompany: (companyId: number) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -29,6 +36,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any>(null);
 
   const [loading, setLoading] = useState(true);
+  // M6: bumped when the account menu's company changes, so the shown user follows it.
+  const [companyPick, setCompanyPick] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- companyPick re-reads the stored choice
+  const activeCompanyId = useMemo(() => storedActiveCompany(user), [user, companyPick]);
+  const shownUser = useMemo(() => withActiveCompany(user, activeCompanyId), [user, activeCompanyId]);
+  const setActiveCompany = (companyId: number) => {
+    saveActiveCompany(user, companyId);
+    setCompanyPick((n) => n + 1);
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -75,8 +91,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email,
       password,
     });
+    return startSession(res.data);
+  };
 
-    const { token, role, user } = res.data;
+  const loginWithCode = async (email: string, code: string) => {
+    const res = await axios.post(`${baseUrl}/auth/login-otp/verify`, { email, code });
+    return startSession(res.data);
+  };
+
+  // Both sign-in endpoints answer { token, role, user }.
+  const startSession = (data: { token: string; role: string; user: AuthContextType["user"] }) => {
+    const { token, role, user } = data;
 
     localStorage.setItem("token", token);
     localStorage.setItem("role", role);
@@ -115,9 +140,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         loading,
         token,
         role,
-        user,
+        user: shownUser,
+        activeCompanyId,
+        setActiveCompany,
         isAuthenticated: !!token,
         login,
+        loginWithCode,
         logout,
       }}
     >

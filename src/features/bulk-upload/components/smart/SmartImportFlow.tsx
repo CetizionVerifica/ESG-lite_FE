@@ -296,6 +296,8 @@ export function SmartImportFlow(props: {
             patchError={patch.error ? smartErrorMessage(patch.error, "The row couldn't be changed.") : skipIssue.error ? smartErrorMessage(skipIssue.error, "The rows couldn't be skipped.") : null}
             autoMapped={autoMapped}
             held={held}
+            siteId={ctx.siteId}
+            proposal={proposal}
             onBack={backToConfirm}
             onImport={runImport}
           />

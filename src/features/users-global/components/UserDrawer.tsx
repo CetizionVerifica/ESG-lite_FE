@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { KpiTopicsField } from "../../../lib/kpi/KpiTopicsField";
+import type { TopicsDraft } from "../../../lib/kpi/personTopics";
 import { Button, Callout, Combobox, Drawer, Field, Modal, Select, TextField, Toggle, cn, focusRing } from "../../../ui";
 import {
   type Company,
@@ -46,14 +48,15 @@ type Props = {
   /** Server error from the last save. */
   error: string | null;
   onClose: () => void;
-  onSave: (draft: UserDraft) => void;
+  /** `topics`: the KPI topics field (D17) when it was changed, else null. */
+  onSave: (draft: UserDraft, topics: TopicsDraft | null) => void;
   onRemove: () => void;
   onReset: () => void;
 };
 
 const ROLE_HELP: Record<Role, string> = {
   Superadmin: "Runs ESGLite for every client. No client or sites.",
-  Admin: "Manages one client, from the site picked below.",
+  Admin: "Manages the whole client picked below, every site of it.",
   Manager: "Reviews and approves data for the sites picked below.",
   User: "Enters data for the sites and categories picked below.",
 };
@@ -68,6 +71,7 @@ export function UserDrawer(props: Props) {
   const [draft, setDraft] = useState<UserDraft>(() => (row ? draftFrom(row) : emptyDraft(props.defaultCompanyId)));
   const [touched, setTouched] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [topics, setTopics] = useState<TopicsDraft | null>(null);
   const zones = useMemo(() => timezoneOptions(draft.timezone), [draft.timezone]);
 
   if (props.loading) return <Drawer open loading onClose={props.onClose} title="Loading person…" />;
@@ -75,7 +79,7 @@ export function UserDrawer(props: Props) {
 
   const errors = validate(draft);
   const invalid = Object.keys(errors).length > 0;
-  const dirty = isDirty(draft, row);
+  const dirty = isDirty(draft, row) || topics !== null;
   const fieldError = (k: DraftField) => (touched ? errors[k] : undefined);
   const set = <K extends keyof UserDraft>(k: K, v: UserDraft[K]) => setDraft((d) => ({ ...d, [k]: v }));
   const lost = row ? lostPermissions(row.role, draft.role) : [];
@@ -108,7 +112,7 @@ export function UserDrawer(props: Props) {
   const close = () => (dirty && !props.saving ? setConfirmClose(true) : props.onClose());
   const save = () => {
     setTouched(true);
-    if (!invalid && !blockedByForeign) props.onSave(draft);
+    if (!invalid && !blockedByForeign) props.onSave(draft, topics);
   };
 
   const title = creating ? "Add user" : row!.displayName;
@@ -227,21 +231,6 @@ export function UserDrawer(props: Props) {
               />
             )}
 
-            {draft.role === "Admin" && (
-              <Select<number>
-                label="Site"
-                required
-                help="An admin's client comes from this site."
-                placeholder="Choose a site"
-                error={fieldError("site_ids")}
-                value={draft.site_ids[0] ?? null}
-                onChange={(v) => setSites(v === null ? [] : [v])}
-                options={clientSites.map((s) => ({ value: s.site_id, label: s.name }))}
-                emptyText={draft.company_id === null ? "Choose a client first" : "This client has no sites"}
-                loading={props.sites.loading}
-              />
-            )}
-
             {foreign.length > 0 && (
               <Callout
                 tone="warn"
@@ -280,6 +269,16 @@ export function UserDrawer(props: Props) {
                 items={categories.map((c) => ({ id: c.category_id, label: c.category_name }))}
                 selected={draft.category_ids}
                 onChange={(ids) => set("category_ids", ids)}
+              />
+            )}
+            {/* D17: site topics, so for a client's Managers and Users (an Admin has no sites; their company-level topics are set in KPI setup), once they exist; hidden while that client's KPI switch is off. */}
+            {row && !internal && draft.company_id !== null && (draft.role === "User" || draft.role === "Manager") && (
+              <KpiTopicsField
+                userId={row.user_id}
+                companyId={draft.company_id}
+                sites={clientSites.filter((s) => draft.site_ids.includes(s.site_id)).map((s) => ({ site_id: s.site_id, name: s.name }))}
+                value={topics}
+                onChange={setTopics}
               />
             )}
           </section>

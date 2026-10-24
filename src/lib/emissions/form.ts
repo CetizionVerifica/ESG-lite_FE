@@ -9,6 +9,7 @@
 import { ROW_METHOD_COLUMN, resolveSpecMethod, specNumericColumns } from "./emissionCalc";
 import { type MethodOptions, readMethodOptions, unitsForMethod } from "../scope3/dq";
 import { type FormSettings, readFormSettings, withDefaults } from "../forms/settings";
+import { unitForCategory, unitsForRow, withMethodUnits, type UnitOptionsByActivity } from "./unitOptions";
 import type {
   CalculationSpec,
   ColumnConfig,
@@ -34,9 +35,11 @@ export interface FormModel {
   methodOptions: MethodOptions;
   /** SE-2/SE-3: field settings, the method question, a fixed unit and currency (src/lib/forms/settings.ts). */
   settings: FormSettings;
+  /** #183: the units each emission category may use, from the server; null keeps the form's flat unit list. */
+  unitOptions: UnitOptionsByActivity | null;
 }
 
-export const toFormModel = (config: ColumnConfig | null | undefined): FormModel => ({
+export const toFormModel = (config: ColumnConfig | null | undefined, unitOptions: UnitOptionsByActivity | null = null): FormModel => ({
   columns: config?.columns ?? [],
   columnOptions: config?.column_options ?? {},
   dependencies: config?.column_dependencies ?? {},
@@ -46,6 +49,7 @@ export const toFormModel = (config: ColumnConfig | null | undefined): FormModel 
   spec: config?.calculation ?? null,
   methodOptions: readMethodOptions(config?.method_options),
   settings: readFormSettings(config),
+  unitOptions,
 });
 
 /**
@@ -91,8 +95,30 @@ export const isSelectColumn = (m: FormModel, col: ColumnEntity) =>
   isParentColumn(m, col.column_name) ||
   isDependentColumn(m, col.column_name);
 
-/** Columns shown in a row: every column except emission_category, which the row derives. */
-export const formColumns = (m: FormModel) => m.columns.filter((c) => lower(c.column_name) !== "emission_category");
+/**
+ * Columns shown in a row: every column except emission_category, which the row derives.
+ * A dependent select always comes after the select it depends on, so filling the row top to
+ * bottom never has a later choice reset an earlier one (F-07); otherwise the form's order.
+ */
+export const formColumns = (m: FormModel) => {
+  const cols = m.columns.filter((c) => lower(c.column_name) !== "emission_category");
+  const names = new Set(cols.map((c) => lower(c.column_name)));
+  const placed = new Set<string>();
+  const out: ColumnEntity[] = [];
+  let pending = cols;
+  while (pending.length) {
+    const ready = pending.filter((c) => {
+      const parent = parentColumnOf(m, c.column_name);
+      return !parent || !names.has(lower(parent)) || placed.has(lower(parent));
+    });
+    // A cycle in the config: keep the rest in the form's order.
+    const take = ready.length ? ready.slice(0, 1) : pending.slice(0, 1);
+    out.push(take[0]);
+    placed.add(lower(take[0].column_name));
+    pending = pending.filter((c) => c !== take[0]);
+  }
+  return out;
+};
 
 /** The label of a parent's stored value, looked up the way the legacy page does. */
 function parentLabelOf(m: FormModel, columnName: string, parentValue: string): string {
@@ -182,6 +208,14 @@ function findMapping(mapping: EmissionCategoryMapping, key: string) {
   for (const [k, category] of Object.entries(mapping)) if (lower(k) === lower(key)) return { key: k, category };
   return null;
 }
+
+/** A mapping key as people read it: "Spent Carbon|Recover" → "Spent Carbon · Recover" (F-08). */
+export const mappingKeyLabel = (key: string): string =>
+  key
+    .split("|")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" · ");
 
 /**
  * The emission category a row's selections map to: the dependency chain's
@@ -303,10 +337,19 @@ export function applyChange(m: FormModel, row: ModalRow, column: string, value: 
   const next: ModalRow = { ...row, [column]: value };
 
   if (isParentColumn(m, column)) {
+    const grandparent = parentColumnOf(m, column);
+    const gpValue = grandparent ? String(next[Object.keys(next).find((k) => lower(k) === lower(grandparent)) ?? ""] ?? "") : undefined;
     for (const [child, parent] of Object.entries(m.dependencies)) {
       if (lower(parent) !== lower(column)) continue;
       const key = Object.keys(next).find((k) => lower(k) === lower(child));
-      if (key) next[key] = "";
+      if (!key) continue;
+      // F-07: a choice the new parent still offers (same label) is kept, under the new list's id;
+      // only one it doesn't offer is cleared.
+      const childCol = columnByName(m, child);
+      const stored = String(next[key] ?? "");
+      const before = childCol && stored ? columnOptionsFor(m, childCol, String(row[column] ?? ""), gpValue).find((o) => String(o.id) === stored) : undefined;
+      const after = before && childCol && value ? columnOptionsFor(m, childCol, value, gpValue).find((o) => lower(String(o.label)) === lower(String(before.label))) : undefined;
+      next[key] = after ? String(after.id) : "";
     }
   }
 
@@ -342,11 +385,33 @@ export function applyChange(m: FormModel, row: ModalRow, column: string, value: 
   if (auto) {
     next.emission_category = auto.category;
     next._ecmKey = auto.key;
-  } else if (isParentColumn(m, column) || isDependentColumn(m, column)) {
+  } else if (isParentColumn(m, column) || isDependentColumn(m, column) || next._ecmKey) {
+    // No choice maps to an activity any more. Also when the activity came from the choices map
+    // (_ecmKey) through a select outside any dependency chain: clearing that select must clear the
+    // activity, or the row keeps calculating (and sends) the one picked before.
     next.emission_category = "";
     next._ecmKey = "";
   }
+
+  // #183: a new emission category keeps the unit only while it still offers it, and picks the only
+  // unit it offers. A spend row's unit is its currency (S3-5) and stays as it is.
+  const spendRow = next[ROW_METHOD_COLUMN] === "spend_based" || !!next.currency;
+  if (m.unitOptions && next.emission_category && next.emission_category !== row.emission_category && !spendRow) {
+    next.activity_data_unit = unitForCategory(m.unitOptions, String(next.emission_category), next.activity_data_unit, methodUnitsOf(m, next)) ?? "";
+  }
   return next;
+}
+
+/** The units of the form's methods that name them: the row's method, else every method (SE-1 picks the method by unit). */
+const methodUnitsOf = (m: FormModel, row: ModalRow): string[] => unitsForMethod(m.methodOptions, String(row[ROW_METHOD_COLUMN] ?? "")) ?? m.methodOptions.flatMap((o) => o.units);
+
+/**
+ * #183: the units the row's emission category offers (narrowed to the method's units when the form
+ * names them), or null when there's no list to check against (no options, or no emission category yet).
+ */
+export function offeredUnits(m: FormModel, row: ModalRow, methodUnits?: string[] | null): string[] | null {
+  const units = row.emission_category ? unitsForRow(m.unitOptions, row.emission_category) : null;
+  return units ? withMethodUnits(units.units, methodUnits ?? methodUnitsOf(m, row)) : null;
 }
 
 export const setExtraField = (row: ModalRow, key: string, value: string): ModalRow => ({

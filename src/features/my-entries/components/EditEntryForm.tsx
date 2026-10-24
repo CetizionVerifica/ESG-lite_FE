@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { applyChange, formColumns, isColumnVisible, toFormModel, useEmissionCalc, type ModalRow } from "../../../lib/emissions";
-import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEmissions, formatNumber } from "../../../ui";
+import { applyChange, formColumns, isColumnVisible, mappingKeyLabel, offeredUnits, sameUnit, toFormModel, unitsForRow, useEmissionCalc, type ModalRow } from "../../../lib/emissions";
+import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEntryEmissions } from "../../../ui";
 import { useEditSetup } from "../api";
 import { type EditIssue, type EntryUpdate, buildUpdate, editIssue, editedDate, entryMonth, factorYearFor, monthBounds, rowFromEntry } from "../edit";
 import { type EntryRow, periodText } from "../logic";
@@ -54,6 +54,7 @@ export function EditEntryForm({ entry, saveError, onSubmit }: Props) {
       config={config}
       factors={setup.data?.factors ?? []}
       units={setup.data?.units ?? []}
+      unitOptions={setup.data?.unitOptions ?? null}
       loadingFactors={setup.isFetching}
       month={month}
       onMonthChange={setMonth}
@@ -69,6 +70,7 @@ type FieldsProps = Props & {
   config: NonNullable<ReturnType<typeof useEditSetup>["data"]>["config"];
   factors: NonNullable<ReturnType<typeof useEditSetup>["data"]>["factors"];
   units: string[];
+  unitOptions: NonNullable<ReturnType<typeof useEditSetup>["data"]>["unitOptions"];
   loadingFactors: boolean;
   month: string;
   onMonthChange: (month: string) => void;
@@ -78,7 +80,7 @@ type FieldsProps = Props & {
 
 function Fields(p: FieldsProps) {
   const { entry } = p;
-  const model = useMemo(() => toFormModel(p.config), [p.config]);
+  const model = useMemo(() => toFormModel(p.config, p.unitOptions), [p.config, p.unitOptions]);
   const [row, setRow] = useState<ModalRow>(() => rowFromEntry(model, entry));
   const [reason, setReason] = useState("");
   const [tried, setTried] = useState(false);
@@ -92,7 +94,9 @@ function Fields(p: FieldsProps) {
   const result = calc.calculateEmission(row);
   const factor = row.emission_category ? calc.getEmissionFactor(row.emission_category) : undefined;
   const expectedUnit = row.emission_category ? calc.getExpectedUnit(row.emission_category) : null;
-  const issue = editIssue(row, calc, entry.status, reason);
+  // #183: the units the emission category offers; the entry's own unit stays selectable as "(no longer offered)".
+  const offered = offeredUnits(model, row);
+  const issue = editIssue(row, calc, entry.status, reason, { offered, stored: entry.activity_data_unit });
   // SE-1: a User sees their fields and the total; problems in plain words.
   const detail = useCalcDetailForSite(entry.site?.site_id);
   const say = (message: string) => (detail ? message : plainProblem(message));
@@ -100,7 +104,15 @@ function Fields(p: FieldsProps) {
 
   const mapped = Object.keys(model.mapping).length > 0;
   const categoryOptions = [...new Set([...p.factors.map((f) => f.emission_category_name), ...(row.emission_category ? [row.emission_category] : [])])];
-  const unitOptions = [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(row.activity_data_unit ? [row.activity_data_unit] : [])])];
+  const factorUnit = unitsForRow(model.unitOptions, row.emission_category)?.factorUnit || expectedUnit;
+  const currentUnit = row.activity_data_unit || "";
+  const notOffered = offered && currentUnit && !offered.some((u) => sameUnit(u, currentUnit)) ? currentUnit : null;
+  const unitsWaitForCategory = !!model.unitOptions && !row.emission_category;
+  const unitOptions = unitsWaitForCategory
+    ? []
+    : offered
+      ? [...offered, ...(notOffered ? [notOffered] : [])]
+      : [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(currentUnit ? [currentUnit] : [])])];
   const change = (column: string, value: string) => setRow((r) => applyChange(model, r, column, value));
 
   const submit = (e: React.FormEvent) => {
@@ -117,7 +129,7 @@ function Fields(p: FieldsProps) {
           <span className="block text-xs font-medium text-muted">Emission category</span>
           {row.emission_category ? (
             <span className="mt-1 inline-flex flex-wrap items-center gap-1 rounded-chip bg-tint px-2 py-1 text-ink">
-              {row._ecmKey || row.emission_category}
+              {row._ecmKey ? mappingKeyLabel(String(row._ecmKey)) : row.emission_category}
             </span>
           ) : (
             <span className={cn("mt-1 block", shown("emission_category") ? "text-bad" : "text-muted")}>Set by your choices below</span>
@@ -152,13 +164,14 @@ function Fields(p: FieldsProps) {
           ))}
         <Select<string>
           label="Unit"
-          value={row.activity_data_unit || null}
+          value={unitsWaitForCategory ? null : row.activity_data_unit || null}
           onChange={(v) => change("activity_data_unit", v ?? "")}
           options={unitOptions.map((u) => ({
             value: u,
-            label: detail && u === expectedUnit ? `${u} (factor unit)` : u,
+            label: u === notOffered ? `${u} (no longer offered)` : detail && sameUnit(u, factorUnit) ? `${u} (factor unit)` : u,
           }))}
           placeholder="Choose a unit"
+          emptyText={mapped ? "Make your choices above first" : "Choose the emission category first"}
           error={shown("activity_data_unit")}
         />
         {entry.reporting_period === "yearly" ? (
@@ -192,11 +205,11 @@ function Fields(p: FieldsProps) {
         </div>
         <div className="text-right" aria-live="polite">
           {result.value !== null ? (
-            <p className="font-num text-base font-semibold text-ink">= {formatNumber(result.value, 2)} tCO₂e</p>
+            <p className="font-num text-base font-semibold text-ink">= {formatEntryEmissions(result.value)}</p>
           ) : (
             <p className={cn("text-sm", shown("values") ? "text-bad" : "text-muted")}>{say(result.status)}</p>
           )}
-          <p className="font-num text-xs text-muted">was {formatEmissions(Number(entry.total_emission))}</p>
+          <p className="font-num text-xs text-muted">was {formatEntryEmissions(Number(entry.total_emission))}</p>
         </div>
       </div>
 

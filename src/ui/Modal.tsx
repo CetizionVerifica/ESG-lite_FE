@@ -6,6 +6,7 @@ import { cn } from "./cn";
 import { useFocusTrap } from "./hooks/useFocusTrap";
 import { useLockBodyScroll } from "./hooks/useLockBodyScroll";
 import { focusRing } from "./styles";
+import { portalRoot } from "./portalRoot";
 
 export type ModalAction = {
   label: string;
@@ -125,6 +126,6 @@ export function Modal({
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

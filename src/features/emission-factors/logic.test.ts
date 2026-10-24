@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  gridFactorHint,
   type Batch,
   type Factor,
   type Site,
@@ -219,5 +220,20 @@ describe("factor metadata (S3-2)", () => {
   it("shows factors at up to 8 decimals", () => {
     expect(formatFactor("0.00012345")).toBe("0.00012345");
     expect(formatFactor("2.68000000")).toBe("2.68");
+  });
+});
+
+describe("gridFactorHint (F-04)", () => {
+  it("warns when a grid electricity factor looks like tonnes, not kg", () => {
+    expect(gridFactorHint("Purchased Electricity", 0.71, "MWh")).toMatch(/50–1,200 kgCO₂e per MWh.*0\.71 looks like tonnes per MWh; in kg that is 710/);
+    expect(gridFactorHint("Purchased Electricity", 0.0007, "kWh")).toMatch(/1,000 times too small/);
+  });
+  it("stays quiet for real values, other categories and renewables", () => {
+    expect(gridFactorHint("Purchased Electricity", 710, "MWh")).toBeNull();
+    expect(gridFactorHint("Purchased Electricity", 0.71, "kWh")).toBeNull();
+    expect(gridFactorHint("Stationary Combustion", 0.5, "MWh")).toBeNull();
+    expect(gridFactorHint("Renewable Electricity", 0, "kWh")).toBeNull();
+    expect(gridFactorHint("Renewable Electricity", 0.001, "kWh")).toBeNull();
+    expect(gridFactorHint(null, 0.71, "MWh")).toBeNull();
   });
 });

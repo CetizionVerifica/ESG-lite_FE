@@ -14,7 +14,8 @@ export function SitesTable(props: {
   loading: boolean;
   error: string | null;
   onRetry: () => void;
-  linkFor: (siteId: number) => string;
+  /** Where a row opens; none for a read-only Admin (M5). */
+  linkFor?: (siteId: number) => string;
 }) {
   const navigate = useNavigate();
   const rows: Row[] = props.sites.map((s) => ({ ...s, state: siteStatus(s, props.missing.get(s.name) ?? 0) }));
@@ -59,7 +60,7 @@ export function SitesTable(props: {
         loading={props.loading}
         error={props.error}
         onRetry={props.onRetry}
-        onRowClick={(r) => navigate(props.linkFor(r.site_id))}
+        onRowClick={props.linkFor ? (r) => navigate(props.linkFor!(r.site_id)) : undefined}
         exportName="overview-by-site"
         defaultSort={{ id: "net", dir: "desc" }}
       />

@@ -18,13 +18,17 @@ interface SessionSite {
 }
 /** The parts of the /auth/login and /auth/me user the theme needs. */
 export interface SessionUser {
+  /** An Admin's company (an Admin belongs to a company, not a site). */
+  company?: SessionCompany | null;
   site?: SessionSite | null;
   sites?: SessionSite[] | null;
 }
 
-/** Company of the signed-in user: their site's company, else their first site's. */
+/** Company of the signed-in user: an Admin's own company, else their site's, else their first site's. */
 export function companyIdFromUser(user: SessionUser | null | undefined): number | null {
   if (!user) return null;
+  const own = user.company?.company_id;
+  if (typeof own === "number" && own > 0) return own;
   const sites = [user.site, ...(user.sites ?? [])];
   for (const site of sites) {
     const id = site?.company?.company_id;

@@ -1,4 +1,5 @@
 import { ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { cn } from "../cn";
 import { MONTH_SHORT } from "../period";
 import { formatReportingYear } from "../format";
@@ -35,7 +36,9 @@ export function MonthPicker({ value, onChange, min, max, ...field }: MonthPicker
   const minV = min ?? `${now.getFullYear() - 6}-01`;
   const [vy, vm] = value ? value.split("-").map(Number) : [null, null];
   const years = yearsBetween(Number(minV.slice(0, 4)), Number(maxV.slice(0, 4)));
-  const year = vy ?? years[0];
+  // A year picked before any month is kept here, so it doesn't snap back to the latest year (F-24).
+  const [pickedYear, setPickedYear] = useState<number | null>(null);
+  const year = vy ?? (pickedYear !== null && years.includes(pickedYear) ? pickedYear : years[0]);
 
   const emit = (y: number, m: number | null) => {
     if (m === null) return onChange(null);
@@ -73,7 +76,11 @@ export function MonthPicker({ value, onChange, min, max, ...field }: MonthPicker
               aria-describedby={control["aria-describedby"]}
               disabled={control.disabled}
               value={year}
-              onChange={(e) => emit(Number(e.target.value), vm)}
+              onChange={(e) => {
+                const y = Number(e.target.value);
+                setPickedYear(y);
+                if (vm !== null) emit(y, vm);
+              }}
               className={cn(selectClass, "font-num")}
             >
               {years.map((y) => (

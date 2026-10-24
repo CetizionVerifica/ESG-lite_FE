@@ -196,6 +196,18 @@ export function mergeFera<T extends EmissionData>(rows: T[], showFera: boolean):
   };
 }
 
+/**
+ * F-26: the list's total counts pending Category 3 (FERA) twins that ride on their entry, while the
+ * tabs count decisions (twins folded). Says how many, so "1–50 of 159" and "Approvals 147" add up.
+ * Null when there are none, when FERA rows are shown on their own, or on an API without the counts.
+ */
+export function foldedTwinNote(summary: { pending_count?: number; pending_review_count?: number } | undefined, total: number, showFera: boolean): string | null {
+  if (showFera || summary?.pending_count === undefined || summary.pending_review_count === undefined) return null;
+  const twins = summary.pending_count - summary.pending_review_count;
+  if (twins <= 0 || total <= 0) return null;
+  return `${formatNumber(total)} rows, ${formatNumber(twins)} of them Category 3 ${twins === 1 ? "row" : "rows"} shown with ${twins === 1 ? "its entry" : "their entries"}.`;
+}
+
 // ── Activity data ───────────────────────────────────────────────────────────
 
 const sameText = (a: unknown, b: unknown) => String(a).toLowerCase() === String(b).toLowerCase();
@@ -297,6 +309,12 @@ export function quantityOf(fields: ActivityField[]): number | null {
   if (!f) return null;
   const n = Number(f.value);
   return Number.isFinite(n) ? n : null;
+}
+
+/** The quantity shown: the server's (worked out from the entry's form, as My entries shows it), else the first numeric field. */
+export function rowQuantity(row: Pick<EmissionData, "quantity">, fields: ActivityField[]): number | null {
+  const server = row.quantity === null || row.quantity === undefined ? NaN : Number(row.quantity);
+  return Number.isFinite(server) ? server : quantityOf(fields);
 }
 
 // ── Display ─────────────────────────────────────────────────────────────────

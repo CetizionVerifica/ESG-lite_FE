@@ -5,6 +5,7 @@ import { type NavItem, isActiveLink, resolveNavTo } from "../nav";
 import type { Appearance } from "../../../theme";
 import { Drawer, GLOSSARY_LOCALES, LOCALE_NAMES, infoLanguageEnabled, setGlossaryLocale, useGlossaryLocale } from "../../../ui";
 import { focusRing } from "./styles";
+import { useCompanyChoice } from "../useCompanyChoice";
 
 interface MobileNavProps {
   open: boolean;
@@ -22,6 +23,7 @@ interface MobileNavProps {
 export default function MobileNav({ open, onClose, items, clientId, user, appearance, onAppearance, onSearch, onSignOut }: MobileNavProps) {
   const { pathname, search } = useLocation();
   const infoLocale = useGlossaryLocale();
+  const company = useCompanyChoice();
 
   const renderLink = (label: string, rawTo: string, indent: boolean) => {
     const to = resolveNavTo(rawTo, clientId);
@@ -111,6 +113,27 @@ export default function MobileNav({ open, onClose, items, clientId, user, appear
                   className={`rounded-(--r-sm) py-1.5 text-xs font-medium ${infoLocale === l ? "bg-(--t-panel) shadow-sm" : "text-(--t-muted)"} ${focusRing}`}
                 >
                   {LOCALE_NAMES[l]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {company.companies.length > 0 && (
+          <>
+            <div id="drawer-company" className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-(--t-muted)">
+              Company
+            </div>
+            <div role="radiogroup" aria-labelledby="drawer-company" className="mt-1.5 grid gap-1 rounded-(--r-md) bg-(--t-tint) p-1">
+              {company.companies.map((c) => (
+                <button
+                  key={c.company_id}
+                  type="button"
+                  role="radio"
+                  aria-checked={company.current === c.company_id}
+                  onClick={() => company.choose(c.company_id)}
+                  className={`truncate rounded-(--r-sm) px-2 py-1.5 text-left text-xs font-medium ${company.current === c.company_id ? "bg-(--t-panel) shadow-sm" : "text-(--t-muted)"} ${focusRing}`}
+                >
+                  {c.name}
                 </button>
               ))}
             </div>
