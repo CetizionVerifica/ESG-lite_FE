@@ -394,9 +394,10 @@ export function applyChange(m: FormModel, row: ModalRow, column: string, value: 
   }
 
   // #183: a new emission category keeps the unit only while it still offers it, and picks the only
-  // unit it offers. A spend row's unit is its currency (S3-5) and stays as it is.
+  // unit it offers. A spend row's unit is its currency (S3-5) and stays as it is, and so does a
+  // form's fixed unit (SE-3): the Superadmin set it, so a choice never swaps it.
   const spendRow = next[ROW_METHOD_COLUMN] === "spend_based" || !!next.currency;
-  if (m.unitOptions && next.emission_category && next.emission_category !== row.emission_category && !spendRow) {
+  if (m.unitOptions && !m.settings.fixedUnit && next.emission_category && next.emission_category !== row.emission_category && !spendRow) {
     next.activity_data_unit = unitForCategory(m.unitOptions, String(next.emission_category), next.activity_data_unit, methodUnitsOf(m, next)) ?? "";
   }
   return next;
