@@ -9,10 +9,24 @@ import { useDesignStudio, useStudioCompanyId } from "../../../lib/studio/switch"
 import { getInputsPrefill } from "../../../services/studioService";
 import { Badge, Button, Callout, EmptyState, PageHeader, SegmentedControl, Select, Skeleton, Stepper, TextField, Textarea, Toggle, cn, focusRing, panel } from "../../../ui";
 import { useBrandKit } from "../brand-kit/api";
-import { docErrorMessage, useDocBuild, useStartBuild, useTemplates } from "../docs/api";
+import { docErrorMessage, errorCode, useDocBuild, useStartBuild, useTemplates } from "../docs/api";
 import { FORMAT_ASPECT, formatLine } from "../home/logic";
 import { ReportDetailsForm } from "../panels/ReportDetailsForm";
-import { FRAMEWORK_LABELS, blankFormatFor, createBody, filterTemplates, initialState, yearOptions, type FormatFilter, type NewDesignState } from "./logic";
+import {
+  FRAMEWORK_LABELS,
+  SITES_SCOPE_MESSAGE,
+  blankFormatFor,
+  companySites,
+  createBody,
+  filterTemplates,
+  initialState,
+  scopeRefusal,
+  toggleScopeSite,
+  yearOptions,
+  type FormatFilter,
+  type NewDesignState,
+  type ScopeSite,
+} from "./logic";
 import { HelpMeChoose } from "./HelpMeChoose"; // AT-1
 import type { ChooseMode } from "./suggestLogic"; // AT-1
 
@@ -25,16 +39,37 @@ const STEPS = [
 
 const KIND_TITLE: Record<ReportKind, string> = { ghg: "New GHG report", sustainability: "New sustainability report" };
 
-type SiteLike = { site_id: number; name: string };
-
 /** The sites the session knows (a Manager's or User's); Admins and Superadmins report company-wide. */
-function useSessionSites(): SiteLike[] {
+function useSessionSites(): { all: ScopeSite[]; company: ScopeSite[] } {
   const { user } = useAuth();
   return useMemo(() => {
-    const u = (user ?? {}) as { sites?: SiteLike[]; site?: SiteLike | null };
-    const list = u.sites?.length ? u.sites : u.site ? [u.site] : [];
-    return list.filter((s) => Number.isInteger(s?.site_id));
+    const u = (user ?? {}) as { sites?: ScopeSite[]; site?: ScopeSite | null; company?: { company_id?: number } | null; company_id?: number | null };
+    const list = (u.sites?.length ? u.sites : u.site ? [u.site] : []).filter((s) => Number.isInteger(s?.site_id));
+    // #243: only the company being worked in (M6); the server refuses another client's sites. With no
+    // company chosen yet, the one the server falls back to (resolveUserCompanyId): own, main site's, first site's.
+    const companyId = u.company?.company_id ?? u.company_id ?? u.site?.company?.company_id ?? list[0]?.company?.company_id;
+    return { all: list, company: companySites(list, companyId) };
   }, [user]);
+}
+
+type ScopeCheck = { allRefused: boolean; refusal: string | null };
+
+/**
+ * #243: the server's answer for the sites, asked on the Scope step through the
+ * prefill the details step reads (same query): "All sites" is refused
+ * (DS_SITES_SCOPE) when the person lacks a site of the company, and picked
+ * sites they can't read come back as DS_DOC_NOT_FOUND.
+ */
+function useScopeCheck(state: NewDesignState, enabled: boolean, names: ScopeSite[]): ScopeCheck {
+  const companyId = useStudioCompanyId();
+  const prefill = (sites: NewDesignState["sites"]) => {
+    const scope = { kind: state.kind, year: state.year, yearType: state.yearType, sites };
+    return { queryKey: ["studio", "inputs", "prefill", companyId, scope], queryFn: () => getInputsPrefill(scope, companyId), staleTime: 60_000 };
+  };
+  const all = useQuery({ ...prefill("all"), enabled });
+  const picked = useQuery({ ...prefill(state.sites), enabled: enabled && state.sites !== "all" });
+  const allRefused = errorCode(all.error) === "DS_SITES_SCOPE";
+  return { allRefused, refusal: state.sites === "all" ? (allRefused ? SITES_SCOPE_MESSAGE : null) : scopeRefusal(picked.error, names) };
 }
 
 /**
@@ -52,6 +87,13 @@ export function NewDesignPage() {
   const set = (patch: Partial<NewDesignState>) => setState((s) => ({ ...s, ...patch }));
   const start = useStartBuild();
   const [error, setError] = useState<string | null>(null);
+  const sites = useSessionSites();
+  const scopeCheck = useScopeCheck(state, step >= 1, sites.all);
+  // #243: someone without every site of the company starts from their own sites.
+  const ownSites = sites.company.map((s) => s.site_id).join(",");
+  useEffect(() => {
+    if (scopeCheck.allRefused && state.sites === "all" && ownSites) setState((s) => ({ ...s, sites: ownSites.split(",").map(Number) }));
+  }, [scopeCheck.allRefused, state.sites, ownSites]);
 
   // The studio switch itself is the route's gate (StudioGate); here only the sustainability kind's KPI switch.
   if (state.kind === "sustainability" && !kinds.sustainability && !checking) {
@@ -67,7 +109,11 @@ export function NewDesignPage() {
 
   if (buildId !== null) return <BuildView id={buildId} onRetry={() => (setBuildId(null), setStep(3))} />;
 
-  const canNext = step === 0 ? state.templateId !== null : step === 1 ? state.frameworks.length > 0 : true;
+  // A site picked elsewhere (the URL) stays listed so it can be unticked, though it isn't the company's.
+  const picked = state.sites === "all" ? [] : state.sites;
+  const scopeSites = [...sites.company, ...sites.all.filter((s) => picked.includes(s.site_id) && !sites.company.includes(s))];
+  const sitesOk = state.sites === "all" ? !scopeCheck.allRefused : state.sites.length > 0 && !scopeCheck.refusal;
+  const canNext = step === 0 ? state.templateId !== null : step === 1 ? state.frameworks.length > 0 && sitesOk : true;
   const onBuild = async () => {
     setError(null);
     try {
@@ -93,8 +139,8 @@ export function NewDesignPage() {
         </Callout>
       )}
       {step === 0 && <TemplateStep state={state} set={set} kindsOn={kinds} onUse={(templateId) => (set({ templateId }), setStep(1))} /* AT-1 */ />}
-      {step === 1 && <ScopeStep state={state} set={set} />}
-      {step === 2 && <DetailsStep state={state} set={set} />}
+      {step === 1 && <ScopeStep state={state} set={set} sites={scopeSites} check={scopeCheck} />}
+      {step === 2 && <DetailsStep state={state} set={set} names={sites.all} />}
       {step === 3 && <WordsStep state={state} set={set} />}
       <div className="flex flex-wrap justify-between gap-2 border-t border-line pt-4">
         {step === 0 ? (
@@ -293,15 +339,12 @@ function BrowseTemplates({ state, set, kindControl }: StepProps & { kindControl:
   );
 }
 
-function ScopeStep({ state, set }: StepProps) {
-  const sites = useSessionSites();
+function ScopeStep({ state, set, sites, check }: StepProps & { sites: ScopeSite[]; check: ScopeCheck }) {
   const years = yearOptions(state.yearType);
   const yearList = years.includes(state.year) ? years : [state.year, ...years];
-  const toggleSite = (id: number) => {
-    const current = state.sites === "all" ? [] : state.sites;
-    const next = current.includes(id) ? current.filter((s) => s !== id) : [...current, id];
-    set({ sites: next.length ? next : "all" });
-  };
+  const toggleSite = (id: number) => set({ sites: toggleScopeSite(state.sites, id, !check.allRefused) });
+  // Without every site of the company the person's own sites are the choice, even when there is one.
+  const listSites = sites.length > 1 || (check.allRefused && sites.length > 0);
   const toggleFramework = (f: FrameworkCode) => set({ frameworks: state.frameworks.includes(f) ? state.frameworks.filter((x) => x !== f) : [...state.frameworks, f] });
   return (
     <div className={cn(panel, "grid gap-6 p-4 md:grid-cols-2")}>
@@ -327,18 +370,29 @@ function ScopeStep({ state, set }: StepProps) {
       <div className="space-y-5">
         <fieldset className="space-y-2">
           <legend className="text-sm font-semibold text-ink">Sites</legend>
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input type="radio" name="sites" className="size-4 accent-accent" checked={state.sites === "all"} onChange={() => set({ sites: "all" })} />
+          <label className={cn("flex items-center gap-2 text-sm", check.allRefused ? "text-muted" : "text-ink")}>
+            <input type="radio" name="sites" className="size-4 accent-accent" checked={state.sites === "all"} disabled={check.allRefused} aria-describedby={check.allRefused ? "all-sites-refused" : undefined} onChange={() => set({ sites: "all" })} />
             All sites
           </label>
-          {sites.length > 1 &&
+          {check.allRefused && (
+            <p id="all-sites-refused" className="pl-6 text-sm text-muted">
+              {SITES_SCOPE_MESSAGE}
+            </p>
+          )}
+          {listSites &&
             sites.map((s) => (
               <label key={s.site_id} className="flex items-center gap-2 pl-6 text-sm text-ink">
                 <input type="checkbox" className="size-4 accent-accent" checked={state.sites !== "all" && state.sites.includes(s.site_id)} onChange={() => toggleSite(s.site_id)} />
                 {s.name}
               </label>
             ))}
-          {state.sites !== "all" && sites.length <= 1 && <p className="pl-6 text-sm text-muted">{state.sites.length} site{state.sites.length === 1 ? "" : "s"} from the GHG report.</p>}
+          {state.sites !== "all" && !listSites && <p className="pl-6 text-sm text-muted">{state.sites.length} site{state.sites.length === 1 ? "" : "s"} from the GHG report.</p>}
+          {state.sites !== "all" && state.sites.length === 0 && <p className="pl-6 text-sm text-bad">Pick at least one site.</p>}
+          {state.sites !== "all" && check.refusal && (
+            <div data-testid="scope-refusal">
+              <Callout tone="warn">{check.refusal}</Callout>
+            </div>
+          )}
         </fieldset>
         <fieldset className="space-y-2">
           <legend className="text-sm font-semibold text-ink">Frameworks</legend>
@@ -355,13 +409,15 @@ function ScopeStep({ state, set }: StepProps) {
   );
 }
 
-function DetailsStep({ state, set }: StepProps) {
+function DetailsStep({ state, set, names }: StepProps & { names: ScopeSite[] }) {
   const companyId = useStudioCompanyId();
   const scope = { kind: state.kind, year: state.year, yearType: state.yearType, sites: state.sites };
   const prefill = useQuery({ queryKey: ["studio", "inputs", "prefill", companyId, scope], queryFn: () => getInputsPrefill(scope, companyId), staleTime: 60_000 });
+  // #243: a refusal about the sites says so; anything else keeps the general note.
+  const refusal = prefill.isError ? scopeRefusal(prefill.error, names) : null;
   return (
     <div className={cn(panel, "p-4")}>
-      {prefill.isError && <Callout tone="warn">We couldn't read what your company settings already say. You can still type the details.</Callout>}
+      {prefill.isError && <Callout tone="warn">{refusal ?? "We couldn't read what your company settings already say. You can still type the details."}</Callout>}
       <ReportDetailsForm kind={state.kind} stored={state.inputs} prefill={prefill.data?.prefill ?? {}} loading={prefill.isPending} onChange={(inputs) => set({ inputs })} />
     </div>
   );

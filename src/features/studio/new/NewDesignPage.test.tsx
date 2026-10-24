@@ -11,15 +11,17 @@ import { handlers, resetStudioMocks } from "../../../test/msw";
 import { studioMockDoc } from "../../../test/msw/studio";
 import { NewDesignPage } from "./NewDesignPage";
 
-const auth = vi.hoisted(() => ({ role: "Manager" as string }));
+const SESSION_USER = { sites: [{ site_id: 1, name: "Bahrain plant" }, { site_id: 2, name: "Pune warehouse" }] };
+const auth = vi.hoisted(() => ({ role: "Manager" as string, user: null as unknown }));
 vi.mock("../../../context/AuthContext", () => ({
-  useAuth: () => ({ role: auth.role, user: { sites: [{ site_id: 1, name: "Bahrain plant" }, { site_id: 2, name: "Pune warehouse" }] } }),
+  useAuth: () => ({ role: auth.role, user: auth.user ?? SESSION_USER }),
 }));
 
 const server = setupServer(...handlers);
 const posted: unknown[] = [];
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  auth.user = null;
   resetStudioMocks();
   posted.length = 0;
   server.events.on("request:start", async ({ request }) => {
@@ -87,6 +89,82 @@ describe("NewDesignPage", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/studio/3"), { timeout: 5000 });
     expect(posted[0]).toMatchObject({ kind: "ghg", templateId: 1, year: 2026, yearType: "FY", compareYear: 2025, sites: [1], frameworks: ["GHGP", "ISO14064"], ai: true, inputs: { responsible_person: { value: "Asha Rao" } } });
     expect(studioMockDoc(3)?.doc.meta.sites).toEqual([1]);
+  });
+
+  describe("#243: the sites of the company being worked in", () => {
+    const midal = { company_id: 1, name: "Midal Cables" };
+    // An internal account with no company picked yet: no `company` on the session, so the first site's (as the server falls back).
+    const manager = {
+      company: null,
+      company_id: null,
+      sites: [
+        { site_id: 1, name: "Bahrain plant", company: midal },
+        { site_id: 2, name: "Pune warehouse", company: midal },
+        { site_id: 24, name: "Chieron - Main Site", company: { company_id: 5, name: "Chieron" } },
+      ],
+    };
+    // The server: no all-site access (a Midal site is missing); site 24 is another client's.
+    const refusing = () =>
+      server.use(
+        http.get("*/studio/inputs/prefill", ({ request }) => {
+          const sites = new URL(request.url).searchParams.get("sites") ?? "";
+          if (sites === "all") return HttpResponse.json({ code: "DS_SITES_SCOPE", message: "You need access to every site for a company-wide report." }, { status: 403 });
+          if (sites.split(",").includes("24")) return HttpResponse.json({ code: "DS_DOC_NOT_FOUND", message: "Not found", details: { sites: [24] } }, { status: 404 });
+          return undefined;
+        }),
+      );
+
+    it("without every site, All sites is off with the reason and their own sites are ticked", async () => {
+      auth.user = manager;
+      refusing();
+      const user = userEvent.setup();
+      renderFlow("/studio/new?kind=ghg&year=2026&yearType=FY&format=a4&purpose=report");
+      await user.click(await screen.findByTestId("template-1"));
+      await user.click(screen.getByTestId("new-next"));
+
+      await waitFor(() => expect((screen.getByLabelText("All sites") as HTMLInputElement).disabled).toBe(true));
+      expect(screen.getByText("A company-wide report needs access to every site. Pick your sites instead.")).toBeTruthy();
+      await waitFor(() => expect((screen.getByLabelText("Bahrain plant") as HTMLInputElement).checked).toBe(true));
+      expect((screen.getByLabelText("Pune warehouse") as HTMLInputElement).checked).toBe(true);
+      expect(screen.queryByLabelText("Chieron - Main Site")).toBeNull();
+
+      // Unticking both leaves nothing picked (not "all"), and Next waits for a site.
+      await user.click(screen.getByLabelText("Bahrain plant"));
+      await user.click(screen.getByLabelText("Pune warehouse"));
+      expect(screen.getByText("Pick at least one site.")).toBeTruthy();
+      expect((screen.getByTestId("new-next") as HTMLButtonElement).disabled).toBe(true);
+      await user.click(screen.getByLabelText("Pune warehouse"));
+      await user.click(screen.getByTestId("new-next"));
+
+      await screen.findByTestId("input-responsible_person");
+      expect(screen.queryByText(/We couldn't read what your company settings already say/)).toBeNull();
+    });
+
+    it("another client's site from the URL is refused on the Scope step, and can be unticked", async () => {
+      auth.user = manager;
+      refusing();
+      const user = userEvent.setup();
+      renderFlow("/studio/new?kind=ghg&year=2026&yearType=FY&siteIds=1,24&format=a4&purpose=report");
+      await user.click(await screen.findByTestId("template-1"));
+      await user.click(screen.getByTestId("new-next"));
+
+      expect(await screen.findByText("You can't report on Chieron - Main Site in this company. Untick it.")).toBeTruthy();
+      expect((screen.getByTestId("new-next") as HTMLButtonElement).disabled).toBe(true);
+      await user.click(screen.getByLabelText("Chieron - Main Site"));
+      await waitFor(() => expect(screen.queryByTestId("scope-refusal")).toBeNull());
+      expect((screen.getByTestId("new-next") as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it("with every site of the company, All sites stays ticked", async () => {
+      auth.user = manager;
+      const user = userEvent.setup();
+      renderFlow("/studio/new?kind=ghg&year=2026&yearType=FY&format=a4&purpose=report");
+      await user.click(await screen.findByTestId("template-1"));
+      await user.click(screen.getByTestId("new-next"));
+      expect((screen.getByLabelText("All sites") as HTMLInputElement).checked).toBe(true);
+      expect((screen.getByLabelText("All sites") as HTMLInputElement).disabled).toBe(false);
+      expect(screen.queryByLabelText("Chieron - Main Site")).toBeNull();
+    });
   });
 
   it("a blank deck and a build that fails", async () => {
