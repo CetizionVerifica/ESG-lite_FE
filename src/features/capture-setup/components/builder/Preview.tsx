@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Eye, RotateCcw } from "lucide-react";
-import { applyChange, columnTitle, formColumns, isColumnVisible, newRow, rowMethodChoices, setExtraField, toFormModel, visibleExtraFields, type FormModel } from "../../../../lib/emissions/form";
+import { applyChange, columnTitle, formColumns, isColumnVisible, newRow, offeredUnits, rowMethodChoices, setExtraField, toFormModel, visibleExtraFields, type FormModel } from "../../../../lib/emissions/form";
+import type { UnitOptionsByActivity } from "../../../../lib/emissions/unitOptions";
 import { settingFor, withDefaults } from "../../../../lib/forms/settings";
 import { ROW_METHOD_COLUMN, resolveSpecMethod } from "../../../../lib/emissions/emissionCalc";
 import type { ModalRow } from "../../../../lib/emissions/types";
@@ -14,6 +15,8 @@ export type PreviewProps = {
   categoryName?: string;
   /** GHG Protocol category: methods are worded the category's way (S3-3). */
   ghgCategory?: number | null;
+  /** #254: the site × category's units and the units each emission category offers (#183), as Add data reads them. */
+  units?: { units: string[]; unitOptions?: UnitOptionsByActivity | null } | null;
 };
 
 /** A new preview row, with the form's defaults (SE-3). */
@@ -27,8 +30,8 @@ const freshRow = (model: FormModel) => withDefaults(newRow(model, 1), model.sett
  * read-only fields, no method words. "Reviewer view" shows every field and the
  * method cards.
  */
-export function Preview({ draft, formId, siteName, categoryName, ghgCategory }: PreviewProps) {
-  const model = useMemo(() => toFormModel(toPreviewConfig(draft, formId)), [draft, formId]);
+export function Preview({ draft, formId, siteName, categoryName, ghgCategory, units }: PreviewProps) {
+  const model = useMemo(() => toFormModel(toPreviewConfig(draft, formId), units?.unitOptions ?? null), [draft, formId, units?.unitOptions]);
   const [row, setRow] = useState<ModalRow>(() => freshRow(model));
   // Contributors only see the form's default method; a reviewer picks between them (simple-entry §8).
   const [viewAs, setViewAs] = useState<"contributor" | "manager">("contributor");
@@ -42,6 +45,11 @@ export function Preview({ draft, formId, siteName, categoryName, ghgCategory }: 
   // A method the draft no longer offers falls back to its first, as a new row in Add data would start.
   const method = methods.includes(String(row[ROW_METHOD_COLUMN] ?? "")) ? String(row[ROW_METHOD_COLUMN]) : (model.methodOptions[0]?.method ?? null);
   const unit = row.activity_data_unit || (model.spec ? resolveSpecMethod(model.spec, row)?.method.activity_unit : undefined);
+  // #254: the Unit field a contributor gets in Add data. With the #183 lists it waits for the emission
+  // category and offers that category's units; otherwise the site's units. A fixed unit is text.
+  const fixedUnit = model.settings.fixedUnit;
+  const waitsForCategory = !!model.unitOptions && !row.emission_category;
+  const unitChoices = waitsForCategory ? [] : (offeredUnits(model, row) ?? [...new Set([...(unit ? [unit] : []), ...(units?.units ?? [])])]);
 
   return (
     <section aria-labelledby="preview-title" className={cn(panel, "space-y-4 p-4")} data-testid="form-preview">
@@ -95,6 +103,16 @@ export function Preview({ draft, formId, siteName, categoryName, ghgCategory }: 
               labelExtra={!contributor && settingFor(settings, c.column_name)?.hidden ? <Badge tone="neutral">Hidden from contributors</Badge> : undefined}
             />
           ))}
+          {!fixedUnit && (
+            <Select<string>
+              label="Unit"
+              value={waitsForCategory ? null : row.activity_data_unit || null}
+              onChange={(v) => setRow((r) => applyChange(model, r, "activity_data_unit", v ?? ""))}
+              options={unitChoices.map((u) => ({ value: u, label: u }))}
+              placeholder="Choose a unit"
+              emptyText={mapped ? "Make your choices above first" : "Choose the emission category first"}
+            />
+          )}
         </div>
       )}
 
@@ -107,11 +125,12 @@ export function Preview({ draft, formId, siteName, categoryName, ghgCategory }: 
         ) : (
           <span className="text-muted">contributor picks it</span>
         )}
-        {(model.settings.fixedUnit ?? unit) && (
+        {/* A fixed unit is text, as in Add data; any other unit is the Unit field above. */}
+        {fixedUnit && (
           <>
             <span className="ml-2 text-muted">Unit:</span>
-            <span className="font-num text-ink">{model.settings.fixedUnit ?? unit}</span>
-            {model.settings.fixedUnit && <span className="text-xs text-muted">(fixed)</span>}
+            <span className="font-num text-ink">{fixedUnit}</span>
+            <span className="text-xs text-muted">(fixed)</span>
           </>
         )}
       </div>

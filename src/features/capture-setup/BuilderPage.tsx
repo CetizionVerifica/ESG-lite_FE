@@ -85,7 +85,8 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
   const library = useLibrary();
   const factors = useFactorNames(source.category?.category_id, source.site?.site_id);
   const save = useSaveForm(id);
-  const testSetup = useTestSetup(tab === "test" ? source.site?.site_id : null, source.category?.category_id);
+  // The Test tab's factors and units; the Live preview reads the units too (#254), so it loads on every tab.
+  const testSetup = useTestSetup(source.site?.site_id, source.category?.category_id);
 
   const dirty = isDirty(draft, initial);
   const blocker = useUnsavedGuard(dirty && !save.isPending);
@@ -246,7 +247,14 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
           </TabPanel>
         </div>
         <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
-          <Preview draft={draft} formId={id} siteName={source.site?.name} categoryName={source.category?.category_name} ghgCategory={source.category?.ghg_category ?? null} />
+          <Preview
+            draft={draft}
+            formId={id}
+            siteName={source.site?.name}
+            categoryName={source.category?.category_name}
+            ghgCategory={source.category?.ghg_category ?? null}
+            units={testSetup.data ?? null}
+          />
         </div>
       </div>
 
