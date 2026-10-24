@@ -158,6 +158,16 @@ export const SORT_KEYS: Record<string, string> = {
   submitted: "created_at",
 };
 
+/** On a phone the columns a User looks for come first (#252): category, tCO₂e, status; the rest keep their order. */
+export const PHONE_FIRST = ["category", "total", "status"];
+
+export function phoneOrder<C extends { id: string; wrap?: boolean; width?: string }>(columns: C[]): C[] {
+  const first = PHONE_FIRST.map((id) => columns.find((c) => c.id === id)).filter((c): c is C => !!c);
+  // A long category ("Upstream transportation and distribution") wraps in a narrow column, so tCO₂e and status still fit.
+  const narrowCategory = (c: C): C => (c.id === "category" ? { ...c, wrap: true, width: "7.5rem" } : c);
+  return [...first.map(narrowCategory), ...columns.filter((c) => !PHONE_FIRST.includes(c.id))];
+}
+
 /* ---------------------------------------------------------------- status */
 
 export const STATUS_VALUES: EmissionStatus[] = ["pending", "approved", "rejected"];

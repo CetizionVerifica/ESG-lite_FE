@@ -3,6 +3,7 @@ import type { EmissionData } from "../../services/emissionService";
 import {
   type LabelConfig,
   activityFields,
+  phoneOrder,
   breakdownRows,
   attachFera,
   categoriesFor,
@@ -230,5 +231,18 @@ describe("What was entered (SE-1)", () => {
       { key: "activity_value", value: "1250" },
     ]);
     expect(activityFields(imported, undefined, { plain: true }).map((f) => f.key)).toContain("activity_value");
+  });
+});
+
+describe("phoneOrder (#252)", () => {
+  it("puts category, tCO₂e and status first and keeps the rest in order", () => {
+    const ids = ["category", "activity", "quantity", "total", "period", "status", "dq", "submitted", "documents"].map((id) => ({ id }));
+    expect(phoneOrder(ids).map((c) => c.id)).toEqual(["category", "total", "status", "activity", "quantity", "period", "dq", "submitted", "documents"]);
+  });
+
+  it("lets a long category wrap in a narrow column on a phone", () => {
+    const [category, total] = phoneOrder([{ id: "category" }, { id: "total" }]);
+    expect(category).toEqual({ id: "category", wrap: true, width: "7.5rem" });
+    expect(total).toEqual({ id: "total" });
   });
 });
