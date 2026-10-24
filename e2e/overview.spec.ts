@@ -171,6 +171,22 @@ test("a manager sees the period at a glance and drills into a site", async ({ pa
   await expect(page).toHaveURL(/\/data\/ledger\?site=1&period=CY2025&status=approved/);
 });
 
+test("approved entries are what people filed: FERA twins approved with them aren't counted again (ESG-lite #194)", async ({ page }) => {
+  await signIn(page);
+  // 7 approved rows: 4 entries and the 3 automatic FERA twins of fuel entries.
+  await page.route(
+    (url) => url.port !== "4173" && url.pathname.endsWith("/manager/overview"),
+    (route) => {
+      const o = overview("2025");
+      return route.fulfill({ json: { ...o, kpis: { ...o.kpis, approved_count: 7, approved_entry_count: 4 } } });
+    },
+  );
+  await page.goto("/overview?period=CY2025");
+
+  await expect(page.getByRole("link", { name: "4 approved entries" })).toHaveAttribute("href", "/data/ledger?period=CY2025&status=approved");
+  await expect(page.locator("dl").first()).not.toContainText("7 approved");
+});
+
 test("period chips map to B4's period form and stay in the URL", async ({ page }) => {
   const { b4 } = await signIn(page);
   await page.goto("/overview?period=FY2025&site=2");
