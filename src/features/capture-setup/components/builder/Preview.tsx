@@ -7,6 +7,7 @@ import { ROW_METHOD_COLUMN, resolveSpecMethod } from "../../../../lib/emissions/
 import type { ModalRow } from "../../../../lib/emissions/types";
 import { Badge, Button, DynamicField, MethodCards, NumberField, SegmentedControl, Select, TextField, Textarea, cn, panel } from "../../../../ui";
 import { type BuilderDraft, toPreviewConfig } from "../../builder";
+import { useTestSetup } from "../../api";
 
 export type PreviewProps = {
   draft: BuilderDraft;
@@ -15,8 +16,9 @@ export type PreviewProps = {
   categoryName?: string;
   /** GHG Protocol category: methods are worded the category's way (S3-3). */
   ghgCategory?: number | null;
-  /** #254: the site × category's units and the units each emission category offers (#183), as Add data reads them. */
-  units?: { units: string[]; unitOptions?: UnitOptionsByActivity | null } | null;
+  /** #254: the form's site and category, for the units Add data offers (the Test tab's query). */
+  siteId?: number | null;
+  categoryId?: number | null;
 };
 
 /** A new preview row, with the form's defaults (SE-3). */
@@ -30,8 +32,11 @@ const freshRow = (model: FormModel) => withDefaults(newRow(model, 1), model.sett
  * read-only fields, no method words. "Reviewer view" shows every field and the
  * method cards.
  */
-export function Preview({ draft, formId, siteName, categoryName, ghgCategory, units }: PreviewProps) {
-  const model = useMemo(() => toFormModel(toPreviewConfig(draft, formId), units?.unitOptions ?? null), [draft, formId, units?.unitOptions]);
+export function Preview({ draft, formId, siteName, categoryName, ghgCategory, siteId, categoryId }: PreviewProps) {
+  // #254: the site × category's units and the units each emission category offers (#183), as Add data reads them.
+  const units = useTestSetup(siteId, categoryId).data;
+  const unitOptions: UnitOptionsByActivity | null = units?.unitOptions ?? null;
+  const model = useMemo(() => toFormModel(toPreviewConfig(draft, formId), unitOptions), [draft, formId, unitOptions]);
   const [row, setRow] = useState<ModalRow>(() => freshRow(model));
   // Contributors only see the form's default method; a reviewer picks between them (simple-entry §8).
   const [viewAs, setViewAs] = useState<"contributor" | "manager">("contributor");
