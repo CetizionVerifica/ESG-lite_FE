@@ -4,6 +4,7 @@ import {
   isContributor,
   accessCount,
   currentMonth,
+  filingMonth,
   displayName,
   enabledIds,
   initialDraft,
@@ -128,6 +129,12 @@ describe("month status", () => {
   it("formats the current month", () => {
     expect(currentMonth(new Date(2026, 0, 31))).toBe("2026-01");
     expect(currentMonth(new Date(2026, 9, 9))).toBe("2026-10");
+  });
+
+  it("the month being filed is the last full month, across a new year (#244)", () => {
+    expect(filingMonth(new Date(2026, 9, 23))).toBe("2026-09");
+    expect(filingMonth(new Date(2026, 9, 1))).toBe("2026-09");
+    expect(filingMonth(new Date(2026, 0, 15))).toBe("2025-12");
   });
 });
 

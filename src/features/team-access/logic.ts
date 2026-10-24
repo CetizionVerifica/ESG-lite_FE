@@ -103,3 +103,8 @@ export function monthStatusById(rows: SubmissionUser[] | undefined): Map<number,
 export function currentMonth(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
+
+/** The month being filed: the last full month, as Overview's Submission status picks it (#244); the month in progress isn't due yet. */
+export function filingMonth(now = new Date()): string {
+  return currentMonth(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+}
