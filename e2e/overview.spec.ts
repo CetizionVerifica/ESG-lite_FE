@@ -211,6 +211,20 @@ test("the lower tabs load on demand and follow the header context", async ({ pag
   await expect(page.getByRole("tabpanel").getByRole("row", { name: /Hidd/ })).toContainText("80");
 });
 
+test("the Gross scope labels keep small scopes readable: S3 0.47, not 0 (#248)", async ({ page }) => {
+  await signIn(page);
+  // A small site: 8.6 t Scope 1, nothing in Scope 2, 0.47 t Scope 3.
+  await page.route(
+    (url) => url.port !== "4173" && url.pathname.endsWith("/manager/overview"),
+    (route) => {
+      const o = overview("2026");
+      return route.fulfill({ json: { ...o, kpis: { ...o.kpis, gross: 9.07, net: 9.07, saved: 0, scope_1: 8.6, scope_2: 0, scope_3: 0.47 } } });
+    },
+  );
+  await page.goto("/overview?period=CY2026");
+  await expect(page.locator("dl").first()).toContainText("S1 8.6 · S2 0 · S3 0.47");
+});
+
 test("submission status still shows when the overview request fails", async ({ page }) => {
   await signIn(page);
   await page.route(/\/manager\/overview(\?|$)/, (route) => route.fulfill({ status: 500, json: { message: "boom" } }));
