@@ -124,4 +124,15 @@ export interface ColumnConfig {
    * `readMethodOptions` (src/lib/scope3/dq.ts), which also takes bare keys.
    */
   method_options?: unknown;
+  /**
+   * SE-2: what the form fixes for the person entering data: a choice whose
+   * answers pick the method, per-field settings, a fixed unit and currency.
+   * Read with `readFormSettings` (src/lib/forms/settings.ts).
+   */
+  method_by_choice?: unknown;
+  field_settings?: unknown;
+  units?: unknown;
+  currency?: unknown;
+  /** SE-2: bumped when the form is published (SE-4). */
+  version?: number;
 }

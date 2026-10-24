@@ -5,6 +5,7 @@ import { Badge, Button, EmptyState, Modal, PageHeader, Skeleton, TabPanel, Tabs,
 import { errorMessage, hasBrand, useAdminUsers, useBrand, useCompanies, useDeleteCompany, useDownloadSetup, useSites, useThreshold, useUpdateCompany } from "./api";
 import { ClaudeImportsToggle } from "./components/ClaudeImportsToggle";
 import { SmartImportToggle } from "./components/SmartImportToggle";
+import { EntrySettings } from "./components/EntrySettings";
 import { KpiTrackingToggle } from "./components/KpiTrackingToggle";
 import { DesignStudioToggle } from "./components/DesignStudioToggle"; // DS-0
 import { InsightsToggle } from "./components/InsightsToggle"; // IN-0
@@ -179,6 +180,7 @@ export default function ClientDetailPage() {
       <TabPanel idBase={idBase} value="overview" current={tab}>
         <div className="space-y-5">
           <OverviewTab row={row} />
+          <EntrySettings row={row} />
           <SmartImportToggle row={row} />
           <KpiTrackingToggle row={row} />
           <DesignStudioToggle row={row} />

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Eye, RotateCcw } from "lucide-react";
-import { applyChange, formColumns, isColumnVisible, newRow, rowMethodChoices, setExtraField, toFormModel, visibleExtraFields } from "../../../../lib/emissions/form";
+import { applyChange, columnTitle, formColumns, isColumnVisible, newRow, rowMethodChoices, setExtraField, toFormModel, visibleExtraFields, type FormModel } from "../../../../lib/emissions/form";
+import { settingFor, withDefaults } from "../../../../lib/forms/settings";
 import { ROW_METHOD_COLUMN, resolveSpecMethod } from "../../../../lib/emissions/emissionCalc";
 import type { ModalRow } from "../../../../lib/emissions/types";
 import { Badge, Button, DynamicField, MethodCards, NumberField, SegmentedControl, Select, TextField, Textarea, cn, panel } from "../../../../ui";
@@ -15,18 +16,27 @@ export type PreviewProps = {
   ghgCategory?: number | null;
 };
 
+/** A new preview row, with the form's defaults (SE-3). */
+const freshRow = (model: FormModel) => withDefaults(newRow(model, 1), model.settings.fieldSettings, model.extraFields.map((f) => f.key));
+
 /**
  * The entry row contributors see in Add data, built from the unsaved draft
  * with the same form rules, so every edit shows here at once. Values typed
- * here are never saved.
+ * here are never saved. "Contributor view" applies what the form fixes for a
+ * User (SE-1, SE-3): hidden fields left out, the client's labels and help,
+ * read-only fields, no method words. "Reviewer view" shows every field and the
+ * method cards.
  */
 export function Preview({ draft, formId, siteName, categoryName, ghgCategory }: PreviewProps) {
   const model = useMemo(() => toFormModel(toPreviewConfig(draft, formId)), [draft, formId]);
-  const [row, setRow] = useState<ModalRow>(() => newRow(model, 1));
-  // Contributors only see the form's default method; a Manager picks between them (simple-entry §8).
+  const [row, setRow] = useState<ModalRow>(() => freshRow(model));
+  // Contributors only see the form's default method; a reviewer picks between them (simple-entry §8).
   const [viewAs, setViewAs] = useState<"contributor" | "manager">("contributor");
-  const columns = formColumns(model).filter((c) => isColumnVisible(model, c, row));
-  const extras = visibleExtraFields(model, row);
+  const contributor = viewAs === "contributor";
+  const settings = model.settings.fieldSettings;
+  const hidden = (key: string) => contributor && !!settingFor(settings, key)?.hidden;
+  const columns = formColumns(model).filter((c) => isColumnVisible(model, c, row) && !hidden(c.column_name));
+  const extras = visibleExtraFields(model, row).filter((f) => !hidden(f.key));
   const mapped = Object.keys(model.mapping).length > 0;
   const methods = rowMethodChoices(model);
   // A method the draft no longer offers falls back to its first, as a new row in Add data would start.
@@ -44,38 +54,46 @@ export function Preview({ draft, formId, siteName, categoryName, ghgCategory }: 
             What {viewAs === "manager" ? "Managers" : "contributors"} see{siteName && categoryName ? ` at ${siteName} for ${categoryName}` : ""}. Nothing typed here is saved.
           </p>
         </div>
-        <Button size="sm" variant="ghost" icon={<RotateCcw aria-hidden className="size-4" />} onClick={() => setRow(newRow(model, 1))}>
+        <Button size="sm" variant="ghost" icon={<RotateCcw aria-hidden className="size-4" />} onClick={() => setRow(freshRow(model))}>
           Clear
         </Button>
       </div>
 
-      {methods.length > 1 && (
-        <SegmentedControl
-          label="Preview as"
-          size="sm"
-          options={[
-            { value: "contributor", label: "Contributor" },
-            { value: "manager", label: "Manager" },
-          ]}
-          value={viewAs}
-          onChange={(v) => {
-            setViewAs(v);
-            // Back to the contributor's view: the row starts on the form's default method again.
-            const first = model.methodOptions[0]?.method;
-            if (v === "contributor" && first) setRow((r) => applyChange(model, r, ROW_METHOD_COLUMN, first));
-          }}
-        />
-      )}
+      <SegmentedControl
+        label="Preview as"
+        size="sm"
+        options={[
+          { value: "contributor", label: "Contributor view" },
+          { value: "manager", label: "Reviewer view" },
+        ]}
+        value={viewAs}
+        onChange={(v) => {
+          setViewAs(v);
+          // Back to the contributor's view: the row starts on the form's default method again.
+          const first = model.methodOptions[0]?.method;
+          if (v === "contributor" && first) setRow((r) => applyChange(model, r, ROW_METHOD_COLUMN, first));
+        }}
+      />
 
-      {/* Contributors don't pick a method (simple-entry §8): the form's first is shown as the line they'd be calculated by. */}
-      <MethodCards methods={viewAs === "manager" ? methods : method ? [method] : []} value={method} onChange={(v) => setRow((r) => applyChange(model, r, ROW_METHOD_COLUMN, v))} ghgCategory={ghgCategory} />
+      {/* Contributors don't pick or see a method (simple-entry §8, SE-1); reviewers see the cards. */}
+      {!contributor && <MethodCards methods={methods} value={method} onChange={(v) => setRow((r) => applyChange(model, r, ROW_METHOD_COLUMN, v))} ghgCategory={ghgCategory} />}
 
       {columns.length === 0 ? (
         <p className="rounded-control border border-dashed border-line px-3 py-3 text-sm text-muted">No fields yet.</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {columns.map((c) => (
-            <DynamicField key={c.pk_id} model={model} column={c} row={row} onChange={(name, value) => setRow((r) => applyChange(model, r, name, value))} />
+            <DynamicField
+              key={c.pk_id}
+              model={model}
+              column={c}
+              row={row}
+              onChange={(name, value) => setRow((r) => applyChange(model, r, name, value))}
+              labelText={settingFor(settings, c.column_name)?.label ?? columnTitle(c.column_name)}
+              help={settingFor(settings, c.column_name)?.help}
+              readOnly={contributor && !!settingFor(settings, c.column_name)?.readonly}
+              labelExtra={!contributor && settingFor(settings, c.column_name)?.hidden ? <Badge tone="neutral">Hidden from contributors</Badge> : undefined}
+            />
           ))}
         </div>
       )}
@@ -89,10 +107,11 @@ export function Preview({ draft, formId, siteName, categoryName, ghgCategory }: 
         ) : (
           <span className="text-muted">contributor picks it</span>
         )}
-        {unit && (
+        {(model.settings.fixedUnit ?? unit) && (
           <>
             <span className="ml-2 text-muted">Unit:</span>
-            <span className="font-num text-ink">{unit}</span>
+            <span className="font-num text-ink">{model.settings.fixedUnit ?? unit}</span>
+            {model.settings.fixedUnit && <span className="text-xs text-muted">(fixed)</span>}
           </>
         )}
       </div>
@@ -104,7 +123,14 @@ export function Preview({ draft, formId, siteName, categoryName, ghgCategory }: 
             {extras.map((f, i) => {
               const value = String(row._extra_data?.[f.key] ?? "");
               const set = (v: string) => setRow((r) => setExtraField(r, f.key, v));
-              const common = { label: f.label || f.key || "Untitled", required: f.required };
+              const st = settingFor(settings, f.key);
+              const shown = st?.label ?? (f.label || f.key || "Untitled");
+              const common = {
+                label: !contributor && st?.hidden ? `${shown} (hidden from contributors)` : shown,
+                required: f.required || !!st?.required,
+                help: st?.help,
+                disabled: contributor && !!st?.readonly,
+              };
               if (f.type === "select")
                 return <Select<string> key={i} {...common} value={value || null} onChange={(v) => set(v ?? "")} options={(f.options ?? []).filter((o) => o.trim()).map((o) => ({ value: o, label: o }))} placeholder="Select…" />;
               if (f.type === "number")

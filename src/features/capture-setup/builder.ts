@@ -7,6 +7,7 @@ import { ROW_METHOD_COLUMN, normalizeUnitKey } from "../../lib/emissions/emissio
 import { methodLabel } from "../../lib/scope3/labels";
 import { type MethodOptions, readMethodOptions } from "../../lib/scope3/dq";
 import { methodOptionIssues } from "./methodOptions";
+import { type FieldSettings, type MethodByChoice, readFormSettings } from "../../lib/forms/settings";
 import type {
   CalculationSpec,
   ColumnConfig,
@@ -38,6 +39,14 @@ export type BuilderDraft = {
   calculation: CalculationSpec | null;
   /** S3-3 "Methods offered": most specific first, each with the units it offers; empty = the form doesn't limit the method. */
   methodOptions: MethodOptions;
+  /** SE-2/SE-3: a select field whose answers pick the method ("It depends on the record"). */
+  methodByChoice: MethodByChoice | null;
+  /** SE-2/SE-3: per column name or extra-field key, what a contributor sees (label, help, default, hidden…). */
+  fieldSettings: FieldSettings;
+  /** SE-2/SE-3: the one unit rows are in (the unit select is hidden), or null. */
+  fixedUnit: string | null;
+  /** SE-2/SE-3: the one currency spend rows are in, or null for the client's default. */
+  fixedCurrency: string | null;
   /** Column id → name it had when the builder opened. */
   originalNames: Record<number, string>;
 };
@@ -62,8 +71,14 @@ export function draftFromConfig(config: SourceConfig): BuilderDraft {
     extraFields: clone(config.extra_fields ?? []),
     calculation: config.calculation ? clone(config.calculation) : null,
     methodOptions: readMethodOptions(config.method_options),
+    ...draftSettings(config),
     originalNames: Object.fromEntries(fields.map((c) => [c.pk_id, c.column_name])),
   };
+}
+
+function draftSettings(config: SourceConfig): Pick<BuilderDraft, "methodByChoice" | "fieldSettings" | "fixedUnit" | "fixedCurrency"> {
+  const s = readFormSettings(config);
+  return { methodByChoice: clone(s.methodByChoice), fieldSettings: clone(s.fieldSettings), fixedUnit: s.fixedUnit, fixedCurrency: s.fixedCurrency };
 }
 
 export const isSelect = (f: ColumnEntity) => f.column_type === "select";
@@ -122,7 +137,10 @@ export function removeField(d: BuilderDraft, pkId: number): BuilderDraft {
     }
     if (calculation.identity_columns) calculation.identity_columns = calculation.identity_columns.filter((f) => f !== name);
   }
-  return { ...d, fields: d.fields.filter((f) => f.pk_id !== pkId), options, dependentOptions, dependencies, calculation };
+  const fieldSettings = { ...d.fieldSettings };
+  delete fieldSettings[name];
+  const methodByChoice = d.methodByChoice?.column === name ? null : d.methodByChoice;
+  return { ...d, fields: d.fields.filter((f) => f.pk_id !== pkId), options, dependentOptions, dependencies, calculation, fieldSettings, methodByChoice };
 }
 
 export function moveField(d: BuilderDraft, index: number, to: number): BuilderDraft {
@@ -158,6 +176,8 @@ export function renameField(d: BuilderDraft, pkId: number, next: string): Builde
     dependentOptions: renameKeys(d.dependentOptions, from, next),
     dependencies: Object.fromEntries(Object.entries(d.dependencies).map(([c, p]) => [swap(c), swap(p)])),
     calculation,
+    fieldSettings: renameKeys(d.fieldSettings, from, next),
+    methodByChoice: d.methodByChoice ? { ...d.methodByChoice, column: swap(d.methodByChoice.column) } : null,
   };
 }
 
@@ -181,7 +201,10 @@ export type LibraryName = { pk_id: number; column_name: string };
 export function fieldNameError(d: BuilderDraft, pkId: number, name: string, library: LibraryName[] = []): string | null {
   const n = name.trim();
   if (!n) return "Enter a key.";
-  if (!/^[A-Za-z0-9_ ]+$/.test(n)) return "Use letters, numbers, spaces or _.";
+  // Only a key the Superadmin types is held to the plain characters; one the form or the column
+  // library already has passes as it is ("Fuel used (litres)" on the S3-8 transport forms).
+  const existing = d.originalNames[pkId] === n || library.some((c) => c.pk_id === pkId && c.column_name === n);
+  if (!existing && !/^[A-Za-z0-9_ ]+$/.test(n)) return "Use letters, numbers, spaces or _.";
   const same = (other: string) => other.toLowerCase() === n.toLowerCase();
   if (d.fields.some((f) => f.pk_id !== pkId && same(f.column_name))) return "Another field has this key.";
   const was = d.originalNames[pkId];
@@ -623,6 +646,11 @@ export type UpdatePayload = {
   calculation: CalculationSpec | null;
   /** S3-3: contracts §6 `[{method, units}]`, most specific first; null when the form offers no list. */
   method_options: MethodOptions | null;
+  /** SE-2: the choice whose answers pick the method; per-field settings; a fixed unit and currency (null clears). */
+  method_by_choice: MethodByChoice | null;
+  field_settings: FieldSettings;
+  units: { fixed: string } | null;
+  currency: { fixed: string } | null;
   rename_map?: Record<string, string>;
 };
 
@@ -650,6 +678,13 @@ export function toUpdatePayload(d: BuilderDraft): UpdatePayload {
     })),
     calculation: d.calculation,
     method_options: d.methodOptions.length ? d.methodOptions.map((o) => ({ method: o.method, units: o.units.map((u) => u.trim()).filter(Boolean) })) : null,
+    method_by_choice: d.methodByChoice && Object.keys(d.methodByChoice.map).length ? d.methodByChoice : null,
+    // Settings of fields no longer on the form are dropped (SE-2 refuses unknown fields).
+    field_settings: Object.fromEntries(
+      Object.entries(d.fieldSettings).filter(([key]) => d.fields.some((f) => f.column_name === key) || d.extraFields.some((f) => f.key.trim() === key)),
+    ),
+    units: d.fixedUnit ? { fixed: d.fixedUnit } : null,
+    currency: d.fixedCurrency ? { fixed: d.fixedCurrency } : null,
     ...(Object.keys(renames).length ? { rename_map: renames } : {}),
   };
 }
@@ -668,6 +703,10 @@ export function toPreviewConfig(d: BuilderDraft, id: number): ColumnConfig {
     extra_fields: p.extra_fields,
     calculation: p.calculation,
     method_options: p.method_options,
+    method_by_choice: p.method_by_choice,
+    field_settings: p.field_settings,
+    units: p.units,
+    currency: p.currency,
   };
 }
 
