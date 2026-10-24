@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type ColumnConfig, type ColumnEntity, createEmissionCalculator, toFormModel } from "../../lib/emissions";
+import { type ColumnConfig, type ColumnEntity, applyChange, createEmissionCalculator, toFormModel } from "../../lib/emissions";
 import type { EmissionData } from "../../services/emissionService";
 import { buildUpdate, canEdit, monthBounds, editIssue, editedDate, monthEndDate, prefillSelects, rowFromEntry, saveErrorMessage } from "./edit";
 
@@ -73,6 +73,23 @@ describe("rowFromEntry", () => {
     expect(row.disposal_method).toBe("lf");
   });
 
+  it("keeps an older entry's activity through an edit when its option was since removed", () => {
+    // "Open loop" is gone from the form: the selects can't be filled, so the activity isn't tied to them.
+    const trimmed = toFormModel({
+      ...waste,
+      dependent_options: { ...waste.dependent_options, disposal_method: { "Metal|Any metals": [{ id: "lf", label: "Landfill" }] } },
+    });
+    const row = rowFromEntry(trimmed, entry());
+    expect(row._ecmKey).toBeFalsy();
+    expect(applyChange(trimmed, row, "quantity", "1500").emission_category).toBe("Metal: open loop recycling");
+  });
+
+  it("doesn't tie the activity to selects the entry holds differently", () => {
+    const row = prefillSelects(model, { id: 1, emission_category: "Metal: open loop recycling", activity_type: "m", type_of_waste: "am", disposal_method: "lf" });
+    expect(row._ecmKey).toBeFalsy();
+    expect(applyChange(model, row, "quantity", "5").emission_category).toBe("Metal: open loop recycling");
+  });
+
   it("does nothing for a category that isn't in the mapping", () => {
     const row = rowFromEntry(model, entry({ activity_data: { emission_category: "Something else", quantity: "5" } }));
     expect(row.activity_type).toBe("");
@@ -109,6 +126,17 @@ describe("editIssue", () => {
 
   it("doesn't need a note for a pending entry", () => {
     expect(editIssue(row, calc, "pending", "")).toBeNull();
+  });
+
+  it("#183: stops on a unit the emission category doesn't offer, but the entry's own unit can stay as it was", () => {
+    // The factor is per tonne; kg and lb convert to it, but this form offers tonne and kg only.
+    const units = { offered: ["tonne", "kg"], stored: "kg" };
+    expect(editIssue({ ...row, activity_data_unit: "lb" }, calc, "pending", "", units)).toEqual({
+      field: "activity_data_unit",
+      message: "lb isn't a unit for Metal: open loop recycling. Choose tonne or kg.",
+    });
+    expect(editIssue(row, calc, "pending", "", { offered: ["tonne"], stored: "kg" })).toBeNull();
+    expect(editIssue({ ...row, activity_data_unit: "lb" }, calc, "pending", "", { offered: null })).toBeNull();
   });
 
   it("stops on a unit the factor can't take", () => {

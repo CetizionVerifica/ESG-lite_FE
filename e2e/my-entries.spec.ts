@@ -8,6 +8,7 @@ const company = { company_id: 3, name: "Glochem" };
 const categories = [
   { category_id: 1, category_name: "Diesel", scope: "Scope 1" },
   { category_id: 2, category_name: "Grid electricity", scope: "Scope 2" },
+  { category_id: 21, category_name: "Purchased goods and services", scope: "Scope 3", ghg_category: 1 },
 ];
 const user = { name: "Uma User", email: "uma@example.com", site: { site_id: 7, name: "Hidd plant", company, categories } };
 const brand = { companyId: 3, name: "Glochem", primary: "#a01c2c", accent: "#333333", coverFrom: "#a01c2c", coverTo: "#333333", logoUrl: null };
@@ -31,6 +32,8 @@ const row = (over: object) => ({
 const rows = [
   row({ pk_id: 41, activity_data: { emission_category: "Diesel", quantity: "1000" }, status: "rejected", review_comment: "Wrong unit, should be litres", reviewed_by: { user_id: 2, name: "Mia Manager" }, reviewed_at: "2025-10-03T09:00:00.000Z" }),
   row({ pk_id: 42, category: categories[1], activity_data: { emission_category: "Grid Electricity", consumption: "25000" }, activity_data_unit: "kwh", total_emission: 12.3, status: "pending" }),
+  // A Category 1 row from the amount spent (S3-5): its quantity is the amount, in its currency.
+  row({ pk_id: 43, category: categories[2], activity_data: { emission_category: "Chemicals (USEEIO)", "@method": "spend_based", spent_value: "5000", currency: "USD" }, activity_data_unit: "USD", total_emission: 2.1 }),
 ];
 
 const dieselConfig = {
@@ -43,7 +46,8 @@ const dieselConfig = {
 };
 const dieselFactors = [{ emission_factor_id: 5, emission_category_name: "Diesel", factor_value: 2.68, denominator_unit: "litre", year: 2024 }];
 
-async function signIn(page: Page, requests: URLSearchParams[] = [], saved: { url: string; body: unknown }[] = []) {
+/** `unitOptions` (#183): what GET …/units/…/by-activity answers; without it the plain unit list below answers (an older API). */
+async function signIn(page: Page, requests: URLSearchParams[] = [], saved: { url: string; body: unknown }[] = [], unitOptions?: unknown) {
   await page.addInitScript((u) => {
     localStorage.setItem("token", "test-token");
     localStorage.setItem("role", "User");
@@ -87,6 +91,7 @@ async function signIn(page: Page, requests: URLSearchParams[] = [], saved: { url
       if (url.pathname.endsWith("/user/column-configs/site/7/category/1")) return json([dieselConfig]);
       if (url.pathname.includes("/user/column-configs/")) return json([]);
       if (url.pathname.endsWith("/user/emission-factors/site/7/category/1")) return json(dieselFactors);
+      if (url.pathname.endsWith("/by-activity") && unitOptions) return json(unitOptions);
       if (url.pathname.includes("/user/units/site/7/category/1")) return json([{ unit_name: "litre" }]);
       if (url.pathname.includes("/user/documents/emission/")) return json([]);
       if (url.pathname.includes("/audit-logs")) return json([]);
@@ -118,6 +123,16 @@ test("old path redirects; filters are visible and a status figure filters the ta
   expect(requests.some((r) => r.get("status") === "rejected")).toBe(true);
   // The other figures still count every status.
   await expect(page.locator("dl > div").filter({ hasText: "Pending" }).locator("dd").first()).toHaveText("1");
+});
+
+test("a spend row shows the amount spent as its quantity, in its currency", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/data/mine");
+  const table = page.getByRole("table", { name: "My entries" });
+  const spendRow = table.getByRole("row").filter({ hasText: "Purchased goods and services" });
+  await expect(spendRow).toContainText("5,000");
+  await expect(spendRow).toContainText("USD");
+  await expect(spendRow.getByRole("cell", { name: "—", exact: true })).toHaveCount(0);
 });
 
 test("clear filters empties status, category and period in one go", async ({ page }) => {
@@ -156,6 +171,25 @@ test("a rejected entry is fixed and resubmitted in the drawer", async ({ page })
     date_of_reporting: "2025-09-30",
     reason: "Corrected the litres",
   });
+});
+
+test("#183: an entry whose unit the form no longer offers keeps it, says so, and saves unchanged", async ({ page }) => {
+  const saved: { url: string; body: unknown }[] = [];
+  // The form now fixes the unit to kl; the rejected entry was saved in litre.
+  await signIn(page, [], saved, { fixed_unit: "kl", all_units: ["litre", "kl"], activities: [{ name: "Diesel", factor_unit: "litre", units: ["kl"] }] });
+  await page.goto("/data/mine");
+  await page.getByRole("table", { name: "My entries" }).getByRole("row").filter({ hasText: "Wrong unit" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByRole("button", { name: "Fix and resubmit" }).click();
+
+  const unit = drawer.getByLabel("Unit");
+  await expect(unit).toHaveValue("litre");
+  await expect(unit.locator("option")).toHaveText(["Choose a unit", "kl", "litre (no longer offered)"]);
+
+  await drawer.getByLabel("What did you change?").fill("Checked the litres again");
+  await drawer.getByRole("button", { name: "Resubmit" }).click();
+  await expect(page.getByText("Resubmitted for review")).toBeVisible();
+  expect(saved[0]?.body).toMatchObject({ activity_data_unit: "litre", reason: "Checked the litres again" });
 });
 
 test("editing an entry with no factor in the factor year uses the newest one from another year, as the save does", async ({ page }) => {

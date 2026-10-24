@@ -95,8 +95,10 @@ function findKey(data: Record<string, unknown>, name: string): string | undefine
 }
 
 // Same priority as the reporting layer and the old My emissions breakdown:
-// one field, not the sum of the numbers.
-const QUANTITY_KEYS = ["activity data", "activity_value", "value", "quantity", "amount", "consumption"];
+// one field, not the sum of the numbers. Last, a spend row's amount (S3-5: `spent_value`, "Spent value"
+// on older Category 1 forms), in its currency, which is the row's unit: a spend row has no other quantity.
+// Last, so an older form's informational "Spent value" never replaces the row's own quantity.
+const QUANTITY_KEYS = ["activity data", "activity_value", "value", "quantity", "amount", "consumption", "spent_value", "spent value"];
 
 /** The entry's activity quantity, or null when it has no canonical quantity field. */
 export function quantityOf(activityData: Record<string, unknown> | null | undefined): number | null {
@@ -109,6 +111,20 @@ export function quantityOf(activityData: Record<string, unknown> | null | undefi
     if (raw !== "" && raw !== null && Number.isFinite(num)) return num;
   }
   return null;
+}
+
+/**
+ * The quantity the table and drawer show: the server's (it knows the form's number fields, so
+ * "Amount of gas" or "Fuel consumption" count too), else the canonical-key guess for an older API.
+ */
+export function entryQuantity(row: Pick<EmissionData, "quantity" | "activity_data">): number | null {
+  const server = row.quantity === null || row.quantity === undefined ? NaN : Number(row.quantity);
+  return Number.isFinite(server) ? server : quantityOf(row.activity_data);
+}
+
+/** Decimals to show a quantity with: none for a whole number, even one stored with float noise (999596100.0000001). */
+export function quantityDecimals(q: number): 0 | 2 {
+  return Number.isInteger(Math.round(q * 100) / 100) ? 0 : 2;
 }
 
 /** The emission category (fuel, grid, …) that picked the factor. */

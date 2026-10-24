@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SHELL_ROUTES, type ShellRouteId } from "../features/shell/routeMap";
 import { legacyPages } from "./legacyPages";
-import { type ModuleRoutesFile, collectModulePages } from "./pageRegistry";
+import { type ModuleRoutesFile, collectModulePages, collectModuleSlots } from "./pageRegistry";
 
 const fallback = Object.fromEntries(SHELL_ROUTES.map((r) => [r.id, `fallback:${r.id}`])) as Record<ShellRouteId, string>;
 
@@ -20,6 +20,15 @@ describe("collectModulePages", () => {
   it("rejects a route id the route map doesn't know", () => {
     const files = { "a/routes.tsx": { pages: { nope: "x" } as never } };
     expect(() => collectModulePages(files, fallback)).toThrow(/unknown shell route "nope"/);
+  });
+});
+
+describe("collectModuleSlots", () => {
+  const A = () => null;
+  it("collects a module's slot and rejects one filled twice or unknown", () => {
+    expect(collectModuleSlots({ "a/routes.tsx": { slots: { "approvals-kpi": A } } })["approvals-kpi"]).toBe(A);
+    expect(() => collectModuleSlots({ "a/routes.tsx": { slots: { "approvals-kpi": A } }, "b/routes.tsx": { slots: { "approvals-kpi": A } } })).toThrow(/filled by both/);
+    expect(() => collectModuleSlots({ "a/routes.tsx": { slots: { nope: A } as never } })).toThrow(/unknown slot "nope"/);
   });
 });
 

@@ -2,17 +2,19 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { type SupplierDetail, createSupplier, getSupplier, getSuppliers } from "../../services/scope3SuppliersService";
 import { getUserColumnConfigsBySiteAndCategory } from "../../services/columnConfigService";
 import { getUserEmissionFactorsBySiteAndCategory } from "../../services/emissionFactorService";
-import { getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
+import { getUserUnitOptions, getUserUnitsBySiteAndCategory, type UnitData } from "../../services/unitService";
+import type { UnitOptionsByActivity } from "../../lib/emissions/unitOptions";
 import { getMappingsByCompany, type CategoryMapping } from "../../services/categoryMappingService";
 
 export type { CategoryMapping };
-import { createEmission, getEmissionsPaginated, getPeriodTotal, updateEmission } from "../../services/emissionService";
+import { createEmission, getEmissionsPaginated, getPeriodMode, getPeriodTotal, updateEmission } from "../../services/emissionService";
 import { getThresholdByCompany } from "../../services/thresholdService";
 import { getSiteById } from "../../services/siteService";
-import { linkInvoiceDocuments, uploadMultipleDocuments } from "../../services/documentService";
+import { type BackedEntry, findBackedEntries, linkInvoiceDocuments, uploadMultipleDocuments } from "../../services/documentService";
 import { calculateRoadDistance, calculateSeaDistance } from "../../services/distanceService";
 import { resolveLocationFromBackend, type ResolvedLocation } from "../../services/locationService";
 import {
+  bulkDeleteInvoices,
   deleteInvoice,
   getInvoices,
   reextractInvoice,
@@ -20,9 +22,10 @@ import {
   type ExtractionResponse,
   type Invoice,
 } from "../../services/invoiceService";
-import { periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPeriod } from "./logic/entry";
-import { entriesQuery, entryInPeriod, type SavedEntry } from "./logic/existing";
-import type { ColumnConfig, EmissionFactor } from "./types";
+import { entryDate, periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPeriod } from "./logic/entry";
+import { editOf, entriesQuery, entryInPeriod, type SavedEntry } from "./logic/existing";
+import { BILL_UNREADABLE, billErrorMessage, billOf } from "./logic/bill";
+import type { ColumnConfig, EmissionFactor, ModalRow } from "./types";
 
 /**
  * Everything the form needs for one site × category. Factors come for every
@@ -32,7 +35,10 @@ import type { ColumnConfig, EmissionFactor } from "./types";
 export interface EntrySetup {
   config: ColumnConfig | null;
   factors: EmissionFactor[];
+  /** Every unit of the form (the admin's list); the bill reader reads units against it. */
   units: string[];
+  /** #183: the units each emission category may use; null when the API has no list (every unit is offered). */
+  unitOptions: UnitOptionsByActivity | null;
   mappings: CategoryMapping[];
   /** FERA factors when the site has a FERA category (the backend adds the FERA row on save). */
   feraFactors: EmissionFactor[];
@@ -54,28 +60,24 @@ export function useEntrySetup(args: {
     queryFn: async (): Promise<EntrySetup> => {
       const site = siteId as number;
       const category = categoryId as number;
-      const [configs, factors, units, mappings, fera] = await Promise.all([
+      const [configs, factors, units, unitOptions, mappings, feraFactors] = await Promise.all([
         getUserColumnConfigsBySiteAndCategory(site, category) as Promise<ColumnConfig[]>,
         getUserEmissionFactorsBySiteAndCategory(site, category) as Promise<EmissionFactor[]>,
         getUserUnitsBySiteAndCategory(site, category) as Promise<UnitData[]>,
         // Optional extras: the form still works without them.
+        getUserUnitOptions(site, category).catch(() => null),
         companyId ? getMappingsByCompany(companyId, site, category).catch(() => []) : Promise.resolve([]),
-        feraCategoryId
-          ? Promise.all([
-              getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId).catch(() => []),
-              getUserUnitsBySiteAndCategory(site, feraCategoryId).catch(() => []),
-            ])
-          : Promise.resolve([[], []] as [EmissionFactor[], UnitData[]]),
+        // The FERA rows are added by the server on save and never take a unit chosen here, so
+        // only their factors are read (for the Category 3 preview), not their units.
+        feraCategoryId ? getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId).catch(() => []) : Promise.resolve([] as EmissionFactor[]),
       ]);
-      const names = unitNames(units);
-      const known = new Set(names.map((n) => n.toLowerCase()));
-      const feraUnits = unitNames(fera[1] as UnitData[]).filter((n) => !known.has(n.toLowerCase()));
       return {
         config: configs[0] ?? null,
         factors,
-        units: [...names, ...feraUnits],
+        units: unitNames(units),
+        unitOptions,
         mappings,
-        feraFactors: fera[0] as EmissionFactor[],
+        feraFactors: feraFactors as EmissionFactor[],
       };
     },
   });
@@ -147,9 +149,9 @@ export const warningsOf = (body: SavedBody): string[] =>
   (body?.warnings ?? []).map((w) => w?.message ?? "").filter((m): m is string => m.length > 0);
 
 /** Save one row. A 409 duplicate or mode-lock conflict comes back as an outcome, not a throw. */
-export async function saveRow(payload: EmissionPayload, replace = false): Promise<SaveOutcome> {
+export async function saveRow(payload: EmissionPayload, onDuplicate?: "replace" | "keep_both"): Promise<SaveOutcome> {
   try {
-    const result = (await createEmission(payload, replace)) as SavedBody;
+    const result = (await createEmission(payload, onDuplicate)) as SavedBody;
     return { kind: "saved", emissionId: result?.emission?.pk_id ?? null, warnings: warningsOf(result), status: result?.emission?.status ?? null };
   } catch (err) {
     const e = err as ApiError;
@@ -234,14 +236,32 @@ export function useExistingEntries(siteId: number | null, categoryId: number | n
   });
 }
 
+/** F-13/F-27: the save's mode lock for the chosen period, before typing ("already filed monthly for CY 2025 (57 …)"). */
+export function usePeriodMode(siteId: number | null, categoryId: number | null, period: EntryPeriod | null) {
+  return useQuery({
+    queryKey: ["add-data", "period-mode", siteId, categoryId, period],
+    enabled: siteId !== null && categoryId !== null && period !== null,
+    queryFn: () => {
+      const p = period as EntryPeriod;
+      return getPeriodMode(siteId as number, categoryId as number, {
+        reporting_period: p.mode,
+        ...(p.mode === "yearly" ? { year_type: p.yearType } : {}),
+        date_of_reporting: entryDate(p),
+      });
+    },
+  });
+}
+
 export type { ExtractionResponse, Invoice };
 
 type BillContext = { siteId: number; categoryId: number; userId: number | null; units: string[] };
 
+// A contributor sees the service's words only when they are plain ones; a server-side
+// detail ("tesseract is not installed…") becomes "We couldn't read this bill…" (F-01).
 const aiError = (err: unknown, fallback: string) => {
   const e = err as { response?: { data?: { detail?: unknown } }; message?: string };
   const detail = e.response?.data?.detail;
-  return typeof detail === "string" ? detail : e.message || fallback;
+  return billErrorMessage(typeof detail === "string" ? detail : e.message, fallback);
 };
 
 /**
@@ -260,7 +280,7 @@ export async function readBill(file: File, ctx: BillContext): Promise<Extraction
     if (response.error && !response.emission?.length) throw new Error(response.error);
     return response;
   } catch (err) {
-    throw new Error(aiError(err, "Couldn't read this bill."));
+    throw new Error(aiError(err, BILL_UNREADABLE));
   }
 }
 
@@ -271,7 +291,7 @@ export async function rereadBill(invoiceId: number, ctx: BillContext): Promise<E
     if (response.error && !response.emission?.length) throw new Error(response.error);
     return response;
   } catch (err) {
-    throw new Error(aiError(err, "Couldn't read this bill again."));
+    throw new Error(aiError(err, BILL_UNREADABLE));
   }
 }
 
@@ -287,10 +307,58 @@ export function useBills(siteId: number | null, categoryId: number | null, enabl
 export function useDeleteBill() {
   const client = useQueryClient();
   return useMutation({
-    // data-loss-reviewed: deletes one uploaded bill after the user confirms; files still linked as evidence are kept by the AI service
-    mutationFn: (invoiceId: number) => deleteInvoice(invoiceId),
+    // data-loss-reviewed: deletes one bill's uploads (every re-upload of the same file, F-02) after the user confirms; files still linked as evidence are kept by the AI service
+    mutationFn: async (invoiceIds: number[]): Promise<void> => {
+      await (invoiceIds.length === 1 ? deleteInvoice(invoiceIds[0]) : bulkDeleteInvoices(invoiceIds));
+    },
     onSuccess: () => client.invalidateQueries({ queryKey: ["add-data", "bills"] }),
   });
+}
+
+/** Per row: the saved entries of the period that its bill or files already back (F-16). */
+export type AlreadyBacking = Map<number, { fileName: string; entries: BackedEntry[] }[]>;
+
+/**
+ * F-16: before sending, which rows' bill or files already back another entry of the same site,
+ * category and period (the same bill under two disposal methods). A warning; nothing blocks.
+ * Entries being edited don't count; off once a send starts, so the rows never match themselves.
+ */
+export function useAlreadyBacking(rows: ModalRow[], payloads: EmissionPayload[], filesOf: (rowId: number) => File[], enabled: boolean): AlreadyBacking {
+  type Body = Parameters<typeof findBackedEntries>[0] & { exclude_ids: number[] };
+  const byDate = new Map<string, Body>();
+  rows.forEach((row, i) => {
+    const payload = payloads[i];
+    if (!payload) return;
+    const bill = billOf(row);
+    const files = bill ? [] : filesOf(row.id);
+    const items = [
+      ...(bill?.invoiceId != null ? [{ ref: String(row.id), invoice_id: bill.invoiceId }] : []),
+      ...files.map((f, k) => ({ ref: `${row.id}:${k}`, file_name: f.name, file_size: f.size })),
+    ];
+    if (items.length === 0) return;
+    const date = String(payload.date_of_reporting).slice(0, 10);
+    const body = byDate.get(date) ?? { site_id: payload.site_id, category_id: payload.category_id, date_of_reporting: date, files: [], exclude_ids: [] };
+    body.files.push(...items);
+    const editing = editOf(row);
+    if (editing !== null) body.exclude_ids.push(editing);
+    byDate.set(date, body);
+  });
+  const results = useQueries({
+    queries: [...byDate.values()].map((body) => ({
+      queryKey: ["add-data", "already-backing", body],
+      queryFn: () => findBackedEntries(body),
+      enabled,
+      staleTime: 30_000,
+    })),
+  });
+  const out: AlreadyBacking = new Map();
+  for (const r of results) {
+    for (const match of r.data ?? []) {
+      const rowId = Number(match.ref.split(":")[0]);
+      out.set(rowId, [...(out.get(rowId) ?? []), { fileName: match.file_name ?? "", entries: match.entries }]);
+    }
+  }
+  return out;
 }
 
 /** Attach a bill as evidence to the rows saved from it (B8). Resolves to false when that failed. */

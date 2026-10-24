@@ -1,5 +1,21 @@
 import { navLinks, resolveNavTo } from "./nav";
-import type { Role } from "./routeMap";
+import type { FeatureFlags, Role } from "./routeMap";
+
+/** DS-0: Design Studio shortcuts (01-contracts §9). Sustainability designs also need KPI tracking. */
+const STUDIO_ROLES: readonly Role[] = ["Manager", "Admin", "Superadmin"];
+function studioCommands(role: Role, flags: FeatureFlags): Command[] {
+  if (!STUDIO_ROLES.includes(role) || flags.studio !== true) return [];
+  const out: Command[] = [
+    { id: "studio:new-ghg", label: "New GHG report design", group: "Design Studio", to: "/studio/new?kind=ghg", keywords: "design studio new ghg report design inventory emissions" },
+  ];
+  if (flags.kpi === true) {
+    out.push({ id: "studio:new-sustainability", label: "New sustainability report design", group: "Design Studio", to: "/studio/new?kind=sustainability", keywords: "design studio new sustainability annual report design esg" });
+  }
+  return out;
+}
+
+/** IN-0: the Insights entry carries words people search for (the nav link gives the route). */
+const INSIGHTS_KEYWORDS = "insights story dashboard esg emissions pathway decoupling targets readiness";
 
 /**
  * ⌘K registry. Today it holds the routes a role can open; entity search
@@ -14,17 +30,19 @@ export interface Command {
   keywords: string;
 }
 
-export function routeCommands(role: Role | null, clientId: number | null): Command[] {
+/** Pages a role can open from the nav; items behind a switch that's off (KPI-1) aren't offered. */
+export function routeCommands(role: Role | null, clientId: number | null, flags: FeatureFlags = {}): Command[] {
   if (!role) return [];
-  const pages = navLinks(role).map((l) => ({
+  const pages = navLinks(role, flags).map((l) => ({
     id: `route:${l.to}`,
-    label: l.label,
+    label: l.palette ?? l.label,
     group: l.group ?? "Pages",
     to: resolveNavTo(l.to, clientId),
-    keywords: `${l.group ?? ""} ${l.label}`.toLowerCase(),
+    keywords: `${l.group ?? ""} ${l.label} ${l.palette ?? ""}${l.to === "/insights" ? ` ${INSIGHTS_KEYWORDS}` : ""}`.toLowerCase().trim(), // IN-0
   }));
   return [
     ...pages,
+    ...studioCommands(role, flags), // DS-0
     { id: "route:/notifications", label: "Notifications", group: "Account", to: "/notifications", keywords: "notifications bell alerts" },
     { id: "route:/settings", label: "Settings", group: "Account", to: "/settings", keywords: "settings preferences profile password" },
   ];

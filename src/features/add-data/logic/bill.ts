@@ -4,7 +4,7 @@
 // category mapping, so a bill row is the same row a person would type.
 // What the AI filled, how sure it was and which bill a row came from ride
 // along in `row._bill`, which buildPayload never sends.
-import type { CategorySuggestion, ExtractionResponse, InvoiceData, ValidationCheck } from "../../../services/invoiceService";
+import type { CategorySuggestion, ExtractionResponse, Invoice, InvoiceData, ValidationCheck } from "../../../services/invoiceService";
 import { formatDate } from "../../../ui/format";
 import { entryDate, entryPeriodLabel, type EntryPeriod } from "./entry";
 import { autoEmissionCategory, columnOptionsFor, isSelectColumn, newRow, parentColumnOf, type FormModel } from "../../../lib/emissions/form";
@@ -199,4 +199,44 @@ export function billOutsidePeriod(date: string | null, period: EntryPeriod): str
   const day = date.slice(0, 10);
   if (day >= start && day <= end) return null;
   return `This bill is dated ${formatDate(day)}, outside ${entryPeriodLabel(period)}. Remove it here and add it with its own period selected.`;
+}
+
+/** What a contributor sees when a bill can't be read and the service's words aren't meant for them. */
+export const BILL_UNREADABLE = "We couldn't read this bill. Type the values in, or try a clearer PDF or photo.";
+
+// Server-side detail (a missing OCR tool, a stack trace, a connection or HTTP failure) that a
+// contributor can't act on: "tesseract is not installed or it's not in your PATH…" (F-01).
+const TECHNICAL = /tesseract|poppler|\bPATH\b|README|traceback|exception|errno|not installed|module named|internal server error|ECONN|ETIMEDOUT|timeout of \d+|status code \d{3}|network error/i;
+
+/** The service's message when it is a plain one, else BILL_UNREADABLE (or the caller's fallback). */
+export function billErrorMessage(detail: unknown, fallback: string = BILL_UNREADABLE): string {
+  const text = typeof detail === "string" ? detail.trim() : "";
+  if (!text || text.length > 200 || TECHNICAL.test(text)) return fallback;
+  return text;
+}
+
+/** One file in My bills: its newest upload and every upload of it, newest first (F-02). */
+export interface UploadedBill {
+  latest: Invoice;
+  uploads: Invoice[];
+}
+
+/**
+ * My bills lists a file once however often it was uploaded: the same name (any case) and size is
+ * the same bill (F-02, "HT Billing APRIL 2025.pdf" was listed 4×). A file without a size stays
+ * on its own. The list keeps the order of each file's newest upload.
+ */
+export function uploadedBills(invoices: Invoice[]): UploadedBill[] {
+  const byFile = new Map<string, Invoice[]>();
+  for (const inv of invoices) {
+    const key = inv.file_size ? `${inv.file_name.trim().toLowerCase()}|${inv.file_size}` : `id:${inv.invoice_id}`;
+    byFile.set(key, [...(byFile.get(key) ?? []), inv]);
+  }
+  const newest = (a: Invoice, b: Invoice) => b.created_at.localeCompare(a.created_at) || b.invoice_id - a.invoice_id;
+  return [...byFile.values()]
+    .map((list) => {
+      const uploads = [...list].sort(newest);
+      return { latest: uploads[0], uploads };
+    })
+    .sort((a, b) => newest(a.latest, b.latest));
 }

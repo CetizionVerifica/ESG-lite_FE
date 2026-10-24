@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EmissionData } from "../../services/emissionService";
 import {
+  foldedTwinNote,
   isFoldedFeraTwin,
   BATCH_SOURCE_OPTIONS,
   batchSource,
@@ -31,6 +32,7 @@ import {
   optionLabel,
   periodQuery,
   quantityOf,
+  rowQuantity,
   reportOptions,
   rowPeriodLabel,
   scopeNumber,
@@ -185,6 +187,18 @@ describe("optionLabel", () => {
     expect(optionLabel(fuelConfig, "grade", "11", {})).toBe("Ultra low sulphur");
     expect(optionLabel(fuelConfig, "fuel_type", "Kerosene", {})).toBe("Kerosene");
     expect(optionLabel(undefined, "fuel_type", "1", {})).toBe("1");
+  });
+});
+
+describe("rowQuantity", () => {
+  const fields = [{ key: "Distance travelled", label: "Distance travelled", value: "500", numeric: true }];
+  it("prefers the server's quantity (a Smart transport row's tonne.km, not its first number field)", () => {
+    expect(rowQuantity({ quantity: 1000 }, fields)).toBe(1000);
+  });
+  it("falls back to the first numeric field when the server sends none", () => {
+    expect(rowQuantity({}, fields)).toBe(500);
+    expect(rowQuantity({ quantity: null }, fields)).toBe(500);
+    expect(rowQuantity({ quantity: null }, [])).toBeNull();
   });
 });
 
@@ -438,5 +452,19 @@ describe("review queue (S3-15)", () => {
       ["Sep 2026", 5, 1],
     ]);
     expect(history[history.length - 1].current).toBe(true);
+  });
+});
+
+describe("foldedTwinNote (F-26)", () => {
+  it("says how many listed rows are Category 3 twins riding on their entry", () => {
+    expect(foldedTwinNote({ pending_count: 159, pending_review_count: 147 }, 159, false)).toBe("159 rows, 12 of them Category 3 rows shown with their entries.");
+    expect(foldedTwinNote({ pending_count: 2, pending_review_count: 1 }, 2, false)).toBe("2 rows, 1 of them Category 3 row shown with its entry.");
+  });
+
+  it("says nothing without twins, with FERA rows shown on their own, or without the counts", () => {
+    expect(foldedTwinNote({ pending_count: 5, pending_review_count: 5 }, 5, false)).toBeNull();
+    expect(foldedTwinNote({ pending_count: 159, pending_review_count: 147 }, 159, true)).toBeNull();
+    expect(foldedTwinNote({ pending_count: 159 }, 159, false)).toBeNull();
+    expect(foldedTwinNote(undefined, 0, false)).toBeNull();
   });
 });

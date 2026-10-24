@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Building2, Plus } from "lucide-react";
-import { Button, Callout, DataTable, EmptyState, type Kpi, KpiStrip, PageHeader } from "../../ui";
+import { Button, Callout, DataTable, EmptyState, type Kpi, KpiStrip, PageHeader, formatNumber } from "../../ui";
 import {
   errorMessage,
   useBrands,
@@ -70,12 +70,12 @@ export default function ConsolePage() {
 
   const activeClients = (companies.data ?? []).filter((c) => c.status !== false).length;
   const kpis: Kpi[] = [
-    { label: "Clients (active)", value: companies.data ? activeClients : null, primary: true, hint: companies.data ? `${companies.data.length} in total` : undefined },
+    { label: "Clients (active)", value: companies.data ? activeClients : null, primary: true, hint: companies.data ? `${formatNumber(companies.data.length)} in total` : undefined },
     { label: "Sites", value: sites.data?.length },
     { label: "Users", value: users.data ? users.data.filter((u) => u.role !== "Superadmin").length : null },
     { label: "Emission factors", value: summary.data?.totals.emission_factors ?? factorTotal.data ?? null },
     summary.data
-      ? { label: "Entries this month", value: summary.data.totals.entries_this_month, hint: `${summary.data.totals.pending_entries} pending review` }
+      ? { label: "Entries this month", value: summary.data.totals.entries_this_month, hint: `${formatNumber(summary.data.totals.pending_entries)} pending review` }
       : { label: "Entries this month", value: null, hint: summary.isPending ? undefined : "Couldn't load" },
   ];
   const retryCore = () => core.forEach((q) => q.error && void q.refetch());

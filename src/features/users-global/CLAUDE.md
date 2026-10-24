@@ -7,7 +7,7 @@
 ```
 PageHeader "Users"  Client ▾ · Role chips (Superadmin/Admin/Manager/User) · Site ▾ · search   action: Add user
 DataTable: Person | Client | Role | Sites | Categories | Last active | ⋯ (Edit, Send reset link, Remove)
-Drawer: Name, Last name, Email*, Phone, Role*, Client (derived from sites; required for non-superadmin), Sites (multi for Manager/User; single optional for Admin), Categories (for User), Timezone
+Drawer: Name, Last name, Email*, Phone, Role*, Client (required for non-superadmin; an Admin's own client, else derived from sites), Sites (multi for Manager/User; none for Admin), Categories (for User), Timezone
 ```
 ## Data
 `userService` CRUD, `siteService.getSites`.
@@ -20,3 +20,7 @@ No password column; create uses invite/temporary password shown once; Remove con
 - Someone already holding several clients' sites (from before the rule) gets a warning naming the other client's sites, with "Keep only this client's sites". Save stays disabled while the save would send the sites or turn Internal off. A site with no client counts as another client's, as on the server.
 - Turning Internal off keeps the chosen client if it still owns one of the picked sites, else the client owning most of them.
 - After deploying ESG-lite #130 a Superadmin ticks Internal on existing cross-client team logins, or their site and role edits are refused.
+
+## As built (an Admin belongs to a client, ESG-lite `user.company_id`)
+- An Admin picks a **Client** only: no Site field. The save sends `company_id` (on create, a role change to Admin, or a client change); the server clears an Admin's sites. Rows show an Admin's client from `user.company`.
+- The KPI topics field is for Managers and Users (site topics); an Admin's company-level topics are set in KPI setup.

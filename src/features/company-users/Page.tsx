@@ -17,6 +17,9 @@ import {
   writeContext,
   writeFilterParams,
 } from "../../ui";
+import { type TopicsDraft, movedNotes, topicsBody } from "../../lib/kpi/personTopics";
+import { useSavePersonTopics } from "../../lib/kpi/usePersonTopics";
+import { kpiErrorMessage } from "../../services/kpiService";
 import { errorMessage, useCompanySites, useCompanyUsers, usePeopleMutations } from "./api";
 import { PersonDrawer } from "./components/PersonDrawer";
 import { RemoveModal } from "./components/RemoveModal";
@@ -51,6 +54,7 @@ export default function CompanyUsersPage() {
   const users = useCompanyUsers();
   const sites = useCompanySites();
   const m = usePeopleMutations();
+  const saveTopics = useSavePersonTopics();
 
   const [drawer, setDrawer] = useState<DrawerState>(null);
   const [drawerKey, setDrawerKey] = useState(0);
@@ -77,25 +81,36 @@ export default function CompanyUsersPage() {
       onError: (e) => toast({ title: "Couldn't send the reset link", description: errorMessage(e, "Try again in a moment."), tone: "bad" }),
     });
 
-  const submit = (draft: PersonDraft) => {
+  const submit = (draft: PersonDraft, topics: TopicsDraft | null) => {
     setSaveErr(null);
     if (drawer?.mode === "edit") {
       if (!editing) return;
       const body = updatePayload(editing, draft);
-      if (Object.keys(body).length === 0) {
+      if (Object.keys(body).length === 0 && !topics) {
         setDrawer(null);
         return;
       }
-      m.update.mutate(
-        { id: editing.user_id, body },
-        {
-          onSuccess: () => {
-            setDrawer(null);
-            toast({ title: `Saved ${draft.name.trim() || draft.email.trim()}`, tone: "good" });
-          },
-          onError: (e) => setSaveErr(errorMessage(e, "Nothing was changed. Try again.")),
-        },
-      );
+      const name = draft.name.trim() || draft.email.trim();
+      void (async () => {
+        try {
+          if (Object.keys(body).length) await m.update.mutateAsync({ id: editing.user_id, body });
+        } catch (e) {
+          setSaveErr(errorMessage(e, "Nothing was changed. Try again."));
+          return;
+        }
+        // D17: the KPI topics go after the person, so new sites count.
+        let notes: string | undefined;
+        if (topics) {
+          try {
+            notes = movedNotes((await saveTopics.mutateAsync({ userId: editing.user_id, body: topicsBody(topics) })).moved, name);
+          } catch (e) {
+            setSaveErr(Object.keys(body).length ? `Their details were saved, but not their KPI topics. ${kpiErrorMessage(e, "Try again.")}` : kpiErrorMessage(e, "Their KPI topics weren't changed. Try again."));
+            return;
+          }
+        }
+        setDrawer(null);
+        toast({ title: `Saved ${name}`, description: notes, tone: "good" });
+      })();
       return;
     }
     m.create.mutate(createPayload(draft), {
@@ -200,7 +215,7 @@ export default function CompanyUsersPage() {
         open={drawer !== null && (drawer.mode === "invite" || editing !== null)}
         user={editing}
         sites={siteList}
-        saving={m.create.isPending || m.update.isPending}
+        saving={m.create.isPending || m.update.isPending || saveTopics.isPending}
         error={saveErr}
         onEdit={() => setSaveErr(null)}
         onClose={() => setDrawer(null)}

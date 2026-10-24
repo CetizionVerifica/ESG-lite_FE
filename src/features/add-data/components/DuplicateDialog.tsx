@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Button, Modal, SegmentedControl, formatNumber } from "../../../ui";
 
-export type DuplicateChoice = "replace" | "skip";
+/** Keep both (F-06): a second bill for the same month is saved as its own entry; the Manager sees it as a possible duplicate. */
+export type DuplicateChoice = "replace" | "keep" | "skip";
 
 export type DuplicateItem = {
   id: number | string;
@@ -25,10 +26,11 @@ type Props = {
 
 const OPTIONS = [
   { value: "replace" as const, label: "Replace" },
+  { value: "keep" as const, label: "Keep both" },
   { value: "skip" as const, label: "Skip" },
 ];
 
-/** Every 409 conflict from one send, with Replace or Skip per row and both for all. */
+/** Every 409 conflict from one send, with Replace, Keep both or Skip per row and for all. */
 export function DuplicateDialog({ open, periodLabel, items, busy, onApply, onClose }: Props) {
   const [choices, setChoices] = useState<Record<string, DuplicateChoice>>({});
 
@@ -39,6 +41,8 @@ export function DuplicateDialog({ open, periodLabel, items, busy, onApply, onClo
 
   const setAll = (choice: DuplicateChoice) => setChoices(Object.fromEntries(items.map((d) => [String(d.id), choice])));
   const replacing = Object.values(choices).filter((c) => c === "replace").length;
+  const keeping = Object.values(choices).filter((c) => c === "keep").length;
+  const doing = [replacing > 0 && `replace ${replacing}`, keeping > 0 && `keep both ${keeping}`].filter(Boolean).join(", ");
 
   return (
     <Modal
@@ -46,9 +50,9 @@ export function DuplicateDialog({ open, periodLabel, items, busy, onApply, onClo
       onClose={onClose}
       size="md"
       title={`${items.length} ${items.length === 1 ? "row is" : "rows are"} already entered for ${periodLabel}`}
-      description="Replace swaps the saved entry for the new one. Skip keeps the saved entry and drops the new one."
+      description="Replace swaps the saved entry for the new one. Keep both saves the new one as another entry, for a second bill in the same month; your Manager sees the two as a possible duplicate. Skip keeps the saved entry and drops the new one."
       primaryAction={{
-        label: replacing > 0 ? `Apply (replace ${replacing})` : "Apply (skip all)",
+        label: doing ? `Apply (${doing})` : "Apply (skip all)",
         onClick: () => onApply(choices),
         loading: busy,
       }}
@@ -58,6 +62,9 @@ export function DuplicateDialog({ open, periodLabel, items, busy, onApply, onClo
         <span className="text-muted">Apply to all:</span>
         <Button size="sm" variant="secondary" onClick={() => setAll("replace")} disabled={busy}>
           Replace all
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => setAll("keep")} disabled={busy}>
+          Keep both for all
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setAll("skip")} disabled={busy}>
           Skip all
@@ -82,7 +89,7 @@ export function DuplicateDialog({ open, periodLabel, items, busy, onApply, onClo
             </div>
             <SegmentedControl
               size="sm"
-              label={`${d.label}: replace or skip`}
+              label={`${d.label}: replace, keep both or skip`}
               options={OPTIONS}
               value={choices[String(d.id)] ?? "skip"}
               onChange={(v) => setChoices((c) => ({ ...c, [String(d.id)]: v }))}

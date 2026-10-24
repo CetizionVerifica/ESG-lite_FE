@@ -62,20 +62,26 @@ function overview(period: string) {
   };
 }
 
-async function signIn(page: Page) {
+async function signIn(page: Page, role: "Manager" | "Admin" = "Manager") {
   const b4: URLSearchParams[] = [];
-  await page.addInitScript((u) => {
-    localStorage.setItem("token", "test-token");
-    localStorage.setItem("role", "Manager");
-    localStorage.setItem("user", u);
-  }, JSON.stringify(user));
+  // M5: a company Admin has no sites of their own; Overview lists the company's (/company-admin/sites).
+  const me = role === "Admin" ? { name: "Ada Admin", email: "ada@example.com", company, sites: [] } : user;
+  await page.addInitScript(
+    ([u, r]) => {
+      localStorage.setItem("token", "test-token");
+      localStorage.setItem("role", r);
+      localStorage.setItem("user", u);
+    },
+    [JSON.stringify(me), role] as const,
+  );
   await page.route(
     (url) => url.port !== "4173",
     (route) => {
       const url = new URL(route.request().url());
       const path = url.pathname;
       const json = (body: unknown) => route.fulfill({ json: body });
-      if (path.endsWith("/auth/me")) return json({ role: "Manager", user });
+      if (path.endsWith("/auth/me")) return json({ role, user: me });
+      if (path.endsWith("/company-admin/sites")) return json(user.sites.map(({ company: _c, ...s }) => s));
       if (path.endsWith("/auth/me/appearance")) return json({ appearance: "light" });
       if (path.endsWith("/brands/mine")) return json({});
       if (path.endsWith("/notifications/unread")) return json({ count: 0 });
@@ -106,6 +112,26 @@ async function signIn(page: Page) {
   );
   return { b4 };
 }
+
+test("a company Admin reads Overview for the company's sites, with nothing linking to a Manager's lists (M5)", async ({ page }) => {
+  const { b4 } = await signIn(page, "Admin");
+  await page.goto("/overview?period=CY2025");
+
+  await expect(page.getByRole("heading", { level: 1, name: "CY 2025" })).toBeVisible();
+  await expect.poll(() => b4.length).toBeGreaterThan(0);
+  expect(b4[0].get("siteIds")).toBe("1,2");
+  await expect(page.locator("dl").first()).toContainText("120");
+  await expect(page.locator("dl").first()).toContainText("6 approved entries");
+
+  const attention = page.getByRole("region", { name: "Needs attention" });
+  await expect(attention).toContainText("7 entries waiting for approval (all periods)");
+  // Only the jump to this page's own submission panel stays a link.
+  await expect(attention.getByRole("link")).toHaveCount(1);
+  await expect(attention.getByRole("link")).toHaveAttribute("href", "#submission-status");
+  await expect(page.getByRole("link", { name: /approved entr/ })).toHaveCount(0);
+  await expect(page.locator('a[href^="/data/"]')).toHaveCount(0);
+  await expect(page.getByText("You don't manage any sites yet.")).toHaveCount(0);
+});
 
 test("a manager sees the period at a glance and drills into a site", async ({ page }) => {
   const { b4 } = await signIn(page);

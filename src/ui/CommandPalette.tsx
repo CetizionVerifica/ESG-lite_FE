@@ -5,6 +5,7 @@ import { cn } from "./cn";
 import { useFocusTrap } from "./hooks/useFocusTrap";
 import { useLockBodyScroll } from "./hooks/useLockBodyScroll";
 import { filterPalette, type PaletteCommand } from "./paletteFilter";
+import { portalRoot } from "./portalRoot";
 
 export type { PaletteCommand };
 
@@ -34,7 +35,7 @@ function groupBy<C extends PaletteCommand>(items: C[]): Array<{ title: string; i
 /** ⌘K palette: type to filter, ↑↓ to move, Enter to run, Esc to close. Open/close state lives with the shell. */
 export function CommandPalette<C extends PaletteCommand>(props: CommandPaletteProps<C>) {
   if (!props.open) return null;
-  return createPortal(<PaletteDialog {...props} />, document.body);
+  return createPortal(<PaletteDialog {...props} />, portalRoot());
 }
 
 function PaletteDialog<C extends PaletteCommand>({

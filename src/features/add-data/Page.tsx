@@ -26,6 +26,7 @@ import { EnterRows } from "./steps/EnterRows";
 import { Review } from "./steps/Review";
 import type { RowComparison } from "./components/EntryRow";
 import { ExistingEntries } from "./components/ExistingEntries";
+import { PeriodModeNote } from "./components/PeriodModeNote";
 import { editOf, fixTarget, rowFromEntry, savedExcludingEdits } from "./logic/existing";
 import { isScope2, splitFeraFactors, upstreamSubFor } from "../../lib/scope3/fera";
 import type { Cat3Calc } from "./components/EntryRow";
@@ -86,7 +87,7 @@ export default function AddDataPage() {
     feraCategoryId: fera?.category_id ?? null,
   });
   const threshold = useThreshold(site?.company_id ?? null);
-  const model = useMemo(() => (setup.data ? toFormModel(setup.data.config) : null), [setup.data]);
+  const model = useMemo(() => (setup.data ? toFormModel(setup.data.config, setup.data.unitOptions) : null), [setup.data]);
   // S3-3: the data quality preview scores a factor for the site's own country best; Scope 3 only.
   const siteCountry = useSiteCountry(site?.site_id ?? null, contextReady && category?.ghg_category != null);
   // Rows the server refused for their method (METHOD_NOT_ALLOWED), shown on the row's method cards.
@@ -194,7 +195,7 @@ export default function AddDataPage() {
     return bill ? bill.confirmed : rowHasInput(r) || !hasBills;
   };
   const activeRows = rows.filter(sendable);
-  const issues = rows.map((r) => (billOf(r) || sendable(r) ? rowIssue(r, calc) : null));
+  const issues = rows.map((r) => (billOf(r) || sendable(r) ? rowIssue(r, calc, model) : null));
   const unconfirmedBills = billGroups(rows).filter((g) => !g.bill.confirmed).length;
 
   // S3-15 live checks, with the review workflow on: complete rows as Save would send them.
@@ -237,7 +238,8 @@ export default function AddDataPage() {
   // Rows without their own date are filed in the month the period ends, as here.
   const bulkUploadHref =
     contextReady && period
-      ? `/capture/upload?${new URLSearchParams({ site: String(site.site_id), category: String(category.category_id), period: entryDate(period).slice(0, 7) })}`
+      ? // F-21: a yearly choice opens a yearly upload (?period=CY2025), as Add data's own links name it.
+        `/capture/upload?${new URLSearchParams({ site: String(site.site_id), category: String(category.category_id), period: period.mode === "yearly" ? `${period.yearType}${period.year}` : entryDate(period).slice(0, 7) })}`
       : "/capture/upload";
 
   const renderReview = (s: NonNullable<typeof site>, c: NonNullable<typeof category>, p: EntryPeriod) => (
@@ -318,6 +320,7 @@ export default function AddDataPage() {
           )}
         </Callout>
       )}
+      <PeriodModeNote siteId={site.site_id} categoryId={category.category_id} period={period} />
       <EnterRows
         rows={rows}
         dispatch={dispatch}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  fitsText,
   type Category,
   type Site,
   categoryDeleteBlock,
@@ -179,5 +180,15 @@ describe("units", () => {
     expect(isUnitDirty(d, units[0])).toBe(false);
     expect(isUnitDirty({ ...d, site_id: 2 }, units[0])).toBe(true);
     expect(isUnitDirty(unitDraftFrom(null), null)).toBe(false);
+  });
+});
+
+describe("fitsText (#183 U3-FE)", () => {
+  it("names up to two emission categories a unit fits, says when it fits none, and nothing while unknown", () => {
+    expect(fitsText(["LSHS", "Diesel"])).toEqual({ text: "Diesel, LSHS", title: "Diesel, LSHS", none: false });
+    expect(fitsText(["Diesel", "LSHS", "Furnace oil"])?.text).toBe("Diesel, Furnace oil +1 more");
+    expect(fitsText([])).toMatchObject({ text: "Fits no emission category", none: true });
+    expect(fitsText(undefined)).toBeNull();
+    expect(fitsText(null)).toBeNull();
   });
 });

@@ -76,7 +76,7 @@ export function AuditTimeline({ entries, loading, error, onRetry, className }: A
 }
 
 /** Fetches /user/audit-logs for one record (TanStack Query) and renders it. Put it in a Drawer tab. */
-export function EntityAuditTimeline({ entityType, entityId, className }: { entityType: "emission" | "production_data"; entityId: number; className?: string }) {
+export function EntityAuditTimeline({ entityType, entityId, className }: { entityType: "emission" | "production_data" | "kpi_value"; entityId: number; className?: string }) {
   const q = useQuery({ queryKey: ["audit-logs", entityType, entityId], queryFn: () => getAuditLogs(entityType, entityId) });
   return (
     <AuditTimeline

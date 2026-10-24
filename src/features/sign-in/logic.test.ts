@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  cleanLoginCode,
   returnPath,
   coverTitle,
   errorMessage,
@@ -85,4 +86,11 @@ describe("validateReset", () => {
 it("names the client on the cover when known", () => {
   expect(coverTitle("Midal Cables")).toBe("Carbon reporting for Midal Cables");
   expect(coverTitle(null)).toBe("Carbon reporting for your company");
+});
+
+it("keeps only the digits of a typed or pasted sign-in code, six at most", () => {
+  expect(cleanLoginCode("123 456")).toBe("123456");
+  expect(cleanLoginCode(" 12-34-56 ")).toBe("123456");
+  expect(cleanLoginCode("1234567")).toBe("123456");
+  expect(cleanLoginCode("abc")).toBe("");
 });

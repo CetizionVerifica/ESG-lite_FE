@@ -91,6 +91,8 @@ async function signIn(page: Page) {
       const pair = /\/admin\/units\/site\/(\d+)\/category\/(\d+)$/.exec(path);
       if (pair) return json(units.filter((u) => u.site.site_id === Number(pair[1]) && u.category.category_id === Number(pair[2])));
       if (path.endsWith("/admin/units")) return json(units);
+      // #183 U3-FE: litres fits the site's Diesel; kWh fits nothing on its site and category.
+      if (path.endsWith("/admin/units/fits")) return json({ fits: [{ unit_id: 1, activities: ["Diesel", "LSHS", "Furnace oil"] }, { unit_id: 2, activities: [] }] });
       return json({});
     },
   );
@@ -195,6 +197,9 @@ test("units: site and category chips filter the list; delete keeps entries", asy
   await page.goto("/setup/reference?tab=units");
   await expect(table.getByRole("row")).toHaveCount(3);
   await expect(table.getByRole("row", { name: /litres/ })).toContainText("4");
+  // #183 U3-FE: what each unit fits; a unit fitting nothing says so.
+  await expect(table.getByRole("row", { name: /litres/ })).toContainText("Diesel, Furnace oil +1 more");
+  await expect(table.getByRole("row", { name: /kWh/ })).toContainText("Fits no emission category");
   await page.getByRole("button", { name: "Edit litres" }).click();
   const drawer = page.getByRole("dialog", { name: "litres" });
   await expect(drawer.getByLabel("Category")).toHaveValue("1");

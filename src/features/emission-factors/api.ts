@@ -11,6 +11,7 @@ import {
   deleteEmissionFactorsByBatch,
   getEmissionFactorBatches,
   getEmissionFactors,
+  recalculateFactorEntries,
   updateEmissionFactor,
 } from "../../services/emissionFactorService";
 import { getSites } from "../../services/siteService";
@@ -101,6 +102,45 @@ export function useSaveFactor() {
 }
 
 /** One factor, after the confirm dialog that names it. Entries already calculated keep their totals. */
+/** N4: what recalculating a factor's entries would change; refetched each time the dialog opens. */
+export function useRecalcPreview(id: number | null) {
+  return useQuery({ queryKey: [...keys.all, "recalc", id], queryFn: () => recalculateFactorEntries(id as number, false), enabled: id !== null, gcTime: 0, staleTime: 0, retry: false });
+}
+
+/** N4: recalculate a corrected factor's entries with the engine. */
+export function useRecalculate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => recalculateFactorEntries(id, true),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...keys.all, "recalc"] }),
+  });
+}
+
+/**
+ * N4: recalculate the entries of several factors, one factor after the other (each runs the engine
+ * over its site and category). Stops at the first failure and says how far it got.
+ */
+export function useRecalculateMany() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: number[]) => {
+      let changed = 0;
+      let locked = 0;
+      for (const [i, id] of ids.entries()) {
+        try {
+          const r = await recalculateFactorEntries(id, true);
+          changed += r.changed;
+          locked += r.locked;
+        } catch (e) {
+          throw new Error(`${errorMessage(e, "Recalculating stopped.")} ${i} of ${ids.length} factors were done (${changed.toLocaleString("en-US")} entries).`);
+        }
+      }
+      return { changed, locked, factors: ids.length };
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: [...keys.all, "recalc"] }),
+  });
+}
+
 export function useRemoveFactor() {
   const qc = useQueryClient();
   return useMutation({

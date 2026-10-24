@@ -46,6 +46,12 @@ React 19 + Vite + TypeScript + Tailwind. Backend is ESG-lite (Node), AI/OCR endp
 - Users (contributors) see their fields and the total tCO₂e only: no method choice, factor, FX, FERA/Category 3 or DQ text. Gate detail with `showCalcDetail` (SE-1).
 - Method, unit, currency and field labels/defaults are set per form by the Superadmin in Capture setup and applied by the server; a User's entry sends field values only.
 
+## KPI tracking — see docs/kpi/ (in ESG-lite)
+- Pages live in `src/features/kpi/` (setup, my-kpis, review, dashboard, reports, library); shared logic in `src/lib/kpi/`. Labels, framework names and units come from `src/lib/kpi/` only.
+- Nothing KPI is visible unless `kpiTrackingOn(user)` (`src/lib/kpi/switch.ts`): nav, routes, command palette, My month card, Approvals tab. Deep links to KPI routes when off land on a friendly "not available" state.
+- `docs/kpi/05-ux.md` is binding: plain questions (not disclosure codes) for contributors, one KPI at a time, framework badges, auto values read-only with "From your data", drafts save as you type, progress always visible.
+- The FE never calculates a reported figure; previews (unit conversion, formula) mirror `src/lib/kpi/` and the server's numbers win.
+
 ## Definition of done (every module)
 
 1. Matches its spec's layout and the screen in the previews artifact.
@@ -75,3 +81,19 @@ Run after `npm ci`:
 - Shared components: see `src/ui/README.md`; the dev-only gallery is `/__ui` (`npm run dev`).
 - Run lint:new, typecheck and unit tests before every push.
 - A lane with a backend part runs the end-to-end data workflow test in ESG-lite before review (`bash ci/workflow/local.sh`, see ESG-lite `ci/workflow/README.md`) and puts "Workflow test: N passed, M skipped" in its last PR. It checks the data from client setup to the report; what a User sees stays in Playwright.
+
+## Design Studio — see docs/design-studio/ (in ESG-lite)
+- Pages live in `src/features/studio/`; shared logic in `src/lib/studio/`. Nothing is visible unless `designStudioOn(user)`. Sustainability designs also need `kpiTrackingOn(user)`.
+- `src/lib/studio/render/` is a generated mirror of ESG-lite `src/reporting/studio/render/`. Never edit it by hand: run `npm run sync:studio-render`. CI checks `RENDER_HASH`.
+- The editor draws pages with that renderer inside a shadow root, so the editor, Page view, Present and the PDF match. Never restyle report content with app CSS or Tailwind inside the sheet.
+- Numbers on pages come from `/studio/resolve` and data chips. The FE never computes a reported figure.
+- Every AI result is a suggestion card with Accept / Try again / Discard. Nothing AI-written lands on a page without a click.
+- `docs/design-studio/05-ux.md` is binding (Canva-style rail, drawers, contextual toolbar, page strip). Never use "Magic" or Canva's names, icons or look. The editor needs ≥1280 px.
+
+## Insights — see docs/insights/ (in ESG-lite)
+- Page lives in `src/features/insights/`; shared logic in `src/lib/insights/`. Nothing is visible unless `insightsOn(user)`. KPI panels hide themselves on `availability: 'kpi_off'`.
+- Charts: ECharts 6 via `ChartFrame` and `useChartTheme()` only. No new chart library, no hex colours, no `isDark`. Scope, pillar, heat and status colours are fixed tokens.
+- Every number comes from an `/insights` endpoint. The FE never computes a reported figure, index, share or driver — it only formats.
+- Each panel loads, fails and retries on its own. Every chart has a table view and an aria label; colour is never the only signal.
+- Motion goes through `src/lib/insights/motion.ts` and is off under `prefers-reduced-motion`.
+- `docs/insights/05-ux.md` is binding.

@@ -175,3 +175,23 @@ export const getEmissionFactorBatches = async (
   return response.data;
 };
 
+/** What recalculating a corrected factor's entries changes (N4): counts, totals and the first 200 changes. */
+export interface FactorRecalc {
+  factor: { emission_factor_id: number; name: string | null; year: number; value: number; unit: string | null };
+  recalculated: boolean;
+  uses_factor: number;
+  changed: number;
+  unchanged: number;
+  locked: number;
+  failed: number;
+  before_tco2e: number;
+  after_tco2e: number;
+  changes: { pk_id: number; status: string; date_of_reporting: string; old_total: number; new_total: number }[];
+}
+
+/** N4: GET previews what recalculating this factor's entries would change; POST recalculates them (Superadmin). */
+export const recalculateFactorEntries = async (id: number, write: boolean): Promise<FactorRecalc> => {
+  const url = `/admin/emission-factors/${id}/recalculate`;
+  const response = write ? await api.post(url) : await api.get(url);
+  return response.data;
+};

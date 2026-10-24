@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useMemo } from "react";
-import { PoweredBy, cn } from "../../../ui";
+import { EsgLiteLogo, PoweredBy, cn } from "../../../ui";
 import { type ThemePack, buildTheme, textOnGradient, toCssVars, useTheme } from "../../../theme";
 import { coverTitle } from "../logic";
 
@@ -38,8 +38,10 @@ export function AuthLayout({ pack, clientName, coverHeading, children }: AuthLay
         <div className="relative flex items-center gap-3">
           {logo ? (
             <img src={logo} alt={clientName ?? pack.name} className="h-8 w-auto max-w-[200px] object-contain lg:h-10" />
+          ) : clientName ? (
+            <span className="font-brand text-lg font-semibold lg:text-2xl">{clientName}</span>
           ) : (
-            <span className="font-brand text-lg font-semibold lg:text-2xl">{clientName ?? "ESGLite"}</span>
+            <EsgLiteLogo tone="inherit" className="text-2xl lg:text-[32px]" />
           )}
         </div>
         <div className="relative mt-2 lg:mt-0 lg:max-w-md">

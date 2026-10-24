@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Ruler, SearchX } from "lucide-react";
 import {
+  Badge,
   Button,
   Callout,
   type Column,
@@ -18,7 +19,7 @@ import {
   useFilterParams,
   useToast,
 } from "../../../ui";
-import { errorMessage, useCategories, useDeleteUnit, useSaveUnit, useSites, useUnits } from "../api";
+import { errorMessage, useCategories, useDeleteUnit, useSaveUnit, useSites, useUnitFits, useUnits } from "../api";
 import { useOpenParam } from "../hooks/useOpenParam";
 import {
   type Site,
@@ -31,6 +32,7 @@ import {
   unitDraftFrom,
   unitRows,
   validateUnit,
+  fitsText,
 } from "../logic";
 import { DeleteModal, DiscardModal, DrawerFooter, SaveError, type TabShell } from "./common";
 import { dash, openColumn } from "./columns";
@@ -107,11 +109,31 @@ export function UnitsTab({ nav, panel }: TabShell) {
   );
 
   const countsKnown = all.some((r) => r.entries !== null);
+  const fits = useUnitFits();
+  const fitsOf = (r: UnitRow) => fitsText(fits.data?.get(r.unit_id));
   const columns: Column<UnitRow>[] = [
     { id: "unit", header: "Unit", hideable: false, sortable: true, value: (r) => r.unit_name, cell: (r) => <span className="font-medium text-ink">{r.unit_name}</span> },
     { id: "description", header: "Description", value: (r) => r.description ?? "", cell: (r) => (r.description ? <span title={r.description} className="block max-w-[24rem] truncate text-muted">{r.description}</span> : dash) },
     { id: "site", header: "Site", sortable: true, value: (r) => r.siteName },
     { id: "category", header: "Category", sortable: true, value: (r) => r.categoryName },
+    {
+      id: "fits",
+      header: "Fits",
+      value: (r) => fitsOf(r)?.text ?? "",
+      cell: (r) => {
+        const f = fitsOf(r);
+        if (!f) return dash;
+        return f.none ? (
+          <span title={f.title}>
+            <Badge tone="warn">{f.text}</Badge>
+          </span>
+        ) : (
+          <span title={f.title} className="block max-w-[18rem] truncate text-ink">
+            {f.text}
+          </span>
+        );
+      },
+    },
     { id: "entries", header: "Used by entries", numeric: true, sortable: true, width: "9rem", value: (r) => r.entries, cell: countsKnown ? undefined : () => dash },
     openColumn((r) => r.unit_name, (r) => open(String(r.unit_id))),
   ];

@@ -25,6 +25,12 @@ export type Company = {
   entry_detail?: string | null;
   /** SE-2: the currency a spend row takes when it names none (INR for current clients). */
   default_currency?: string | null;
+  /** "KPI tracking" (KPI-1, D2); absent on servers without migrate:kpi-switch = off. */
+  kpi_tracking_enabled?: boolean;
+  /** "Design Studio" (DS-0, D4); absent on servers without migrate:ds-0-switch = off. */
+  design_studio_enabled?: boolean;
+  /** "Insights" (IN-0, I2); absent on servers without migrate:in-switch = off. */
+  insights_enabled?: boolean;
 };
 export type Site = { site_id: number; name: string; address?: string | null; company?: { company_id: number } | null; country?: { name: string } | null };
 export type AdminUser = {
@@ -33,7 +39,9 @@ export type AdminUser = {
   last_name?: string | null;
   email: string;
   role: string;
-  /** The one site a data-entry user (or company admin) belongs to. */
+  /** A company Admin's client (an Admin belongs to a client, not a site). */
+  company?: { company_id: number } | null;
+  /** The one site a data-entry user belongs to. */
   site?: { site_id: number } | null;
   /** Sites a manager looks after. */
   sites?: { site_id: number }[] | null;
@@ -73,7 +81,7 @@ export function buildRows(companies: Company[], sites: Site[] = [], users: Admin
   }
   const usersBy = new Map<number, AdminUser[]>();
   for (const u of users) {
-    const ids = new Set<number>();
+    const ids = new Set<number>(u.company?.company_id ? [u.company.company_id] : []);
     for (const sid of [u.site?.site_id, ...(u.sites ?? []).map((s) => s.site_id)]) {
       const cid = sid ? companyOfSite.get(sid) : undefined;
       if (cid) ids.add(cid);

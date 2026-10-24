@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Callout, type Column, DataTable, EmptyState, KpiStrip, Select, formatNumber } from "../../../../ui";
 import type { PlanSummary } from "../../api";
 import type { PreviewRow } from "../../logic";
-import { type HeldPart, SEVERITY_TONE, errorRowsRemain, heldText, issueLabel, issueOptions, rowSeverity, rowsText } from "../../smart/logic";
+import { type HeldPart, SEVERITY_TONE, categoryForRow, errorRowsRemain, heldText, issueLabel, issueOptions, rowSeverity, rowsText } from "../../smart/logic";
+import type { MappingProposal } from "../../smart/types";
 import { type RowEdit, RowEditModal } from "./RowEditModal";
 
 type Row = PreviewRow & { _i: number };
@@ -39,6 +40,9 @@ export function SmartReviewStep(props: {
   autoMapped?: boolean;
   /** Sheets and wordings the model wasn't sure of, left out of this plan; "Check them" opens Confirm mapping. */
   held?: HeldPart[];
+  /** #183: the upload's site and confirmed mapping, so a row's Edit offers the units its activity accepts. */
+  siteId?: number | null;
+  proposal?: MappingProposal | null;
   onBack: () => void;
   onImport: () => void;
 }) {
@@ -226,6 +230,8 @@ export function SmartReviewStep(props: {
 
       <RowEditModal
         row={editing}
+        siteId={props.siteId ?? null}
+        categoryId={editing ? categoryForRow(props.proposal ?? null, String(editing.emission_category ?? "")) : null}
         saving={props.busy}
         error={props.patchError}
         onClose={() => setEditing(null)}

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { FINGERPRINT_POWER, MOCK_PROFILE, MOCK_PROPOSAL, MODEL_PROPOSAL } from "./fixtures";
 import {
+  categoryForRow,
+  rowUnitIssue,
   activityChip,
   autoReview,
   heldText,
@@ -427,5 +429,22 @@ describe("holding unsure parts back (Shyam, 2026-10-15)", () => {
     expect(autoReview(nothingSure)).toBe(false);
     // a fully sure proposal holds nothing
     expect(holdUnsure(MODEL_PROPOSAL).held).toEqual([]);
+  });
+});
+
+describe("the units of a plan row's Edit (#183)", () => {
+  it("finds the row's category from the confirmed mapping: its activity, else the one category the sheets name", () => {
+    expect(categoryForRow(MOCK_PROPOSAL, "Diesel (gen-set)")).toBe(1);
+    expect(categoryForRow(MOCK_PROPOSAL, "petrol")).toBe(1);
+    const oneSheet = { ...MOCK_PROPOSAL, sheets: [MOCK_PROPOSAL.sheets[0]] };
+    expect(categoryForRow(oneSheet, "Something else")).toBe(1);
+    expect(categoryForRow(null, "Diesel")).toBeNull();
+  });
+
+  it("reads the engine's unit issue off the row", () => {
+    const issue = { code: "UNIT_NOT_CONVERTIBLE", severity: "error", message: 'Unit mismatch: Expected "litre" but received "kWh".' };
+    expect(rowUnitIssue({ issues: [issue] })).toBe(issue.message);
+    expect(rowUnitIssue({ issues: [{ code: "NO_FACTOR_FOR_YEAR", severity: "error", message: "x" }] })).toBeNull();
+    expect(rowUnitIssue(null)).toBeNull();
   });
 });

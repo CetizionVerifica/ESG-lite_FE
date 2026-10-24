@@ -42,4 +42,4 @@ Filters visible without hover; rejected rows can be fixed and resubmitted in the
 
 ## S3-3 as built (method and data quality, 2026-10-16; spec `src/lib/scope3/CLAUDE.md`)
 - Drawer, Calculation section: "How it was calculated" (the method label in the category's wording, "Estimate" when `is_estimate`) and "Data quality" (`DataQualityBadge`, plus primary or secondary data). Shown for Scope 3 rows and any row that carries the fields; "Not recorded" / "Not scored" on older rows.
-- List: a "Data quality" column, hidden by default (column picker). The row's "@method" is no longer listed under "What was entered".
+- List: a "Data quality" column, hidden by default (column picker), only with `showCalcDetail` (SE-1); a contributor on a default company never gets it. The row's "@method" is no longer listed under "What was entered".

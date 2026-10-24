@@ -6,6 +6,7 @@ import { menuPosition } from "../menuPosition";
 import { inputBase } from "../styles";
 import { Field, type FieldBaseProps } from "./Field";
 import type { Option } from "./Select";
+import { portalRoot } from "../portalRoot";
 
 export type ComboboxProps<V extends string | number> = FieldBaseProps & {
   value: V | null;
@@ -175,7 +176,7 @@ export function Combobox<V extends string | number>({
                   ))
                 )}
               </ul>,
-              document.body,
+              portalRoot(),
             )}
         </div>
       )}

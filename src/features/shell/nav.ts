@@ -1,4 +1,4 @@
-import { CLIENT_ID, type Role, withClientId } from "./routeMap";
+import { CLIENT_ID, type FeatureFlags, type Requirement, type Role, meetsRequirement, withClientId } from "./routeMap";
 
 /** Top-bar navigation per role. Labels are final copy from the F2 spec. */
 
@@ -7,6 +7,10 @@ export interface NavLinkItem {
   label: string;
   /** May contain CLIENT_ID; resolve with resolveNavTo before linking. */
   to: string;
+  /** A company switch the item needs (KPI-1: `"kpi"` = KPI tracking on); left out of the nav while it's off. */
+  requires?: Requirement;
+  /** The command palette's name when the nav label needs its group to make sense ("Dashboard" → "KPI dashboard"). */
+  palette?: string;
 }
 
 export interface NavGroupItem {
@@ -17,18 +21,31 @@ export interface NavGroupItem {
 
 export type NavItem = NavLinkItem | NavGroupItem;
 
-const link = (label: string, to: string): NavLinkItem => ({ kind: "link", label, to });
+const link = (label: string, to: string, requires?: Requirement): NavLinkItem => (requires ? { kind: "link", label, to, requires } : { kind: "link", label, to });
 const group = (label: string, items: NavLinkItem[]): NavGroupItem => ({ kind: "group", label, items });
+/** A KPI page (KPI-1: behind the switch), with its palette name. */
+const kpiLink = (label: string, to: string, palette?: string): NavLinkItem => ({ ...link(label, to, "kpi"), ...(palette ? { palette } : {}) });
+const KPI_ESG = kpiLink("ESG dashboard", "/kpi/esg"); // Wave E: first in the KPIs group
+const KPI_DASHBOARD = kpiLink("Dashboard", "/kpi/dashboard", "KPI dashboard");
+const KPI_TARGETS = kpiLink("Targets", "/kpi/targets", "KPI targets"); // KPI-9 nav fix (wave D)
+const KPI_REPORTS = kpiLink("Framework reports", "/reports/kpi/GRI");
+const KPI_SETUP = kpiLink("KPI setup", "/kpi/setup");
+/** DS-0: Design Studio, behind the company's studio switch. */
+const STUDIO = link("Design Studio", "/studio", "studio");
+/** IN-0: Insights, behind the company's Insights switch (I5: second item, under Overview). */
+const INSIGHTS = link("Insights", "/insights", "insights");
 
 export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   User: [
     link("Current Month", "/my-month"),
+    link("My KPIs", "/kpi", "kpi"), // KPI-1
     link("Add data", "/data/new"),
     link("My entries", "/data/mine"),
     link("Production", "/production"),
   ],
   Manager: [
     link("Overview", "/overview"),
+    INSIGHTS, // IN-0
     group("Data", [
       link("Approvals", "/data/approvals"),
       link("Emissions ledger", "/data/ledger"),
@@ -36,12 +53,28 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Suppliers", "/suppliers"),
       link("Bulk upload", "/capture/upload"),
     ]),
-    group("Reports", [link("GHG report", "/reports/ghg"), link("EDE report", "/reports/ede"), link("Scope 3 boundary", "/settings/scope3")]),
+    group("Reports", [
+      link("GHG report", "/reports/ghg"),
+      link("EDE report", "/reports/ede"),
+      link("Framework reports", "/reports/kpi/GRI", "kpi"), // KPI-1
+      link("Scope 3 boundary", "/settings/scope3"),
+      STUDIO, // DS-0
+    ]),
+    group("KPIs", [KPI_ESG, KPI_DASHBOARD, KPI_TARGETS]), // KPI-1, wave D: Targets next to Dashboard
     link("Targets (SBTi)", "/targets"),
     link("Products (PCF)", "/products"),
     link("Team", "/team"),
   ],
-  Admin: [link("Users", "/users"), link("Bulk upload", "/capture/upload"), link("Brand theme", "/brand"), link("Scope 3 boundary", "/settings/scope3"), link("Suppliers", "/suppliers")],
+  Admin: [
+    INSIGHTS, // IN-0: Admins have no Overview; Insights comes first
+    link("Users", "/users"),
+    link("Bulk upload", "/capture/upload"),
+    link("Brand theme", "/brand"),
+    link("Scope 3 boundary", "/settings/scope3"),
+    link("Suppliers", "/suppliers"),
+    group("KPIs", [KPI_ESG, KPI_DASHBOARD, KPI_TARGETS, KPI_REPORTS, KPI_SETUP]), // KPI-1, wave D
+    STUDIO, // DS-0: Admins have no Reports group
+  ],
   Superadmin: [
     link("Console", "/console"),
     group("Clients", [
@@ -59,6 +92,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Categories", "/setup/reference?tab=categories"),
       link("Units", "/setup/reference?tab=units"),
       link("Products", "/setup/products"),
+      link("KPI library", "/setup/kpi-library"), // KPI-2: the global library, not behind a client's switch
     ]),
     group("Factors", [
       link("Emission factors", "/factors"),
@@ -71,20 +105,33 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
       link("Data-entry forms", "/capture/forms"),
       link("Bulk upload", "/capture/upload"),
     ]),
-    group("Reports", [link("GHG", "/reports/ghg"), link("EDE", "/reports/ede")]),
+    group("Reports", [INSIGHTS, link("GHG", "/reports/ghg"), link("EDE", "/reports/ede"), STUDIO]), // DS-0: Design Studio; IN-0: Insights for the chosen client
+    // D18: everything an Admin has for KPIs, for the chosen client, plus the KPI review (Approvals → KPIs).
+    group("KPIs", [KPI_ESG, KPI_DASHBOARD, KPI_TARGETS, kpiLink("Approvals", "/data/approvals?view=kpi", "KPI approvals"), KPI_REPORTS, KPI_SETUP]),
   ],
 };
 
-export function navFor(role: Role | null): NavItem[] {
-  return role ? NAV_BY_ROLE[role] : [];
+/**
+ * The role's nav with the company's switches applied (KPI-1): items whose
+ * `requires` is off are left out, and a group left empty goes too. No flags =
+ * every switch off.
+ */
+export function navFor(role: Role | null, flags: FeatureFlags = {}): NavItem[] {
+  if (!role) return [];
+  const shown = (item: NavLinkItem) => meetsRequirement(item.requires, flags);
+  return NAV_BY_ROLE[role].flatMap((item): NavItem[] => {
+    if (item.kind === "link") return shown(item) ? [item] : [];
+    const items = item.items.filter(shown);
+    return items.length ? [{ ...item, items }] : [];
+  });
 }
 
 /** Every link a role can reach from the nav, groups flattened, in nav order. */
-export function navLinks(role: Role | null): { label: string; to: string; group?: string }[] {
-  return navFor(role).flatMap((item) =>
+export function navLinks(role: Role | null, flags: FeatureFlags = {}): { label: string; to: string; group?: string; palette?: string }[] {
+  return navFor(role, flags).flatMap((item) =>
     item.kind === "link"
-      ? [{ label: item.label, to: item.to }]
-      : item.items.map((child) => ({ label: child.label, to: child.to, group: item.label })),
+      ? [{ label: item.label, to: item.to, ...(item.palette ? { palette: item.palette } : {}) }]
+      : item.items.map((child) => ({ label: child.label, to: child.to, group: item.label, ...(child.palette ? { palette: child.palette } : {}) })),
   );
 }
 

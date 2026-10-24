@@ -24,6 +24,15 @@ export const forgotPassword = async (email: string): Promise<ForgotPasswordRespo
 };
 
 /**
+ * Email a one-time sign-in code (forgot password). The answer is the same
+ * whether or not the address has an account.
+ */
+export const requestLoginCode = async (email: string): Promise<ForgotPasswordResponse> => {
+  const response = await axios.post(`${API_URL}/auth/login-otp/request`, { email });
+  return response.data;
+};
+
+/**
  * Reset password using the token from email
  */
 export const resetPassword = async (token: string, password: string): Promise<ResetPasswordResponse> => {

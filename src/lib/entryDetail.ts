@@ -25,10 +25,11 @@ type UserSite = { site_id?: number; company?: DetailCompany };
 
 /** The company of one of the signed-in user's sites (the first when no site is given). */
 export function companyOfUserSite(user: unknown, siteId?: number | null): DetailCompany {
-  const u = (user ?? {}) as { sites?: UserSite[]; site?: UserSite | null };
+  const u = (user ?? {}) as { sites?: UserSite[]; site?: UserSite | null; company?: DetailCompany };
   const sites = u.sites?.length ? u.sites : u.site ? [u.site] : [];
   const site = (siteId != null ? sites.find((s) => s.site_id === siteId) : undefined) ?? sites[0];
-  return site?.company ?? null;
+  // An Admin belongs to a company, not a site.
+  return site?.company ?? u.company ?? null;
 }
 
 /** What a User reads when a row can't be worked out: something they can act on, no factor words. */
@@ -51,7 +52,7 @@ export function plainProblem(message: string): string {
   if (/couldn't load the exchange rate/i.test(message)) return USER_TOTAL_ON_SEND;
   if (/exchange rate|fx rate|deflator/i.test(message)) return USER_MISSING_FACTOR;
   if (/no emission factor|no factor|factor has no unit|emission factor .* has no unit/i.test(message)) return USER_MISSING_FACTOR;
-  if (/unit mismatch|can't be converted|cannot be converted|no conversion|is per |unit is not configured/i.test(message)) return USER_UNIT_CANNOT_CONVERT;
+  if (/unit mismatch|can't be converted|cannot be converted|no conversion|is per |unit is not configured|isn't a unit for/i.test(message)) return USER_UNIT_CANNOT_CONVERT;
   return message;
 }
 

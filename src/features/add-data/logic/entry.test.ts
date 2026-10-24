@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmissionCalculator } from "../hooks/emissionCalc";
+import { toFormModel } from "../../../lib/emissions/form";
 import {
   buildPayload,
   entryDate,
@@ -8,7 +9,9 @@ import {
   parseEntryPeriod,
   periodTotalQuery,
   previousPeriod,
+  AMOUNT_NEEDED,
   rowIssue,
+  unitNotOfferedMessage,
 } from "./entry";
 
 describe("entry period", () => {
@@ -66,8 +69,12 @@ describe("rows", () => {
     );
     expect(rowIssue({ id: 1, emission_category: "Diesel", activity_data_unit: "litre" }, calc)).toEqual({
       field: "values",
-      message: "Enter activity data",
+      message: AMOUNT_NEEDED,
     });
+    // 0, a negative number and text typed in get the same plain ask (F-11).
+    for (const quantity of ["0", "-1600", "abc"]) {
+      expect(rowIssue({ id: 1, emission_category: "Diesel", activity_data_unit: "litre", quantity }, calc)?.message).toBe(AMOUNT_NEEDED);
+    }
     expect(rowIssue({ id: 1, emission_category: "Diesel", activity_data_unit: "gallon", quantity: "5" }, calc)).toBeNull();
   });
 
@@ -135,5 +142,28 @@ describe("rows", () => {
     expect(yearly).toMatchObject({ date_of_reporting: "2026-03-31", reporting_period: "yearly", year_type: "FY" });
     const monthlyWithDate = buildPayload({ ...row, date_of_reporting: "2025-09-12" }, { siteId: 4, categoryId: 9, period: { mode: "monthly", year: 2025, month: 9 } });
     expect(monthlyWithDate.date_of_reporting).toBe("2025-09-12");
+  });
+});
+
+describe("a unit the emission category doesn't offer (#183)", () => {
+  const calc = createEmissionCalculator({
+    emissionFactors: [{ emission_category_name: "Diesel", factor_value: 2.68, denominator_unit: "litre", year: 2024 } as never],
+    targetYear: 2024,
+    reportingDate: "2025-09-30",
+  });
+  const options = { fixed_unit: null, all_units: ["litre", "gallon", "kg"], activities: [{ name: "Diesel", factor_unit: "litre", units: ["litre", "kl"] }] };
+
+  it("is a row issue on the unit naming the units to choose; without a list nothing changes", () => {
+    const row = { id: 1, emission_category: "Diesel", activity_data_unit: "gallon", quantity: "5" };
+    // gallon converts to litre, so the factor check passes; the form doesn't offer it, so the server list stops it.
+    expect(rowIssue(row, calc, toFormModel(null, options))).toEqual({ field: "activity_data_unit", message: "gallon isn't a unit for Diesel. Choose litre or kl." });
+    expect(rowIssue(row, calc, toFormModel(null))).toBeNull();
+    expect(rowIssue(row, calc)).toBeNull();
+    expect(rowIssue({ ...row, activity_data_unit: "LITRE" }, calc, toFormModel(null, options))).toBeNull();
+  });
+
+  it("names the units in plain words", () => {
+    expect(unitNotOfferedMessage("kWh", "Diesel", ["litre", "kl", "gallon"])).toBe("kWh isn't a unit for Diesel. Choose litre, kl or gallon.");
+    expect(unitNotOfferedMessage("kWh", "Diesel", ["litre"])).toBe("kWh isn't a unit for Diesel. Choose litre.");
   });
 });

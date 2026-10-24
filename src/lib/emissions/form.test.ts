@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  mappingKeyLabel,
   applyChange,
   autoEmissionCategory,
   columnOptionsFor,
@@ -10,7 +11,7 @@ import {
   toFormModel,
   visibleExtraFields,
 } from "./form";
-import type { ColumnConfig, ColumnEntity } from "./types";
+import type { ColumnConfig, ColumnEntity, ModalRow } from "./types";
 
 const col = (pk_id: number, column_name: string, column_type = "select"): ColumnEntity => ({ pk_id, column_name, column_type });
 
@@ -136,6 +137,37 @@ describe("form model (flat mapping and calculation specs)", () => {
     expect(autoEmissionCategory(m, { id: 1, fuel: "7" })).toEqual({ key: "diesel", category: "Diesel (avg biofuel blend)" });
   });
 
+  describe("clearing a mapped select outside any dependency chain", () => {
+    // A Category 1 form whose one select maps straight to an activity (no column_dependencies).
+    const goods = toFormModel({
+      pk_id: 5,
+      config_name: "Purchased goods",
+      columns: [col(1, "Emission Category"), col(2, "Notes", "text")],
+      column_options: { "1": [{ id: "a", label: "Analytical Spares" }, { id: "b", label: "AMC Charges" }] },
+      emission_category_mapping: { "Analytical Spares": "Analytical Spares", "AMC Charges": "AMC Charges" },
+    });
+
+    it("clears the row's activity, so nothing is calculated or sent from the earlier choice", () => {
+      let row = applyChange(goods, newRow(goods, 1), "Emission Category", "a");
+      expect(row).toMatchObject({ emission_category: "Analytical Spares", _ecmKey: "Analytical Spares" });
+      row = applyChange(goods, row, "Emission Category", "");
+      expect(row).toMatchObject({ emission_category: "", _ecmKey: "" });
+    });
+
+    it("keeps the activity when another column changes", () => {
+      let row = applyChange(goods, newRow(goods, 1), "Emission Category", "b");
+      row = applyChange(goods, row, "Notes", "March invoice");
+      expect(row).toMatchObject({ emission_category: "AMC Charges", _ecmKey: "AMC Charges" });
+    });
+
+    it("leaves an activity picked by hand alone on a form without a mapping", () => {
+      const plain = toFormModel({ pk_id: 6, config_name: "Plain", columns: [col(1, "Site meter"), col(2, "quantity", "number")], column_options: { "1": [{ id: 1, label: "Main" }] } });
+      let row = applyChange(plain, newRow(plain, 1), "emission_category", "Diesel");
+      row = applyChange(plain, row, "Site meter", "");
+      expect(row.emission_category).toBe("Diesel");
+    });
+  });
+
   it("per_method: a method change clears unused numbers, prefills percents and preselects the unit", () => {
     const m = toFormModel({
       pk_id: 3,
@@ -169,5 +201,54 @@ describe("form model (flat mapping and calculation specs)", () => {
     expect(isColumnVisible(m, m.columns[0], { id: 1 })).toBe(true);
     expect(isColumnVisible(m, m.columns[2], { id: 1 })).toBe(false);
     expect(isColumnVisible(m, m.columns[0], { id: 1, activity_data_unit: "km" })).toBe(false);
+  });
+});
+
+describe("mappingKeyLabel (F-08)", () => {
+  it("reads a mapping key the way people write it", () => {
+    expect(mappingKeyLabel("Spent Carbon|Recover")).toBe("Spent Carbon · Recover");
+    expect(mappingKeyLabel(" Road | Van |Diesel [km] ")).toBe("Road · Van · Diesel [km]");
+    expect(mappingKeyLabel("Diesel")).toBe("Diesel");
+  });
+});
+
+describe("dependent choices filled top to bottom (F-07)", () => {
+  // Glochem's waste form lists "Disposal Method" before the "Waste Type" it depends on.
+  const glochem: ColumnConfig = {
+    pk_id: 9,
+    config_name: "Waste for Glochem",
+    columns: [col(1, "Disposal Method"), col(2, "Waste Type"), col(3, "Amount of waste", "number"), col(4, "emission_category", "text")],
+    column_options: {
+      "1": [{ id: "1", label: "Recycle" }, { id: "3", label: "Recover" }, { id: "5", label: "Landfill" }],
+      "2": [{ id: "2", label: "Spent Carbon" }, { id: "16", label: "Coal ash" }],
+    },
+    column_dependencies: { "Disposal Method": "Waste Type" },
+    dependent_options: {
+      "Disposal Method": {
+        "Spent Carbon": [{ id: "21", label: "Recycle" }, { id: "23", label: "Recover" }],
+        "Coal ash": [{ id: "35", label: "Landfill" }],
+      },
+    },
+  };
+  const m = toFormModel(glochem);
+
+  it("shows a select after the one it depends on", () => {
+    expect(formColumns(m).map((c) => c.column_name)).toEqual(["Waste Type", "Disposal Method", "Amount of waste"]);
+  });
+
+  it("keeps an earlier choice the new parent still offers, under the new list's id", () => {
+    let row: ModalRow = { ...newRow(m, 1), "Disposal Method": "3" }; // "Recover" from the full list
+    row = applyChange(m, row, "Waste Type", "2"); // Spent Carbon still offers Recover
+    expect(row["Disposal Method"]).toBe("23");
+  });
+
+  it("clears a choice the new parent doesn't offer", () => {
+    let row: ModalRow = { ...newRow(m, 1), "Waste Type": "2", "Disposal Method": "23" };
+    row = applyChange(m, row, "Waste Type", "16"); // Coal ash: Landfill only
+    expect(row["Disposal Method"]).toBe("");
+  });
+
+  it("keeps the form's order when nothing depends on a later column", () => {
+    expect(formColumns(toFormModel(waste)).map((c) => c.column_name)).toEqual(["activity_type", "type_of_waste", "disposal_method", "quantity"]);
   });
 });

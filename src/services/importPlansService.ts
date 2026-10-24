@@ -100,7 +100,10 @@ export interface ActivityOption {
   name: string;
   kind: "factor" | "mapping";
   maps_to?: string;
+  /** The factor's own units. */
   units: string[];
+  /** #183: every unit a row may use for this activity; absent from an older API. */
+  accepted_units?: string[];
   latest_year: number | null;
 }
 

@@ -3,6 +3,7 @@ import { CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { cn } from "./cn";
 import { focusRing } from "./styles";
 import { ToastContext, type ToastApi, type ToastInput } from "./toastStore";
+import { useRightDrawerOpen } from "./drawerStack";
 
 type Item = ToastInput & { id: number };
 
@@ -62,9 +63,14 @@ function ToastView({ item, onDismiss }: { item: Item; onDismiss: () => void }) {
 
 let nextId = 1;
 
-/** Mount once near the root. Toasts stack bottom-right (bottom, full width on phones), newest last. */
+/**
+ * Mount once near the root. Toasts stack bottom-right (bottom, full width on phones), newest last.
+ * While a right-side drawer is open they move bottom-left, over the backdrop, and on phones
+ * above the drawer's footer, so they never cover its Approve / Reject buttons (F-19).
+ */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Item[]>([]);
+  const drawerOpen = useRightDrawerOpen();
   const dismiss = useCallback((id: number) => setItems((xs) => xs.filter((x) => x.id !== id)), []);
   const toast = useCallback((t: ToastInput) => {
     const id = nextId++;
@@ -77,7 +83,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <ol aria-label="Notifications" className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 p-4 sm:items-end">
+      <ol
+        aria-label="Notifications"
+        data-beside-drawer={drawerOpen || undefined}
+        className={cn(
+          "pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 p-4",
+          drawerOpen ? "pb-20 sm:items-start sm:pb-4" : "sm:items-end",
+        )}
+      >
         {items.map((it) => (
           <ToastView key={it.id} item={it} onDismiss={() => dismiss(it.id)} />
         ))}

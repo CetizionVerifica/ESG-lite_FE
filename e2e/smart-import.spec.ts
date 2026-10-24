@@ -115,7 +115,8 @@ async function signIn(page: Page, role: string, user: object, companySites = [HI
       }
       if (path.endsWith("/imports/context/activities")) {
         return json([
-          { name: "Diesel", kind: "factor", units: ["litres"], latest_year: 2026 },
+          // #183: the units a row may use for the activity.
+          { name: "Diesel", kind: "factor", units: ["litres"], accepted_units: ["litres", "kl"], latest_year: 2026 },
           { name: "Petrol", kind: "factor", units: ["litres"], latest_year: 2026 },
         ]);
       }
@@ -190,6 +191,8 @@ test("a manager uploads a workbook, confirms the mapping, skips the other site's
   await table.getByRole("row", { name: /Fuel 2026!A3/ }).getByRole("button", { name: "Edit" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByLabel("Value")).toHaveValue("100");
+  // #183: the row's sheet wording resolved to Diesel, so Unit offers the units Diesel accepts.
+  await expect(dialog.getByLabel("Unit").locator("option")).toHaveText(["Choose a unit", "litres", "kl"]);
   await dialog.getByLabel("Value").fill("120");
   await dialog.getByRole("button", { name: "Save and recheck" }).click();
   await expect.poll(() => calls.find((c) => c.method === "PATCH")?.body).toEqual({ version: 1, changes: [{ row_ref: "Fuel 2026!A3", set: { activity_name: "Diesel (gen-set)", activity_value: 120, activity_unit: "litres" } }] });
