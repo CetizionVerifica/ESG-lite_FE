@@ -229,3 +229,31 @@ test("submission status still shows when the overview request fails", async ({ p
   // CY 2025 has ended: its last month, as the overview API would pick.
   expect(months).toContain("2025-12");
 });
+
+test("at phone width the Submission status list keeps room for its scrollbar, so 'Missing' isn't cut (#250)", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await signIn(page);
+  // Enough people to scroll the list.
+  const users = Array.from({ length: 14 }, (_, i) => ({ user_id: 100 + i, name: `Person ${i + 1}`, email: `p${i}@x.com`, site_name: "Hidd", submission_count: 0, status: "missing" }));
+  await page.route(
+    (url) => url.port !== "4173" && url.pathname.endsWith("/manager/overview"),
+    (route) => {
+      const o = overview("2025");
+      return route.fulfill({ json: { ...o, submission: { ...o.submission, submitted: 0, missing: users.length, users } } });
+    },
+  );
+  await page.route(/\/manager\/submission-status/, (route) => route.fulfill({ json: { users } }));
+  await page.goto("/overview?period=CY2025");
+
+  const list = page.getByRole("list", { name: "Contributors for Dec 2025" });
+  await expect(list.getByText("Missing").first()).toBeVisible();
+  const layout = await list.evaluate((ul) => {
+    const box = ul.getBoundingClientRect();
+    const labels = [...ul.querySelectorAll("li > span:last-child")].map((s) => s.getBoundingClientRect().right);
+    return { gutter: getComputedStyle(ul).scrollbarGutter, scrolls: ul.scrollHeight > ul.clientHeight, room: Math.min(...labels.map((r) => box.right - r)) };
+  });
+  expect(layout.scrolls).toBe(true);
+  expect(layout.gutter).toBe("stable");
+  // An overlay scrollbar (phones) is about 6–8 px wide: every label ends at least 8 px inside the list.
+  expect(layout.room).toBeGreaterThanOrEqual(8);
+});
