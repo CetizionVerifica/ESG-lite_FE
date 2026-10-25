@@ -19,6 +19,8 @@ export interface OverviewKpis {
   scope_3: number;
   entries: number;
   approved_count: number;
+  /** Approved entries as people filed them, automatic FERA twins left out (ESG-lite #194); absent on older APIs. */
+  approved_entry_count?: number;
   pending_count: number;
   /** Pending entries as the approvals list shows them (ESG-lite #82); absent on older APIs. */
   pending_review_count?: number;

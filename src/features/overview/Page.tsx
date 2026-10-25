@@ -165,6 +165,8 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
   const nothingApproved = !!k && k.approved_count === 0;
   // As the approvals list counts them (FERA twins of a pending entry fold into it).
   const waiting = k ? (k.pending_review_count ?? k.pending_count) : 0;
+  // What people filed: the automatic FERA twins approved with their entries aren't counted again (ESG-lite #194).
+  const approvedEntries = k ? (k.approved_entry_count ?? k.approved_count) : 0;
   const lyCaption = lastYearCaption(data?.last_year);
   const lyNet = lyCaption ? data?.last_year?.kpis.net : null;
   const err = (q: { isError: boolean }) => (q.isError ? LOAD_ERROR : null);
@@ -181,10 +183,10 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
       hint:
         k &&
         (readOnly ? (
-          `${k.approved_count} approved ${k.approved_count === 1 ? "entry" : "entries"}`
+          `${approvedEntries} approved ${approvedEntries === 1 ? "entry" : "entries"}`
         ) : (
           <Link to={links.approved} className={cn("relative rounded underline-offset-2 hover:underline", focusRing)}>
-            {k.approved_count} approved {k.approved_count === 1 ? "entry" : "entries"}
+            {approvedEntries} approved {approvedEntries === 1 ? "entry" : "entries"}
           </Link>
         )),
     },
