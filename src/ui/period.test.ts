@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePeriod, periodContaining, periodLabel, periodRange, serializePeriod, shiftPeriod, type Period } from "./period";
+import { parsePeriod, periodContaining, periodLabel, periodRange, serializePeriod, shiftPeriod, startsAfter, type Period } from "./period";
 
 const cases: Array<[string, Period, string]> = [
   ["2025-09", { kind: "month", year: 2025, month: 9 }, "Sep 2025"],
@@ -71,5 +71,19 @@ describe("shiftPeriod", () => {
       from: "2025-01-11",
       to: "2025-01-20",
     });
+  });
+});
+
+describe("startsAfter (#249)", () => {
+  const day = new Date(2026, 9, 23); // 23 Oct 2026
+  it("is true only for a period that begins after the day", () => {
+    expect(startsAfter({ kind: "month", year: 2026, month: 11 }, day)).toBe(true);
+    expect(startsAfter({ kind: "month", year: 2026, month: 10 }, day)).toBe(false);
+    expect(startsAfter({ kind: "quarter", year: 2027, quarter: 1 }, day)).toBe(true);
+    expect(startsAfter({ kind: "quarter", year: 2026, quarter: 4 }, day)).toBe(false);
+    expect(startsAfter({ kind: "cy", year: 2027 }, day)).toBe(true);
+    expect(startsAfter({ kind: "cy", year: 2026 }, day)).toBe(false);
+    expect(startsAfter({ kind: "fy", startYear: 2027 }, day)).toBe(true);
+    expect(startsAfter({ kind: "fy", startYear: 2026 }, day)).toBe(false);
   });
 });

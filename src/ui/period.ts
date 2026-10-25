@@ -149,6 +149,11 @@ export function periodContaining(kind: PeriodKind, date: Date, fyStartMonth = DE
   }
 }
 
+/** Whether `p` starts after `date`: nothing can be filed for it yet (#249). */
+export function startsAfter(p: Period, date: Date, fyStartMonth = DEFAULT_FY_START_MONTH): boolean {
+  return periodRange(p, fyStartMonth).from > `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 /** The period `steps` before (negative) or after (positive) `p`. Custom ranges move by their own length. */
 export function shiftPeriod(p: Period, steps: number): Period {
   switch (p.kind) {
