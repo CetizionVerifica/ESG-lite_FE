@@ -6,6 +6,8 @@ import { type MonthStatus, accessCount, displayName } from "../logic";
 export function teamColumns(opts: {
   siteIds: number[];
   month: Map<number, MonthStatus> | undefined;
+  /** The month the status column checks, as its header ("Sep 2026"). */
+  monthName: string;
   onManage: (u: ManagerUser) => void;
 }): Column<ManagerUser>[] {
   const sitesOf = (u: ManagerUser) => (opts.siteIds.length ? u.sites.filter((s) => opts.siteIds.includes(s.site_id)) : u.sites);
@@ -81,7 +83,7 @@ export function teamColumns(opts: {
     },
     {
       id: "month",
-      header: "This month",
+      header: opts.monthName,
       sortable: true,
       value: (u) => {
         const m = opts.month?.get(u.user_id);
