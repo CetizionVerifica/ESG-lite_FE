@@ -18,8 +18,8 @@ import {
   ScopeBar,
   SkeletonText,
   cn,
+  emissionsParts,
   focusRing,
-  formatNumber,
   periodLabel,
   periodRange,
   shiftPeriod,
@@ -217,8 +217,9 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
       hint: k && !nothingApproved && k.gross > 0 && (
         <span className="mt-1 block w-full basis-full">
           <ScopeBar hideLegend totals={{ scope1: k.scope_1, scope2: k.scope_2, scope3: k.scope_3 }} />
+          {/* #248: the app's tCO₂e rounding (1 decimal below 1,000 t, up to 3 below 1 t), so a small scope isn't shown as 0. */}
           <span className="mt-1 block font-num">
-            S1 {formatNumber(k.scope_1)} · S2 {formatNumber(k.scope_2)} · S3 {formatNumber(k.scope_3)}
+            S1 {emissionsParts(k.scope_1).value} · S2 {emissionsParts(k.scope_2).value} · S3 {emissionsParts(k.scope_3).value}
           </span>
         </span>
       ),
