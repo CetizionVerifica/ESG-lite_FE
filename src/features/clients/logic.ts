@@ -21,6 +21,10 @@ export type Company = {
   mcp_enabled?: boolean | null;
   /** "Smart import" for the client's Managers and Admins (XI0); absent on servers without migrate:ai-import = off. */
   ai_import_enabled?: boolean | null;
+  /** SE-2: how much of the calculation the client's Users see where they enter data ("total" or "full"). */
+  entry_detail?: string | null;
+  /** SE-2: the currency a spend row takes when it names none (INR for current clients). */
+  default_currency?: string | null;
   /** "KPI tracking" (KPI-1, D2); absent on servers without migrate:kpi-switch = off. */
   kpi_tracking_enabled?: boolean;
   /** "Design Studio" (DS-0, D4); absent on servers without migrate:ds-0-switch = off. */
