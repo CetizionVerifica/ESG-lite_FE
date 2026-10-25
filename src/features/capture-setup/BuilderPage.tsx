@@ -246,7 +246,15 @@ function Builder({ id, source }: { id: number; source: SourceConfig }) {
           </TabPanel>
         </div>
         <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
-          <Preview draft={draft} formId={id} siteName={source.site?.name} categoryName={source.category?.category_name} ghgCategory={source.category?.ghg_category ?? null} />
+          <Preview
+            draft={draft}
+            formId={id}
+            siteName={source.site?.name}
+            categoryName={source.category?.category_name}
+            ghgCategory={source.category?.ghg_category ?? null}
+            siteId={source.site?.site_id ?? null}
+            categoryId={source.category?.category_id ?? null}
+          />
         </div>
       </div>
 

@@ -265,6 +265,26 @@ test("form builder: Test tab calculates with the real factor", async ({ page }) 
   expect(calls.some((c) => c.method === "PUT")).toBe(false);
 });
 
+test("form builder: the Live preview has the Unit field contributors get (#254)", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await routeTransport(page, calls);
+  await page.route(/\/user\/units\/site\/1\/category\/30/, (route) => route.fulfill({ json: [{ unit_name: "km" }, { unit_name: "mile" }] }));
+
+  await page.goto("/capture/forms/7");
+  const preview = page.getByTestId("form-preview");
+  const unit = preview.getByLabel("Unit", { exact: true });
+  await expect(unit).toBeVisible();
+  // As in Add data, the unit waits for the choices that set the emission category.
+  await preview.getByLabel("Mode").selectOption("road");
+  await preview.getByLabel("Vehicle").selectOption("van");
+  await expect(preview.getByText("Van - Diesel")).toBeVisible();
+  await expect(unit.locator("option")).toContainText(["km", "mile"]);
+  await unit.selectOption("km");
+  await expect(unit).toHaveValue("km");
+  // Nothing typed in the preview is saved.
+  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+});
+
 test("forms: auto-generate builds a form from the factors", async ({ page }) => {
   const { calls } = await signIn(page);
   const select = (column_name: string, existing_id: number | null = null) => ({ existing_id, column_name, column_type: "select", is_new: existing_id === null });
