@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReportTemplate } from "../../../lib/studio/contracts";
-import { blankFormatFor, createBody, filterTemplates, initialState, yearOptions } from "./logic";
+import { blankFormatFor, companySites, createBody, filterTemplates, initialState, scopeRefusal, SITES_SCOPE_MESSAGE, toggleScopeSite, yearOptions } from "./logic";
 
 const NOW = new Date(2026, 9, 20);
 const t = (id: number, purpose: ReportTemplate["purpose"], format: ReportTemplate["format"]): ReportTemplate => ({ id, companyId: null, kind: "ghg", purpose, format, name: `T${id}`, tags: [], version: 1, thumbnailUrl: null, pageCount: 3 });
@@ -38,5 +38,36 @@ describe("new design logic", () => {
     });
     expect(body).toEqual({ kind: "ghg", templateId: 7, year: 2026, yearType: "FY", sites: [1], frameworks: ["GHGP", "ISO14064"], compareYear: 2025, title: "Our inventory", inputs: { responsible_person: { value: "Asha", source: "typed" } }, ai: true });
     expect(createBody({ ...s, templateId: "blank", blankFormat: "slide_16_9" }).format).toBe("slide_16_9");
+  });
+});
+
+describe("scope step sites (#243)", () => {
+  const midal = { company_id: 1 };
+  const sites = [
+    { site_id: 17, name: "Saudi Arabia", company: midal },
+    { site_id: 24, name: "Chieron - Main Site", company: { company_id: 5 } },
+    { site_id: 18, name: "Mozambique", company: midal },
+    { site_id: 99, name: "No company on it" },
+  ];
+
+  it("companySites keeps the sites of the company being worked in", () => {
+    expect(companySites(sites, 1).map((s) => s.site_id)).toEqual([17, 18, 99]);
+    expect(companySites(sites, null)).toEqual(sites);
+  });
+
+  it("toggleScopeSite: nothing left is all sites only when that's allowed", () => {
+    expect(toggleScopeSite("all", 17, true)).toEqual([17]);
+    expect(toggleScopeSite([17, 18], 17, true)).toEqual([18]);
+    expect(toggleScopeSite([17], 17, true)).toBe("all");
+    expect(toggleScopeSite([17], 17, false)).toEqual([]);
+  });
+
+  it("scopeRefusal words the server's site answers and ignores the rest", () => {
+    const res = (code: string, details?: unknown) => ({ response: { status: code === "DS_SITES_SCOPE" ? 403 : 404, data: { code, details } } });
+    expect(scopeRefusal(res("DS_SITES_SCOPE"), sites)).toBe(SITES_SCOPE_MESSAGE);
+    expect(scopeRefusal(res("DS_DOC_NOT_FOUND", { sites: [24] }), sites)).toBe("You can't report on Chieron - Main Site in this company. Untick it.");
+    expect(scopeRefusal(res("DS_DOC_NOT_FOUND", { sites: [24, 50] }), sites)).toBe("You can't report on some of these sites in this company. Pick your own sites.");
+    expect(scopeRefusal(res("DS_DOC_NOT_FOUND"), sites)).toBeNull();
+    expect(scopeRefusal(new Error("Network Error"), sites)).toBeNull();
   });
 });

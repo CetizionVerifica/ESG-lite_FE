@@ -90,6 +90,34 @@ export function yearOptions(yearType: YearType, now: Date = new Date()): number[
   return Array.from({ length: 7 }, (_, i) => latest + 1 - i);
 }
 
+export type ScopeSite = { site_id: number; name: string; company?: { company_id?: number | null } | null };
+
+/** The session's sites in the company being worked in (M6's choice is the session's `company`); a site with no company on it stays. */
+export function companySites<T extends ScopeSite>(sites: T[], companyId: number | null | undefined): T[] {
+  if (!companyId) return sites;
+  return sites.filter((s) => !s.company?.company_id || s.company.company_id === companyId);
+}
+
+/** Ticks or unticks a site. Nothing left means all sites, unless the person can't report company-wide: then nothing is picked. */
+export function toggleScopeSite(current: "all" | number[], id: number, allAllowed: boolean): "all" | number[] {
+  const picked = current === "all" ? [] : current;
+  const next = picked.includes(id) ? picked.filter((s) => s !== id) : [...picked, id];
+  return next.length || !allAllowed ? next : "all";
+}
+
+export const SITES_SCOPE_MESSAGE = "A company-wide report needs access to every site. Pick your sites instead.";
+
+/** What to say when the server refuses the picked sites (DS_SITES_SCOPE, or DS_DOC_NOT_FOUND naming sites); null for any other answer. */
+export function scopeRefusal(error: unknown, sites: ScopeSite[]): string | null {
+  const data = (error as { response?: { data?: { code?: unknown; details?: { sites?: unknown } } } } | null)?.response?.data;
+  if (data?.code === "DS_SITES_SCOPE") return SITES_SCOPE_MESSAGE;
+  const ids = data?.code === "DS_DOC_NOT_FOUND" && Array.isArray(data.details?.sites) ? (data.details.sites as unknown[]).map(Number) : [];
+  if (!ids.length) return null;
+  const names = ids.map((id) => sites.find((s) => s.site_id === id)?.name).filter((n): n is string => !!n);
+  if (names.length === ids.length) return `You can't report on ${names.join(", ")} in this company. Untick ${ids.length === 1 ? "it" : "them"}.`;
+  return `You can't report on ${ids.length === 1 ? "one of these sites" : "some of these sites"} in this company. Pick your own sites.`;
+}
+
 /** POST /docs body from the flow's state. */
 export function createBody(s: NewDesignState): CreateDocBody {
   if (s.templateId === null) throw new Error("Pick a template first");
