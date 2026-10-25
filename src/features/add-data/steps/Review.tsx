@@ -44,6 +44,11 @@ type Props = {
    * submitted right after the save) next to "Save as draft".
    */
   workflow?: boolean;
+  /**
+   * #255: the save's mode lock for this period (the server's words, as step 2's note says it), or
+   * null when the period is free. New rows can't be sent while it's set; edits of saved entries can.
+   */
+  periodLock?: string | null;
 };
 
 const label = (row: ModalRow) => (row._ecmKey ? mappingKeyLabel(String(row._ecmKey)) : row.emission_category) || "—";
@@ -124,7 +129,21 @@ export function Review(p: Props) {
     );
   };
 
-  const pending = p.rows.map((_, i) => i).filter((i) => !outcomes[p.rows[i].id] || outcomes[p.rows[i].id].kind === "error");
+  // #255: a new row in a period filed the other way would only be refused, before and after a send.
+  const locked = (row: ModalRow) => !!p.periodLock && editOf(row) === null;
+  const refusedByLock = (row: ModalRow) => {
+    const o = outcomes[row.id];
+    return o?.kind === "error" && o.modeLock;
+  };
+  // What a send would send: rows not sent yet, and errors worth another try (not the lock's refusal).
+  const pending = p.rows
+    .map((_, i) => i)
+    .filter((i) => {
+      const row = p.rows[i];
+      const o = outcomes[row.id];
+      return (!o || o.kind === "error") && !locked(row) && !refusedByLock(row);
+    });
+  const blockedCount = p.rows.filter((r) => !outcomes[r.id] && locked(r)).length;
   const duplicates = p.rows.map((_, i) => i).filter((i) => outcomes[p.rows[i].id]?.kind === "duplicate");
   const duplicateItems = useMemo(
     () =>
@@ -222,6 +241,11 @@ export function Review(p: Props) {
 
   return (
     <div className="space-y-4">
+      {blockedCount > 0 && (
+        <Callout tone="warn" title={blockedCount === p.rows.length ? "These rows can't be sent" : `${blockedCount} of ${p.rows.length} rows can't be sent`}>
+          {p.periodLock}
+        </Callout>
+      )}
       <div className={cn(panel, "overflow-x-auto")}>
         <table className="w-full text-sm">
           <caption className="sr-only">Rows to send for {p.periodLabel}</caption>
@@ -252,7 +276,8 @@ export function Review(p: Props) {
                     {unsent && backing.has(row.id) && <span className="block text-xs text-warn">Already the evidence of a saved entry</span>}
                   </td>
                   <td className="px-3 py-2" aria-live="polite">
-                    {!o && <span className="text-muted">Ready</span>}
+                    {!o && !locked(row) && <span className="text-muted">Ready</span>}
+                    {!o && locked(row) && <span className="text-warn">Can't be sent: this period is filed the other way</span>}
                     {o?.kind === "saving" && <span className="text-muted">Sending…</span>}
                     {o?.kind === "saved" && <span className="text-good">Sent</span>}
                     {o?.kind === "saved" &&
@@ -326,14 +351,19 @@ export function Review(p: Props) {
           <Button variant="ghost" onClick={p.onBack} disabled={sending || savedCount > 0}>
             Back
           </Button>
-          {p.workflow && (
-            <Button onClick={() => void send(pending, () => undefined, false)} loading={sending && !submitAfter} disabled={pending.length === 0 || sending}>
-              Save as draft
-            </Button>
+          {/* #255: after a send, the send buttons stay only while something is left to send. */}
+          {(pending.length > 0 || sending || Object.keys(outcomes).length === 0) && (
+            <>
+              {p.workflow && (
+                <Button onClick={() => void send(pending, () => undefined, false)} loading={sending && !submitAfter} disabled={pending.length === 0 || sending}>
+                  Save as draft
+                </Button>
+              )}
+              <Button variant="primary" onClick={() => void send(pending, () => undefined, true)} loading={sending && (!p.workflow || submitAfter)} disabled={pending.length === 0 || sending}>
+                {Object.keys(outcomes).length > 0 ? "Send the rest" : p.workflow ? "Save and submit" : "Submit for approval"}
+              </Button>
+            </>
           )}
-          <Button variant="primary" onClick={() => void send(pending, () => undefined, true)} loading={sending && (!p.workflow || submitAfter)} disabled={pending.length === 0 || sending}>
-            {Object.keys(outcomes).length > 0 ? "Send the rest" : p.workflow ? "Save and submit" : "Submit for approval"}
-          </Button>
         </div>
       </div>
     </div>
