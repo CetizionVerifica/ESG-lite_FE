@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Brand } from "../../services/brandService";
-import { type ConsoleData, brandProblem, buildClientRows, recentActivity, setupGaps, summaryActivity, withMonth } from "./logic";
+import { type ConsoleData, brandProblem, buildClientRows, factorTile, recentActivity, setupGaps, summaryActivity, withMonth } from "./logic";
 
 const goodBrand = (companyId: number): Brand => ({
   companyId,
@@ -170,5 +170,18 @@ describe("summary", () => {
       ["factor_upload", "Factor upload · 5 factors", "Glochem · Dammam · Fuel"],
     ]);
     expect(new Set(items.map((i) => i.id)).size).toBe(6);
+  });
+});
+
+describe("factorTile (#253)", () => {
+  const totals = { clients: 2, active_clients: 2, sites: 2, users: 3, emission_factors: 47383, entries_this_month: 5, pending_entries: 7 };
+  it("counts site factors as the Factors page does and names the global spend library beside them", () => {
+    expect(factorTile({ ...totals, site_emission_factors: 46367, global_emission_factors: 1016 }, 46367)).toEqual({ value: 46367, global: 1016 });
+    expect(factorTile({ ...totals, site_emission_factors: 120, global_emission_factors: 0 }, 120)).toEqual({ value: 120, global: null });
+  });
+  it("an older API's one total, and the Factors page's count when the summary is missing", () => {
+    expect(factorTile(totals, 46367)).toEqual({ value: 47383, global: null });
+    expect(factorTile(undefined, 46367)).toEqual({ value: 46367, global: null });
+    expect(factorTile(undefined, undefined)).toEqual({ value: null, global: null });
   });
 });
