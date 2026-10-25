@@ -9,6 +9,8 @@ type Props = {
   amountError?: string;
   /** "Choose the currency" and similar, under the Currency field. */
   currencyError?: string;
+  /** SE-3: the currency the form or the client fixes; shown as text, the Currency select is hidden. */
+  fixedCurrency?: string | null;
   /** SE-1: the exchange-rate help is for reviewers (or a company set to full detail). */
   showCalcDetail?: boolean;
 };
@@ -23,7 +25,7 @@ const parseAmount = (v: unknown): number | null => {
  * ESGLite converts) and an optional invoice date. The currency is also the
  * row's unit, as the backend stores it.
  */
-export function SpendFields({ row, onChange: change, amountError, currencyError, showCalcDetail = true }: Props) {
+export function SpendFields({ row, onChange: change, amountError, currencyError, showCalcDetail = true, fixedCurrency }: Props) {
   const currencies = useCurrencies();
   // Any value typed here makes the row a spend row for the engine ("From the amount spent").
   const onChange = (column: string, value: string) => {
@@ -42,6 +44,12 @@ export function SpendFields({ row, onChange: change, amountError, currencyError,
         error={amountError}
         required
       />
+      {fixedCurrency ? (
+        <div className="text-sm" data-testid="fixed-currency">
+          <span className="block text-xs font-medium text-muted">Currency</span>
+          <span className="mt-1 block font-num text-ink">{fixedCurrency}</span>
+        </div>
+      ) : (
       <Select<string>
         label="Currency"
         value={currency || null}
@@ -54,6 +62,7 @@ export function SpendFields({ row, onChange: change, amountError, currencyError,
         error={currencyError}
         required
       />
+      )}
       <DateField
         label="Invoice date"
         value={String(row[SPEND_FIELDS.invoiceDate] ?? "")}

@@ -71,6 +71,12 @@ export interface ModalRow {
   _invoiceDate?: string;
   _totalAmount?: number;
   _currency?: string;
+  /**
+   * SE-3: what the form filled in on a new row (its field defaults, fixed unit and the
+   * emission category they map to), so a row holding only those isn't something
+   * the person typed. Extra fields are keyed `_extra_data.<key>`. Never sent.
+   */
+  _defaults?: Record<string, string>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- rows carry ColumnConfig-defined fields
   [key: string]: any;
 }

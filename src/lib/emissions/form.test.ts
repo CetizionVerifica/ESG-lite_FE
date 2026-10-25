@@ -125,6 +125,38 @@ describe("form model (dependent selects and mapping)", () => {
   });
 });
 
+describe("a form's fixed unit (SE-3) and the units an emission category offers (#183)", () => {
+  const fuel = (units?: ColumnConfig["units"]): ColumnConfig => ({
+    pk_id: 3,
+    config_name: "Fuel",
+    columns: [col(1, "fuel"), col(2, "quantity", "number")],
+    column_options: { "1": [{ id: 7, label: "Diesel" }, { id: 8, label: "Petrol" }] },
+    emission_category_mapping: { diesel: "Diesel", petrol: "Petrol" },
+    units,
+  });
+  const offered = {
+    fixed_unit: null,
+    all_units: ["litre", "kg"],
+    activities: [
+      { name: "Diesel", factor_unit: "litre", units: ["litre"] },
+      { name: "Petrol", factor_unit: "kg", units: ["kg"] },
+    ],
+  };
+  const dieselRow: ModalRow = { id: 1, fuel: "7", emission_category: "Diesel", activity_data_unit: "litre" };
+
+  it("without a fixed unit, a new category picks the only unit it offers", () => {
+    const next = applyChange(toFormModel(fuel(), offered), dieselRow, "fuel", "8");
+    expect(next.emission_category).toBe("Petrol");
+    expect(next.activity_data_unit).toBe("kg");
+  });
+
+  it("a fixed unit stays whatever category is chosen", () => {
+    const next = applyChange(toFormModel(fuel({ fixed: "litre" }), offered), dieselRow, "fuel", "8");
+    expect(next.emission_category).toBe("Petrol");
+    expect(next.activity_data_unit).toBe("litre");
+  });
+});
+
 describe("form model (flat mapping and calculation specs)", () => {
   it("maps a flat select by label", () => {
     const m = toFormModel({

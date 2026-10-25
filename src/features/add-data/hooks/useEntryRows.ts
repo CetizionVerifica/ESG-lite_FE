@@ -4,6 +4,7 @@ import { withCompositeProduct } from "../logic/distance";
 import { applyChange, newRow, setExtraField, type FormModel } from "../logic/form";
 import { ROW_METHOD_COLUMN } from "../../../lib/emissions/emissionCalc";
 import type { ModalRow } from "../types";
+import { isDefaultValue } from "../../../lib/forms/settings";
 
 // One reducer for the rows being entered (replaces the legacy page's modal
 // row state). The draft is kept in sessionStorage per user × site × category
@@ -141,7 +142,10 @@ function readDraft(key: string): ModalRow[] | null {
  */
 export const rowHasInput = (row: ModalRow) =>
   Object.entries(row).some(([k, v]) =>
-    k === "_extra_data" ? Object.values(v ?? {}).some(Boolean) : k !== "id" && k !== ROW_METHOD_COLUMN && !k.startsWith("_") && !!v,
+    k === "_extra_data"
+      ? Object.entries(v ?? {}).some(([ek, ev]) => !!ev && !isDefaultValue(row, `_extra_data.${ek}`, ev))
+      : // SE-3: what the form filled in (`_defaults`) isn't input either.
+        k !== "id" && k !== ROW_METHOD_COLUMN && !k.startsWith("_") && !!v && !isDefaultValue(row, k, v),
   );
 
 export function useEntryRows(model: FormModel | null, draftKey: string | null) {
