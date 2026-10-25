@@ -9,6 +9,7 @@ import {
 import axios from "axios";
 import api from "../api/axios";
 import { clearEntryDrafts } from "../lib/entryDrafts";
+import { clearSession } from "../lib/session";
 import { saveActiveCompany, storedActiveCompany, withActiveCompany } from "../lib/activeCompany";
 
 const baseUrl = import.meta.env.VITE_API_URL;
@@ -127,7 +128,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    localStorage.clear();
+    // #245: the sign-in only; the person's choices on this device (company, table settings) stay.
+    clearSession();
     clearEntryDrafts();
     setToken(null);
     setRole(null);

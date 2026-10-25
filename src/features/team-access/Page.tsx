@@ -16,12 +16,13 @@ import {
   useFilterParams,
   useToast,
   writeContext,
+  formatMonth,
   writeFilterParams,
 } from "../../ui";
 import { errorMessage, useMonthStatus, useSaveAccess, useTeam } from "./api";
 import { AccessDrawer } from "./components/AccessDrawer";
 import { teamColumns } from "./components/columns";
-import { currentMonth, displayName, matchesSearch, monthStatusById, onSites } from "./logic";
+import { displayName, filingMonth, matchesSearch, monthStatusById, onSites } from "./logic";
 
 type SiteOption = { site_id: number; name: string };
 
@@ -49,7 +50,9 @@ export default function TeamAccessPage() {
   const monthFilter = filters.filters.month?.[0] as "submitted" | "missing" | undefined;
 
   const team = useTeam();
-  const month = currentMonth();
+  // The month being filed, as Overview's Submission status shows it (#244), named on screen ("Sep 2026").
+  const month = filingMonth();
+  const monthName = formatMonth(month);
   const monthStatus = useMonthStatus(month);
   const save = useSaveAccess();
   const statusById = useMemo(() => (monthStatus.data ? monthStatusById(monthStatus.data) : undefined), [monthStatus.data]);
@@ -73,7 +76,7 @@ export default function TeamAccessPage() {
     setSaveErr(null);
     setOpenId(u.user_id);
   };
-  const columns = teamColumns({ siteIds, month: statusById, onManage: manage });
+  const columns = teamColumns({ siteIds, month: statusById, monthName, onManage: manage });
 
   const onSave = (user: ManagerUser, categoryIds: number[]) => {
     setSaveErr(null);
@@ -89,7 +92,7 @@ export default function TeamAccessPage() {
     );
   };
 
-  const filterDefs: FilterDef[] = monthStatus.data ? [{ key: "month", label: "This month", multiple: false, options: MONTH_OPTIONS }] : [];
+  const filterDefs: FilterDef[] = monthStatus.data ? [{ key: "month", label: monthName, multiple: false, options: MONTH_OPTIONS }] : [];
   const filtered = !!filters.q.trim() || !!monthFilter || siteIds.length > 0;
   const clearFilters = () => setParams((p) => writeContext(writeFilterParams(p, EMPTY_FILTERS, FILTER_KEYS), { siteIds: [] }), { replace: true });
   const empty =
@@ -118,7 +121,7 @@ export default function TeamAccessPage() {
         {team.data ? (
           <>
             {rows.length} {rows.length === 1 ? "person" : "people"}
-            {statusById && ` · ${rows.filter((u) => statusById.get(u.user_id)?.status === "missing").length} missing this month`}
+            {statusById && ` · ${rows.filter((u) => statusById.get(u.user_id)?.status === "missing").length} missing ${monthName}`}
           </>
         ) : (
           " "

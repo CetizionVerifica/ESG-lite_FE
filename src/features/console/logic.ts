@@ -247,6 +247,17 @@ export function withMonth(rows: ClientRow[], summary: ConsoleSummary | undefined
   });
 }
 
+/**
+ * The Emission factors tile (#253): the site factors, as the Factors page counts them, and the
+ * global spend library (no site) said beside it. An older API sends one total; the Factors page's
+ * own count stands in when there's no summary.
+ */
+export function factorTile(totals: ConsoleSummary["totals"] | undefined, factorsPage: number | null | undefined): { value: number | null; global: number | null } {
+  if (!totals) return { value: factorsPage ?? null, global: null };
+  if (totals.site_emission_factors === undefined) return { value: totals.emission_factors, global: null };
+  return { value: totals.site_emission_factors, global: totals.global_emission_factors ? totals.global_emission_factors : null };
+}
+
 /** One upload batch can cover several sites and categories, so the batch id alone repeats. */
 const batchKey = (prefix: string, a: ConsoleActivity, i: number) =>
   a.batch_id ? `${prefix}-${a.batch_id}-${a.site_id ?? ""}-${a.category_name ?? ""}` : `${prefix}-${i}`;

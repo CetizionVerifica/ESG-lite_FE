@@ -9,7 +9,12 @@ export interface ConsoleSummary {
     active_clients: number;
     sites: number;
     users: number;
+    /** Every factor row, site factors and the global spend library (no site) together. */
     emission_factors: number;
+    /** Factors of a site, as the Factors page lists them (ESG-lite #253); absent on older APIs. */
+    site_emission_factors?: number;
+    /** Factors with no site: the global spend (EEIO) library (ESG-lite #253); absent on older APIs. */
+    global_emission_factors?: number;
     /** Entries entered (not reported for) this month. */
     entries_this_month: number;
     pending_entries: number;

@@ -63,6 +63,23 @@ describe("ContextChips", () => {
     expect(search()).toBe("?period=2024-12&tab=a");
   });
 
+  it("stops ▶ at the period that contains today, for every kind (#249)", async () => {
+    const user = userEvent.setup();
+    const now = new Date();
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const fyStart = now.getMonth() + 1 >= 4 ? now.getFullYear() : now.getFullYear() - 1;
+    for (const p of [thisMonth, `${now.getFullYear()}-Q${Math.ceil((now.getMonth() + 1) / 3)}`, `CY${now.getFullYear()}`, `FY${fyStart}`]) {
+      cleanup();
+      renderAt(`/x?period=${p}`);
+      expect((screen.getByRole("button", { name: "Next period" }) as HTMLButtonElement).disabled, p).toBe(true);
+    }
+    // The year before still steps forward, into the one in progress.
+    cleanup();
+    renderAt(`/x?period=CY${now.getFullYear() - 1}`);
+    await user.click(screen.getByRole("button", { name: "Next period" }));
+    expect(search()).toBe(`?period=CY${now.getFullYear()}`);
+  });
+
   it("switches to a quarter in the editor and applies it", async () => {
     const user = userEvent.setup();
     renderAt("/x?period=2025-08");

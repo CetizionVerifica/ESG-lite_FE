@@ -216,6 +216,29 @@ test("signing out and back in as another role lands on that role's home, not a 4
   await expect(page.getByText("You don't have access to this page")).toHaveCount(0);
 });
 
+test("signing out ends the session but keeps the company picked and table settings on this device (#245)", async ({ page }) => {
+  await mockApi(page, { role: "Manager" });
+  await page.goto("/login");
+  await fillAndSubmit(page);
+  await expect(page).toHaveURL(/\/overview$/);
+  // What the account menu's company choice (M6) and a table's Columns / Compact store.
+  await page.evaluate(() => {
+    localStorage.setItem("activeCompany:7", "2");
+    localStorage.setItem("dt:my-entries", JSON.stringify({ hidden: ["submitted"], density: "compact" }));
+  });
+  await page.getByRole("button", { name: /account menu/i }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  const stored = await page.evaluate(() => ({
+    token: localStorage.getItem("token"),
+    role: localStorage.getItem("role"),
+    user: localStorage.getItem("user"),
+    company: localStorage.getItem("activeCompany:7"),
+    table: localStorage.getItem("dt:my-entries"),
+  }));
+  expect(stored).toEqual({ token: null, role: null, user: null, company: "2", table: JSON.stringify({ hidden: ["submitted"], density: "compact" }) });
+});
+
 test("forgot password offers a one-time email code that signs in to the role's home", async ({ page }) => {
   const codeRequestBodies: unknown[] = [];
   const codeVerifyBodies: unknown[] = [];

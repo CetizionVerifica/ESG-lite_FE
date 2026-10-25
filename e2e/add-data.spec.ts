@@ -98,7 +98,7 @@ type Extra = {
   /** SE-1: the company's entry_detail; "full" shows a User the calculation detail. */
   entryDetail?: "full";
   /** F-13/F-27: the server's mode-lock message for the chosen period; the queries asked are pushed here. */
-  periodMode?: { message: string; asked: Record<string, string>[] };
+  periodMode?: { message: string; asked: Record<string, string>[]; conflict?: Record<string, unknown> };
   /** F-02: My bills' list; deleted id lists are pushed to `deletedBills`. */
   bills?: unknown[];
   deletedBills?: number[][];
@@ -147,7 +147,7 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       if (path.includes("/user/thresholds/company/1")) return json({ threshold_percentage: 5 });
       if (path.includes("/user/emissions/period-mode/site/4/category/")) {
         extra.periodMode?.asked.push(Object.fromEntries(url.searchParams));
-        return json({ conflict: extra.periodMode ? {} : null, message: extra.periodMode?.message ?? null });
+        return json({ conflict: extra.periodMode ? (extra.periodMode.conflict ?? {}) : null, message: extra.periodMode?.message ?? null });
       }
       if (path.endsWith("/user/emissions/period-total")) {
         return json({ total_emission: url.searchParams.get("basis") === "approved" ? 4 : 0 });
@@ -599,6 +599,19 @@ test("a year already filed monthly says so before anything is typed (F-13/F-27)"
   expect(periodMode.asked).toContainEqual({ reporting_period: "yearly", year_type: "CY", date_of_reporting: "2025-12-31" });
 });
 
+test("a financial year over CY yearly data says it's filed under CY, not monthly (#246)", async ({ page }) => {
+  const message = "This year overlaps CY yearly data already filed on this category. A category uses CY or FY for a given period, not both — delete the CY yearly data first, or file this data under CY too.";
+  const periodMode = { message, asked: [] as Record<string, string>[], conflict: { conflicting_period: "yearly", conflicting_rows: 1, conflicting_year_type: "CY", window: { start: "2025-01-01", end: "2025-12-31" } } };
+  await signIn(page, [], false, [], undefined, { periodMode });
+  await page.goto("/data/new?site=4&category=9&period=FY2025");
+
+  await expect(page.getByText("Filed under CY for this year")).toBeVisible();
+  await expect(page.getByText("Filed monthly for this year")).toHaveCount(0);
+  await expect(page.getByText(message)).toBeVisible();
+  // The saved list says the same, not "filed monthly".
+  await expect(page.getByText("No yearly entry for FY 2025-26: it is filed under CY.")).toBeVisible();
+});
+
 test("a period filed the same way shows no lock note", async ({ page }) => {
   await signIn(page, []);
   await page.goto("/data/new?site=4&category=9&period=2025-09");
@@ -839,6 +852,47 @@ test("a passenger.km row works the distance out in the drawer", async ({ page })
   expect(Object.keys(created[0].body.activity_data as object)).not.toContain("Activity Data__distance");
   // A road route is not an estimate (S3-3 is_estimate).
   expect(created[0].body).not.toHaveProperty("is_estimate");
+});
+
+test("Review doesn't offer rows a period filed the other way would refuse (#255)", async ({ page }) => {
+  const message = "This category is already filed monthly for CY 2025 (57 monthly entries). Keep entering it monthly, or delete those entries first to file the year as one entry.";
+  const created: unknown[] = [];
+  await signIn(page, created, false, [], undefined, { periodMode: { message, asked: [] } });
+  await page.goto("/data/new?site=4&category=9&period=CY2025");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("100");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+
+  await expect(page.getByText("Can't be sent: this period is filed the other way")).toBeVisible();
+  await expect(page.getByText("These rows can't be sent")).toBeVisible();
+  await expect(page.getByText(message).last()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit for approval" })).toBeDisabled();
+  expect(created).toEqual([]);
+});
+
+test("after the save refuses a row for the period lock, there's no \"Send the rest\" with nothing left (#255)", async ({ page }) => {
+  await signIn(page, []);
+  // An API whose pre-check missed the lock: the save itself refuses the row.
+  await page.route(
+    (url) => url.port !== "4173" && url.pathname.endsWith("/user/emissions"),
+    (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({ status: 409, json: { message: "This category already has a yearly batch for CY 2025. Delete the yearly data first, or file this entry under a different period.", mode_lock: true } })
+        : route.fallback(),
+  );
+  await page.goto("/data/new?site=4&category=9&period=2025-09");
+  const row = page.getByRole("region", { name: "Row 1" });
+  await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
+  await row.getByLabel("Quantity").fill("100");
+  await row.getByLabel("Unit").selectOption("litre");
+  await page.getByRole("button", { name: "Review" }).click();
+  await page.getByRole("button", { name: "Submit for approval" }).click();
+
+  await expect(page.getByText(/already has a yearly batch for CY 2025/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send the rest" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Submit for approval" })).toHaveCount(0);
 });
 
 test("a rail estimate from the distance drawer is saved as an estimate (S3-3)", async ({ page }) => {

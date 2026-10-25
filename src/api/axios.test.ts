@@ -16,9 +16,13 @@ function respondWith(status: number): AxiosAdapter {
 }
 
 function signedInAt(path: string, role = "Manager") {
-  store = { token: "abc", role, user: "{}" };
+  // The sign-in, plus a company picked in the account menu and table settings (#245).
+  store = { token: "abc", role, user: "{}", "activeCompany:7": "2", "dt:my-entries": '{"density":"compact"}' };
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => store[key] ?? null,
+    removeItem: (key: string) => {
+      delete store[key];
+    },
     clear: () => {
       store = {};
     },
@@ -33,10 +37,10 @@ afterEach(() => {
 });
 
 describe("api 401 handling", () => {
-  it("clears the session and sends the person to sign-in", async () => {
+  it("clears the session, keeps the person's choices on this device, and sends them to sign-in", async () => {
     signedInAt("/overview");
     await expect(api.get("/emissions", { adapter: respondWith(401) })).rejects.toBeInstanceOf(AxiosError);
-    expect(store).toEqual({});
+    expect(store).toEqual({ "activeCompany:7": "2", "dt:my-entries": '{"density":"compact"}' });
     expect(replace).toHaveBeenCalledWith("/login");
   });
 

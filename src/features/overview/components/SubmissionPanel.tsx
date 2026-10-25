@@ -43,7 +43,8 @@ export function SubmissionPanel(props: {
               {missing} missing
             </span>
           </p>
-          <ul aria-label={`Contributors for ${monthLabel(props.month)}`} className="max-h-72 space-y-1 overflow-y-auto">
+          {/* #250: room for the scrollbar (phones draw it over the content), so "Missing" isn't cut. */}
+          <ul aria-label={`Contributors for ${monthLabel(props.month)}`} className="max-h-72 space-y-1 overflow-y-auto pr-2 [scrollbar-gutter:stable]">
             {users.map((u) => (
               <li key={`${u.user_id}-${u.site_name}`} className="flex items-center gap-2.5 py-1 text-sm">
                 <Avatar size="sm" name={u.name} />
@@ -52,9 +53,9 @@ export function SubmissionPanel(props: {
                   <span className="block truncate text-xs text-muted">{u.site_name}</span>
                 </span>
                 {u.status === "submitted" ? (
-                  <span className="font-num text-xs text-good">{u.submission_count} {u.submission_count === 1 ? "entry" : "entries"}</span>
+                  <span className="shrink-0 font-num text-xs text-good">{u.submission_count} {u.submission_count === 1 ? "entry" : "entries"}</span>
                 ) : (
-                  <span className="text-xs font-medium text-bad">Missing</span>
+                  <span className="shrink-0 text-xs font-medium text-bad">Missing</span>
                 )}
               </li>
             ))}

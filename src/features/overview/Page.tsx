@@ -18,8 +18,8 @@ import {
   ScopeBar,
   SkeletonText,
   cn,
+  emissionsParts,
   focusRing,
-  formatNumber,
   periodLabel,
   periodRange,
   shiftPeriod,
@@ -165,6 +165,8 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
   const nothingApproved = !!k && k.approved_count === 0;
   // As the approvals list counts them (FERA twins of a pending entry fold into it).
   const waiting = k ? (k.pending_review_count ?? k.pending_count) : 0;
+  // What people filed: the automatic FERA twins approved with their entries aren't counted again (ESG-lite #194).
+  const approvedEntries = k ? (k.approved_entry_count ?? k.approved_count) : 0;
   const lyCaption = lastYearCaption(data?.last_year);
   const lyNet = lyCaption ? data?.last_year?.kpis.net : null;
   const err = (q: { isError: boolean }) => (q.isError ? LOAD_ERROR : null);
@@ -181,10 +183,10 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
       hint:
         k &&
         (readOnly ? (
-          `${k.approved_count} approved ${k.approved_count === 1 ? "entry" : "entries"}`
+          `${approvedEntries} approved ${approvedEntries === 1 ? "entry" : "entries"}`
         ) : (
           <Link to={links.approved} className={cn("relative rounded underline-offset-2 hover:underline", focusRing)}>
-            {k.approved_count} approved {k.approved_count === 1 ? "entry" : "entries"}
+            {approvedEntries} approved {approvedEntries === 1 ? "entry" : "entries"}
           </Link>
         )),
     },
@@ -215,8 +217,9 @@ export default function OverviewPage({ pcfKpi }: { pcfKpi?: Kpi | null } = {}) {
       hint: k && !nothingApproved && k.gross > 0 && (
         <span className="mt-1 block w-full basis-full">
           <ScopeBar hideLegend totals={{ scope1: k.scope_1, scope2: k.scope_2, scope3: k.scope_3 }} />
+          {/* #248: the app's tCO₂e rounding (1 decimal below 1,000 t, up to 3 below 1 t), so a small scope isn't shown as 0. */}
           <span className="mt-1 block font-num">
-            S1 {formatNumber(k.scope_1)} · S2 {formatNumber(k.scope_2)} · S3 {formatNumber(k.scope_3)}
+            S1 {emissionsParts(k.scope_1).value} · S2 {emissionsParts(k.scope_2).value} · S3 {emissionsParts(k.scope_3).value}
           </span>
         </span>
       ),

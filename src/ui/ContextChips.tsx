@@ -4,7 +4,7 @@ import { Button } from "./Button";
 import { cn } from "./cn";
 import { Combobox, DateField, MonthPicker, Select, YearPicker, type Option } from "./fields";
 import { useContextParams, type ContextPatch, type Scope } from "./hooks/useContextParams";
-import { DEFAULT_FY_START_MONTH, periodContaining, periodLabel, shiftPeriod, type Period, type PeriodKind } from "./period";
+import { DEFAULT_FY_START_MONTH, periodContaining, periodLabel, shiftPeriod, startsAfter, type Period, type PeriodKind } from "./period";
 import { Popover } from "./Popover";
 import { focusRing } from "./styles";
 
@@ -238,6 +238,8 @@ export function ContextChips({
   const [ctx, update] = useContextParams(defaults);
   const anyPeriod = !!allowAnyPeriod && ctx.period === null;
   const period = ctx.period ?? periodContaining(periodKinds[0] ?? "month", new Date(), fyStartMonth);
+  // #249: ▶ stops at the period that contains today; the next one has no data yet.
+  const nextNotStarted = period.kind !== "custom" && startsAfter(shiftPeriod(period, 1), new Date(), fyStartMonth);
 
   const siteLabel =
     ctx.siteIds.length === 0
@@ -301,7 +303,8 @@ export function ContextChips({
                 <button
                   type="button"
                   aria-label="Next period"
-                  disabled={loading}
+                  title={nextNotStarted ? "The next period hasn't started yet" : undefined}
+                  disabled={loading || nextNotStarted}
                   onClick={() => update({ period: shiftPeriod(period, 1) })}
                   className={cn("rounded-full p-1 text-muted hover:bg-tint hover:text-ink disabled:opacity-60", focusRing)}
                 >

@@ -1,5 +1,6 @@
 import axios, { type AxiosError } from "axios";
 import { activeCompanyHeader } from "../lib/activeCompany";
+import { clearSession } from "../lib/session";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -43,7 +44,7 @@ export function handleUnauthorized(error: AxiosError): void {
   let role: string | null = null;
   try {
     role = localStorage.getItem("role");
-    localStorage.clear();
+    clearSession();
   } catch {
     // Storage blocked: the reload below still drops the in-memory session.
   }

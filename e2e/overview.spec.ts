@@ -171,6 +171,22 @@ test("a manager sees the period at a glance and drills into a site", async ({ pa
   await expect(page).toHaveURL(/\/data\/ledger\?site=1&period=CY2025&status=approved/);
 });
 
+test("approved entries are what people filed: FERA twins approved with them aren't counted again (ESG-lite #194)", async ({ page }) => {
+  await signIn(page);
+  // 7 approved rows: 4 entries and the 3 automatic FERA twins of fuel entries.
+  await page.route(
+    (url) => url.port !== "4173" && url.pathname.endsWith("/manager/overview"),
+    (route) => {
+      const o = overview("2025");
+      return route.fulfill({ json: { ...o, kpis: { ...o.kpis, approved_count: 7, approved_entry_count: 4 } } });
+    },
+  );
+  await page.goto("/overview?period=CY2025");
+
+  await expect(page.getByRole("link", { name: "4 approved entries" })).toHaveAttribute("href", "/data/ledger?period=CY2025&status=approved");
+  await expect(page.locator("dl").first()).not.toContainText("7 approved");
+});
+
 test("period chips map to B4's period form and stay in the URL", async ({ page }) => {
   const { b4 } = await signIn(page);
   await page.goto("/overview?period=FY2025&site=2");
@@ -211,6 +227,20 @@ test("the lower tabs load on demand and follow the header context", async ({ pag
   await expect(page.getByRole("tabpanel").getByRole("row", { name: /Hidd/ })).toContainText("80");
 });
 
+test("the Gross scope labels keep small scopes readable: S3 0.47, not 0 (#248)", async ({ page }) => {
+  await signIn(page);
+  // A small site: 8.6 t Scope 1, nothing in Scope 2, 0.47 t Scope 3.
+  await page.route(
+    (url) => url.port !== "4173" && url.pathname.endsWith("/manager/overview"),
+    (route) => {
+      const o = overview("2026");
+      return route.fulfill({ json: { ...o, kpis: { ...o.kpis, gross: 9.07, net: 9.07, saved: 0, scope_1: 8.6, scope_2: 0, scope_3: 0.47 } } });
+    },
+  );
+  await page.goto("/overview?period=CY2026");
+  await expect(page.locator("dl").first()).toContainText("S1 8.6 · S2 0 · S3 0.47");
+});
+
 test("submission status still shows when the overview request fails", async ({ page }) => {
   await signIn(page);
   await page.route(/\/manager\/overview(\?|$)/, (route) => route.fulfill({ status: 500, json: { message: "boom" } }));
@@ -228,4 +258,32 @@ test("submission status still shows when the overview request fails", async ({ p
   await expect(panel).toContainText("Omar Contributor");
   // CY 2025 has ended: its last month, as the overview API would pick.
   expect(months).toContain("2025-12");
+});
+
+test("at phone width the Submission status list keeps room for its scrollbar, so 'Missing' isn't cut (#250)", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await signIn(page);
+  // Enough people to scroll the list.
+  const users = Array.from({ length: 14 }, (_, i) => ({ user_id: 100 + i, name: `Person ${i + 1}`, email: `p${i}@x.com`, site_name: "Hidd", submission_count: 0, status: "missing" }));
+  await page.route(
+    (url) => url.port !== "4173" && url.pathname.endsWith("/manager/overview"),
+    (route) => {
+      const o = overview("2025");
+      return route.fulfill({ json: { ...o, submission: { ...o.submission, submitted: 0, missing: users.length, users } } });
+    },
+  );
+  await page.route(/\/manager\/submission-status/, (route) => route.fulfill({ json: { users } }));
+  await page.goto("/overview?period=CY2025");
+
+  const list = page.getByRole("list", { name: "Contributors for Dec 2025" });
+  await expect(list.getByText("Missing").first()).toBeVisible();
+  const layout = await list.evaluate((ul) => {
+    const box = ul.getBoundingClientRect();
+    const labels = [...ul.querySelectorAll("li > span:last-child")].map((s) => s.getBoundingClientRect().right);
+    return { gutter: getComputedStyle(ul).scrollbarGutter, scrolls: ul.scrollHeight > ul.clientHeight, room: Math.min(...labels.map((r) => box.right - r)) };
+  });
+  expect(layout.scrolls).toBe(true);
+  expect(layout.gutter).toBe("stable");
+  // An overlay scrollbar (phones) is about 6–8 px wide: every label ends at least 8 px inside the list.
+  expect(layout.room).toBeGreaterThanOrEqual(8);
 });

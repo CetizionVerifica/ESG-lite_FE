@@ -51,10 +51,12 @@ import {
   quantityDecimals,
   parseStatus,
   periodText,
+  phoneOrder,
   serverPeriod,
   toSupportedPeriod,
   userSites,
 } from "./logic";
+import { useNarrow } from "./useNarrow";
 import { twinsTotal } from "../../lib/scope3/fera";
 import { useCalcDetailForSite } from "../../lib/useCalcDetail";
 
@@ -74,6 +76,8 @@ export default function MyEntriesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  // #252: on a phone the table starts with category, tCO₂e and status.
+  const narrow = useNarrow();
 
   const sites = useMemo(() => userSites(user), [user]);
   // SE-1: a User sees totals only (no "+ FERA" line under them).
@@ -297,7 +301,7 @@ export default function MyEntriesPage() {
           <DataTable<EntryRow>
             label="My entries"
             rows={rows}
-            columns={columns}
+            columns={narrow ? phoneOrder(columns) : columns}
             getRowId={(r) => r.pk_id}
             rowLabel={(r) => `${r.category?.category_name ?? "Entry"} ${periodText(r)}`}
             loading={query.isPending}
