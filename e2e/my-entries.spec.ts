@@ -135,6 +135,19 @@ test("a spend row shows the amount spent as its quantity, in its currency", asyn
   await expect(spendRow.getByRole("cell", { name: "—", exact: true })).toHaveCount(0);
 });
 
+test("on a phone a row shows its category, tCO₂e and status without swiping (#252)", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await signIn(page);
+  await page.goto("/data/mine");
+  const table = page.getByRole("table", { name: "My entries" });
+  await expect(table.getByRole("row").nth(1)).toBeVisible();
+  const headers = (await table.getByRole("columnheader").allTextContents()).map((h) => h.trim()).filter(Boolean);
+  expect(headers.slice(0, 3)).toEqual(["Category", "tCO₂e", "Status"]);
+  // The status column is on screen, not behind a sideways scroll.
+  const status = await table.getByRole("columnheader", { name: /^Status/ }).boundingBox();
+  expect(status!.x + status!.width).toBeLessThanOrEqual(375);
+});
+
 test("clear filters empties status, category and period in one go", async ({ page }) => {
   await signIn(page);
   await page.goto("/data/mine?status=rejected&category=2&period=2025-09");
