@@ -98,7 +98,7 @@ type Extra = {
   /** SE-1: the company's entry_detail; "full" shows a User the calculation detail. */
   entryDetail?: "full";
   /** F-13/F-27: the server's mode-lock message for the chosen period; the queries asked are pushed here. */
-  periodMode?: { message: string; asked: Record<string, string>[] };
+  periodMode?: { message: string; asked: Record<string, string>[]; conflict?: Record<string, unknown> };
   /** F-02: My bills' list; deleted id lists are pushed to `deletedBills`. */
   bills?: unknown[];
   deletedBills?: number[][];
@@ -147,7 +147,7 @@ async function signIn(page: Page, created: unknown[], duplicateOnce = false, lin
       if (path.includes("/user/thresholds/company/1")) return json({ threshold_percentage: 5 });
       if (path.includes("/user/emissions/period-mode/site/4/category/")) {
         extra.periodMode?.asked.push(Object.fromEntries(url.searchParams));
-        return json({ conflict: extra.periodMode ? {} : null, message: extra.periodMode?.message ?? null });
+        return json({ conflict: extra.periodMode ? (extra.periodMode.conflict ?? {}) : null, message: extra.periodMode?.message ?? null });
       }
       if (path.endsWith("/user/emissions/period-total")) {
         return json({ total_emission: url.searchParams.get("basis") === "approved" ? 4 : 0 });
@@ -597,6 +597,19 @@ test("a year already filed monthly says so before anything is typed (F-13/F-27)"
   expect(note!.y).toBeLessThan(firstRow!.y);
   await expect(page.getByText("No yearly entry for CY 2025: it is filed monthly.")).toBeVisible();
   expect(periodMode.asked).toContainEqual({ reporting_period: "yearly", year_type: "CY", date_of_reporting: "2025-12-31" });
+});
+
+test("a financial year over CY yearly data says it's filed under CY, not monthly (#246)", async ({ page }) => {
+  const message = "This year overlaps CY yearly data already filed on this category. A category uses CY or FY for a given period, not both — delete the CY yearly data first, or file this data under CY too.";
+  const periodMode = { message, asked: [] as Record<string, string>[], conflict: { conflicting_period: "yearly", conflicting_rows: 1, conflicting_year_type: "CY", window: { start: "2025-01-01", end: "2025-12-31" } } };
+  await signIn(page, [], false, [], undefined, { periodMode });
+  await page.goto("/data/new?site=4&category=9&period=FY2025");
+
+  await expect(page.getByText("Filed under CY for this year")).toBeVisible();
+  await expect(page.getByText("Filed monthly for this year")).toHaveCount(0);
+  await expect(page.getByText(message)).toBeVisible();
+  // The saved list says the same, not "filed monthly".
+  await expect(page.getByText("No yearly entry for FY 2025-26: it is filed under CY.")).toBeVisible();
 });
 
 test("a period filed the same way shows no lock note", async ({ page }) => {
