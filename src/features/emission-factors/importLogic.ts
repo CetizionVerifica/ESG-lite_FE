@@ -27,6 +27,8 @@ export type ImportRow = {
   denominator_unit: string;
   source: string;
   emission_category_name: string;
+  /** A simple sheet's "Global name": the name entries also match it by (a T&D-loss factor's activity). */
+  global_name?: string;
   /** Excel parent group (AI path); null on simple sheets. */
   group: string | null;
   excluded: boolean;
@@ -52,6 +54,7 @@ const COLS = {
   unit: ["denominator_unit", "Denominator Unit", "unit", "Unit"],
   source: ["source", "Source", "SOURCE"],
   name: ["emission_category_name", "Emission Category", "emission_category", "Emission Category Name"],
+  global: ["global_category_name", "Global Category Name", "Global name", "Global Name"],
 };
 
 /** S3-2 metadata columns a simple sheet may add. */
@@ -170,6 +173,7 @@ export function parseSimpleRows(json: Record<string, unknown>[]): SimpleParse {
       denominator_unit: String(pick(r, COLS.unit) ?? "").trim(),
       source: String(pick(r, COLS.source) ?? "").trim(),
       emission_category_name: String(pick(r, COLS.name) ?? "").trim(),
+      ...(pick(r, COLS.global) !== undefined ? { global_name: String(pick(r, COLS.global)).trim() } : {}),
       group: null,
       excluded: false,
       ...(readMeta(r) ? { meta: readMeta(r) } : {}),
@@ -286,7 +290,8 @@ export function planUpload(rows: ImportRow[], map: CategoryMap, target: Target, 
         // The full composite name: column configs split it on " - " and entries look factors up by it.
         if (name) {
           body.emission_category_name = name;
-          body.global_category_name = name;
+          // The sheet's global name when it has one (a T&D-loss factor's activity, S3-7), else the name again.
+          body.global_category_name = r.global_name?.trim() || name;
         }
         return body;
       });

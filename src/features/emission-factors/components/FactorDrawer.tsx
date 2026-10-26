@@ -15,6 +15,7 @@ import {
   draftFrom,
   emptyDraft,
   gasSumHint,
+  globalNameHint,
   gridFactorHint,
   isDirty,
   validate,
@@ -204,6 +205,16 @@ export function FactorDrawer(props: Props) {
             value={draft.name}
             onChange={(v) => set("name", v)}
             help="The fuel, material or activity, e.g. Diesel or Grid electricity. Leave blank for one factor per category."
+            autoComplete="off"
+          />
+          <TextField
+            label="Global name"
+            value={draft.globalName}
+            onChange={(v) => set("globalName", v)}
+            help={
+              globalNameHint(draft) ??
+              "Leave blank to use the name above. Entries also find a factor by this name: for a T&D-loss factor, the electricity or heat choice it adds to."
+            }
             autoComplete="off"
           />
           <Select<number>

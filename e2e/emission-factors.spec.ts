@@ -383,6 +383,26 @@ test("a superadmin sets a factor's type and GWP set, and they stay after a reloa
   expect(first[head.indexOf("GWP")]).toBe("AR5");
 });
 
+test("a superadmin pairs a T&D-loss factor with its electricity choice through its global name (S3-7)", async ({ page }) => {
+  const { calls } = await signIn(page);
+  await page.goto("/factors");
+  await page.getByRole("button", { name: "Edit Hidd, Electricity, 2024" }).click();
+  const drawer = page.getByRole("dialog", { name: "Edit factor" });
+  await drawer.getByRole("textbox", { name: "Emission category name" }).fill("Grid T&D losses");
+  await drawer.getByRole("combobox", { name: "Type" }).selectOption({ label: "Transmission and distribution losses" });
+  // Without a global name it would never be added to an entry: the drawer says so.
+  await expect(drawer.getByText("only through its global name")).toBeVisible();
+  await drawer.getByRole("textbox", { name: "Global name" }).fill("Grid");
+  await expect(drawer.getByText("only through its global name")).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Factor saved")).toBeVisible();
+  expect(calls.at(-1)).toMatchObject({ method: "PUT", body: { emission_category_name: "Grid T&D losses", global_category_name: "Grid", factor_type: "td_loss" } });
+
+  await page.reload();
+  await page.getByRole("button", { name: "Edit Hidd, Electricity, 2024" }).click();
+  await expect(page.getByRole("dialog", { name: "Edit factor" }).getByRole("textbox", { name: "Global name" })).toHaveValue("Grid");
+});
+
 function sheet(rows: Record<string, unknown>[]): Buffer {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Factors");

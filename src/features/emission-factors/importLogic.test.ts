@@ -53,6 +53,18 @@ describe("simple sheet", () => {
       ["r4", 2024, 0, "", ""],
     ]);
   });
+  it("reads a Global name column and sends it instead of the name (S3-7 T&D pairing)", () => {
+    const { rows } = parseSimpleRows([
+      { Year: 2025, "Factor Value": 0.0225, Unit: "kWh", "Emission Category Name": "Grid UK T&D losses", "Global name": " Grid UK " },
+      { Year: 2025, "Factor Value": 0.0459, Unit: "kWh", "Emission Category Name": "Grid UK", "Global name": "" },
+    ]);
+    expect(rows.map((r) => r.global_name)).toEqual(["Grid UK", undefined]);
+    const plan = planUpload(rows, { "": 1 }, { kind: "site", siteId: 1 }, SITES, [FUEL, POWER]);
+    expect(plan.jobs[0].factors.map((f) => [f.emission_category_name, f.global_category_name])).toEqual([
+      ["Grid UK T&D losses", "Grid UK"],
+      ["Grid UK", "Grid UK"],
+    ]);
+  });
   it("reads comma thousands grouping but reports a decimal comma", () => {
     expect([1.5, "2.68", " 1,234.5 ", "1,430", "-0.5", ".5", "1e-3"].map(parseFactor)).toEqual([1.5, 2.68, 1234.5, 1430, -0.5, 0.5, 0.001]);
     for (const bad of ["0,5", "1,23", "12,34,567", "2.68 kg", "", "1.2.3", null]) expect(parseFactor(bad)).toBeNaN();

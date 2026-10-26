@@ -21,6 +21,7 @@ import {
   sitesOfClient,
   toPayload,
   toUpdatePayload,
+  globalNameHint,
   uploadStatus,
   validate,
   yearHint,
@@ -131,7 +132,7 @@ describe("form", () => {
   it("round-trips a saved factor and spots changes", () => {
     const d = draftFrom(factor);
     expect(d).toEqual({
-      siteId: 1, categoryId: 1, name: "Diesel", year: 2024, value: 2.68, unit: "litre", source: "DEFRA 2024",
+      siteId: 1, categoryId: 1, name: "Diesel", globalName: "", year: 2024, value: 2.68, unit: "litre", source: "DEFRA 2024",
       factorType: null, gwpSet: null, geography: null, dataset: "", datasetVersion: "",
       gases: { co2: null, ch4: null, n2o: null, other: null, biogenic: null },
     });
@@ -154,6 +155,21 @@ describe("form", () => {
     expect(toUpdatePayload(d, factor)).toEqual({});
     expect(toUpdatePayload({ ...d, value: 2.7, source: " ", unit: "kg " }, factor)).toEqual({ factor_value: 2.7, source: "", denominator_unit: "kg" });
     expect(toUpdatePayload({ ...d, name: "", year: 2023 }, factor)).toEqual({ emission_category_name: "", year: 2023 });
+  });
+  it("a global name set apart from the name is shown, sent, and cleared back to the name (S3-7 T&D pairing)", () => {
+    // Imports store the name twice: nothing to show.
+    expect(draftFrom({ ...factor, global_category_name: "Diesel" }).globalName).toBe("");
+    const td = { ...factor, emission_category_name: "Grid UK T&D losses", global_category_name: "Grid UK", factor_type: "td_loss" };
+    const d = draftFrom(td);
+    expect(d.globalName).toBe("Grid UK");
+    expect(toUpdatePayload(d, td)).toEqual({});
+    expect(toUpdatePayload({ ...d, globalName: " Grid UK [kWh] " }, td)).toEqual({ global_category_name: "Grid UK [kWh]" });
+    expect(toUpdatePayload({ ...d, globalName: "" }, td)).toEqual({ global_category_name: "Grid UK T&D losses" });
+    expect(toPayload({ ...d, siteId: 1, categoryId: 5 })).toMatchObject({ emission_category_name: "Grid UK T&D losses", global_category_name: "Grid UK" });
+    expect(toPayload({ ...d, siteId: 1, categoryId: 5, globalName: " " })).not.toHaveProperty("global_category_name");
+    expect(globalNameHint(d)).toBeNull();
+    expect(globalNameHint({ ...d, globalName: "" })).toMatch(/only through its global name/);
+    expect(globalNameHint({ ...d, globalName: "", factorType: "wtt" })).toBeNull();
   });
 });
 
