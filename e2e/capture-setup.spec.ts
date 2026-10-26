@@ -225,11 +225,11 @@ const transport = {
   calculation: null,
 };
 
-async function routeTransport(page: Page, calls: Call[]) {
+async function routeTransport(page: Page, calls: Call[], config: Record<string, unknown> = transport) {
   await page.route(/\/admin\/column-configs\/7$/, (route) =>
     route.request().method() === "PUT"
-      ? (calls.push({ method: "PUT", path: "/admin/column-configs/7", body: route.request().postDataJSON() }), route.fulfill({ json: { message: "updated", columnConfig: { ...transport, ...route.request().postDataJSON() } } }))
-      : route.fulfill({ json: transport }),
+      ? (calls.push({ method: "PUT", path: "/admin/column-configs/7", body: route.request().postDataJSON() }), route.fulfill({ json: { message: "updated", columnConfig: { ...config, ...route.request().postDataJSON() } } }))
+      : route.fulfill({ json: config }),
   );
   await page.route(/\/admin\/emission-factors\/category-names/, (route) => route.fulfill({ json: ["Van - Diesel", "HGV - Diesel"] }));
 }
@@ -262,6 +262,34 @@ test("form builder: Test tab calculates with the real factor", async ({ page }) 
   await expect(result).toContainText("3.00 tCO₂e");
   // Nothing typed in the Test tab is saved or makes the form dirty.
   await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  expect(calls.some((c) => c.method === "PUT")).toBe(false);
+});
+
+test("form builder: the Test tab uses the form's own field names", async ({ page }) => {
+  const { calls } = await signIn(page);
+  const named = {
+    ...transport,
+    field_settings: { mode: { label: "How did it travel?", help: "Road or sea" }, distance: { label: "Distance driven" }, vehicle: { hidden: true } },
+  };
+  await routeTransport(page, calls, named);
+  await page.route(/\/user\/emission-factors\/site\/1\/category\/30/, (route) =>
+    route.fulfill({ json: [{ emission_factor_id: 1, emission_category_name: "Van - Diesel", factor_value: 0.25, denominator_unit: "km", year: 2025 }] }),
+  );
+  await page.route(/\/user\/units\/site\/1\/category\/30/, (route) => route.fulfill({ json: [{ unit_name: "km" }] }));
+
+  await page.goto("/capture/forms/7");
+  await page.getByRole("tab", { name: "Test" }).click();
+  const panel = page.getByRole("tabpanel", { name: "Test" });
+  await expect(panel.getByLabel("How did it travel?")).toBeVisible();
+  await expect(panel.getByText("Road or sea")).toBeVisible();
+  await expect(panel.getByLabel("Mode")).toHaveCount(0);
+  // A field hidden from contributors is still there to test, and says so.
+  await expect(panel.getByText("Hidden from contributors")).toBeVisible();
+  await panel.getByLabel("How did it travel?").selectOption("road");
+  await panel.getByLabel("Vehicle").selectOption("van");
+  await panel.getByLabel("Distance driven").fill("10000");
+  await panel.getByLabel("Unit", { exact: true }).selectOption("km");
+  await expect(panel.getByTestId("test-result")).toContainText("2.50 tCO₂e");
   expect(calls.some((c) => c.method === "PUT")).toBe(false);
 });
 

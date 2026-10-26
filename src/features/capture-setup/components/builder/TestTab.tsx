@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Calculator, RotateCcw } from "lucide-react";
-import { applyChange, formColumns, isColumnVisible, newRow, offeredUnits, toFormModel } from "../../../../lib/emissions/form";
+import { applyChange, columnTitle, formColumns, isColumnVisible, newRow, offeredUnits, toFormModel } from "../../../../lib/emissions/form";
 import { sameUnit, type UnitOptionsByActivity } from "../../../../lib/emissions/unitOptions";
 import { calculateEmission, findEmissionFactor, resolveSpecMethod, type EmissionCalcInput } from "../../../../lib/emissions/emissionCalc";
 import type { EmissionFactor, ModalRow } from "../../../../lib/emissions/types";
-import { Button, DynamicField, EmptyState, Select, SkeletonText, cn } from "../../../../ui";
+import { settingFor } from "../../../../lib/forms/settings";
+import { Badge, Button, DynamicField, EmptyState, Select, SkeletonText, cn } from "../../../../ui";
 import { type BuilderDraft, toPreviewConfig } from "../../builder";
 import { describeResult, factorYears, factorsFor } from "../../sampleCalc";
 
@@ -56,6 +57,8 @@ export function TestTab({ draft, formId, setup, loading, error, onRetry }: TestT
       : [...new Set([...(expectedUnit ? [expectedUnit] : []), ...setup.units, ...(currentUnit ? [currentUnit] : [])])];
   const outcome = describeResult(calculateEmission(input, row), factor);
   const change = (name: string, value: string) => setRow((r) => applyChange(model, r, name, value));
+  // The form's own names and help (SE-3), as in the preview; every field shows, hidden ones marked as in the reviewer view.
+  const settings = model.settings.fieldSettings;
 
   return (
     <div className="space-y-4">
@@ -94,7 +97,16 @@ export function TestTab({ draft, formId, setup, loading, error, onRetry }: TestT
         {formColumns(model)
           .filter((c) => isColumnVisible(model, c, row))
           .map((c) => (
-            <DynamicField key={c.pk_id} model={model} column={c} row={row} onChange={change} />
+            <DynamicField
+              key={c.pk_id}
+              model={model}
+              column={c}
+              row={row}
+              onChange={change}
+              labelText={settingFor(settings, c.column_name)?.label ?? columnTitle(c.column_name)}
+              help={settingFor(settings, c.column_name)?.help}
+              labelExtra={settingFor(settings, c.column_name)?.hidden ? <Badge tone="neutral">Hidden from contributors</Badge> : undefined}
+            />
           ))}
         <Select<string>
           label="Unit"
