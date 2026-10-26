@@ -51,4 +51,13 @@ describe("factorExportColumns", () => {
     expect(at("CH₄ (kg)")).toBe("");
     expect(at("Includes WTT")).toBe("No");
   });
+  it("exports a global name set apart from the name under the header the import reads", () => {
+    const cols = factorExportColumns(factorColumns({ batches: [], onEdit: () => {} }));
+    const [head, td, own] = toMatrix(
+      [factor(1, { emission_category_name: "Grid UK T&D losses", global_category_name: "Grid UK" }), factor(2, { emission_category_name: "Diesel", global_category_name: "Diesel" })],
+      cols,
+    );
+    expect(td[head.indexOf("Global name")]).toBe("Grid UK");
+    expect(own[head.indexOf("Global name")]).toBe("");
+  });
 });

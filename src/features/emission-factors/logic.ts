@@ -19,6 +19,8 @@ export type Factor = {
   denominator_unit?: string | null;
   source?: string | null;
   emission_category_name?: string | null;
+  /** The name entries match the factor by when it differs from its own (a T&D-loss factor's activity). */
+  global_category_name?: string | null;
   upload_batch_id?: string | null;
   created_at?: string | null;
   site?: { site_id: number; name: string } | null;
@@ -182,6 +184,8 @@ export type FactorDraft = {
   siteId: number | null;
   categoryId: number | null;
   name: string;
+  /** Blank = the same as the name. Set for a T&D-loss factor: the electricity or heat choice it adds to (S3-7). */
+  globalName: string;
   year: number | null;
   value: number | null;
   unit: string;
@@ -202,6 +206,7 @@ export function emptyDraft(defaults: { siteId?: number | null; categoryId?: numb
     siteId: defaults.siteId ?? null,
     categoryId: defaults.categoryId ?? null,
     name: "",
+    globalName: "",
     year: defaults.year ?? null,
     value: null,
     unit: "",
@@ -223,6 +228,8 @@ export function draftFrom(f: Factor): FactorDraft {
     siteId: f.site?.site_id ?? null,
     categoryId: f.category?.category_id ?? null,
     name: f.emission_category_name ?? "",
+    // Shown only when it says something the name doesn't (imports store the name twice).
+    globalName: f.global_category_name && f.global_category_name !== (f.emission_category_name ?? "") ? f.global_category_name : "",
     year: f.year,
     value: factorNumber(f.factor_value),
     unit: f.denominator_unit ?? "",
@@ -346,6 +353,7 @@ export type FactorPayload = {
   denominator_unit?: string;
   source?: string;
   emission_category_name?: string;
+  global_category_name?: string;
 } & FactorMetaPayload;
 
 function metaPayload(d: FactorDraft): FactorMetaPayload {
@@ -365,6 +373,7 @@ export function toPayload(d: FactorDraft): FactorPayload {
   if (d.unit.trim()) out.denominator_unit = d.unit.trim();
   if (d.source.trim()) out.source = d.source.trim();
   if (d.name.trim()) out.emission_category_name = d.name.trim();
+  if (d.globalName.trim()) out.global_category_name = d.globalName.trim();
   return out;
 }
 
@@ -382,6 +391,8 @@ export function toUpdatePayload(d: FactorDraft, row: Factor): Partial<FactorPayl
   if (d.unit.trim() !== base.unit.trim()) out.denominator_unit = d.unit.trim();
   if (d.source.trim() !== base.source.trim()) out.source = d.source.trim();
   if (d.name.trim() !== base.name.trim()) out.emission_category_name = d.name.trim();
+  // A cleared global name goes back to the factor's own name.
+  if (d.globalName.trim() !== base.globalName.trim()) out.global_category_name = d.globalName.trim() || d.name.trim();
   // Metadata: a cleared field is sent as null so the server clears it.
   if (d.factorType !== base.factorType) out.factor_type = d.factorType;
   if (d.gwpSet !== base.gwpSet) out.gwp_set = d.gwpSet;
@@ -390,6 +401,16 @@ export function toUpdatePayload(d: FactorDraft, row: Factor): Partial<FactorPayl
   if (d.datasetVersion.trim() !== base.datasetVersion.trim()) out.dataset_version = d.datasetVersion.trim() || null;
   for (const { key, field } of GAS_KEYS) if (d.gases[key] !== base.gases[key]) out[field] = d.gases[key];
   return out;
+}
+
+/**
+ * A T&D-loss factor adds a 3c twin to an entry only when its name or global name is the entry's
+ * activity (S3-7), and its name can't be (the upstream factor of that year holds it): say so.
+ */
+export function globalNameHint(d: FactorDraft): string | null {
+  return d.factorType === "td_loss" && !d.globalName.trim()
+    ? "A T&D-loss factor is added to entries only through its global name: type the electricity or heat choice it belongs to, exactly as that factor is named."
+    : null;
 }
 
 /** Type filter options: every factor type, plus "Not set" for factors saved before S3-2. */

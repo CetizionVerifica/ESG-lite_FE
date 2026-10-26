@@ -86,6 +86,8 @@ const text = (v: string | null | undefined) => v ?? "";
  */
 export function factorExportColumns(table: Column<Factor>[]): Column<Factor>[] {
   const meta: Column<Factor>[] = [
+    // Same header the simple-sheet import reads, so an exported sheet keeps T&D-loss pairings.
+    { id: "global_category_name", header: "Global name", value: (r) => (r.global_category_name && r.global_category_name !== r.emission_category_name ? r.global_category_name : "") },
     { id: "geography", header: "Geography", value: (r) => text(r.geography) },
     { id: "dataset", header: "Dataset", value: (r) => text(r.dataset) },
     { id: "dataset_version", header: "Dataset version", value: (r) => text(r.dataset_version) },
