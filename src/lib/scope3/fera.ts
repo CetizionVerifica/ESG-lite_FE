@@ -71,3 +71,44 @@ export function cat3PreviewText(parts: { sub: Scope3Sub; value: number | null | 
   if (!shown.length) return null;
   return `${CAT3_PREVIEW_PREFIX}${shown.map((p) => `${format(p.value)} tCO₂e (${SCOPE3_SUB_SHORT[p.sub].replace(/^Upstream/, "upstream")})`).join(" + ")}, added on save`;
 }
+
+// D6a (ESG-lite docs/scope3/04-decisions.md): Scope 3 transport and travel
+// rows take their well-to-tank (WTT) part in their own total, as the engine's
+// methods/fera.ts `wttInRow` decides; they get no Category 3 twin.
+export const WTT_IN_ROW_CATEGORIES = [4, 6, 7, 9] as const;
+
+// The engine's name rules (scope3/factors/backfill.ts GHG_NAME_RULES), in its order,
+// for a Scope 3 category the server sends without a ghg_category.
+const GHG_NAME_RULES: [RegExp, number][] = [
+  [/purchased goods|goods and services/, 1],
+  [/capital goods/, 2],
+  [/fuel[- ]and[- ]energy|energy[- ]related/, 3],
+  [/upstream transport|inbound (logistics|freight)/, 4],
+  [/waste/, 5],
+  [/business travel/, 6],
+  [/commut/, 7],
+  [/upstream leased/, 8],
+  [/downstream transport|outbound (logistics|freight)/, 9],
+];
+
+type CategoryLike = { category_name?: string | null; scope?: string | null; ghg_category?: number | null };
+
+const isScope3 = (scope: string | null | undefined): boolean => /^\s*s(?:cope)?[\s_-]*3\s*$/i.test(scope ?? "");
+
+/** The category's GHG Protocol number as the engine reads it: `ghg_category`, else a Scope 3 category's name. */
+export function ghgCategoryOf(category: CategoryLike | null | undefined): number | null {
+  if (!category) return null;
+  if (typeof category.ghg_category === "number") return category.ghg_category;
+  if (!isScope3(category.scope)) return null;
+  const name = (category.category_name ?? "").toLowerCase();
+  return GHG_NAME_RULES.find(([re]) => re.test(name))?.[1] ?? null;
+}
+
+/** Category 4, 6, 7 or 9: the row's total includes its WTT part (D6a). */
+export const wttInRow = (category: CategoryLike | null | undefined): boolean => (WTT_IN_ROW_CATEGORIES as readonly number[]).includes(ghgCategoryOf(category) ?? 0);
+
+/** The row's tCO₂e with its WTT part: kg summed at 4 dp, then rounded to 2 dp, as the engine's `withWtt`. */
+export const tonnesWithWtt = (rowKg: number, wttKg: number): number => {
+  const kg = Number((Math.round(rowKg * 10000) / 10000 + Math.round(wttKg * 10000) / 10000).toFixed(4));
+  return Math.round((kg / 1000) * 100) / 100;
+};

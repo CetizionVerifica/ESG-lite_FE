@@ -321,12 +321,31 @@ const spendRow = (input: EmissionCalcInput, row: ModalRow): EmissionCalculationR
   return outcome.ok ? { value: outcome.tonnes, status: "ok" } : { value: null, status: outcome.status };
 };
 
+/**
+ * D6a: a quantity × factor row's kgCO₂e before rounding (the engine sums it
+ * with the WTT part, then rounds). Null for a row with no total, a spend row
+ * and a row whose unit doesn't convert (unless `fallbackToRaw`), as
+ * `calculateEmission` would show no quantity × factor figure for them.
+ */
+export const emissionKg = (input: EmissionCalcInput, row: ModalRow): number | null => {
+  const result = calculateEmission(input, row);
+  if (result.value === null || !row.emission_category || !row.activity_data_unit) return null;
+  const factor = findEmissionFactor(input, row.emission_category);
+  if (!factor || (isSpendRow(row, factor) && spendRow(input, row))) return null;
+  const fromSpec = input.calculationSpec ? specActivityValue(input.calculationSpec, row) : findActivityValue(input, row);
+  if (typeof fromSpec !== "number") return null;
+  const currentUnit = input.calculationSpec?.mode === "per_unit" ? normalizeUnitKey(row.activity_data_unit) : row.activity_data_unit;
+  const conversion = unitsMatchExact(factor.denominator_unit, currentUnit) ? 1 : (getConversionFactor(currentUnit, factor.denominator_unit) ?? (input.fallbackToRaw ? 1 : null));
+  return conversion === null ? null : fromSpec * conversion * factor.factor_value;
+};
+
 // One calculator bound to a context (site × category × period).
 export const createEmissionCalculator = (input: EmissionCalcInput) => ({
   getExpectedUnit: (emissionCategory: string) => expectedUnitFor(input, emissionCategory),
   getEmissionFactor: (emissionCategory: string) => findEmissionFactor(input, emissionCategory),
   findActivityValue: (row: ModalRow) => findActivityValue(input, row),
   calculateEmission: (row: ModalRow) => calculateEmission(input, row),
+  emissionKg: (row: ModalRow) => emissionKg(input, row),
   spendDetail: (row: ModalRow) => spendDetail(input, row),
   usesSpendForm: (row: ModalRow) => usesSpendForm(input, row),
 });

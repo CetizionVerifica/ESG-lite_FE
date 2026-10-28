@@ -425,6 +425,9 @@ export function EntryRow(p: Props) {
             <p className={cn("text-sm", localShown || serverValues ? "text-bad" : "text-muted")}>{p.issue ? localMessage(p.issue.message) : (serverValues ?? (p.showCalcDetail ? result.status : plainProblem(result.status)))}</p>
           )}
           {result.value !== null && serverValues && <p className="text-xs text-bad">{serverValues}</p>}
+          {p.showCalcDetail && result.value !== null && result.wtt_kg !== undefined && (
+            <p className="font-num text-xs text-muted">Includes {formatNumber(result.wtt_kg / 1000, 2)} tCO₂e well-to-tank (WTT)</p>
+          )}
           {p.showCalcDetail && cat3 && (
             <p className="font-num text-xs text-muted">
               + <InfoTerm id="fera">Cat 3</InfoTerm> {cat3.slice(CAT3_PREVIEW_PREFIX.length)}
