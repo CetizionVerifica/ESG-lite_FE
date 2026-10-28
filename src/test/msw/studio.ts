@@ -530,7 +530,9 @@ function finishJob(job: MockJob): void {
     job.versionN = v.n;
     job.fileName = `ACME-GHG-Report-${row.doc.meta.year}-v${v.n}.pdf`;
   } else {
-    job.expiresAt = new Date(Date.parse(NOW) + 7 * 86_400_000).toISOString();
+    // From the real clock, as the server does: the share dialog drops expired proofs against Date.now(),
+    // so NOW + 7 days made every mock proof expired from 27 Oct 2026 and the share tests failed.
+    job.expiresAt = new Date(Date.now() + 7 * 86_400_000).toISOString();
     job.fileName = `ACME-GHG-Report-${row?.doc.meta.year ?? 2025}-${JOB_FILES[job.kind]}`;
   }
 }

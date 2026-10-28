@@ -73,6 +73,8 @@ import {
   PAGE_SIZES,
   type Tab,
   approveAllCopy,
+  duplicateApproveCopy,
+  possibleDuplicates,
   asStatus,
   attentionOn,
   effectiveStatus,
@@ -241,6 +243,8 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   const [rejectReason, setRejectReason] = useState("");
   const [collectingReady, setCollectingReady] = useState(false);
   const [deleting, setDeleting] = useState<LedgerRow[] | null>(null);
+  // Approving a possible duplicate asks first; `run` approves once the Manager confirms.
+  const [confirmDuplicates, setConfirmDuplicates] = useState<{ rows: LedgerRow[]; approving: number; run: () => void } | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
   // XI5: a batch's pending rows the smart import was least sure about come first, as a filter chip
@@ -363,7 +367,17 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
     drawer === null && rejecting === null && deleting === null,
   );
 
-  function approve(row: LedgerRow, index?: number) {
+  /** Approve one row; a possible duplicate (two people may have filed the same bill) asks first. */
+  function approve(row: LedgerRow, index?: number, then?: () => void) {
+    if (statusOf(row) === "pending" && possibleDuplicates([row]).length > 0) {
+      setConfirmDuplicates({ rows: [row], approving: 1, run: () => { approveNow(row, index); then?.(); } });
+      return;
+    }
+    approveNow(row, index);
+    then?.();
+  }
+
+  function approveNow(row: LedgerRow, index?: number) {
     if (statusOf(row) !== "pending") {
       toast({ title: "Only pending entries can be approved" });
       return;
@@ -409,8 +423,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
     const index = rows.findIndex((r) => r.pk_id === row.pk_id);
     const rest = rows.filter((r) => r.pk_id !== row.pk_id);
     const next = rest[Math.max(index, 0)] ?? rest[0] ?? null;
-    approve(row);
-    setDrawer(next);
+    approve(row, undefined, () => setDrawer(next));
   }
 
   /** "Approve all N ready": every pending row passing its checks under the current filters, with undo. */
@@ -466,6 +479,16 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
   };
 
   const approveMany = (target: LedgerRow[]) => {
+    const pendingRows = target.filter((r) => statusOf(r) === "pending");
+    const duplicates = possibleDuplicates(pendingRows);
+    if (duplicates.length > 0) {
+      setConfirmDuplicates({ rows: duplicates, approving: pendingRows.length, run: () => approveManyNow(target) });
+      return;
+    }
+    approveManyNow(target);
+  };
+
+  const approveManyNow = (target: LedgerRow[]) => {
     const ids = target.filter((r) => statusOf(r) === "pending").map((r) => r.pk_id);
     review.approveMany.mutate(ids, {
       onSuccess: () => {
@@ -696,7 +719,47 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
         onConfirm={confirmReject}
       />
       <DeleteModal rows={deleting} statusOf={statusOf} busy={review.remove.isPending} error={review.remove.error} onClose={() => setDeleting(null)} onConfirm={confirmDelete} />
+      <DuplicateApproveModal
+        confirm={confirmDuplicates}
+        onClose={() => setConfirmDuplicates(null)}
+        onConfirm={() => {
+          const c = confirmDuplicates;
+          setConfirmDuplicates(null);
+          c?.run();
+        }}
+      />
     </>
+  );
+}
+
+/** "Approve anyway?" for possible duplicates: which rows, their tCO₂e and who filed them. */
+function DuplicateApproveModal({
+  confirm,
+  onClose,
+  onConfirm,
+}: {
+  confirm: { rows: LedgerRow[]; approving: number } | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const copy = duplicateApproveCopy(confirm?.rows.length ?? 1, confirm?.approving ?? 1);
+  const shown = confirm?.rows.slice(0, 5) ?? [];
+  const more = (confirm?.rows.length ?? 0) - shown.length;
+  return (
+    <Modal open={confirm !== null} onClose={onClose} size="md" title={copy.title} description={copy.description} primaryAction={{ label: copy.confirm, onClick: onConfirm }} cancelLabel="Cancel">
+      <ul className="divide-y divide-line rounded-control border border-line text-sm">
+        {shown.map((r) => (
+          <li key={r.pk_id} className="px-3 py-2">
+            <p className="font-medium text-ink">{describe(r)}</p>
+            <p className="text-xs text-muted">
+              <span className="font-num">{formatNumber(Number(r.total_emission ?? 0), 2)} tCO₂e</span>
+              {r.created_by?.name ? ` · ${r.created_by.name}` : ""}
+            </p>
+          </li>
+        ))}
+      </ul>
+      {more > 0 && <p className="mt-2 text-xs text-muted">and {more} more</p>}
+    </Modal>
   );
 }
 

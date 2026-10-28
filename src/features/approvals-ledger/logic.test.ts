@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { EmissionData } from "../../services/emissionService";
 import {
+  duplicateApproveCopy,
+  possibleDuplicates,
   foldedTwinNote,
   isFoldedFeraTwin,
   BATCH_SOURCE_OPTIONS,
@@ -468,3 +470,22 @@ describe("foldedTwinNote (F-26)", () => {
     expect(foldedTwinNote(undefined, 0, false)).toBeNull();
   });
 });
+
+describe("approving a possible duplicate", () => {
+  const row = (id: number, held: string[], status = "pending") => ({ pk_id: id, status, checks: { ready: held.length === 0, held } });
+
+  it("finds the pending rows held as a possible duplicate", () => {
+    const rows = [row(1, ["NO_DUPLICATE"]), row(2, ["EVIDENCE_ATTACHED"]), row(3, ["EVIDENCE_ATTACHED", "NO_DUPLICATE"]), row(4, ["NO_DUPLICATE"], "approved"), row(5, [])];
+    expect(possibleDuplicates(rows).map((r) => r.pk_id)).toEqual([1, 3]);
+    expect(possibleDuplicates([{ pk_id: 6, status: "pending" }])).toEqual([]);
+  });
+
+  it("asks in plain words, naming how many of the selection", () => {
+    expect(duplicateApproveCopy(1, 1).title).toBe("Approve a possible duplicate?");
+    expect(duplicateApproveCopy(1, 1).description).toMatch(/^This entry looks like a duplicate: another entry has the same site/);
+    expect(duplicateApproveCopy(2, 5).title).toBe("Approve 2 possible duplicates?");
+    expect(duplicateApproveCopy(2, 5).description).toMatch(/^2 of these entries look like duplicates \(2 of the 5 you're approving\)/);
+    expect(duplicateApproveCopy(2, 5).confirm).toBe("Approve anyway");
+  });
+});
+
