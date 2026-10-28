@@ -25,6 +25,7 @@ import {
 import { entryDate, periodTotalQuery, previousPeriod, type EmissionPayload, type EntryPeriod } from "./logic/entry";
 import { editOf, entriesQuery, entryInPeriod, type SavedEntry } from "./logic/existing";
 import { BILL_UNREADABLE, billErrorMessage, billOf } from "./logic/bill";
+import { isDuplicateAnswer, savedEntryOf, type DuplicateBody, type SavedMatch } from "./logic/duplicate";
 import type { ColumnConfig, EmissionFactor, ModalRow } from "./types";
 
 /**
@@ -130,14 +131,15 @@ export type SaveOutcome =
   /** `warnings`: the engine's notes that never block (an older factor year, no FERA factor), shown on the result line (S3-4). */
   /** `status`: what the row was saved as; `draft` with the review workflow on (S3-15), otherwise `pending`. */
   | { kind: "saved"; emissionId: number | null; warnings?: string[]; status?: string | null }
-  | { kind: "duplicate"; message: string; existing: { tco2e: number | null; status: string | null } | null }
+  /** `existing`: the saved entry it collides with, who entered it and whether Replace is allowed (logic/duplicate.ts). */
+  | { kind: "duplicate"; message: string; existing: SavedMatch | null }
   /** `methodNotAllowed`: the form doesn't offer the row's method (S3-3 METHOD_NOT_ALLOWED); the message names the ones it does. */
   | { kind: "error"; message: string; modeLock: boolean; methodNotAllowed?: boolean };
 
 interface ApiError {
   response?: {
     status?: number;
-    data?: { message?: string; code?: string; duplicate?: boolean; mode_lock?: boolean; existing_emission?: { total_emission?: number | string; status?: string } };
+    data?: DuplicateBody & { mode_lock?: boolean };
   };
   message?: string;
 }
@@ -156,12 +158,12 @@ export async function saveRow(payload: EmissionPayload, onDuplicate?: "replace" 
   } catch (err) {
     const e = err as ApiError;
     const data = e.response?.data;
-    if (e.response?.status === 409 && data?.duplicate) {
-      const existing = data.existing_emission;
+    // A refused Replace (someone else's or an approved entry) goes back to the dialog with Replace off.
+    if (isDuplicateAnswer(e.response?.status, data)) {
       return {
         kind: "duplicate",
-        message: data.message ?? "An entry for this already exists in the period.",
-        existing: existing ? { tco2e: existing.total_emission == null ? null : Number(existing.total_emission), status: existing.status ?? null } : null,
+        message: data?.message ?? "An entry for this already exists in the period.",
+        existing: savedEntryOf(data),
       };
     }
     return {

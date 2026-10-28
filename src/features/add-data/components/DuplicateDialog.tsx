@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, Modal, SegmentedControl, formatNumber } from "../../../ui";
+import { enteredByText, replaceBlocked, replaceWhereAllowed, type SavedMatch } from "../logic/duplicate";
 
 /** Keep both (F-06): a second bill for the same month is saved as its own entry; the Manager sees it as a possible duplicate. */
 export type DuplicateChoice = "replace" | "keep" | "skip";
@@ -11,8 +12,8 @@ export type DuplicateItem = {
   tco2e: number | null;
   /** The server's 409 message. */
   message: string;
-  /** The saved entry it collides with, when the server sent it. */
-  existing: { tco2e: number | null; status: string | null } | null;
+  /** The saved entry it collides with, who entered it and whether it may be replaced, when the server sent it. */
+  existing: SavedMatch | null;
 };
 
 type Props = {
@@ -39,7 +40,9 @@ export function DuplicateDialog({ open, periodLabel, items, busy, onApply, onClo
     if (open) setChoices(Object.fromEntries(items.map((d) => [String(d.id), "skip" as const])));
   }, [open, items]);
 
-  const setAll = (choice: DuplicateChoice) => setChoices(Object.fromEntries(items.map((d) => [String(d.id), choice])));
+  // Replace all skips the rows that can't be replaced (someone else's or an approved entry).
+  const setAll = (choice: DuplicateChoice) =>
+    setChoices(choice === "replace" ? replaceWhereAllowed(items, choices) : Object.fromEntries(items.map((d) => [String(d.id), choice])));
   const replacing = Object.values(choices).filter((c) => c === "replace").length;
   const keeping = Object.values(choices).filter((c) => c === "keep").length;
   const doing = [replacing > 0 && `replace ${replacing}`, keeping > 0 && `keep both ${keeping}`].filter(Boolean).join(", ");
@@ -50,7 +53,7 @@ export function DuplicateDialog({ open, periodLabel, items, busy, onApply, onClo
       onClose={onClose}
       size="md"
       title={`${items.length} ${items.length === 1 ? "row is" : "rows are"} already entered for ${periodLabel}`}
-      description="Replace swaps the saved entry for the new one. Keep both saves the new one as another entry, for a second bill in the same month; your Manager sees the two as a possible duplicate. Skip keeps the saved entry and drops the new one."
+      description="Replace swaps the saved entry for the new one; you can't replace an entry someone else made or one already approved. Keep both saves the new one as another entry, for a second bill in the same month; your Manager sees the two as a possible duplicate. Skip keeps the saved entry and drops the new one."
       primaryAction={{
         label: doing ? `Apply (${doing})` : "Apply (skip all)",
         onClick: () => onApply(choices),
@@ -82,15 +85,17 @@ export function DuplicateDialog({ open, periodLabel, items, busy, onApply, onClo
                     {" · Saved: "}
                     {d.existing.tco2e !== null ? <span className="font-num">{formatNumber(d.existing.tco2e, 2)} tCO₂e</span> : "—"}
                     {d.existing.status && ` (${d.existing.status.charAt(0).toUpperCase()}${d.existing.status.slice(1)})`}
+                    {enteredByText(d.existing) && ` · ${enteredByText(d.existing)}`}
                   </>
                 )}
               </p>
               {!d.existing && <p className="text-xs text-muted">{d.message}</p>}
+              {replaceBlocked(d.existing) && <p className="text-xs text-muted">{replaceBlocked(d.existing)} Keep both or skip.</p>}
             </div>
             <SegmentedControl
               size="sm"
               label={`${d.label}: replace, keep both or skip`}
-              options={OPTIONS}
+              options={replaceBlocked(d.existing) ? OPTIONS.map((o) => (o.value === "replace" ? { ...o, disabled: true } : o)) : OPTIONS}
               value={choices[String(d.id)] ?? "skip"}
               onChange={(v) => setChoices((c) => ({ ...c, [String(d.id)]: v }))}
             />

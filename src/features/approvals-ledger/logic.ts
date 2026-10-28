@@ -2,7 +2,7 @@
 import type { BatchChannel, EmissionData, EmissionStatus, EmissionUploadBatch } from "../../services/emissionService";
 import { fyEndYear, fyStartYearOf } from "../../lib/fiscalYear";
 import { sortTwins } from "../../lib/scope3/fera";
-import type { ReviewGroup } from "../../lib/scope3/checks";
+import { type ReviewGroup, readChecks } from "../../lib/scope3/checks";
 import type { EmissionFx } from "../../lib/scope3/spend";
 import type { DeflatorUsed } from "../../services/fxRateService";
 import { DEFAULT_FY_START_MONTH, type Period, type SortState, formatMonth, formatNumber, formatReportingYear, writeContext } from "../../ui";
@@ -561,3 +561,23 @@ export function monthlyHistory(row: EmissionData, candidates: EmissionData[]): H
     return { ...m, label: formatMonth(`${m.year}-${String(m.month).padStart(2, "0")}`), total: t.total, entries: t.entries, current: m.year === anchor.year && m.month === anchor.month };
   });
 }
+
+/**
+ * Rows the review checks hold as a possible duplicate (S3-15 NO_DUPLICATE:
+ * another entry for the same site, category, activity and period). Approving
+ * one asks first: two people can file the same bill and both rows count.
+ */
+export const possibleDuplicates = <R extends { status?: string; checks?: unknown }>(rows: R[]): R[] =>
+  rows.filter((r) => (r.status ?? "pending") === "pending" && (readChecks(r.checks)?.held.includes("NO_DUPLICATE") ?? false));
+
+/** The question before approving rows that include possible duplicates. */
+export function duplicateApproveCopy(duplicates: number, approving: number): { title: string; description: string; confirm: string } {
+  const which = duplicates === 1 ? "This entry looks like a duplicate" : `${duplicates} of these entries look like duplicates`;
+  const of = approving > duplicates ? ` (${duplicates} of the ${approving} you're approving)` : "";
+  return {
+    title: duplicates === 1 ? "Approve a possible duplicate?" : `Approve ${duplicates} possible duplicates?`,
+    description: `${which}${of}: another entry has the same site, category, activity and period. Check it isn't the same bill entered twice; approving both counts it twice.`,
+    confirm: "Approve anyway",
+  };
+}
+
