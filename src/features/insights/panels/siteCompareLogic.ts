@@ -6,7 +6,7 @@ import type { EChartsOption } from "echarts";
 import type { SiteCompare, SiteCompareRow } from "../../../lib/insights/contracts";
 import { changeText, unitText } from "../../../lib/insights/labels";
 import { entrance, stagger } from "../../../lib/insights/motion";
-import { formatEmissions, formatNumber } from "../../../ui/format";
+import { formatEmissions, formatNumber, formatTonnes } from "../../../ui/format";
 import type { ChartTableColumn } from "../../../ui";
 import type { ChartTheme } from "../../../theme";
 import { SCOPE_LABEL } from "./pathwayLogic";
@@ -75,9 +75,9 @@ export function siteTable(data: SiteCompare, vs: string): Array<Record<string, s
     net: formatNumber(r.net, 1),
     change: changeText(r.change_pct, r.good, vs)?.words ?? "—",
     share: pctText(r.share_pct),
-    s1: formatNumber(r.scope_1, 1),
-    s2: formatNumber(r.scope_2, 1),
-    s3: formatNumber(r.scope_3, 1),
+    s1: formatTonnes(r.scope_1),
+    s2: formatTonnes(r.scope_2),
+    s3: formatTonnes(r.scope_3),
     intensity: intensityText(r) ?? "No production data",
     completeness: pctText(r.completeness_pct),
     pending: r.pending,

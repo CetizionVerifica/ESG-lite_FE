@@ -29,7 +29,7 @@ describe("KpiStrip", () => {
       />,
     );
     const total = screen.getByText("Total emissions").closest("dt")!.parentElement!;
-    expect(within(total).getByText("1,235").textContent).toBe("1,235");
+    expect(within(total).getByText("1,234.500").textContent).toBe("1,234.500"); // #209: 3 dp
     expect(within(total).getByText("tCO₂e")).toBeTruthy();
     expect(within(total).getByText("▼ 5.0%").className).toContain("text-good");
     const elec = screen.getByText("Electricity").closest("dt")!.parentElement!;
@@ -63,7 +63,7 @@ describe("ScopeBar", () => {
   it("describes the split and shows the legend", () => {
     render(<ScopeBar totals={{ scope1: 50, scope2: 30, scope3: 20 }} />);
     expect(screen.getByRole("img").getAttribute("aria-label")).toBe("Emissions by scope: Scope 1 50%, Scope 2 30%, Scope 3 20%");
-    expect(screen.getByText("50 tCO₂e")).toBeTruthy();
+    expect(screen.getByText("50.000 tCO₂e")).toBeTruthy();
   });
   it("shows an empty state for zero totals", () => {
     render(<ScopeBar totals={{ scope1: 0, scope2: 0, scope3: 0 }} />);

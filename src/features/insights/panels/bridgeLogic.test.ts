@@ -23,9 +23,10 @@ const small: Bridge = {
 
 describe("bridge words", () => {
   it("signs changes with a plus or a true minus", () => {
-    expect(signed(5_900)).toBe("+5,900");
-    expect(signed(-6_200)).toBe("−6,200");
-    expect(signed(0.2)).toBe("0");
+    expect(signed(5_900)).toBe("+5,900.000");
+    expect(signed(-6_200)).toBe("−6,200.000");
+    expect(signed(0.2)).toBe("+0.200");
+    expect(signed(0.0002)).toBe("0.000");
   });
 
   it("uses the server's driver label, else the plain-words fallback", () => {
@@ -38,11 +39,11 @@ describe("waterfallBars (layout only)", () => {
   it("floats each step on a transparent helper and keeps the server values for labels", () => {
     const bars = waterfallBars(small);
     expect(bars.map((b) => [b.kind, b.name, b.label])).toEqual([
-      ["from", "2025", "52,100"],
-      ["increase", "More output", "+5,900"],
-      ["decrease", "Cleaner electricity", "−6,200"],
-      ["decrease", "Supply chain (Scope 3)", "−2,100"],
-      ["to", "2026", "49,700"],
+      ["from", "2025", "52,100.000"],
+      ["increase", "More output", "+5,900.000"],
+      ["decrease", "Cleaner electricity", "−6,200.000"],
+      ["decrease", "Supply chain (Scope 3)", "−2,100.000"],
+      ["to", "2026", "49,700.000"],
     ]);
     expect(bars.map((b) => b.base)).toEqual([0, 52_100, 51_800, 49_700, 0]);
     expect(bars.map((b) => b.height)).toEqual([52_100, 5_900, 6_200, 2_100, 49_700]);
@@ -84,35 +85,35 @@ describe("bridgeOption", () => {
 
   it("labels bars with sign and puts the word in the tooltip", () => {
     const values = opt.series[1];
-    expect(values.label!.formatter({ dataIndex: 1 })).toBe("+5,900");
-    expect(values.label!.formatter({ dataIndex: 2 })).toBe("−6,200");
-    expect(opt.tooltip.formatter({ dataIndex: 1 })).toBe("More output: +5,900 tCO₂e (increase)");
-    expect(opt.tooltip.formatter({ dataIndex: 2 })).toBe("Cleaner electricity: −6,200 tCO₂e (decrease)");
-    expect(opt.tooltip.formatter({ dataIndex: 0 })).toBe("2025 total: 52,100 tCO₂e");
+    expect(values.label!.formatter({ dataIndex: 1 })).toBe("+5,900.000");
+    expect(values.label!.formatter({ dataIndex: 2 })).toBe("−6,200.000");
+    expect(opt.tooltip.formatter({ dataIndex: 1 })).toBe("More output: +5,900.000 tCO₂e (increase)");
+    expect(opt.tooltip.formatter({ dataIndex: 2 })).toBe("Cleaner electricity: −6,200.000 tCO₂e (decrease)");
+    expect(opt.tooltip.formatter({ dataIndex: 0 })).toBe("2025 total: 52,100.000 tCO₂e");
   });
 
   it("colours by kind", () => {
     expect(barColor("increase", t)).toBe("bad");
     expect(barColor("decrease", t)).toBe("good");
     expect(barColor("from", t)).toBe("brand");
-    expect(barTooltip(waterfallBars(small)[4])).toBe("2026 total: 49,700 tCO₂e");
+    expect(barTooltip(waterfallBars(small)[4])).toBe("2026 total: 49,700.000 tCO₂e");
   });
 });
 
 describe("table and aria", () => {
   it("lists totals and steps with the change and a word", () => {
     expect(bridgeTableRows(small)).toEqual([
-      { step: "2025 total", change: "52,100", kind: "Total" },
-      { step: "More output", change: "+5,900", kind: "Increase" },
-      { step: "Cleaner electricity", change: "−6,200", kind: "Decrease" },
-      { step: "Supply chain (Scope 3)", change: "−2,100", kind: "Decrease" },
-      { step: "2026 total", change: "49,700", kind: "Total" },
+      { step: "2025 total", change: "52,100.000", kind: "Total" },
+      { step: "More output", change: "+5,900.000", kind: "Increase" },
+      { step: "Cleaner electricity", change: "−6,200.000", kind: "Decrease" },
+      { step: "Supply chain (Scope 3)", change: "−2,100.000", kind: "Decrease" },
+      { step: "2026 total", change: "49,700.000", kind: "Total" },
     ]);
   });
 
   it("summarises in one sentence with server values", () => {
-    expect(bridgeAriaLabel(small)).toBe("Emissions went from 52,100 tCO₂e in 2025 to 49,700 tCO₂e in 2026; the biggest driver was cleaner electricity (−6,200 tCO₂e).");
-    expect(bridgeAriaLabel({ ...small, steps: [] })).toBe("Emissions went from 52,100 tCO₂e in 2025 to 49,700 tCO₂e in 2026.");
+    expect(bridgeAriaLabel(small)).toBe("Emissions went from 52,100.000 tCO₂e in 2025 to 49,700.000 tCO₂e in 2026; the biggest driver was cleaner electricity (−6,200.000 tCO₂e).");
+    expect(bridgeAriaLabel({ ...small, steps: [] })).toBe("Emissions went from 52,100.000 tCO₂e in 2025 to 49,700.000 tCO₂e in 2026.");
   });
 });
 

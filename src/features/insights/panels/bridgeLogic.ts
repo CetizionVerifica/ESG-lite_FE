@@ -7,7 +7,7 @@ import type { Bridge, Driver } from "../../../lib/insights/contracts";
 import { DRIVER_LABEL } from "../../../lib/insights/labels";
 import { entrance, morph } from "../../../lib/insights/motion";
 import type { ChartTheme } from "../../../theme";
-import { formatNumber } from "../../../ui/format";
+import { formatNumber, formatTonnes } from "../../../ui/format";
 
 export type BridgeStep = Bridge["steps"][number];
 export type BarKind = "from" | "increase" | "decrease" | "to";
@@ -15,10 +15,10 @@ export type BarKind = "from" | "increase" | "decrease" | "to";
 /** The driver's plain words: the server's `label`, else the shared fallback. */
 export const driverLabel = (step: Pick<BridgeStep, "driver" | "label">) => step.label?.trim() || DRIVER_LABEL[step.driver];
 
-/** "+5,900" / "−6,200" / "0" (a true minus sign, whole tonnes). */
+/** "+5,900.000" / "−6,200.500" / "0.000" (a true minus sign, tCO₂e to 3 decimals, #209). */
 export function signed(v: number): string {
-  const n = formatNumber(Math.abs(v), 0);
-  if (n === "0") return "0";
+  const n = formatTonnes(Math.abs(v));
+  if (!/[1-9]/.test(n)) return n;
   return `${v > 0 ? "+" : "−"}${n}`;
 }
 
@@ -58,7 +58,7 @@ export interface WaterfallBar {
  */
 export function waterfallBars(data: Bridge): WaterfallBar[] {
   const bars: WaterfallBar[] = [
-    { id: barGroupId({ kind: "from", year: data.from.year }), kind: "from", name: String(data.from.year), value: data.from.value, label: formatNumber(data.from.value, 0), base: 0, height: data.from.value },
+    { id: barGroupId({ kind: "from", year: data.from.year }), kind: "from", name: String(data.from.year), value: data.from.value, label: formatTonnes(data.from.value), base: 0, height: data.from.value },
   ];
   let level = data.from.value; // drawing position only
   for (const s of data.steps) {
@@ -67,7 +67,7 @@ export function waterfallBars(data: Bridge): WaterfallBar[] {
     bars.push({ id: barGroupId({ kind, driver: s.driver }), kind, name: driverLabel(s), value: s.value, label: signed(s.value), base, height: Math.abs(s.value), driver: s.driver });
     level += s.value;
   }
-  bars.push({ id: barGroupId({ kind: "to", year: data.to.year }), kind: "to", name: String(data.to.year), value: data.to.value, label: formatNumber(data.to.value, 0), base: 0, height: data.to.value });
+  bars.push({ id: barGroupId({ kind: "to", year: data.to.year }), kind: "to", name: String(data.to.year), value: data.to.value, label: formatTonnes(data.to.value), base: 0, height: data.to.value });
   return bars;
 }
 
@@ -80,7 +80,7 @@ export function barColor(kind: BarKind, t: Pick<ChartTheme, "ui" | "status">): s
 
 /** Tooltip lines: name, value with unit, and the word. */
 export function barTooltip(bar: WaterfallBar): string {
-  if (bar.kind === "from" || bar.kind === "to") return `${bar.name} total: ${formatNumber(bar.value, 0)} tCO₂e`;
+  if (bar.kind === "from" || bar.kind === "to") return `${bar.name} total: ${formatTonnes(bar.value)} tCO₂e`;
   return `${bar.name}: ${bar.label} tCO₂e (${bar.kind})`;
 }
 
@@ -137,13 +137,13 @@ export const BRIDGE_COLUMNS = [
 /** Table view rows: totals and each step, server values with sign and a word. */
 export function bridgeTableRows(data: Bridge): Array<{ step: string; change: string; kind: string }> {
   return waterfallBars(data).map((b) =>
-    b.kind === "from" || b.kind === "to" ? { step: `${b.name} total`, change: formatNumber(b.value, 0), kind: KIND_WORD[b.kind] } : { step: b.name, change: b.label, kind: KIND_WORD[b.kind] },
+    b.kind === "from" || b.kind === "to" ? { step: `${b.name} total`, change: formatTonnes(b.value), kind: KIND_WORD[b.kind] } : { step: b.name, change: b.label, kind: KIND_WORD[b.kind] },
   );
 }
 
 /** "Emissions went from 44,910 tCO₂e in 2025 to 41,280 tCO₂e in 2026; the biggest driver was cleaner electricity (−2,449 tCO₂e)." */
 export function bridgeAriaLabel(data: Bridge): string {
-  const head = `Emissions went from ${formatNumber(data.from.value, 0)} tCO₂e in ${data.from.year} to ${formatNumber(data.to.value, 0)} tCO₂e in ${data.to.year}`;
+  const head = `Emissions went from ${formatTonnes(data.from.value)} tCO₂e in ${data.from.year} to ${formatTonnes(data.to.value)} tCO₂e in ${data.to.year}`;
   // Picks the step with the largest server value by size; nothing is computed.
   const biggest = data.steps.reduce<BridgeStep | null>((best, s) => (!best || Math.abs(s.value) > Math.abs(best.value) ? s : best), null);
   if (!biggest) return `${head}.`;
