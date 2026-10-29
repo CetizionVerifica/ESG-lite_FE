@@ -89,7 +89,7 @@ export default function TargetsPage() {
                     </div>
                   )}
                 </div>
-                <TargetProgress label={targetText(t)} pct={t.progress_pct} status={statusOf(t)} />
+                <TargetProgress label={targetText({ ...t, unit })} pct={t.progress_pct} status={statusOf(t)} />
                 <dl className="grid grid-cols-3 gap-2 text-xs">
                   <div>
                     <dt className="text-muted">Baseline {t.baseline_year}</dt>

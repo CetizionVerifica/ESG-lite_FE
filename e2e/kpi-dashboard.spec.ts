@@ -41,18 +41,19 @@ test("cards show the year, the change, a trend and the target; pending values ar
   await expect(page.getByRole("link", { name: "Review them" })).toHaveAttribute("href", "/data/approvals?view=kpi");
 
   const scope1 = page.getByTestId("kpi-card").filter({ hasText: "Scope 1 emissions" });
-  await expect(scope1.getByTestId("kpi-card-value")).toHaveText("4,650.20 tCO₂e");
+  // #209: a tCO₂e figure always shows 3 decimals (the mock's 4650.2 for 2026).
+  await expect(scope1.getByTestId("kpi-card-value")).toHaveText("4,650.200 tCO₂e");
   await expect(scope1).toContainText("−7 % vs 2025");
   await expect(scope1).toContainText("From your data");
   await expect(scope1.getByTestId("kpi-target-progress")).toContainText("Target: −40 % by 2030 from 2024");
   await expect(scope1.getByTestId("kpi-target-progress")).toContainText("28.1 % of the way");
-  await expect(scope1.getByRole("img", { name: /Scope 1 emissions, 12 periods: from 540 tCO₂e \(Oct 2025\) to 512 tCO₂e \(Sep 2026\)/ })).toBeVisible();
+  await expect(scope1.getByRole("img", { name: /Scope 1 emissions, 12 periods: from 540\.000 tCO₂e \(Oct 2025\) to 512\.400 tCO₂e \(Sep 2026\)/ })).toBeVisible();
   await expect(scope1).toContainText("Climate");
 
   // Last year's figures.
   await page.getByLabel("Year").selectOption("2025");
   await expect(page).toHaveURL(/year=2025/);
-  await expect(scope1.getByTestId("kpi-card-value")).toHaveText("4,980.40 tCO₂e");
+  await expect(scope1.getByTestId("kpi-card-value")).toHaveText("4,980.400 tCO₂e");
 });
 
 test("Remind asks the owner once; Open goes to what's left for the period", async ({ page }) => {
