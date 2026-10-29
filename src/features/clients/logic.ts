@@ -31,6 +31,8 @@ export type Company = {
   design_studio_enabled?: boolean;
   /** "Insights" (IN-0, I2); absent on servers without migrate:in-switch = off. */
   insights_enabled?: boolean;
+  /** "Help assistant" (AS-1); absent on servers without migrate:as-1-assistant = off. */
+  assistant_enabled?: boolean;
 };
 export type Site = { site_id: number; name: string; address?: string | null; company?: { company_id: number } | null; country?: { name: string } | null };
 export type AdminUser = {

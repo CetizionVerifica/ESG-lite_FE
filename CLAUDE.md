@@ -97,3 +97,8 @@ Run after `npm ci`:
 - Each panel loads, fails and retries on its own. Every chart has a table view and an aria label; colour is never the only signal.
 - Motion goes through `src/lib/insights/motion.ts` and is off under `prefers-reduced-motion`.
 - `docs/insights/05-ux.md` is binding.
+
+## Help assistant ("Ask ESGLite") — see docs/assistant/ (in ESG-lite)
+- Logic and API in `src/lib/assistant/`; the top bar button and chat drawer in `src/features/shell/components/assistant/` (the shell owns it, like the bell). The button shows only when `GET /assistant/status` says `enabled` and `configured`.
+- Answers render as React elements from a small Markdown subset (no HTML); links only to app paths. The FE sends the question, the last turns and the page path; never data.
+- The Superadmin switch is Clients → client → Overview → Help assistant (`company.assistant_enabled`).

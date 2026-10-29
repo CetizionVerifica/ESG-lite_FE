@@ -3,6 +3,7 @@ import type { ShellUser } from "../account";
 import type { Look, ShellBrand } from "../brand";
 import type { NavItem } from "../nav";
 import type { Appearance } from "../../../theme";
+import AssistantButton from "./assistant/AssistantButton"; // AS-1
 import AvatarMenu from "./AvatarMenu";
 import BellPopover from "./BellPopover";
 import DesktopNav from "./DesktopNav";
@@ -57,6 +58,8 @@ export default function TopBar(props: TopBarProps) {
             <span className="hidden xl:inline">Search</span>
             <kbd className="hidden rounded-(--r-sm) border border-(--t-chrome-line) px-1 font-sans text-[11px] xl:inline">{isMac ? "⌘K" : "Ctrl K"}</kbd>
           </button>
+          {/* AS-1: "Ask ESGLite", only when the help assistant is on */}
+          <AssistantButton />
           <BellPopover />
           <div className="hidden lg:block">
             <AvatarMenu user={user} appearance={appearance} onAppearance={onAppearance} onSignOut={onSignOut} />
