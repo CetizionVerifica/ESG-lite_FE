@@ -18,7 +18,11 @@ export type FactorSnapshot = {
   year: number;
   /** S3-5: the deflator a spend row used (index[base_year] ÷ index[spend_year]). */
   deflator?: DeflatorUsed | null;
+  /** D6a: the well-to-tank factor a Category 4, 6, 7 or 9 row's total includes, and its kgCO₂e. */
+  wtt?: WttSnapshot | null;
 };
+
+export type WttSnapshot = Pick<FactorSnapshot, "emission_factor_id" | "emission_category_name" | "factor_value" | "denominator_unit" | "source" | "year"> & { kgco2e: string };
 
 /** A factor's value as a number, whether the API sent it as text or a number; null when it isn't one. */
 export function factorValue(factor: { factor_value: number | string | null | undefined }): number | null {

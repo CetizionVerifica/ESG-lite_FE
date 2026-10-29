@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cat3PreviewText, feraSubLabel, feraSubShort, isScope2, sortTwins, splitFeraFactors, twinsTotal, upstreamSubFor } from "./fera";
+import { cat3PreviewText, feraSubLabel, feraSubShort, ghgCategoryOf, isScope2, sortTwins, splitFeraFactors, tonnesWithWtt, twinsTotal, upstreamSubFor, wttInRow } from "./fera";
 
 describe("Category 3 sub-activities", () => {
   it("labels each twin by its sub-activity", () => {
@@ -52,3 +52,28 @@ describe("Category 3 sub-activities", () => {
     expect(cat3PreviewText([{ sub: "3a_upstream_fuels", value: null }], fmt)).toBeNull();
   });
 });
+
+describe("D6a: WTT in the row for Categories 4, 6, 7 and 9", () => {
+  it("reads ghg_category, else a Scope 3 category's name, as the engine does", () => {
+    expect(ghgCategoryOf({ category_name: "Upstream Transportation and Distribution", scope: "Scope 3" })).toBe(4);
+    expect(ghgCategoryOf({ category_name: "Business Travel", scope: "Scope 3" })).toBe(6);
+    expect(ghgCategoryOf({ category_name: "Employee Commuting", scope: "Scope 3" })).toBe(7);
+    expect(ghgCategoryOf({ category_name: "Downstream transportation and distribution", scope: "Scope 3" })).toBe(9);
+    expect(ghgCategoryOf({ category_name: "Anything", scope: "Scope 3", ghg_category: 6 })).toBe(6);
+    expect(ghgCategoryOf({ category_name: "Upstream transport fuel", scope: "Scope 1" })).toBeNull();
+  });
+
+  it("puts WTT in the row only for those four categories", () => {
+    expect(wttInRow({ category_name: "Business Travel", scope: "Scope 3" })).toBe(true);
+    expect(wttInRow({ category_name: "Upstream leased assets", scope: "Scope 3" })).toBe(false);
+    expect(wttInRow({ category_name: "FERA", scope: "Scope 3", ghg_category: 3 })).toBe(false);
+    expect(wttInRow({ category_name: "Mobile Combustion", scope: "Scope 1" })).toBe(false);
+    expect(wttInRow(null)).toBe(false);
+  });
+
+  it("sums kg at 4 dp, then rounds the tonnes", () => {
+    expect(tonnesWithWtt(229.28, 33.5)).toBe(0.26);
+    expect(tonnesWithWtt(4.996, 0.0045)).toBe(0.01);
+  });
+});
+
