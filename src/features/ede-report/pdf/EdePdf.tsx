@@ -46,6 +46,8 @@ function styles(t: PdfTheme) {
     cell: { paddingVertical: 4, paddingHorizontal: 6 },
     head: { fontSize: 8.5, fontWeight: 700, color: c.muted },
     num: { textAlign: "right", fontFamily: t.fonts.num },
+    // #209: a 3-dp figure up to 99,999,999.999 t fits a 16% column.
+    numDense: { fontSize: 8.5, paddingHorizontal: 4 },
     kpis: { flexDirection: "row", flexWrap: "wrap", marginTop: 10 },
     kpi: { width: "33.33%", padding: 8, borderWidth: 1, borderColor: c.line },
     kpiLabel: { fontSize: 8, color: c.muted, marginBottom: 2 },
@@ -58,12 +60,27 @@ function styles(t: PdfTheme) {
 
 type S = ReturnType<typeof styles>;
 
-function Table({ s, headers, widths, rows, numeric }: { s: S; headers: string[]; widths: number[]; rows: (string | number)[][]; numeric: number[] }) {
+function Table({
+  s,
+  headers,
+  widths,
+  rows,
+  numeric,
+  dense,
+}: {
+  s: S;
+  headers: string[];
+  widths: number[];
+  rows: (string | number)[][];
+  numeric: number[];
+  /** Smaller numeric cells, for tables with several tCO2e columns. */
+  dense?: boolean;
+}) {
   return (
     <View style={s.table}>
       <View style={s.th} fixed>
         {headers.map((h, i) => (
-          <Text key={i} style={[s.cell, s.head, { width: `${widths[i]}%` }, numeric.includes(i) ? s.num : {}]}>
+          <Text key={i} style={[s.cell, s.head, { width: `${widths[i]}%` }, numeric.includes(i) ? s.num : {}, dense && numeric.includes(i) ? { paddingHorizontal: 4 } : {}]}>
             {h}
           </Text>
         ))}
@@ -71,7 +88,7 @@ function Table({ s, headers, widths, rows, numeric }: { s: S; headers: string[];
       {rows.map((r, ri) => (
         <View key={ri} style={s.tr} wrap={false}>
           {r.map((v, i) => (
-            <Text key={i} style={[s.cell, { width: `${widths[i]}%` }, numeric.includes(i) ? s.num : {}]}>
+            <Text key={i} style={[s.cell, { width: `${widths[i]}%` }, numeric.includes(i) ? s.num : {}, dense && numeric.includes(i) ? s.numDense : {}]}>
               {String(v)}
             </Text>
           ))}
@@ -193,8 +210,9 @@ export function EdePdf(p: EdePdfProps) {
         <Table
           s={s}
           headers={["Site", "Total", "Scope 1", "Scope 2", "Scope 3", "Share"]}
-          widths={[30, 15, 13, 13, 13, 16]}
+          widths={[20, 16, 16, 16, 16, 16]}
           numeric={[1, 2, 3, 4, 5]}
+          dense
           rows={[...data.bySite]
             .sort((a, b) => b.total - a.total)
             .map((r) => [r.siteName, formatTonnes(r.total), formatTonnes(r.scope1), formatTonnes(r.scope2), formatTonnes(r.scope3), `${n(r.pctOfTotal, 1)}%`])}
