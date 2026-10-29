@@ -11,53 +11,58 @@ import {
   formatNumber,
   formatQuantity,
   formatReportingYear,
+  formatTonnes,
+  formatTonnesChange,
 } from "./format";
 
-describe("formatEmissions", () => {
-  it("adds thousands separators and drops decimals from 1,000 t", () => {
-    expect(formatEmissions(12345.67)).toBe("12,346 tCO₂e");
+describe("formatEmissions (#209: always 3 decimals)", () => {
+  it("adds thousands separators and keeps 3 decimals at any size", () => {
+    expect(formatEmissions(12345.67)).toBe("12,345.670 tCO₂e");
+    expect(formatEmissions(12.46)).toBe("12.460 tCO₂e");
+    expect(formatEmissions(12)).toBe("12.000 tCO₂e");
   });
-  it("keeps one decimal between 1 and 1,000 t", () => {
-    expect(formatEmissions(12.46)).toBe("12.5 tCO₂e");
-    expect(formatEmissions(12)).toBe("12 tCO₂e");
-  });
-  it("stays in tCO₂e below 1 t, with up to 3 decimals", () => {
-    expect(formatEmissions(0.71)).toBe("0.71 tCO₂e");
-    expect(formatEmissions(0.42)).toBe("0.42 tCO₂e");
+  it("stays in tCO₂e below 1 t", () => {
+    expect(formatEmissions(0.71)).toBe("0.710 tCO₂e");
     expect(formatEmissions(0.0123)).toBe("0.012 tCO₂e");
-    expect(emissionsParts(0.0004)).toEqual({ value: "0", unit: "tCO₂e" });
+    expect(emissionsParts(0.0004)).toEqual({ value: "0.000", unit: "tCO₂e" });
   });
   it("shows zero in tonnes and a dash for missing values", () => {
-    expect(formatEmissions(0)).toBe("0 tCO₂e");
+    expect(formatEmissions(0)).toBe("0.000 tCO₂e");
     expect(formatEmissions(null)).toBe("—");
     expect(formatEmissions(Number.NaN)).toBe("—");
   });
   it("handles negative values (removals)", () => {
-    expect(formatEmissions(-1500)).toBe("-1,500 tCO₂e");
+    expect(formatEmissions(-1500)).toBe("-1,500.000 tCO₂e");
   });
-  it("rounds near the 1 t and 1,000 t boundaries", () => {
-    expect(formatEmissions(0.9996)).toBe("1 tCO₂e");
-    expect(formatEmissions(-0.9996)).toBe("-1 tCO₂e");
+  it("rounds half up at the third decimal", () => {
+    expect(formatEmissions(0.9996)).toBe("1.000 tCO₂e");
     expect(formatEmissions(0.9994)).toBe("0.999 tCO₂e");
-    expect(formatEmissions(999.96)).toBe("1,000 tCO₂e");
+    expect(formatEmissions(999.9996)).toBe("1,000.000 tCO₂e");
   });
   it("never prints -0", () => {
-    expect(formatEmissions(-0.0004)).toBe("0 tCO₂e");
-    expect(formatEmissions(-0)).toBe("0 tCO₂e");
-    expect(formatEmissions(-0.04)).toBe("-0.04 tCO₂e");
+    expect(formatEmissions(-0.0004)).toBe("0.000 tCO₂e");
+    expect(formatEmissions(-0)).toBe("0.000 tCO₂e");
+    expect(formatEmissions(-0.04)).toBe("-0.040 tCO₂e");
     expect(formatNumber(-0.4)).toBe("0");
     expect(formatNumber(-0.004, 2)).toBe("0.00");
     expect(formatIntensity(-0.04)).toBe("0.0 tCO₂e/t");
   });
+  it("signs a change with a true minus", () => {
+    expect(formatTonnesChange(600)).toBe("+600.000 tCO₂e");
+    expect(formatTonnesChange(-12.5)).toBe("−12.500 tCO₂e");
+    expect(formatTonnesChange(-0.0001)).toBe("0.000 tCO₂e");
+    expect(formatTonnesChange(null)).toBe("—");
+  });
 });
 
 describe("single entries (F-12, F-17)", () => {
-  it("shows an entry's tCO₂e with the 2 decimals the server stores", () => {
-    expect(formatEntryTonnes(4.02)).toBe("4.02");
-    expect(formatEntryTonnes(4)).toBe("4.00");
-    expect(formatEntryTonnes(4.77)).toBe("4.77");
-    expect(formatEntryTonnes(1234.5)).toBe("1,234.50");
-    expect(formatEntryEmissions(0.07)).toBe("0.07 tCO₂e");
+  it("shows an entry's tCO₂e with the 3 decimals the server stores (#209)", () => {
+    expect(formatEntryTonnes(4.022)).toBe("4.022");
+    expect(formatEntryTonnes(4)).toBe("4.000");
+    expect(formatEntryTonnes(4.77)).toBe("4.770");
+    expect(formatEntryTonnes(1234.5)).toBe("1,234.500");
+    expect(formatTonnes(1234.5)).toBe("1,234.500");
+    expect(formatEntryEmissions(0.07)).toBe("0.070 tCO₂e");
     expect(formatEntryEmissions(null)).toBe("—");
   });
   it("shows a whole quantity without decimals, else 2", () => {

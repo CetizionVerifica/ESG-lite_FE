@@ -55,8 +55,8 @@ export function PreviewStep(props: {
     },
     { id: "value", header: "Value", numeric: true, value: (r) => (r.activity_value == null || r.activity_value === "" ? null : Number(r.activity_value)), cell: (r) => (r.activity_value == null || r.activity_value === "" ? <span className="text-muted">–</span> : String(r.activity_value)) },
     { id: "unit", header: "Unit", value: (r) => String(r.activity_data_unit ?? "") },
-    { id: "tco2e", header: "tCO₂e", numeric: true, sortable: true, decimals: 2, value: (r) => (r.total_emission == null ? null : Number(r.total_emission)) },
-    { id: "fera", header: "FERA tCO₂e", numeric: true, decimals: 2, defaultHidden: true, value: (r) => (r.fera_total_emission == null ? null : Number(r.fera_total_emission)) },
+    { id: "tco2e", header: "tCO₂e", numeric: true, sortable: true, decimals: 3, value: (r) => (r.total_emission == null ? null : Number(r.total_emission)) },
+    { id: "fera", header: "FERA tCO₂e", numeric: true, decimals: 3, defaultHidden: true, value: (r) => (r.fera_total_emission == null ? null : Number(r.fera_total_emission)) },
     { id: "date", header: "Filed in", value: (r) => String(r.date_of_reporting ?? "").slice(0, 7), defaultHidden: false },
     {
       id: "issue",

@@ -11,12 +11,18 @@ export function AtAGlance({ glance, month }: { glance: Glance; month: string }) 
     <aside className="space-y-4" aria-label="Your month at a glance">
       <section className={`${panel} p-4`}>
         <h2 className="text-sm font-semibold text-ink">Your month at a glance</h2>
-        <dl className="mt-3 grid grid-cols-3 gap-3 lg:grid-cols-1">
-          <div>
+        {/* #209: on a phone "Entered" takes the whole first row, so a 3-decimal figure has room; the unit may wrap. */}
+        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-1">
+          <div className="col-span-2 sm:col-span-1">
             <dt className="text-xs text-muted">Entered</dt>
             <dd className="font-num text-xl font-semibold tabular-nums text-ink">
               {t.value}
-              {t.unit && <span className="ml-1 text-xs font-normal text-muted">{t.unit}</span>}
+              {t.unit && (
+                <>
+                  <wbr />
+                  <span className="ml-1 text-xs font-normal text-muted">{t.unit}</span>
+                </>
+              )}
             </dd>
           </div>
           <div>

@@ -23,6 +23,7 @@ import {
   exportMatrix,
   focusRing,
   formatNumber,
+  formatTonnes,
   UNDO_MS,
   toMatrix,
   useContextParams,
@@ -752,7 +753,7 @@ function DuplicateApproveModal({
           <li key={r.pk_id} className="px-3 py-2">
             <p className="font-medium text-ink">{describe(r)}</p>
             <p className="text-xs text-muted">
-              <span className="font-num">{formatNumber(Number(r.total_emission ?? 0), 2)} tCO₂e</span>
+              <span className="font-num">{formatTonnes(Number(r.total_emission ?? 0))} tCO₂e</span>
               {r.created_by?.name ? ` · ${r.created_by.name}` : ""}
             </p>
           </li>

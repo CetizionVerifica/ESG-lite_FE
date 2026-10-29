@@ -32,7 +32,7 @@ describe("HeroStrip (IN-1)", () => {
   it("shows the server's figures with words, not colour alone", () => {
     renderHero(summaryData(true));
     const net = screen.getByTestId("hero-net");
-    expect(within(net).getByTestId("hero-net-value").textContent).toBe("41,280");
+    expect(within(net).getByTestId("hero-net-value").textContent).toBe("41,280.400");
     expect(within(net).getByTestId("change-chip").textContent).toBe("down 8.1% on 2025");
     expect(within(net).getByTestId("change-chip").dataset.tone).toBe("good");
     expect(within(net).getByTestId("status-chip").textContent).toBe("At risk");

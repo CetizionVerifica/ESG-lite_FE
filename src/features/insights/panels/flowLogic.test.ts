@@ -88,7 +88,7 @@ describe("flowLogic (IN-6)", () => {
 
   it("tooltips: tonnes formatted, counts in words with the fit, disclosures with their framework", () => {
     const labels = new Map(on.nodes.map((n) => [n.id, n.label]));
-    expect(linkTooltip(on.links[0], labels)).toBe("Chennai plant → Scope 1<br/>6,100 tCO₂e");
+    expect(linkTooltip(on.links[0], labels)).toBe("Chennai plant → Scope 1<br/>6,100.000 tCO₂e");
     const partial = on.links.find((l) => l.fit === "partial")!;
     expect(linkTooltip(partial, labels)).toBe("Gross Scope 2 (location) → ESRS E1-6<br/>feeds 1 disclosure · Partial fit");
     expect(nodeTooltip(on.nodes.find((n) => n.id === "disc:GRI:305-1")!, true)).toBe("GRI 305-1<br/>Disclosure · GRI");
@@ -105,7 +105,7 @@ describe("flowLogic (IN-6)", () => {
   it("table rows: source, target, value, measure and fit in the server's order", () => {
     const { columns, rows } = flowTable(on);
     expect(columns.map((c) => c.header)).toEqual(["From", "To", "Value", "Measure", "Fit"]);
-    expect(rows[0]).toEqual({ source: "Chennai plant", target: "Scope 1", value: "6,100", measure: "tCO₂e", fit: null });
+    expect(rows[0]).toEqual({ source: "Chennai plant", target: "Scope 1", value: "6,100.000", measure: "tCO₂e", fit: null });
     expect(rows.find((r) => r.target === "ESRS E1-6" && r.source === "Gross Scope 3")).toEqual({ source: "Gross Scope 3", target: "ESRS E1-6", value: "1", measure: "Count", fit: "Derived" });
     expect(rows).toHaveLength(on.links.length);
   });

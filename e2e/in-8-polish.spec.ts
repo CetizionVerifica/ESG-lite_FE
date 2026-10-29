@@ -8,10 +8,10 @@ test("the stripes band summarises the months in words and reads a month on hover
   await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true });
   await page.goto("/insights?year=2026");
   const band = page.getByTestId("stripes").getByRole("img");
-  await expect(band).toHaveAttribute("aria-label", "Monthly emissions from Jan 2021 to Sep 2026: 4,300 tCO₂e in the first month and 3,280 tCO₂e in the last; darker is higher.");
+  await expect(band).toHaveAttribute("aria-label", "Monthly emissions from Jan 2021 to Sep 2026: 4,300.000 tCO₂e in the first month and 3,280.000 tCO₂e in the last; darker is higher.");
   await expect(page.getByTestId("stripes").locator("[data-month]")).toHaveCount(69);
   await page.getByTestId("stripes").locator('[data-month="2021-01"]').hover();
-  await expect(page.getByTestId("stripes-readout")).toHaveText("Jan 2021: 4,300 tCO₂e");
+  await expect(page.getByTestId("stripes-readout")).toHaveText("Jan 2021: 4,300.000 tCO₂e");
 });
 
 test("under reduced motion the hero shows its final figures at once and nothing animates", async ({ page }) => {
@@ -21,7 +21,7 @@ test("under reduced motion the hero shows its final figures at once and nothing 
   const value = page.getByTestId("hero-net-value");
   await value.waitFor();
   // The very first text is the server's value (no count-up from 0).
-  expect(await value.textContent()).toBe("41,280");
+  expect(await value.textContent()).toBe("41,280.400");
   const animations = await page.evaluate(() => document.getAnimations().length);
   expect(animations).toBe(0);
 });
@@ -30,7 +30,7 @@ test("with motion, the hero counts up and lands on the server's value", async ({
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true });
   await page.goto("/insights?year=2026");
-  await expect(page.getByTestId("hero-net-value")).toHaveText("41,280");
+  await expect(page.getByTestId("hero-net-value")).toHaveText("41,280.400");
 });
 
 test("present mode: same filters, arrow keys move through the slides, Esc goes back", async ({ page }) => {

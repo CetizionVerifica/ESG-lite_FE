@@ -167,7 +167,7 @@ test("a rejected entry is fixed and resubmitted in the drawer", async ({ page })
   const quantity = drawer.getByLabel("Quantity");
   await expect(quantity).toHaveValue("1000");
   await quantity.fill("1200");
-  await expect(drawer.getByText("= 3.22 tCO₂e")).toBeVisible();
+  await expect(drawer.getByText("= 3.216 tCO₂e")).toBeVisible();
 
   await drawer.getByRole("button", { name: "Resubmit" }).click();
   await expect(drawer.getByText("Say what you changed so the reviewer can check it.")).toBeVisible();
@@ -219,7 +219,7 @@ test("editing an entry with no factor in the factor year uses the newest one fro
   const drawer = page.getByRole("dialog");
   await drawer.getByRole("button", { name: "Fix and resubmit" }).click();
   await drawer.getByLabel("Quantity").fill("1200");
-  await expect(drawer.getByText("= 3.00 tCO₂e")).toBeVisible();
+  await expect(drawer.getByText("= 3.000 tCO₂e")).toBeVisible();
   await expect(drawer.getByText("No factor for this category")).toHaveCount(0);
 });
 

@@ -158,10 +158,10 @@ export function signedPct(pct: number | null): string {
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v)} %`;
 }
 
-/** "+600 tCO₂e" / "−12.5 tCO₂e". */
+/** "+600.000 tCO₂e" / "−12.500 tCO₂e" (3 decimals, #209). */
 export function signedT(t: number): string {
-  const v = Math.round(t * 100) / 100;
-  const abs = Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: Math.abs(v) >= 100 ? 0 : 2 });
+  const v = Math.round(t * 1000) / 1000;
+  const abs = Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${abs} tCO₂e`;
 }
 
@@ -176,7 +176,7 @@ export function beforeAfterRows(before: CategoryTotal[], after: CategoryTotal[])
   const keys = new Set<number | null>([...before, ...after].map((c) => c.n));
   const val = (list: CategoryTotal[], n: number | null) => list.find((c) => c.n === n)?.tco2e ?? 0;
   return [...keys]
-    .map((n) => ({ n, before: val(before, n), after: val(after, n), delta: Math.round((val(after, n) - val(before, n)) * 100) / 100 }))
+    .map((n) => ({ n, before: val(before, n), after: val(after, n), delta: Math.round((val(after, n) - val(before, n)) * 1000) / 1000 }))
     .filter((r) => r.before !== 0 || r.after !== 0)
     .sort((a, b) => (a.n ?? 99) - (b.n ?? 99));
 }

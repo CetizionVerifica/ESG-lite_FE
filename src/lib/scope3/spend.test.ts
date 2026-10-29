@@ -91,7 +91,7 @@ describe("spend inputs", () => {
     const yearlyRates = new Map([[spendRateKey("INR", "2026-12-31", "USD", 2022), inrRate]]);
     const calc = createEmissionCalculator({ emissionFactors: [eeio], spendRates: yearlyRates, reportingDate: "2026-12-31", reportingPeriod: "yearly" });
     expect(calc.spendDetail(dated)?.spend.spend_date).toBe("2026-12-31");
-    expect(calc.calculateEmission(dated).value).toBe(5.19);
+    expect(calc.calculateEmission(dated).value).toBe(5.192);
   });
 
   it("takes the quantity when the unit is a currency, and not for kWh", () => {
@@ -131,7 +131,7 @@ describe("spend total (engine mirror)", () => {
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.kg).toBeCloseTo(5192.1603, 3);
-    expect(out.tonnes).toBe(5.19);
+    expect(out.tonnes).toBe(5.192);
     expect(spendPreviewLine(input, out, eeio)).toBe("₹ 12,40,000 ≈ USD 12,362 (rate on 3 Sep 2026) × 0.42 kgCO₂e/USD (2022 USD, deflated)");
   });
 
@@ -163,10 +163,10 @@ describe("spend total (engine mirror)", () => {
 
   it("the calculator uses it for spend rows and leaves other rows alone", () => {
     const input = { emissionFactors: [eeio], spendRates: rates, reportingDate: "2026-09-30" };
-    expect(calculateEmission(input, row())).toEqual({ value: 5.19, status: "ok" });
+    expect(calculateEmission(input, row())).toEqual({ value: 5.192, status: "ok" });
     expect(calculateEmission({ ...input, spendRates: undefined }, row()).status).toBe(SPEND_RATE_PENDING);
     const kg: EmissionFactor = { ...eeio, factor_type: "cradle_to_gate", denominator_unit: "kg", price_currency: null, price_base_year: null };
-    expect(calculateEmission({ emissionFactors: [kg] }, { id: 1, emission_category: "Chemicals (USEEIO)", quantity: "100", activity_data_unit: "kg" })).toEqual({ value: 0.04, status: "ok" });
+    expect(calculateEmission({ emissionFactors: [kg] }, { id: 1, emission_category: "Chemicals (USEEIO)", quantity: "100", activity_data_unit: "kg" })).toEqual({ value: 0.042, status: "ok" });
     expect(createEmissionCalculator(input).spendDetail(row())?.outcome.ok).toBe(true);
   });
 

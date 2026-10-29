@@ -69,7 +69,7 @@ function Row({ siteId, category, month, locked, workflow }: RowProps) {
       </div>
       <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
         <WordPill word={word} />
-        <span className="w-24 whitespace-nowrap text-right font-num text-sm tabular-nums text-ink">
+        <span className="min-w-36 shrink-0 whitespace-nowrap text-right font-num text-sm tabular-nums text-ink">
           {category.status === "pending" || category.status === "approved" ? formatEmissions(Number(category.total_emission)) : ""}
         </span>
         {nothingOffered && workflow && (

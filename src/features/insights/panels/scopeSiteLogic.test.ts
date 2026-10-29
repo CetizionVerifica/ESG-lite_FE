@@ -22,7 +22,7 @@ describe("By scope and site (no KPI tracking)", () => {
   it("has a table and a sentence", () => {
     const rows = scopeSiteRows(flowData(false));
     expect(scopeSiteTable(rows).rows[1]).toEqual({ site: "Chennai plant", scope: "Scope 2", value: 5_900 });
-    expect(scopeSiteAria(rows)).toBe("Emissions by site and scope for 3 sites; the largest box is Nagpur plant · Scope 1 (8,020 tCO₂e).");
+    expect(scopeSiteAria(rows)).toBe("Emissions by site and scope for 3 sites; the largest box is Nagpur plant · Scope 1 (8,020.000 tCO₂e).");
     expect(scopeSiteAria([])).toBe("No approved emissions by site and scope yet.");
   });
 });

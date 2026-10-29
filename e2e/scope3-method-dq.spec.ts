@@ -129,7 +129,7 @@ test("a contributor enters values only: the form's method is sent, no method cho
   await row.getByLabel("Unit").selectOption("kg");
   await pickGulf(page);
   // The supplier's own figure, 8.6 kg per kg, without the figure line (reviewers see that).
-  await expect(row.getByText("= 8.60 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 8.600 tCO₂e")).toBeVisible();
   await expect(row.getByTestId("supplier-figure")).toHaveCount(0);
   await expect(row.getByRole("group", { name: "How is row 1 calculated?" })).toHaveCount(0);
   await expect(row.getByRole("radio")).toHaveCount(0);
@@ -173,7 +173,7 @@ test("on a company set to full detail, a contributor saves a spend-based row and
   await row.getByLabel("Emission category").selectOption("Aluminium (spend)");
   await row.getByRole("textbox", { name: "Amount spent", exact: true }).fill("25000");
   await row.getByLabel("Currency").selectOption("USD");
-  await expect(row.getByText("= 22.50 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 22.500 tCO₂e")).toBeVisible();
   await expect(row.getByTestId("row-dq").getByTestId("dq-badge")).toHaveText("Poor");
   await expect(row.getByTestId("row-dq")).toContainText("Secondary data");
 

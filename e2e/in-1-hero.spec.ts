@@ -8,7 +8,7 @@ test("the hero shows net, intensity, readiness and needs-you; the menu and the b
   await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true });
   await page.goto("/insights?year=2026");
   const hero = page.getByTestId("hero-strip");
-  await expect(hero.getByTestId("hero-net-value")).toHaveText("41,280");
+  await expect(hero.getByTestId("hero-net-value")).toHaveText("41,280.400");
   await expect(hero.getByTestId("hero-net").getByTestId("change-chip")).toHaveText("down 8.1% on 2025");
   await expect(hero.getByTestId("hero-net").getByTestId("status-chip")).toHaveText("At risk");
   await expect(hero.getByTestId("hero-readiness-value")).toHaveText("69%");

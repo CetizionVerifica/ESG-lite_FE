@@ -75,7 +75,7 @@ export function SmartReviewStep(props: {
           </>
         ),
     },
-    { id: "tco2e", header: "tCO₂e", numeric: true, sortable: true, decimals: 2, value: (r) => (r.total_emission == null ? null : Number(r.total_emission)) },
+    { id: "tco2e", header: "tCO₂e", numeric: true, sortable: true, decimals: 3, value: (r) => (r.total_emission == null ? null : Number(r.total_emission)) },
     { id: "date", header: "Filed in", value: (r) => String(r.date_of_reporting ?? "").slice(0, 7) },
     {
       id: "issue",

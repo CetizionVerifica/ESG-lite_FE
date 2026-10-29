@@ -145,6 +145,37 @@ test("a manager reads a year by site and narrows it to a month live", async ({ p
   await expect(page.getByText("Approved data for June 2025")).toBeVisible();
 });
 
+test("3-decimal figures stay inside their KPI tiles at 1024, 768 and 390 px (#209)", async ({ page }) => {
+  await signIn(page);
+  // Registered last, so it answers the report before signIn's catch-all.
+  await page.route("**/user/reports/ede", (route) => {
+    const r = report(route.request().postDataJSON() as Body);
+    return route.fulfill({
+      json: {
+        ...r,
+        totals: { scope1: 1_234.567, scope2: 123_456.789, scope3: 12_345.678, total: 137_037.034 },
+        savedBySite: [{ siteId: 2, siteName: "Sitra", saved: 12_345.678 }],
+        renewableKwhBySite: [{ siteId: 2, siteName: "Sitra", kwh: 1_250_000, unit: "kWh" }],
+      },
+    });
+  });
+  for (const width of [1024, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/reports/ede?year=2025");
+    const kpi = page.locator("dl").first();
+    await expect(kpi).toContainText("123,456.789");
+    // Every line box of every figure and unit sits inside its own tile, and the page doesn't scroll sideways.
+    const outside = await kpi.evaluate((dl) =>
+      [...dl.children].flatMap((tile) => {
+        const t = tile.getBoundingClientRect();
+        return [...tile.querySelectorAll("dd span")].flatMap((s) => [...s.getClientRects()].filter((r) => r.left < t.left - 0.5 || r.right > t.right + 0.5).map(() => s.textContent));
+      }),
+    );
+    expect(outside, `at ${width} px`).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `at ${width} px`).toBe(true);
+  }
+});
+
 test("a GHG report link with an FY quarter falls back to the calendar year", async ({ page }) => {
   const { last } = await signIn(page);
   await page.goto("/reports/ede?cal=FY&freq=quarter&year=2025&quarter=2&site=1");

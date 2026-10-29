@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
-import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
+import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatTonnes, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
 import { formColumns, isColumnVisible, mappingKeyLabel, offeredUnits, rowMethodChoices, visibleExtraFields, type FormModel } from "../logic/form";
@@ -114,7 +114,7 @@ export function EntryRow(p: Props) {
             { sub: p.feraCalc.upstreamSub, value: twin(p.feraCalc.upstream) },
             { sub: "3c_td_losses", value: twin(p.feraCalc.tdLoss) },
           ],
-          (n) => formatNumber(n, 2),
+          formatTonnes,
         )
       : null;
   const expectedUnit =
@@ -418,7 +418,7 @@ export function EntryRow(p: Props) {
           {result.value !== null ? (
             <p className="font-num text-base font-semibold text-ink">
               {/* Exact to the 2 decimals the saved total keeps. */}
-              = {formatNumber(result.value, 2)} tCO₂e
+              = {formatTonnes(result.value)} tCO₂e
               {result.status === "converted" && <span className="block text-xs font-normal text-muted">unit converted</span>}
               {p.showCalcDetail &&
                 result.notes?.map((n) => (
@@ -433,7 +433,7 @@ export function EntryRow(p: Props) {
           )}
           {result.value !== null && serverValues && <p className="text-xs text-bad">{serverValues}</p>}
           {p.showCalcDetail && result.value !== null && result.wtt_kg !== undefined && (
-            <p className="font-num text-xs text-muted">Includes {formatNumber(result.wtt_kg / 1000, 2)} tCO₂e well-to-tank (WTT)</p>
+            <p className="font-num text-xs text-muted">Includes {formatTonnes(result.wtt_kg / 1000)} tCO₂e well-to-tank (WTT)</p>
           )}
           {p.showCalcDetail && cat3 && (
             <p className="font-num text-xs text-muted">

@@ -43,7 +43,7 @@ for (const [width, appearance, pack] of [
     const calls = await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true, brand: PACKS[pack], appearance });
     await page.goto("/insights?year=2026");
     await settledPanels(page, STORY);
-    await expect(page.getByTestId("hero-net-value")).toHaveText("41,280");
+    await expect(page.getByTestId("hero-net-value")).toHaveText("41,280.400");
 
     // Ring → pillar filter (the header chip is the keyboard path to the same filter).
     await page.getByRole("group", { name: "Pillar" }).getByRole("button", { name: "Environment" }).click();

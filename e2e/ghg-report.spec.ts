@@ -228,12 +228,12 @@ test("scope tabs load detail rows on demand, and findings follow the PDF", async
 
   await page.getByRole("tab", { name: "Scope 2" }).click();
   const table = page.getByRole("table", { name: "Scope 2 emissions by category and site" });
-  await expect(table.getByRole("row", { name: /Sitra/ })).toContainText("20 tCO₂e");
+  await expect(table.getByRole("row", { name: /Sitra/ })).toContainText("20.000 tCO₂e");
   expect(details[0]).toEqual({ siteIds: [1, 2], yearType: "CY", year: 2025, frequency: "yearly" });
 
   await page.getByRole("tab", { name: "Findings" }).click();
-  await expect(page.getByText("Total CY 2025 emissions were 100 tCO₂e (down 20.0% vs CY 2024).")).toBeVisible();
-  await expect(page.getByText("Hidd is the largest contributing site at 80 tCO₂e (80.0% of total).")).toBeVisible();
+  await expect(page.getByText("Total CY 2025 emissions were 100.000 tCO₂e (down 20.0% vs CY 2024).")).toBeVisible();
+  await expect(page.getByText("Hidd is the largest contributing site at 80.000 tCO₂e (80.0% of total).")).toBeVisible();
 
   await page.reload();
   await expect(page.getByRole("tab", { name: "Findings", selected: true })).toBeVisible();

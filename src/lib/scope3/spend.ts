@@ -7,6 +7,7 @@
  *   kgCO₂e = amount × rate (to the factor's currency, on the purchase date)
  *            × index[factor price year] ÷ index[spend year] × factor value
  */
+import { roundTonnes } from "../emissions/round"; // #209
 import type { SpendRate } from "../../services/fxRateService";
 import { formatDate } from "../../ui/format";
 
@@ -186,8 +187,8 @@ export function spendOutcome(
   const converted = input.amount * rate.rate * ratio;
   const factorValue = Number(factor.factor_value);
   const kg = converted * factorValue;
-  // Same rounding as the engine: tCO₂e to 2 dp at the end only.
-  return { ok: true, kg, tonnes: Math.round((kg / 1000) * 100) / 100, converted, rate, factorValue };
+  // Same rounding as the engine: tCO₂e to 3 dp at the end only (#209).
+  return { ok: true, kg, tonnes: roundTonnes(kg / 1000), converted, rate, factorValue };
 }
 
 const money = (amount: number, currency: string, decimals = 0) =>

@@ -2,7 +2,7 @@ import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import type { PdfTheme } from "../../../theme";
 import type { EdeReportResponse } from "../../../services/reportService";
-import type { ReportPeriod } from "../../../ui";
+import { formatTonnes, type ReportPeriod } from "../../../ui";
 import { type SiteRef, intensityGrid, monthLabel, monthlyGrid } from "../logic";
 
 export type EdePdfCharts = { share?: string; monthly?: string; renewables?: string; saved?: string; intensity: { unit: string; src?: string }[] };
@@ -99,7 +99,8 @@ export function renderCharts(data: EdeReportResponse, period: ReportPeriod, site
           {
             type: "bar",
             barMaxWidth: 56,
-            label: { show: true, position: "top", color: t.colors.ink, formatter: `{c} ${unit}` },
+            // #209: a tCO2e label prints as the tables do, 3 decimals with thousands separators.
+            label: { show: true, position: "top", color: t.colors.ink, formatter: unit === "kWh" ? `{c} ${unit}` : (x: { value: unknown }) => `${formatTonnes(Number(x.value))} ${unit}` },
             data: shown.map((r) => ({ value: Number(r.value.toFixed(unit === "kWh" ? 0 : 3)), itemStyle: { color: colorOf(r.siteId) } })),
           },
         ],
