@@ -23,6 +23,7 @@
 import { http, HttpResponse } from "msw";
 import ghgFixture from "../fixtures/studio/ghg-doc.json";
 import { resizeDocument } from "../../lib/studio/resize"; // DS-10
+import { formatNumber as renderNumber, isTonnesCo2e } from "../../lib/studio/render/format"; // #209
 import sustainabilityFixture from "../fixtures/studio/sustainability-doc.json";
 import {
   type AiAction,
@@ -609,17 +610,21 @@ const addDoc = (doc: ReportDoc, inputs: ReportInputs = {}, sourceDocId: number |
   return row;
 };
 
-/** A made-up display string per binding (mock data, never a reported figure). DS-2: the real shapes of src/studio/sources. */
+/**
+ * A made-up display string per binding (mock data, never a reported figure). DS-2: the real shapes of src/studio/sources.
+ * #209: a tCO₂e figure reads with 3 decimals ("1,111.000"), as src/studio/sources/format.ts sends it; other units as before.
+ */
 const resolveOne = (b: Binding, i: number): ResolvedBinding => {
   if (b.source === "custom") return { display: "Unlinked data", value: null, unit: null, source: "custom" };
   if (b.source === "input") return { display: "From report details", value: null, unit: null, source: "input" };
   if (b.source === "ghg" && b.metric === "scope2_market")
     return { display: "Not reported", value: null, unit: "tCO₂e", source: "ghg", unavailable: { reason: "NOT_RECORDED", detail: "Market-based Scope 2 isn't recorded (D7)." } };
   const value = 1000 + i * 111;
+  const unit = b.source === "ghg" ? "tCO₂e" : (b.unit ?? null);
   return {
-    display: value.toLocaleString("en-GB"),
+    display: isTonnesCo2e(unit) ? renderNumber(value, "auto", unit) : value.toLocaleString("en-GB"),
     value,
-    unit: b.source === "ghg" ? "tCO₂e" : (b.unit ?? null),
+    unit,
     source: b.source,
     approvedAt: "2026-04-12T00:00:00.000Z",
     series: [{ label: "2025", values: [{ key: "2025", value }] }],

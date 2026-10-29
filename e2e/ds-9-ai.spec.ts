@@ -16,7 +16,8 @@ type El = { id: string; type: string; source?: string; reviewed?: boolean; frame
 type Pg = { id: string; kind: string; name: string; elements?: El[] };
 type Doc = { pages: Pg[]; [k: string]: unknown };
 
-const DISPLAY: Record<string, string> = { total: "18,940", scope1: "12,480", scope2_location: "5,210", scope3: "1,250" };
+// The server's display strings: tCO₂e figures with 3 decimals (#209, src/studio/sources/format.ts).
+const DISPLAY: Record<string, string> = { total: "18,940.000", scope1: "12,480.000", scope2_location: "5,210.000", scope3: "1,250.000" };
 const SUMMARY_TEXT = {
   type: "doc",
   content: [
@@ -53,7 +54,7 @@ async function mockApi(page: Page, opts: { studio?: boolean } = {}) {
     [JSON.stringify(user)],
   );
   const value = (b: { source: string; metric?: string }) => {
-    const display = (b.source === "ghg" && b.metric && DISPLAY[b.metric]) || "1,000";
+    const display = (b.source === "ghg" && b.metric && DISPLAY[b.metric]) || "1,000.000";
     return { display, value: Number(display.replace(/,/g, "")), unit: "tCO₂e", source: b.source, approvedAt: "2026-04-12T00:00:00.000Z", approvedEntries: 318, series: [{ label: "2025", values: [{ key: "2025", value: 1 }] }] };
   };
   await page.route(
@@ -145,7 +146,7 @@ async function selectSummaryAndAsk(page: Page) {
 test("ask for the executive summary → a card with a diff → Accept → the text has chips", async ({ page }) => {
   const state = await mockApi(page);
   const { card } = await selectSummaryAndAsk(page);
-  await expect(card.getByTestId("ai-diff")).toContainText("Total emissions were ⟦18,940⟧");
+  await expect(card.getByTestId("ai-diff")).toContainText("Total emissions were ⟦18,940.000⟧");
   await expect(card.getByTestId("ai-diff").locator("del").first()).toBeVisible();
   await expect(card).toContainText("Based on: Total emissions 2025 · Scope 3 2025");
   expect(state.chats[0]).toMatchObject({ selection: { pageId: "p-summary", elementIds: ["p-summary.body"] } });
@@ -154,7 +155,7 @@ test("ask for the executive summary → a card with a diff → Accept → the te
   await card.getByRole("button", { name: "Accept" }).click();
   await expect(card).toHaveAttribute("data-status", "accepted");
   const chips = page.locator('[data-sheet-host="p-summary"] [data-el-id="p-summary.body"] .ds-chip');
-  await expect(chips).toHaveText(["18,940", "1,250"]);
+  await expect(chips).toHaveText(["18,940.000", "1,250.000"]);
   await expect(page.getByRole("button", { name: /^Undo AI: Executive summary/ })).toBeVisible();
   await expect.poll(() => bodyOf(lastSaved(state))?.reviewed, { timeout: 6000 }).toBe(false);
   const saved = bodyOf(lastSaved(state))!;

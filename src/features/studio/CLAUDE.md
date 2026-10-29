@@ -57,3 +57,7 @@ src/test/msw/studio.ts   mocks for every 01-contracts §4 endpoint (DS-0), kept 
 - Transparency is the element's `opacity` (0..1) shown as 0..100 %. Image edits are non-destructive; every visual effect is drawn by the shared renderer (never by app CSS in the sheet), so editor, preview and PDF match.
 - Figures stay chips: find and replace skips data chips and locked boxes; layouts and template swaps keep every text, chip and chart; AI output is a card applied in one undo step on Accept.
 - Font upload and delete are Manager-only (show the licence tick; delete needs an inline confirm). "Background remover isn't set up on this server yet" for `DS_BG_UNAVAILABLE`.
+
+## #209 follow-up: tCO₂e at 3 decimals
+- The renderer mirror (RENDER_HASH `b3a36e64…de29`) prints tCO₂e chart labels, legend values and bound table / flow cells with 3 decimals; chips and the Data drawer show the server's `display`, which `src/studio/sources/format.ts` now sends with 3 decimals for any tCO₂e spelling. The FE still formats nothing.
+- The MSW `/resolve` and `/data` mocks send tCO₂e displays the same way ("1,111.000"); `e2e/ds-5`, `ds-7`, `ds-9` mock the server's 3-decimal displays. `e2e/tonnes-209-fit.spec.ts` checks a 123,456.789 chip and Data drawer row fit at 1280 px.

@@ -155,7 +155,7 @@ describe("studio mocks (01-contracts §4)", () => {
       ],
       tokens: [],
     });
-    expect(res.body.values.map((v) => v.display)).toEqual(["1,000", "Not reported", "Unlinked data"]);
+    expect(res.body.values.map((v) => v.display)).toEqual(["1,000.000", "Not reported", "Unlinked data"]); // #209: tCO₂e with 3 decimals
     expect(res.body.unavailable).toEqual([{ bindingIdx: 1, reason: "NOT_RECORDED" }]); // DS-2: a reason code
   });
 

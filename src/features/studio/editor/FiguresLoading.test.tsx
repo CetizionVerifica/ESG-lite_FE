@@ -118,7 +118,7 @@ describe("figures while /studio/resolve is pending", () => {
     expect(allText()).not.toContain("Not reported");
 
     act(() => release());
-    await waitFor(() => expect(coverFigure()).toMatch(/^\d[\d,]*$/));
+    await waitFor(() => expect(coverFigure()).toMatch(/^\d[\d,]*\.\d{3}$/)); // #209: the total in tCO₂e, 3 decimals
     expect(coverFigure()).not.toContain(FIGURE_LOADING_TEXT);
     expect(coverFigure()).not.toContain("Not reported");
     expect(screen.queryByTestId("figures-loading")).toBeNull();
@@ -134,7 +134,7 @@ describe("figures while /studio/resolve is pending", () => {
 
     fail = false;
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(coverFigure()).toMatch(/^\d[\d,]*$/));
+    await waitFor(() => expect(coverFigure()).toMatch(/^\d[\d,]*\.\d{3}$/)); // #209: the total in tCO₂e, 3 decimals
     expect(coverFigure()).not.toContain(FIGURE_ERROR_TEXT);
     expect(screen.queryByText("The figures couldn't load.")).toBeNull();
   }, 20000);
