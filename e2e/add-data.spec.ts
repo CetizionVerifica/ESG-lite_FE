@@ -249,8 +249,8 @@ test("contributor types a row, sees tCO2e live and submits it", async ({ page })
   await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
   await row.getByLabel("Quantity").fill("1600");
   await row.getByLabel("Unit").selectOption("litre");
-  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
-  await expect(row.getByText("▲ 7.3% vs Aug 2025 (threshold 5%)")).toBeVisible();
+  await expect(row.getByText("= 4.288 tCO₂e")).toBeVisible();
+  await expect(row.getByText("▲ 7.2% vs Aug 2025 (threshold 5%)")).toBeVisible();
   // SE-1: a User sees the total, not how it was worked out.
   for (const text of ["Global:", "Factor ", "kgCO₂e per", "factor year", "(factor unit)", "FERA", "Calculation method"]) {
     await expect(row.getByText(text, { exact: false })).toHaveCount(0);
@@ -384,8 +384,8 @@ test("Category 4 from fuel used: 1,000 L of diesel at 100 % previews and sends w
   await row.getByLabel("Fuel Used (Litres)", { exact: true }).fill("1000");
   await row.getByLabel("Your Share Of The Load (%)", { exact: true }).fill("100");
   await row.getByLabel("Unit").selectOption("litre");
-  // 1,000 L × 100 % × 3.1238 kg/L (life-cycle diesel, factor year 2024) = 3.12 t
-  await expect(row.getByText("= 3.12 tCO₂e")).toBeVisible();
+  // 1,000 L × 100 % × 3.1238 kg/L (life-cycle diesel, factor year 2024) = 3.124 t
+  await expect(row.getByText("= 3.124 tCO₂e")).toBeVisible();
   await expect(row.getByText(/^Litres your carrier used for your goods/)).toBeVisible();
 
   await row.getByText("More details").click();
@@ -430,8 +430,8 @@ test("SE-1: on a form offering several methods, a User picks from every method's
   await row.getByLabel("Weight (Tonne)", { exact: true }).fill("10");
   await row.getByLabel("Distance Travelled", { exact: true }).fill("500");
   await row.getByLabel("Unit").selectOption("tonne.km");
-  // 10 t × 500 km × 0.2408 kg/tonne.km = 1.20 t
-  await expect(row.getByText("= 1.20 tCO₂e")).toBeVisible();
+  // 10 t × 500 km × 0.2408 kg/tonne.km = 1.204 t
+  await expect(row.getByText("= 1.204 tCO₂e")).toBeVisible();
   await page.getByRole("button", { name: "Review" }).click();
   await page.getByRole("button", { name: "Submit for approval" }).click();
   await expect(page.getByText("1 row sent for approval")).toBeVisible();
@@ -446,7 +446,7 @@ test("SE-1: with company detail set to full, a User sees how the row is worked o
   await expect(row.getByText("Global: Diesel (avg biofuel blend)")).toBeVisible();
   await row.getByLabel("Quantity").fill("1600");
   await row.getByLabel("Unit").selectOption("litre");
-  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 4.288 tCO₂e")).toBeVisible();
   await expect(row.getByText("factor year 2024 used for 2025 data")).toBeVisible();
   await expect(row.getByText(/Factor 2\.68 kgCO₂e per litre/)).toBeVisible();
   await expect(row.getByLabel("Unit").locator("option", { hasText: "(factor unit)" })).toHaveCount(1);
@@ -487,7 +487,7 @@ test("SE-1: a form with one method picks it for the User, out of sight, and stil
   await expect(row.getByLabel("Type of record")).toHaveCount(0);
   await row.getByLabel("Unit").selectOption("passenger.km");
   await row.getByRole("textbox", { name: "Activity Data" }).fill("100");
-  await expect(row.getByText("= 0.02 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 0.017 tCO₂e")).toBeVisible();
   await page.getByRole("button", { name: "Review" }).click();
   await page.getByRole("button", { name: "Submit for approval" }).click();
   await expect(page.getByText("1 row sent for approval")).toBeVisible();
@@ -554,7 +554,7 @@ test("with no factor in the factor year, the preview uses the newest factor from
   await row.getByLabel("Quantity").fill("1000");
   await row.getByLabel("Unit").selectOption("litre");
   await expect(row.getByText("no 2024 factor; 2023 used for 2025 data")).toBeVisible();
-  await expect(row.getByText("= 2.50 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 2.500 tCO₂e")).toBeVisible();
 });
 
 test("an incomplete row blocks review and a duplicate can be replaced", async ({ page }) => {
@@ -573,7 +573,7 @@ test("an incomplete row blocks review and a duplicate can be replaced", async ({
   await page.getByRole("button", { name: "Submit for approval" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("1 row is already entered for");
-  await expect(dialog).toContainText("Saved: 1.50 tCO₂e (Pending)");
+  await expect(dialog).toContainText("Saved: 1.500 tCO₂e (Pending)");
   await dialog.getByRole("radio", { name: "Replace" }).click();
   await dialog.getByRole("button", { name: "Apply (replace 1)" }).click();
   await expect(page.getByText("1 row sent for approval")).toBeVisible();
@@ -635,7 +635,7 @@ test("a bill is read into a row that is checked before it is sent, then attached
   // The AI's labels became the form's values; each filled field is marked.
   await expect(row.getByLabel(/Fuel Type/)).toHaveValue("diesel");
   await expect(row.getByText("AI filled, check it")).toHaveCount(4);
-  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 4.288 tCO₂e")).toBeVisible();
 
   // Nothing from the bill goes to review before the user checks it.
   await page.getByRole("button", { name: "Review", exact: true }).click();
@@ -940,7 +940,7 @@ test("typed rows survive a page reload", async ({ page }) => {
   await row.getByLabel("Fuel Type").selectOption({ label: "Diesel" });
   await row.getByLabel("Quantity").fill("1600");
   await row.getByLabel("Unit").selectOption("litre");
-  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 4.288 tCO₂e")).toBeVisible();
   // The unsaved-rows guard asks before the reload; leave anyway.
   const asked: string[] = [];
   page.once("dialog", (d) => {
@@ -951,7 +951,7 @@ test("typed rows survive a page reload", async ({ page }) => {
   expect(asked).toEqual(["beforeunload"]);
   const restored = page.getByRole("region", { name: "Row 1" });
   await expect(restored.getByLabel("Quantity")).toHaveValue("1600");
-  await expect(restored.getByText("= 4.29 tCO₂e")).toBeVisible();
+  await expect(restored.getByText("= 4.288 tCO₂e")).toBeVisible();
 });
 
 test("after a send the steps are locked and a reload shows an empty form", async ({ page }) => {
@@ -1109,7 +1109,7 @@ test("Review warns when a file already backs another entry of the period, and st
   await page.getByRole("button", { name: "Review" }).click();
 
   await expect(page.getByText("This evidence already backs another entry")).toBeVisible();
-  await expect(page.getByText(/Row 1 · Diesel: spent-carbon-dec\.pdf is already the evidence of Recycle \(0\.05 tCO₂e, Approved\) for Sep 2025\./)).toBeVisible();
+  await expect(page.getByText(/Row 1 · Diesel: spent-carbon-dec\.pdf is already the evidence of Recycle \(0\.050 tCO₂e, Approved\) for Sep 2025\./)).toBeVisible();
   await expect(page.getByText("Already the evidence of a saved entry")).toBeVisible();
   expect(backing.asked[0]).toMatchObject({ site_id: 4, category_id: 9, date_of_reporting: "2025-09-30", files: [{ ref: expect.stringMatching(/:0$/), file_name: "spent-carbon-dec.pdf", file_size: 8 }] });
 
@@ -1176,7 +1176,7 @@ test("SE-3: a User fills the form in the client's words; hidden details and the 
   await page.goto("/data/new?site=4&category=9&period=2025-09");
   await row.getByLabel("Which fuel did you burn?").selectOption({ label: "Diesel" });
   await row.getByLabel("Quantity").fill("1600");
-  await expect(row.getByText("= 4.29 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 4.288 tCO₂e")).toBeVisible();
   // The hidden PO number isn't offered.
   await expect(row.getByText("More details")).toHaveCount(0);
   await page.getByRole("button", { name: "Review" }).click();
@@ -1224,8 +1224,8 @@ test("SE-3: a User answers the form's question; the answer picks the method, wit
   // The answer's method offers its own units only.
   await expect(row.getByLabel("Unit").locator("option")).toHaveText(["Choose a unit", "tonne.km"]);
   await expect(row.getByLabel("Unit")).toHaveValue("tonne.km");
-  // 10 t × 500 km × 0.2408 kg/tonne.km = 1.20 t
-  await expect(row.getByText("= 1.20 tCO₂e")).toBeVisible();
+  // 10 t × 500 km × 0.2408 kg/tonne.km = 1.204 t
+  await expect(row.getByText("= 1.204 tCO₂e")).toBeVisible();
   for (const text of ["Calculation method", "Type of record", "Weight × distance", "From fuel used", "Distance-based"]) {
     await expect(row.getByText(text, { exact: false })).toHaveCount(0);
   }

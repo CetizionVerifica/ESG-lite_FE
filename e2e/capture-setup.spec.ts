@@ -256,10 +256,10 @@ test("form builder: Test tab calculates with the real factor", async ({ page }) 
   await panel.getByLabel("Vehicle").selectOption("van");
   await panel.getByLabel("Distance").fill("10000");
   await panel.getByLabel("Unit", { exact: true }).selectOption("km");
-  await expect(result).toContainText("2.50 tCO₂e");
+  await expect(result).toContainText("2.500 tCO₂e");
   await expect(result).toContainText("Van - Diesel: 0.25 kgCO₂e per km (2025)");
   await panel.getByLabel("Factor year").selectOption("2024");
-  await expect(result).toContainText("3.00 tCO₂e");
+  await expect(result).toContainText("3.000 tCO₂e");
   // Nothing typed in the Test tab is saved or makes the form dirty.
   await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
   expect(calls.some((c) => c.method === "PUT")).toBe(false);
@@ -289,7 +289,7 @@ test("form builder: the Test tab uses the form's own field names", async ({ page
   await panel.getByLabel("Vehicle").selectOption("van");
   await panel.getByLabel("Distance driven").fill("10000");
   await panel.getByLabel("Unit", { exact: true }).selectOption("km");
-  await expect(panel.getByTestId("test-result")).toContainText("2.50 tCO₂e");
+  await expect(panel.getByTestId("test-result")).toContainText("2.500 tCO₂e");
   expect(calls.some((c) => c.method === "PUT")).toBe(false);
 });
 

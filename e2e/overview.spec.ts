@@ -238,7 +238,7 @@ test("the Gross scope labels keep small scopes readable: S3 0.47, not 0 (#248)",
     },
   );
   await page.goto("/overview?period=CY2026");
-  await expect(page.locator("dl").first()).toContainText("S1 8.6 · S2 0 · S3 0.47");
+  await expect(page.locator("dl").first()).toContainText("S1 8.600 · S2 0.000 · S3 0.470");
 });
 
 test("submission status still shows when the overview request fails", async ({ page }) => {

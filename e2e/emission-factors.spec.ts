@@ -273,7 +273,7 @@ test("after a factor's value is corrected, its saved entries are recalculated (N
 
   const modal = page.getByRole("dialog", { name: "Recalculate entries?" });
   await expect(modal).toContainText("The factor is saved. Entries already calculated with it still show their old totals.");
-  await expect(modal.getByTestId("recalc-preview")).toContainText("2 entries would change: 0.21 → 213.00 tCO₂e in total.");
+  await expect(modal.getByTestId("recalc-preview")).toContainText("2 entries would change: 0.210 → 213.000 tCO₂e in total.");
   await expect(modal).toContainText("1 of them is approved and stays approved");
   await expect(modal).toContainText("1 entry is in a locked month and won't change.");
   await modal.getByRole("button", { name: "Recalculate 2 entries" }).click();

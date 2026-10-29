@@ -156,7 +156,7 @@ test("a contributor gets the Supplier field only: no method choice and no suppli
   await row.getByRole("combobox", { name: "Supplier" }).click();
   await page.getByRole("option", { name: "Gulf Smelter Co." }).click();
   // The form decides the method (average data here): 1,000 kg × 10.
-  await expect(row.getByText("= 10.00 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 10.000 tCO₂e")).toBeVisible();
   await expect(row.getByLabel("Calculated from")).toHaveCount(0);
   await expect(row.getByTestId("supplier-figure")).toHaveCount(0);
   await expect(row.getByText(/From the supplier's figures/)).toHaveCount(0);
@@ -208,7 +208,7 @@ test("on a company set to full detail, a contributor enters Category 1 with the 
   await row.getByLabel("Quantity").fill("1000");
   await row.getByLabel("Unit").selectOption("kg");
   // Average data until a supplier method is chosen: 1,000 kg × 10.
-  await expect(row.getByText("= 10.00 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 10.000 tCO₂e")).toBeVisible();
 
   // "From the amount spent" switches the row to S3-5's spend fields; a supplier method switches back.
   await row.getByLabel("Calculated from").selectOption("spend_based");
@@ -229,7 +229,7 @@ test("on a company set to full detail, a contributor enters Category 1 with the 
   await supplier.click();
   await page.getByRole("option", { name: "Gulf Smelter Co." }).click();
   await expect(row.getByTestId("supplier-figure")).toContainText("Gulf Smelter Co., P1020 ingot, 8.6 kgCO₂e/kg, 2025");
-  await expect(row.getByText("= 8.60 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 8.600 tCO₂e")).toBeVisible();
 
   await page.getByRole("button", { name: "Review" }).click();
   await page.getByRole("button", { name: "Submit for approval" }).click();
