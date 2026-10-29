@@ -210,7 +210,7 @@ export function EdePdf(p: EdePdfProps) {
         <Table
           s={s}
           headers={["Site", "Total", "Scope 1", "Scope 2", "Scope 3", "Share"]}
-          widths={[20, 16, 16, 16, 16, 16]}
+          widths={[22, 16, 16, 16, 16, 14]}
           numeric={[1, 2, 3, 4, 5]}
           dense
           rows={[...data.bySite]
