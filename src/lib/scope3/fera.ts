@@ -3,6 +3,7 @@
  * §1 `Scope3Sub`, module S3-7). Pages read these labels from here, never
  * their own strings. The list itself is S3-0's, in ./contracts.
  */
+import { roundTonnes } from "../emissions/round";
 import { SCOPE3_SUBS, type Scope3Sub } from "./contracts";
 
 export { SCOPE3_SUBS, type Scope3Sub };
@@ -107,8 +108,8 @@ export function ghgCategoryOf(category: CategoryLike | null | undefined): number
 /** Category 4, 6, 7 or 9: the row's total includes its WTT part (D6a). */
 export const wttInRow = (category: CategoryLike | null | undefined): boolean => (WTT_IN_ROW_CATEGORIES as readonly number[]).includes(ghgCategoryOf(category) ?? 0);
 
-/** The row's tCO₂e with its WTT part: kg summed at 4 dp, then rounded to 2 dp, as the engine's `withWtt`. */
+/** The row's tCO₂e with its WTT part: kg summed at 4 dp, then rounded with roundTonnes (3 dp, #209), as the engine's `withWtt`. */
 export const tonnesWithWtt = (rowKg: number, wttKg: number): number => {
   const kg = Number((Math.round(rowKg * 10000) / 10000 + Math.round(wttKg * 10000) / 10000).toFixed(4));
-  return Math.round((kg / 1000) * 100) / 100;
+  return roundTonnes(kg / 1000);
 };

@@ -72,8 +72,9 @@ describe("D6a: WTT in the row for Categories 4, 6, 7 and 9", () => {
   });
 
   it("sums kg at 4 dp, then rounds the tonnes", () => {
-    expect(tonnesWithWtt(229.28, 33.5)).toBe(0.26);
-    expect(tonnesWithWtt(4.996, 0.0045)).toBe(0.01);
+    expect(tonnesWithWtt(229.28, 33.5)).toBe(0.263);
+    // 0.499 + 0.002 kg = 0.501 kg → 0.001 t (#209: 3 dp); each part alone would round to 0.000 t.
+    expect(tonnesWithWtt(0.499, 0.002)).toBe(0.001);
   });
 });
 

@@ -205,12 +205,12 @@ describe("D6a: the edit preview adds WTT as the save does", () => {
     expect(editAddsWtt({ category: travel }, { spec: { mode: "per_unit" } as never })).toBe(false);
   });
 
-  it("previews the total the save stores: 1,000 passenger.km × (0.22928 + 0.0335 WTT) = 0.26 t", () => {
+  it("previews the total the save stores: 1,000 passenger.km × (0.22928 + 0.0335 WTT) = 0.263 t", () => {
     const name = "Flights - Domestic, to/from UK, Average passenger, With RF [passenger.km]";
     const own = createEmissionCalculator({ emissionFactors: [{ emission_factor_id: 1, emission_category_name: name, factor_value: 0.22928, denominator_unit: "passenger.km", year: 2024 }], targetYear: 2024 });
     const wtt = createEmissionCalculator({ emissionFactors: [{ emission_factor_id: 2, emission_category_name: name, factor_value: 0.0335, denominator_unit: "passenger.km", year: 2024, factor_type: "wtt" }], targetYear: 2024 });
     const row = { id: 1, emission_category: name, activity_data_unit: "passenger.km", quantity: "1000" };
-    expect(own.calculateEmission(row).value).toBe(0.23);
-    expect(withWttInRow(own, wtt).calculateEmission(row).value).toBe(0.26);
+    expect(own.calculateEmission(row).value).toBe(0.229);
+    expect(withWttInRow(own, wtt).calculateEmission(row).value).toBe(0.263);
   });
 });

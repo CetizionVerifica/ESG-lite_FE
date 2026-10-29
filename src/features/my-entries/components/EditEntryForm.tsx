@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { applyChange, formColumns, isColumnVisible, mappingKeyLabel, offeredUnits, sameUnit, toFormModel, unitsForRow, useEmissionCalc, type EmissionFactor, type ModalRow } from "../../../lib/emissions";
-import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEntryEmissions, formatNumber } from "../../../ui";
+import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEntryEmissions, formatTonnes } from "../../../ui";
 import { useEditSetup } from "../api";
 import { type EditIssue, type EntryUpdate, buildUpdate, editAddsWtt, editIssue, editedDate, entryMonth, factorYearFor, feraCategoryIdOf, monthBounds, rowFromEntry } from "../edit";
 import { type EntryRow, periodText } from "../logic";
@@ -216,7 +216,7 @@ function Fields(p: FieldsProps) {
             <span className="text-bad">No factor for this category</span>
           ) : null}
           {detail && result.value !== null && result.wtt_kg !== undefined && (
-            <span className="mt-1 block font-num">Includes {formatNumber(result.wtt_kg / 1000, 2)} tCO₂e well-to-tank (WTT)</span>
+            <span className="mt-1 block font-num">Includes {formatTonnes(result.wtt_kg / 1000)} tCO₂e well-to-tank (WTT)</span>
           )}
           {detail && entry.fera && <span className="mt-1 block">Linked Category 3 entries are recalculated when you save.</span>}
         </div>
