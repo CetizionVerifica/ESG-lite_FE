@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
-import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatNumber, formatTonnes, panel, type FileDropItem } from "../../../ui";
+import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatTonnes, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
 import { formColumns, isColumnVisible, mappingKeyLabel, offeredUnits, rowMethodChoices, visibleExtraFields, type FormModel } from "../logic/form";
@@ -114,7 +114,7 @@ export function EntryRow(p: Props) {
             { sub: p.feraCalc.upstreamSub, value: twin(p.feraCalc.upstream) },
             { sub: "3c_td_losses", value: twin(p.feraCalc.tdLoss) },
           ],
-          (n) => formatNumber(n, 2),
+          formatTonnes,
         )
       : null;
   const expectedUnit =

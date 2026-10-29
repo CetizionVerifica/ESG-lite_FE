@@ -21,7 +21,7 @@ describe("siteCompareLogic (IN-11)", () => {
   it("puts the server's figures in the table and words, never summing them", () => {
     const rows = siteTable(siteCompareData, "2025");
     expect(SITE_COLUMNS.map((c) => c.id)).toEqual(["site", "net", "change", "share", "s1", "s2", "s3", "intensity", "completeness", "pending"]);
-    expect(rows[0]).toMatchObject({ site: "Chennai plant", link: "/overview?period=CY2026&siteIds=11", net: "5,200.0", change: "down 15% on 2025", share: "61%", completeness: "92%", pending: 3 });
+    expect(rows[0]).toMatchObject({ site: "Chennai plant", link: "/overview?period=CY2026&siteIds=11", net: "5,200.000", change: "down 15% on 2025", share: "61%", completeness: "92%", pending: 3 });
     expect(rows[1]).toMatchObject({ change: "—", intensity: "No production data", pending: 0 });
     expect(rows[2].change).toBe("up 5.9% on 2025");
     expect(intensityText(siteCompareData.rows[0])).toBe("0.420 tCO₂e/t");

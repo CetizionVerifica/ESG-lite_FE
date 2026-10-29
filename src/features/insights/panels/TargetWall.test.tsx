@@ -100,7 +100,7 @@ describe("TargetWall (IN-2 H)", () => {
     expect(rows[2].textContent).toContain("Lost-time injury frequency rate");
     expect(rows[2].textContent).toContain("Off track");
     expect(rows[2].textContent).toContain("KPI target");
-    expect(rows[1].textContent).toContain("51,020 tCO₂e (2021)");
+    expect(rows[1].textContent).toContain("51,020.000 tCO₂e (2021)");
   });
 
   it("without KPI tracking shows the SBTi target only; without targets says what's needed", () => {

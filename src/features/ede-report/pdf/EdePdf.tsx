@@ -1,7 +1,7 @@
 import { Defs, Document, Image, LinearGradient, Page, Rect, Stop, StyleSheet, Svg, Text, View } from "@react-pdf/renderer";
 import type { PdfTheme } from "../../../theme";
 import type { EdeReportResponse } from "../../../services/reportService";
-import { POWERED_BY_TEXT, type ReportPeriod } from "../../../ui";
+import { POWERED_BY_TEXT, formatTonnes, type ReportPeriod } from "../../../ui";
 import { type EdeFigures, type SiteRef, edePeriodLabel, intensityGrid, monthLabel, monthlyGrid, overallTotals } from "../logic";
 import type { EdePdfCharts } from "./charts";
 
@@ -20,7 +20,7 @@ export type EdePdfProps = {
   generatedAt: Date;
 };
 
-const n = (v: number, d = 2) => (Number.isFinite(v) ? v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }) : "—");
+const n = (v: number, d: number) => (Number.isFinite(v) ? v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }) : "—");
 
 function styles(t: PdfTheme) {
   const c = t.colors;
@@ -103,13 +103,13 @@ function Footer({ s, label }: { s: S; label: string }) {
 }
 
 /** Month × site table, split into chunks of 4 sites so it fits A4. */
-function pivot(months: string[], cols: { name: string; values: (number | null)[] }[], decimals: number) {
+function pivot(months: string[], cols: { name: string; values: (number | null)[] }[], format: (v: number) => string) {
   const chunks: (typeof cols)[] = [];
   for (let i = 0; i < cols.length; i += 4) chunks.push(cols.slice(i, i + 4));
   return chunks.map((chunk) => ({
     headers: ["Month", ...chunk.map((c) => c.name)],
     widths: [22, ...chunk.map(() => 78 / chunk.length)],
-    rows: months.map((m, mi) => [monthLabel(m), ...chunk.map((c) => (c.values[mi] === null ? "—" : n(c.values[mi] as number, decimals)))]),
+    rows: months.map((m, mi) => [monthLabel(m), ...chunk.map((c) => (c.values[mi] === null ? "—" : format(c.values[mi] as number)))]),
   }));
 }
 
@@ -122,12 +122,12 @@ export function EdePdf(p: EdePdfProps) {
   const grid = monthlyGrid(data, p.period, p.sites);
   const intensity = intensityGrid(data, p.period, p.sites);
   const kpis: [string, string][] = [
-    ["Total emissions", `${n(f.total)} tCO2e`],
-    ["Scope 1", `${n(f.scope1)} tCO2e`],
-    ["Scope 2", `${n(f.scope2)} tCO2e`],
-    ["Scope 3", `${n(f.scope3)} tCO2e`],
+    ["Total emissions", `${formatTonnes(f.total)} tCO2e`],
+    ["Scope 1", `${formatTonnes(f.scope1)} tCO2e`],
+    ["Scope 2", `${formatTonnes(f.scope2)} tCO2e`],
+    ["Scope 3", `${formatTonnes(f.scope3)} tCO2e`],
     ["Renewable produced", `${n(f.renewableKwh, 0)} kWh`],
-    ["Saved by renewables", `${n(f.saved)} tCO2e`],
+    ["Saved by renewables", `${formatTonnes(f.saved)} tCO2e`],
   ];
 
   return (
@@ -186,7 +186,7 @@ export function EdePdf(p: EdePdfProps) {
           headers={["Metric", "Value", "Unit"]}
           widths={[60, 25, 15]}
           numeric={[1]}
-          rows={overallTotals(f).map((r) => [r.metric.replace("₂", "2"), n(r.value, r.unit === "kWh" ? 0 : 2), r.unit.replace("₂", "2")])}
+          rows={overallTotals(f).map((r) => [r.metric.replace("₂", "2"), r.unit === "kWh" ? n(r.value, 0) : formatTonnes(r.value), r.unit.replace("₂", "2")])}
         />
 
         <Text style={s.h2}>Footprint by site</Text>
@@ -197,7 +197,7 @@ export function EdePdf(p: EdePdfProps) {
           numeric={[1, 2, 3, 4, 5]}
           rows={[...data.bySite]
             .sort((a, b) => b.total - a.total)
-            .map((r) => [r.siteName, n(r.total), n(r.scope1), n(r.scope2), n(r.scope3), `${n(r.pctOfTotal, 1)}%`])}
+            .map((r) => [r.siteName, formatTonnes(r.total), formatTonnes(r.scope1), formatTonnes(r.scope2), formatTonnes(r.scope3), `${n(r.pctOfTotal, 1)}%`])}
         />
         <Chart s={s} title="Share by site" note="Each site's share of Scope 1 + 2 + 3 emissions." src={p.charts.share} />
         <Footer s={s} label={footer} />
@@ -211,7 +211,7 @@ export function EdePdf(p: EdePdfProps) {
           grid.months,
           // Renewables-only sites have no emissions to tabulate (same filter as the chart).
           grid.series.filter((x) => x.values.some((v) => v !== 0)).map((x) => ({ name: x.siteName, values: x.values })),
-          2,
+          formatTonnes,
         ).map((tb, i) => (
           <View key={i} style={{ marginBottom: 8 }}>
             <Table s={s} headers={tb.headers} widths={tb.widths} rows={tb.rows} numeric={tb.headers.map((_, j) => j).slice(1)} />
@@ -234,9 +234,9 @@ export function EdePdf(p: EdePdfProps) {
             .map((x) => [
               x.siteName,
               n(Number(data.renewableKwhBySite.find((r) => r.siteId === x.siteId)?.kwh ?? 0), 0),
-              n(Number(data.savedBySite.find((r) => r.siteId === x.siteId)?.saved ?? 0)),
+              formatTonnes(Number(data.savedBySite.find((r) => r.siteId === x.siteId)?.saved ?? 0)),
             ])
-            .filter((r) => r[1] !== "0" || r[2] !== "0.00")}
+            .filter((r) => r[1] !== "0" || r[2] !== formatTonnes(0))}
         />
         {intensity.groups.map((g) => (
           <View key={g.unit}>
@@ -250,7 +250,7 @@ export function EdePdf(p: EdePdfProps) {
             {pivot(
               intensity.months,
               g.rows.map((r) => ({ name: r.site.siteName, values: r.values })),
-              6,
+              (v) => n(v, 6),
             ).map((tb, i) => (
               <View key={i} style={{ marginBottom: 8 }}>
                 <Table s={s} headers={tb.headers} widths={tb.widths} rows={tb.rows} numeric={tb.headers.map((_, j) => j).slice(1)} />

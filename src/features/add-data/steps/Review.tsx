@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
-import { Button, Callout, EmptyState, cn, formatEntryTonnes, formatNumber, formatTonnes, panel } from "../../../ui";
+import { Button, Callout, EmptyState, cn, formatEntryTonnes, formatTonnes, panel } from "../../../ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateEmissionQueries } from "../../../lib/emissionQueries";
 import { linkBillEvidence, saveRow, updateRow, uploadRowEvidence, useAlreadyBacking, type SaveOutcome } from "../api";
@@ -270,7 +270,7 @@ export function Review(p: Props) {
                     {editOf(row) !== null && <span className="block text-xs text-muted">Changes a saved entry</span>}
                   </td>
                   <td className="px-3 py-2 text-muted">{row.activity_data_unit}</td>
-                  <td className="px-3 py-2 text-right font-num text-ink">{formatNumber(p.calc.calculateEmission(row).value, 2)}</td>
+                  <td className="px-3 py-2 text-right font-num text-ink">{formatTonnes(p.calc.calculateEmission(row).value)}</td>
                   <td className="px-3 py-2">
                     {evidenceText(row)}
                     {unsent && backing.has(row.id) && <span className="block text-xs text-warn">Already the evidence of a saved entry</span>}

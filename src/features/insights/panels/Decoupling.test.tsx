@@ -82,6 +82,7 @@ describe("Decoupling (IN-2 B)", () => {
     expect(rows[1].textContent).toContain("2021 (base)");
     expect(rows[6].textContent).toContain("142.0");
     expect(rows[6].textContent).toContain("66,880");
+    expect(rows[6].textContent).toContain("41,280.000");
     expect(rows[6].textContent).toContain("0.617");
   });
 });

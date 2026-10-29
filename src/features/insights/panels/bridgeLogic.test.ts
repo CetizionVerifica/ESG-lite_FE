@@ -139,5 +139,16 @@ describe("drawer inputs", () => {
       { key: "output_from", name: "Output (2025)", value: "63,540" },
       { key: "output_to", name: "Output (2026)", value: "66,880" },
     ]);
+    // #209: tCO₂e inputs to 3 decimals, so they read like the step's own −150.900; factors and log terms keep the display rule.
+    expect(inputRows(bridgeData.steps[4], years).map((r) => r.value)).toEqual(["5,060.000", "4,910.000"]);
+    const step = { ...bridgeData.steps[4], inputs: { scope3_from: 5_060.45, scope3_to: 4_909.55, saved_from: 12.5, scope2_change: -0.4, l: 4_800.2, tco2e_per_kwh_from: 0.00079 } };
+    expect(inputRows(step, years).map((r) => [r.key, r.value])).toEqual([
+      ["scope3_from", "5,060.450"],
+      ["scope3_to", "4,909.550"],
+      ["saved_from", "12.500"],
+      ["scope2_change", "-0.400"],
+      ["l", "4,800"],
+      ["tco2e_per_kwh_from", "0.000790"],
+    ]);
   });
 });

@@ -9,7 +9,7 @@ import type { TargetSource, TargetWallItem } from "../../../lib/insights/contrac
 import { STATUS_WORD, unitText } from "../../../lib/insights/labels";
 import { entrance } from "../../../lib/insights/motion";
 import { PILLAR_LABEL, PILLAR_LETTER } from "../../../lib/kpi/labels";
-import { formatNumber } from "../../../ui/format";
+import { formatNumber, formatTonnes } from "../../../ui/format";
 import type { ChartTableColumn } from "../../../ui";
 import type { ChartTheme } from "../../../theme";
 import { esc, pctText, statusColor } from "./shared";
@@ -31,8 +31,10 @@ export function rightLabel(item: TargetWallItem): string {
   return item.expected_pct === null ? pctText(item.progress_pct) : `${pctText(item.progress_pct)} · expected ${pctText(item.expected_pct)}`;
 }
 
-/** "41,280 tCO₂e" / "46.6%" / "2.2 per million hours". */
+/** "41,280.400 tCO₂e" / "46.6%" / "2.2 per million hours". */
 export function valueText(v: number, unit: string): string {
+  // #209: tCO₂e always to 3 decimals, as the server stores it.
+  if (unit === "tCO2e") return `${formatTonnes(v)} ${unitText(unit)}`;
   // As many decimals as the value has, up to two (none from 100).
   const whole = (x: number) => Math.abs(x - Math.round(x)) < 1e-9;
   const decimals = Math.abs(v) >= 100 || whole(v) ? 0 : whole(v * 10) ? 1 : 2;

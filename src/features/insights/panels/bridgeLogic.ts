@@ -198,6 +198,11 @@ export function inputValue(v: number): string {
   return formatNumber(v, Math.min(8, Math.ceil(-Math.log10(a)) + 2));
 }
 
+/** Inputs in tCO₂e (a scope's or the savings' figure for a year, or a scope's change): 3 decimals, as every tCO₂e figure (#209). */
+const TONNES_INPUT = /^(?:(?:s[123]|e|scope[123]|saved)(?:_from|_to|_0|_t|0|t|⁰|ᵀ)?|scope[123]_change)$/;
+
+const isTonnesInput = (key: string) => TONNES_INPUT.test(key.toLowerCase());
+
 export function inputRows(step: BridgeStep, years: { from: number; to: number }): Array<{ key: string; name: string; value: string }> {
-  return Object.entries(step.inputs).map(([key, v]) => ({ key, name: inputName(key, years), value: inputValue(v) }));
+  return Object.entries(step.inputs).map(([key, v]) => ({ key, name: inputName(key, years), value: isTonnesInput(key) ? formatTonnes(v) : inputValue(v) }));
 }

@@ -99,12 +99,12 @@ test("an admin adds a 25 % equity investment and the plan preview shows 15,000 t
     path: expect.stringMatching(/\/scope3\/investments$/),
     body: { investee: "Acme Power", type: "equity", share_pct: 25, investee_scope12_tco2e: 60000, year, revenue: null },
   });
-  await expect(page.getByRole("cell", { name: "60,000 tCO₂e" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "60,000.000 tCO₂e" })).toBeVisible();
 
   await page.getByRole("button", { name: "Create Category 15 plan" }).click();
   const plan = page.getByRole("dialog");
   await plan.getByRole("button", { name: "Preview plan" }).click();
-  await expect(plan.getByTestId("plan-total")).toHaveText("15,000 tCO₂e");
+  await expect(plan.getByTestId("plan-total")).toHaveText("15,000.000 tCO₂e");
   expect(calls.at(-1)).toMatchObject({ path: expect.stringMatching(/\/scope3\/investments\/plan$/), body: { site_id: 4, year, year_type: "CY" } });
   // The page sends no total: the server's plan carries it.
   expect(JSON.stringify(calls)).not.toContain("15000");

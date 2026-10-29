@@ -72,7 +72,7 @@ export function siteTable(data: SiteCompare, vs: string): Array<Record<string, s
   return data.rows.map((r) => ({
     site: r.site,
     link: r.link,
-    net: formatNumber(r.net, 1),
+    net: formatTonnes(r.net),
     change: changeText(r.change_pct, r.good, vs)?.words ?? "—",
     share: pctText(r.share_pct),
     s1: formatTonnes(r.scope_1),
