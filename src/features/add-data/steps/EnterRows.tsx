@@ -1,7 +1,7 @@
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Sparkles } from "lucide-react";
-import { Button, Callout, TabPanel, Tabs, formatNumber } from "../../../ui";
+import { Button, Callout, TabPanel, Tabs, formatTonnes } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import type { RowsDispatch } from "../hooks/useEntryRows";
 import type { RowIssue } from "../logic/entry";
@@ -220,7 +220,7 @@ export function EnterRows(p: Props) {
 
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-page py-3">
         <p className="text-sm text-muted">
-          Total <span className="font-num text-base font-semibold text-ink">{formatNumber(total, 2)} tCO₂e</span>
+          Total <span className="font-num text-base font-semibold text-ink">{formatTonnes(total)} tCO₂e</span>
           <span className="ml-2 hidden text-xs sm:inline">Ctrl+Enter to review</span>
         </p>
         <div className="flex gap-2">

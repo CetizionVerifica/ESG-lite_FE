@@ -3,6 +3,7 @@
 // Moved unchanged from pages/UserDataEntry/useEmissionCalculation.ts; the
 // golden snapshots in emissionCalc.golden.test.ts pin the outputs. Mirrors the
 // backend (services/calculationSpec.ts) so the preview matches the saved total.
+import { roundTonnes } from "./round"; // #209
 import { getConversionFactor, unitsMatchExact } from "../../ui/unitMatch";
 import type { SpendRate } from "../../services/fxRateService";
 import { isSpendRow, spendInputOf, spendOutcome } from "../scope3/spend";
@@ -218,7 +219,7 @@ const specActivityValue = (spec: CalculationSpec, row: ModalRow): number | { sta
 };
 
 // tCO₂e rounded to 2 decimals (factor_value is kg per unit).
-const toTonnes = (activity: number, factorValue: number) => Math.round(((activity * factorValue) / 1000) * 100) / 100;
+const toTonnes = (activity: number, factorValue: number) => roundTonnes((activity * factorValue) / 1000); // #209: 3 dp, as the engine
 
 export const calculateEmission = (input: EmissionCalcInput, row: ModalRow): EmissionCalculationResult => {
   if (!row.emission_category) return { value: null, status: "Select emission category" };
@@ -414,7 +415,7 @@ export function supplierEmission(activityValue: number | null, unit: string | un
   if (quantity === null) return { value: null, kg: null, status: `Unit mismatch - the supplier's figure is per ${figure.unit}` };
   // Rounded once, from the unrounded product, as the engine does.
   const kg = quantity * figure.kgco2e_per_unit;
-  return { value: Math.round((kg / 1000) * 100) / 100, kg: round4(kg), status: unitsMatchExact(unit, figure.unit) ? "ok" : "converted" };
+  return { value: roundTonnes(kg / 1000), kg: round4(kg), status: unitsMatchExact(unit, figure.unit) ? "ok" : "converted" };
 }
 
 export type HybridLineKind = "energy" | "material" | "transport" | "waste";
@@ -480,5 +481,5 @@ export function hybridEmission(
     components.push({ kind: line.kind, label: line.name, kg: round4(q * factor.factor_value) });
   }
   const kg = components.reduce((s, c) => s + c.kg, 0);
-  return { value: Math.round((kg / 1000) * 100) / 100, kg: round4(kg), status: "ok", components, notes };
+  return { value: roundTonnes(kg / 1000), kg: round4(kg), status: "ok", components, notes };
 }

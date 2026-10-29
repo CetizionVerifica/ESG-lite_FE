@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Modal, SegmentedControl, formatNumber } from "../../../ui";
+import { Button, Modal, SegmentedControl, formatTonnes } from "../../../ui";
 import { enteredByText, replaceBlocked, replaceWhereAllowed, type SavedMatch } from "../logic/duplicate";
 
 /** Keep both (F-06): a second bill for the same month is saved as its own entry; the Manager sees it as a possible duplicate. */
@@ -79,11 +79,11 @@ export function DuplicateDialog({ open, periodLabel, items, busy, onApply, onClo
             <div className="min-w-0 text-sm">
               <p className="truncate font-medium text-ink">{d.label}</p>
               <p className="text-xs text-muted">
-                New: {d.tco2e !== null ? <span className="font-num">{formatNumber(d.tco2e, 2)} tCO₂e</span> : "—"}
+                New: {d.tco2e !== null ? <span className="font-num">{formatTonnes(d.tco2e)} tCO₂e</span> : "—"}
                 {d.existing && (
                   <>
                     {" · Saved: "}
-                    {d.existing.tco2e !== null ? <span className="font-num">{formatNumber(d.existing.tco2e, 2)} tCO₂e</span> : "—"}
+                    {d.existing.tco2e !== null ? <span className="font-num">{formatTonnes(d.existing.tco2e)} tCO₂e</span> : "—"}
                     {d.existing.status && ` (${d.existing.status.charAt(0).toUpperCase()}${d.existing.status.slice(1)})`}
                     {enteredByText(d.existing) && ` · ${enteredByText(d.existing)}`}
                   </>

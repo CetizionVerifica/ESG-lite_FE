@@ -418,9 +418,9 @@ export function scopeDistribution(
 
 // ─── Findings (same rules as the branded PDF, backend src/reporting/ghg.ts) ─
 
-const fmt0 = (n: number) => Math.round(n).toLocaleString("en-US");
-const fmt1 = (n: number) =>
-  n.toLocaleString("en-US", { maximumFractionDigits: 1 });
+// #209: tCO₂e in the findings to 3 decimals, as everywhere else.
+const fmt0 = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+const fmt1 = fmt0;
 const pctText = (a: number, b: number) =>
   b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "—";
 

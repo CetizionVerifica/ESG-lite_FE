@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { ChevronDown, Copy, Trash2 } from "lucide-react";
-import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatNumber, panel, type FileDropItem } from "../../../ui";
+import { Badge, Button, DataQualityBadge, FileDrop, InfoTerm, MethodCards, Select, cn, formatNumber, formatTonnes, panel, type FileDropItem } from "../../../ui";
 import type { EmissionCalculator } from "../hooks/emissionCalc";
 import { resolveSpecMethod } from "../hooks/emissionCalc";
 import { formColumns, isColumnVisible, mappingKeyLabel, offeredUnits, rowMethodChoices, visibleExtraFields, type FormModel } from "../logic/form";
@@ -411,7 +411,7 @@ export function EntryRow(p: Props) {
           {result.value !== null ? (
             <p className="font-num text-base font-semibold text-ink">
               {/* Exact to the 2 decimals the saved total keeps. */}
-              = {formatNumber(result.value, 2)} tCO₂e
+              = {formatTonnes(result.value)} tCO₂e
               {result.status === "converted" && <span className="block text-xs font-normal text-muted">unit converted</span>}
               {p.showCalcDetail &&
                 result.notes?.map((n) => (

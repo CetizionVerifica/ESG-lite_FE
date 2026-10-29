@@ -53,7 +53,7 @@ describe("Supplier field on Category 1 and 2 rows", () => {
   it("hybrid: facility share by mass plus the lines", () => {
     const r = row({ "@method": "hybrid", _supplier_id: 7, _inputs: [{ kind: "material", name: "Alumina", quantity: "1930", unit: "kg" }] });
     // 500 t × 1,000 / 100,000 = 5,000 kg; 1,930 × 1.2 = 2,316 kg
-    expect(calc.calculateEmission(r).value).toBe(7.32);
+    expect(calc.calculateEmission(r).value).toBe(7.316); // 7,316 kg at 3 dp (#209)
     expect(lineProblem([{ kind: "material", name: "", quantity: "1", unit: "kg" }])).toMatch(/line 1/);
   });
 

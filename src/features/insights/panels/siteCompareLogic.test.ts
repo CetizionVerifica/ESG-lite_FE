@@ -35,7 +35,7 @@ describe("siteCompareLogic (IN-11)", () => {
 
   it("tooltips list the scopes and net, escaped", () => {
     expect(siteTooltip({ ...siteCompareData.rows[0], site: "A<b>" })).toContain("<b>A&lt;b&gt;</b>");
-    expect(siteTooltip(siteCompareData.rows[0])).toContain("Scope 2: 2,600 tCO₂e");
+    expect(siteTooltip(siteCompareData.rows[0])).toContain("Scope 2: 2,600.000 tCO₂e");
     expect(siteTooltip(undefined)).toBe("");
   });
 });

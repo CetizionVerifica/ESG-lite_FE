@@ -466,8 +466,8 @@ describe("findings", () => {
     expect(
       findings(f, locationRows(data, sites), "CY 2025", "CY 2024"),
     ).toEqual([
-      "Total CY 2025 emissions were 100 tCO₂e (up 0.0% vs CY 2024).",
-      "Hidd is the largest contributing site at 80 tCO₂e (80.0% of total).",
+      "Total CY 2025 emissions were 100.000 tCO₂e (up 0.0% vs CY 2024).",
+      "Hidd is the largest contributing site at 80.000 tCO₂e (80.0% of total).",
       "Scope 2 (purchased energy) dominates the footprint at 70.0%, indicating the highest-leverage reduction pathway.",
       "Electricity is the single largest emission source (70.0%).",
     ]);

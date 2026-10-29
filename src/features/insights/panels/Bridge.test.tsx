@@ -79,7 +79,7 @@ describe("Bridge (IN-5)", () => {
     expect(values.data.map((d) => d.itemStyle?.color)).toEqual(["brand", "bad", "good", "good", "good", "good", "brand"]);
     expect(values.data[0].groupId).toBe("year:2025");
     expect(screen.getByRole("img").getAttribute("aria-label")).toBe(
-      "Emissions went from 44,910 tCO₂e in 2025 to 41,280 tCO₂e in 2026; the biggest driver was cleaner electricity (−2,449 tCO₂e).",
+      "Emissions went from 44,910.200 tCO₂e in 2025 to 41,280.400 tCO₂e in 2026; the biggest driver was cleaner electricity (−2,449.000 tCO₂e).",
     );
     expect(screen.getByRole("list", { name: "Bar colours" }).textContent).toContain("Increase (+)");
   });
@@ -89,10 +89,10 @@ describe("Bridge (IN-5)", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Table" }));
     const table = screen.getByRole("table", { name: "What moved" });
     const rows = within(table).getAllByRole("row").map((r) => r.textContent);
-    expect(rows[1]).toBe("2025 total44,910Total");
-    expect(rows[2]).toBe("More output+2,331Increase");
-    expect(rows[3]).toBe("Better process efficiency−2,210Decrease");
-    expect(rows[rows.length - 1]).toBe("2026 total41,280Total");
+    expect(rows[1]).toBe("2025 total44,910.200Total");
+    expect(rows[2]).toBe("More output+2,330.600Increase");
+    expect(rows[3]).toBe("Better process efficiency−2,210.100Decrease");
+    expect(rows[rows.length - 1]).toBe("2026 total41,280.400Total");
   });
 
   it("shows the notes under the chart", () => {
@@ -108,7 +108,7 @@ describe("Bridge (IN-5)", () => {
     expect(dialog.textContent).toContain("L(Eᵀ, E⁰) × ln(driverᵀ / driver⁰)");
     const activity = within(dialog).getByTestId("calc-step-activity");
     expect(activity.textContent).toContain("More output");
-    expect(activity.textContent).toContain("+2,331 tCO₂e");
+    expect(activity.textContent).toContain("+2,330.600 tCO₂e");
     expect(within(activity).getAllByRole("row").map((r) => r.textContent)).toEqual(["InputValue", "Output (2025)63,540", "Output (2026)66,880"]);
     expect(within(dialog).getByTestId("calc-notes").textContent).toBe("Scope 2 kWh for 2025 was estimated.");
     await user.keyboard("{Escape}");

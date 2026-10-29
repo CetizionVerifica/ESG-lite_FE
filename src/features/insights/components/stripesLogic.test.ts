@@ -19,7 +19,7 @@ describe("stripes (IN-8)", () => {
   it("labels months and says the ends in words from server values only", () => {
     const cells = stripeCells(stripesData);
     expect(cells).toHaveLength(69);
-    expect(cells[0].text).toBe("Jan 2021: 4,300 tCO₂e");
-    expect(stripesSentence(stripesData)).toBe("Monthly emissions from Jan 2021 to Sep 2026: 4,300 tCO₂e in the first month and 3,280 tCO₂e in the last; darker is higher.");
+    expect(cells[0].text).toBe("Jan 2021: 4,300.000 tCO₂e");
+    expect(stripesSentence(stripesData)).toBe("Monthly emissions from Jan 2021 to Sep 2026: 4,300.000 tCO₂e in the first month and 3,280.000 tCO₂e in the last; darker is higher.");
   });
 });
