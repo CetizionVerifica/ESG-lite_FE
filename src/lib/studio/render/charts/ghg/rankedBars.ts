@@ -6,7 +6,7 @@
  * the server's display; only the three biggest bars carry a value label.
  * Binding: ghg · breakdown scope3_category (category_bars) or site (site_bars) · top n.
  */
-import { formatNumber } from "../../format";
+import { formatNumber, seriesUnit } from "../../format";
 import { esc, n3 } from "../../util";
 import { valueGridX } from "../axis";
 import { linearScale } from "../scale";
@@ -38,9 +38,10 @@ function rankedBars(input: ChartInput, kind: "category_bars" | "site_bars"): str
   const labelW = Math.min(w * 0.36, Math.max(...ps.map((p) => Math.min(p.key.length, labelChars))) * SMALL * 0.55 + SMALL);
   const x0 = labelW;
   // Value labels sit after the bar end; a long one (a 3-decimal tCO₂e figure, #209) narrows the plot so it isn't cut.
-  const valueText = (v: number) => formatNumber(v, "auto", value.unit);
+  const unit = seriesUnit(cur, value.unit); // #209 review: the series' own unit
+  const valueText = (v: number) => formatNumber(v, "auto", unit);
   const pw0 = w - x0 - (showValues ? SMALL * 4.5 : SMALL);
-  const pw = showValues ? fitBarEnds(pw0, x0, w, ps.filter((_, i) => labelled.has(i)).map((p) => ({ t: scale.t(Math.max(0, p.value)), label: valueText(p.value) }))) : pw0;
+  const pw = showValues ? fitBarEnds(pw0, x0, w, ps.map((p, i) => ({ p, i })).filter(({ i }) => labelled.has(i)).map(({ p, i }) => ({ t: scale.t(Math.max(0, p.value)), label: valueText(p.value), bold: i === 0 }))) : pw0;
   const top = head.h;
   const ph = h - top - leg.h - SMALL * 2;
   const band = ph / ps.length;
