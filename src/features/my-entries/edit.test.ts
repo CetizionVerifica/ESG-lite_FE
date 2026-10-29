@@ -191,6 +191,12 @@ describe("D6a: the edit preview adds WTT as the save does", () => {
     expect(feraCategoryIdOf(null, 3)).toBeNull();
   });
 
+  it("uses the server's fera_category_id when the user's grants leave FERA out, as the save still adds the WTT", () => {
+    const user = { sites: [{ site_id: 3, categories: [{ category_id: 9, category_name: "Business Travel" }], fera_category_id: 5 }] };
+    expect(feraCategoryIdOf(user, 3)).toBe(5);
+    expect(feraCategoryIdOf({ sites: [{ site_id: 3, categories: [], fera_category_id: null }] }, 3)).toBeNull();
+  });
+
   it("only for a Category 4, 6, 7 or 9 entry saved without a Category 3 twin, on a form without a spec", () => {
     expect(editAddsWtt({ category: travel }, noSpec)).toBe(true);
     expect(editAddsWtt({ category: travel, fera_linked_id: 12 }, noSpec)).toBe(false);

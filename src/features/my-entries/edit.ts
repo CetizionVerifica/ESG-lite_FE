@@ -97,13 +97,16 @@ export { editedDate, entryMonth, monthBounds, monthEndDate } from "../../lib/emi
 
 export const factorYearFor = (date: string) => factorYearForDate(date) as number;
 
-type UserSite = { site_id: number; categories?: { category_id: number; category_name: string }[] };
+type UserSite = { site_id: number; categories?: { category_id: number; category_name: string }[]; fera_category_id?: number | null };
 
-/** The entry's site's FERA category, from the signed-in user's sites (user.sites, or user.site on older accounts). */
+/**
+ * The entry's site's FERA category, from the signed-in user's sites (user.sites, or user.site on older
+ * accounts): one of its categories, else the server's `fera_category_id`, set when the user's grants leave FERA out.
+ */
 export function feraCategoryIdOf(user: unknown, siteId: number | undefined): number | null {
   const u = (user ?? {}) as { sites?: UserSite[]; site?: UserSite | null };
   const site = [...(u.sites ?? []), ...(u.site ? [u.site] : [])].find((s) => s.site_id === siteId);
-  return site ? (feraCategoryIds([site])[0] ?? null) : null;
+  return site ? (feraCategoryIds([site])[0] ?? site.fera_category_id ?? null) : null;
 }
 
 /**

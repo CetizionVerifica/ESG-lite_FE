@@ -69,8 +69,9 @@ export function useEntrySetup(args: {
         getUserUnitOptions(site, category).catch(() => null),
         companyId ? getMappingsByCompany(companyId, site, category).catch(() => []) : Promise.resolve([]),
         // The FERA rows are added by the server on save and never take a unit chosen here, so
-        // only their factors are read (for the Category 3 preview), not their units.
-        feraCategoryId ? getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId).catch(() => []) : Promise.resolve([] as EmissionFactor[]),
+        // only their factors are read (for the Category 3 preview), not their units. Not optional:
+        // a transport or travel row's total includes their WTT (D6a), so a failed fetch shows Retry.
+        feraCategoryId ? getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId) : Promise.resolve([] as EmissionFactor[]),
       ]);
       return {
         config: configs[0] ?? null,

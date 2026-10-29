@@ -112,8 +112,9 @@ export function useEditSetup(siteId: number | undefined, categoryId: number | un
         getUserEmissionFactorsBySiteAndCategory(site, category) as Promise<EmissionFactor[]>,
         getUserUnitsBySiteAndCategory(site, category) as Promise<UnitData[]>,
         getUserUnitOptions(site, category).catch(() => null),
-        // Optional: without them the preview is the row's own factor, as before D6a.
-        feraCategoryId ? (getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId) as Promise<EmissionFactor[]>).catch(() => []) : Promise.resolve([] as EmissionFactor[]),
+        // Not optional: the save adds a transport or travel row's WTT from them (D6a), so a failed
+        // fetch shows the error and Try again rather than a total without it.
+        feraCategoryId ? (getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId) as Promise<EmissionFactor[]>) : Promise.resolve([] as EmissionFactor[]),
       ]);
       return { config: configs?.[0] ?? null, factors: factors ?? [], units: (units ?? []).map((u) => u.unit_name), unitOptions, feraFactors: feraFactors ?? [] };
     },

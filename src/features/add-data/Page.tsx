@@ -20,7 +20,7 @@ import { useRowEvidence } from "./hooks/useRowEvidence";
 import { billGroups, billOf } from "./logic/bill";
 import { buildPayload, comparison, entryDate, entryFactorYear, entryPeriodLabel, formatEntryPeriodParam, parseEntryPeriod, previousPeriod, rowIssue, type EntryPeriod } from "./logic/entry";
 import { formColumns, rowMethodChoices, toFormModel } from "./logic/form";
-import { entryCategories, feraCategoryOf, sitesOf, userIdOf } from "./logic/sites";
+import { entryCategories, feraCategoryIdOf, sitesOf, userIdOf } from "./logic/sites";
 import { entryDraftKey } from "../../lib/entryDrafts";
 import { ChooseContext } from "./steps/ChooseContext";
 import { EnterRows } from "./steps/EnterRows";
@@ -82,13 +82,12 @@ export default function AddDataPage() {
     );
 
   const factorYear = period ? entryFactorYear(period) : null;
-  const fera = feraCategoryOf(site);
   const setup = useEntrySetup({
     siteId: contextReady ? site.site_id : null,
     categoryId: contextReady ? category.category_id : null,
     factorYear,
     companyId: site?.company_id ?? null,
-    feraCategoryId: fera?.category_id ?? null,
+    feraCategoryId: feraCategoryIdOf(site),
   });
   const threshold = useThreshold(site?.company_id ?? null);
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config, setup.data.unitOptions) : null), [setup.data]);
