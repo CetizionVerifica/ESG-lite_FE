@@ -8,8 +8,7 @@ import { MIA, RAVI, kpiApp } from "./kpiMockApi";
  * #209 follow-up · a tCO₂e figure has 3 decimals, so it's longer. With a big
  * one (123,456.789 tCO₂e) in place of the sample's, the KPI cards, rows and
  * drawers and the Design Studio chips show it whole: on one line, inside
- * their card, row or box, and the page doesn't scroll sideways (the ESG
- * page excepted, see below). KPI pages at
+ * their card, row or box, and the page doesn't scroll sideways. KPI pages at
  * 1280, 1024, 768 and 390 px; the studio editor at 1280 px (it needs ≥ 1280).
  * The chip's hover card is checked in TextEditing.test.tsx.
  */
@@ -61,15 +60,20 @@ const onOneLine = (el: Locator, t: string) =>
     return false;
   }, t);
 
+/** `el` sits inside `box`, left to right. */
+async function inside(el: Locator, box: Locator, what: string) {
+  const a = await el.boundingBox();
+  const b = await box.boundingBox();
+  if (!a || !b) throw new Error(`${what}: not on screen`);
+  expect(a.x, `${what} starts inside its box`).toBeGreaterThanOrEqual(b.x - 1);
+  expect(a.x + a.width, `${what} ends inside its box`).toBeLessThanOrEqual(b.x + b.width + 1);
+}
+
 /** `el` shows `text` whole: the number on one line, inside `box` left to right. */
 async function fits(el: Locator, box: Locator, text = TEXT) {
   await expect(el).toContainText(text);
   expect(await onOneLine(el, text.split(" ")[0]), `${text} on one line`).toBe(true);
-  const a = await el.boundingBox();
-  const b = await box.boundingBox();
-  if (!a || !b) throw new Error("not on screen");
-  expect(a.x, `${text} starts inside its box`).toBeGreaterThanOrEqual(b.x - 1);
-  expect(a.x + a.width, `${text} ends inside its box`).toBeLessThanOrEqual(b.x + b.width + 1);
+  await inside(el, box, text);
 }
 
 const noSideScroll = async (page: Page) => expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
@@ -86,11 +90,19 @@ for (const width of WIDTHS) {
     await fits(card.getByTestId("kpi-card-value"), card);
     await noSideScroll(page);
 
-    // ESG headline trend, and the topic drawer's row. (Not the whole page: at 768 px a pillar card's
-    // "+50 pp on last year · Better" chip already sticks out 15 px, which isn't a tCO₂e figure.)
+    // ESG headline trend, then the whole page: each pillar card's change chip ("+50 pp on last year ·
+    // Better") wraps inside its card rather than pushing the page sideways (it stuck out 15 px at 768 px).
     await page.goto("/kpi/esg");
     const trend = page.locator('[data-testid="esg-trend"][data-kpi="GHG_SCOPE1_2"]');
     await fits(trend.getByTestId("esg-trend-value"), trend);
+    const pillars = page.getByTestId("esg-pillar-card");
+    await expect(pillars).toHaveCount(3);
+    for (const pillar of await pillars.all()) {
+      const chip = pillar.getByTestId("change-chip");
+      await expect(chip).toContainText(/pp on last year/);
+      await inside(chip, pillar, `the ${await pillar.getAttribute("data-pillar")} pillar's change chip`);
+    }
+    await noSideScroll(page);
     await page.goto("/kpi/esg?topic=climate");
     const row = page.getByRole("dialog").getByTestId("esg-drawer-kpi").filter({ hasText: "Scope 1 emissions" });
     await fits(row.getByText(TEXT), row);
