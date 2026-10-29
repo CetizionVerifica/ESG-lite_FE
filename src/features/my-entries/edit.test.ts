@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { type ColumnConfig, type ColumnEntity, applyChange, createEmissionCalculator, toFormModel } from "../../lib/emissions";
 import type { EmissionData } from "../../services/emissionService";
-import { buildUpdate, canEdit, monthBounds, editIssue, editedDate, monthEndDate, prefillSelects, rowFromEntry, saveErrorMessage } from "./edit";
+import { withWttInRow } from "../../lib/scope3/wtt";
+import { buildUpdate, canEdit, editAddsWtt, feraCategoryIdOf, monthBounds, editIssue, editedDate, monthEndDate, prefillSelects, rowFromEntry, saveErrorMessage } from "./edit";
 
 const col = (pk_id: number, column_name: string, column_type = "select"): ColumnEntity => ({ pk_id, column_name, column_type });
 
@@ -175,5 +176,35 @@ describe("helpers", () => {
   it("uses the server's message when there is one", () => {
     expect(saveErrorMessage({ response: { data: { message: "No emission factor found" } } })).toBe("No emission factor found");
     expect(saveErrorMessage(new Error("x"))).toMatch(/Couldn't save/);
+  });
+});
+
+describe("D6a: the edit preview adds WTT as the save does", () => {
+  const travel = { category_id: 9, category_name: "Business Travel", scope: "Scope 3" };
+  const noSpec = { spec: null };
+
+  it("finds the site's FERA category in the signed-in user's sites", () => {
+    const user = { sites: [{ site_id: 3, categories: [{ category_id: 9, category_name: "Business Travel" }, { category_id: 5, category_name: "FERA" }] }] };
+    expect(feraCategoryIdOf(user, 3)).toBe(5);
+    expect(feraCategoryIdOf(user, 4)).toBeNull();
+    expect(feraCategoryIdOf({ site: { site_id: 4, categories: [{ category_id: 7, category_name: "fera" }] } }, 4)).toBe(7);
+    expect(feraCategoryIdOf(null, 3)).toBeNull();
+  });
+
+  it("only for a Category 4, 6, 7 or 9 entry saved without a Category 3 twin, on a form without a spec", () => {
+    expect(editAddsWtt({ category: travel }, noSpec)).toBe(true);
+    expect(editAddsWtt({ category: travel, fera_linked_id: 12 }, noSpec)).toBe(false);
+    expect(editAddsWtt({ category: travel, fera: [{}] }, noSpec)).toBe(false);
+    expect(editAddsWtt({ category: { category_id: 1, category_name: "Mobile Combustion", scope: "Scope 1" } }, noSpec)).toBe(false);
+    expect(editAddsWtt({ category: travel }, { spec: { mode: "per_unit" } as never })).toBe(false);
+  });
+
+  it("previews the total the save stores: 1,000 passenger.km × (0.22928 + 0.0335 WTT) = 0.26 t", () => {
+    const name = "Flights - Domestic, to/from UK, Average passenger, With RF [passenger.km]";
+    const own = createEmissionCalculator({ emissionFactors: [{ emission_factor_id: 1, emission_category_name: name, factor_value: 0.22928, denominator_unit: "passenger.km", year: 2024 }], targetYear: 2024 });
+    const wtt = createEmissionCalculator({ emissionFactors: [{ emission_factor_id: 2, emission_category_name: name, factor_value: 0.0335, denominator_unit: "passenger.km", year: 2024, factor_type: "wtt" }], targetYear: 2024 });
+    const row = { id: 1, emission_category: name, activity_data_unit: "passenger.km", quantity: "1000" };
+    expect(own.calculateEmission(row).value).toBe(0.23);
+    expect(withWttInRow(own, wtt).calculateEmission(row).value).toBe(0.26);
   });
 });

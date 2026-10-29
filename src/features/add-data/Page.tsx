@@ -6,7 +6,7 @@ import { Button, Callout, EmptyState, Loading, Modal, PageHeader, Skeleton, Step
 import { useCreateSupplier, useEntrySetup, useExistingEntries, usePeriodMode, usePeriodTotals, useSiteCountry, useSupplierDetails, useSupplierOptions, useThreshold } from "./api";
 import { SupplierFields } from "./components/SupplierFields";
 import { hasSupplierField, supplierIdOf, withSuppliers } from "./logic/supplier";
-import { withWttInRow } from "./logic/wtt";
+import { withWttInRow } from "../../lib/scope3/wtt";
 import { errorMessage as supplierError } from "../../services/scope3SuppliersService";
 import { useReviewWorkflow } from "../../lib/reviewWorkflow";
 import { LiveChecks, type LiveCheckRow } from "./components/LiveChecks";
@@ -189,9 +189,15 @@ export default function AddDataPage() {
     : undefined;
   const upstreamCalc = useEmissionCalc({ ...calcInput, emissionFactors: feraSplit.upstream, fallbackToRaw: true });
   const tdLossCalc = useEmissionCalc({ ...calcInput, emissionFactors: isScope2(category?.scope) ? feraSplit.tdLoss : [], fallbackToRaw: true });
+  // D6a: in a Category 4, 6, 7 or 9 the line shows only for a saved entry that kept its twin.
   const feraCalc: Cat3Calc | null =
-    !wttHere && (feraSplit.upstream.length || (isScope2(category?.scope) && feraSplit.tdLoss.length))
-      ? { upstream: feraSplit.upstream.length ? upstreamCalc : null, tdLoss: isScope2(category?.scope) && feraSplit.tdLoss.length ? tdLossCalc : null, upstreamSub: upstreamSubFor(category?.scope) }
+    feraSplit.upstream.length || (isScope2(category?.scope) && feraSplit.tdLoss.length)
+      ? {
+          upstream: feraSplit.upstream.length ? upstreamCalc : null,
+          tdLoss: isScope2(category?.scope) && feraSplit.tdLoss.length ? tdLossCalc : null,
+          upstreamSub: upstreamSubFor(category?.scope),
+          keptTwinsOnly: wttHere,
+        }
       : null;
 
   // Rows that will be sent: bill rows, and typed rows with something in them

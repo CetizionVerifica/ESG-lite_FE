@@ -85,6 +85,7 @@ export function rowsReducer(prev: State, action: Action): State {
       const source = { ...state.rows[i] };
       delete source._editOf;
       delete source._editSaved;
+      delete source._keepsFeraTwin;
       const copy = { ...source, id: state.nextId, _extra_data: { ...(source._extra_data ?? {}) } };
       return { ...state, rows: [...state.rows.slice(0, i + 1), copy, ...state.rows.slice(i + 1)], nextId: state.nextId + 1 };
     }

@@ -13,6 +13,8 @@ import {
   sameUnit,
   unitNotOfferedMessage,
 } from "../../lib/emissions";
+import { feraCategoryIds } from "../../lib/emissions/pendingCount";
+import { wttInRow } from "../../lib/scope3/fera";
 import { canConvert, unitsMatchExact } from "../../ui";
 import type { EmissionData } from "../../services/emissionService";
 import { META_KEYS } from "./logic";
@@ -94,6 +96,23 @@ export function rowFromEntry(m: FormModel, entry: EmissionData): ModalRow {
 export { editedDate, entryMonth, monthBounds, monthEndDate } from "../../lib/emissions/entryPeriod";
 
 export const factorYearFor = (date: string) => factorYearForDate(date) as number;
+
+type UserSite = { site_id: number; categories?: { category_id: number; category_name: string }[] };
+
+/** The entry's site's FERA category, from the signed-in user's sites (user.sites, or user.site on older accounts). */
+export function feraCategoryIdOf(user: unknown, siteId: number | undefined): number | null {
+  const u = (user ?? {}) as { sites?: UserSite[]; site?: UserSite | null };
+  const site = [...(u.sites ?? []), ...(u.site ? [u.site] : [])].find((s) => s.site_id === siteId);
+  return site ? (feraCategoryIds([site])[0] ?? null) : null;
+}
+
+/**
+ * D6a: whether the edit preview adds the WTT part, as the save does: a Category 4, 6, 7 or 9
+ * entry on a form without a calculation spec, saved without a Category 3 twin (one saved with
+ * a twin keeps its WTT there, the server's keep_fera_twin).
+ */
+export const editAddsWtt = (entry: Pick<EmissionData, "category" | "fera_linked_id"> & { fera?: unknown[] }, model: Pick<FormModel, "spec">): boolean =>
+  wttInRow(entry.category) && !model.spec && !entry.fera_linked_id && !entry.fera?.length;
 
 /* ------------------------------------------------------------- validation */
 
