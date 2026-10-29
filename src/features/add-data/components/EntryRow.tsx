@@ -37,7 +37,13 @@ const SPEND_EXTRA_KEYS = new Set<string>(Object.values(SPEND_FIELDS));
  * against the site's FERA factors (td_loss ones left out), and for a Scope 2
  * category the T&D-loss twin against its td_loss factors.
  */
-export type Cat3Calc = { upstream: EmissionCalculator | null; tdLoss: EmissionCalculator | null; upstreamSub: Scope3Sub };
+export type Cat3Calc = {
+  upstream: EmissionCalculator | null;
+  tdLoss: EmissionCalculator | null;
+  upstreamSub: Scope3Sub;
+  /** D6a: the category's rows hold their WTT, so only a saved entry that kept its twin (`_keepsFeraTwin`) shows the line. */
+  keptTwinsOnly?: boolean;
+};
 
 export type RowComparison = { text: string; overThreshold: boolean; threshold: number; previousLabel: string } | null;
 
@@ -101,15 +107,16 @@ export function EntryRow(p: Props) {
   const factor = row.emission_category && !supplierMethod ? calc.getEmissionFactor(row.emission_category) : undefined;
   const result = calc.calculateEmission(row);
   const twin = (c: EmissionCalculator | null | undefined) => (c && row.emission_category && c.getEmissionFactor(row.emission_category) ? c.calculateEmission(row).value : null);
-  const cat3 = p.feraCalc
-    ? cat3PreviewText(
-        [
-          { sub: p.feraCalc.upstreamSub, value: twin(p.feraCalc.upstream) },
-          { sub: "3c_td_losses", value: twin(p.feraCalc.tdLoss) },
-        ],
-        (n) => formatNumber(n, 2),
-      )
-    : null;
+  const cat3 =
+    p.feraCalc && (!p.feraCalc.keptTwinsOnly || row._keepsFeraTwin)
+      ? cat3PreviewText(
+          [
+            { sub: p.feraCalc.upstreamSub, value: twin(p.feraCalc.upstream) },
+            { sub: "3c_td_losses", value: twin(p.feraCalc.tdLoss) },
+          ],
+          (n) => formatNumber(n, 2),
+        )
+      : null;
   const expectedUnit =
     (row.emission_category && calc.getExpectedUnit(row.emission_category)) ||
     (model.spec?.mode === "per_method" ? resolveSpecMethod(model.spec, row)?.method.activity_unit : null) ||
@@ -425,6 +432,9 @@ export function EntryRow(p: Props) {
             <p className={cn("text-sm", localShown || serverValues ? "text-bad" : "text-muted")}>{p.issue ? localMessage(p.issue.message) : (serverValues ?? (p.showCalcDetail ? result.status : plainProblem(result.status)))}</p>
           )}
           {result.value !== null && serverValues && <p className="text-xs text-bad">{serverValues}</p>}
+          {p.showCalcDetail && result.value !== null && result.wtt_kg !== undefined && (
+            <p className="font-num text-xs text-muted">Includes {formatNumber(result.wtt_kg / 1000, 2)} tCO₂e well-to-tank (WTT)</p>
+          )}
           {p.showCalcDetail && cat3 && (
             <p className="font-num text-xs text-muted">
               + <InfoTerm id="fera">Cat 3</InfoTerm> {cat3.slice(CAT3_PREVIEW_PREFIX.length)}

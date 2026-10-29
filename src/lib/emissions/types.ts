@@ -50,6 +50,8 @@ export interface EmissionFactor {
   year: number;
   /** S3-2 factor type; a FERA factor typed td_loss makes the T&D-loss twin (S3-7). */
   factor_type?: string | null;
+  /** S3-2: the factor already sums in well-to-tank, so a transport row adds no WTT part (D6a). */
+  includes_wtt?: boolean | null;
   /** S3-2 geography (ISO-3166 alpha-2, a region code or GLO); the data quality preview reads it (S3-3). */
   geography?: string | null;
   // S3-2 metadata the factor list returns; S3-5 reads these for spend rows.
@@ -84,6 +86,8 @@ export interface ModalRow {
 export interface EmissionCalculationResult {
   value: number | null;
   status: "ok" | "converted" | string;
+  /** D6a: the well-to-tank kgCO₂e `value` includes, on a Category 4, 6, 7 or 9 row. */
+  wtt_kg?: number;
   /** Notes that never block, worded as the engine's warnings (S3-6: a hybrid line's factor from another year). */
   notes?: string[];
 }

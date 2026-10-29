@@ -14,6 +14,8 @@ export interface EntrySite {
   name: string;
   categories: Category[];
   company_id: number | null;
+  /** D6a: the site's FERA category even when the user's grants leave it out (ESG-lite session user). */
+  fera_category_id?: number | null;
 }
 
 interface RawSite {
@@ -21,6 +23,7 @@ interface RawSite {
   name: string;
   categories?: Category[];
   company?: { company_id: number } | null;
+  fera_category_id?: number | null;
 }
 
 const toSite = (s: RawSite): EntrySite => ({
@@ -28,6 +31,7 @@ const toSite = (s: RawSite): EntrySite => ({
   name: s.name,
   categories: s.categories ?? [],
   company_id: s.company?.company_id ?? null,
+  fera_category_id: s.fera_category_id ?? null,
 });
 
 /** user.sites, or the single user.site of older accounts. */
@@ -42,7 +46,8 @@ const isFera = (c: Category) => c.category_name.toLowerCase() === "fera";
 /** FERA is never chosen directly: the backend adds its rows when the fuel row is saved. */
 export const entryCategories = (site: EntrySite | undefined) => (site?.categories ?? []).filter((c) => !isFera(c));
 
-export const feraCategoryOf = (site: EntrySite | undefined) => site?.categories.find(isFera) ?? null;
+/** The site's FERA category id: from its categories, else from the server's `fera_category_id` (a user whose grants leave FERA out still gets its WTT on save, D6a). */
+export const feraCategoryIdOf = (site: EntrySite | undefined): number | null => site?.categories.find(isFera)?.category_id ?? site?.fera_category_id ?? null;
 
 /** The signed-in user's id, sent with bill uploads so My bills can list them. */
 export const userIdOf = (user: unknown): number | null => {

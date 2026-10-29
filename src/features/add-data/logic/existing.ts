@@ -17,6 +17,8 @@ export interface SavedEntry {
   /** `draft` only with the review workflow on (S3-15). */
   status: "draft" | "pending" | "approved" | "rejected";
   review_comment?: string;
+  /** Set on an entry saved with a Category 3 (FERA) twin. */
+  fera_linked_id?: number | null;
 }
 
 /** The list query for a period: its month, or the year its period end falls in. */
@@ -68,6 +70,8 @@ export function rowFromEntry(e: SavedEntry, model: FormModel, id: number, period
     }
   }
   row._editOf = e.pk_id;
+  // D6a: an entry saved with a Category 3 twin keeps its WTT there when it's changed (the server's keep_fera_twin).
+  if (e.fera_linked_id) row._keepsFeraTwin = true;
   // A pending entry counts in the period's saved ("entered") total; remember it so the comparison doesn't count it twice.
   if (e.status === "pending") {
     row._editSaved = { category: String(row.emission_category ?? ""), tco2e: Number(e.total_emission) || 0 };

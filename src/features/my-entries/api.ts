@@ -95,23 +95,28 @@ export type EditSetup = {
   units: string[];
   /** #183: the units each emission category may use; null when the API has no list (every unit is offered). */
   unitOptions: UnitOptionsByActivity | null;
+  /** D6a: the site's FERA factors, for the WTT part a transport or travel row's total includes; empty when the site has no FERA category. */
+  feraFactors: EmissionFactor[];
 };
 
-export function useEditSetup(siteId: number | undefined, categoryId: number | undefined, factorYear: number | null) {
+export function useEditSetup(siteId: number | undefined, categoryId: number | undefined, factorYear: number | null, feraCategoryId: number | null = null) {
   return useQuery({
-    queryKey: ["entry-edit-setup", siteId, categoryId],
+    queryKey: ["entry-edit-setup", siteId, categoryId, feraCategoryId],
     enabled: siteId !== undefined && categoryId !== undefined && factorYear !== null,
     staleTime: 10 * 60_000,
     queryFn: async (): Promise<EditSetup> => {
       const site = siteId as number;
       const category = categoryId as number;
-      const [configs, factors, units, unitOptions] = await Promise.all([
+      const [configs, factors, units, unitOptions, feraFactors] = await Promise.all([
         getUserColumnConfigsBySiteAndCategory(site, category) as Promise<ColumnConfig[] | null>,
         getUserEmissionFactorsBySiteAndCategory(site, category) as Promise<EmissionFactor[]>,
         getUserUnitsBySiteAndCategory(site, category) as Promise<UnitData[]>,
         getUserUnitOptions(site, category).catch(() => null),
+        // Not optional: the save adds a transport or travel row's WTT from them (D6a), so a failed
+        // fetch shows the error and Try again rather than a total without it.
+        feraCategoryId ? (getUserEmissionFactorsBySiteAndCategory(site, feraCategoryId) as Promise<EmissionFactor[]>) : Promise.resolve([] as EmissionFactor[]),
       ]);
-      return { config: configs?.[0] ?? null, factors: factors ?? [], units: (units ?? []).map((u) => u.unit_name), unitOptions };
+      return { config: configs?.[0] ?? null, factors: factors ?? [], units: (units ?? []).map((u) => u.unit_name), unitOptions, feraFactors: feraFactors ?? [] };
     },
   });
 }
