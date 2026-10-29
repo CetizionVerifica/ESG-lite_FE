@@ -42,7 +42,7 @@ async function mockApi(page: Page, opts: { studio?: boolean } = {}) {
     },
     [JSON.stringify(user)],
   );
-  const value = () => ({ display: "1,000", value: 1000, unit: "tCO₂e", source: "ghg", approvedAt: "2026-04-12T00:00:00.000Z", approvedEntries: 318, series: [{ label: "2025", values: [{ key: "2025", value: 1 }] }] });
+  const value = () => ({ display: "1,000.000", value: 1000, unit: "tCO₂e", source: "ghg", approvedAt: "2026-04-12T00:00:00.000Z", approvedEntries: 318, series: [{ label: "2025", values: [{ key: "2025", value: 1 }] }] });
   await page.route(
     (url) => url.port !== APP_PORT && !url.protocol.startsWith("data"),
     (route) => {

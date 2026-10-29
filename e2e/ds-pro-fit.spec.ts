@@ -65,7 +65,7 @@ async function mockApi(page: Page) {
       }
       if (path.endsWith("/studio/resolve")) {
         const b = request.postDataJSON() as { bindings: unknown[]; tokens: unknown[] };
-        const v = { display: "1,000", value: 1000, unit: "tCO₂e", source: "ghg", approvedAt: "2026-04-12T00:00:00.000Z", series: [{ label: "2025", values: [{ key: "2025", value: 1 }] }] };
+        const v = { display: "1,000.000", value: 1000, unit: "tCO₂e", source: "ghg", approvedAt: "2026-04-12T00:00:00.000Z", series: [{ label: "2025", values: [{ key: "2025", value: 1 }] }] };
         return json({ values: b.bindings.map(() => v), tokens: b.tokens.map(() => v), dataHash: "h", unavailable: [] });
       }
       if (path.endsWith("/studio/docs/1/ai/usage")) return json({ todayUsd: 0, budgetUsd: 5, calls: 0, callBudget: 200, monthUsd: 0, monthBudgetUsd: 50 });
