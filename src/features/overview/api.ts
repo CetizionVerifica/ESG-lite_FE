@@ -4,7 +4,7 @@ import { getEmissionsPaginated } from "../../services/emissionService";
 import { type OverviewResponse, type SubmissionUser, getManagerOverview, getSubmissionStatus } from "../../services/overviewService";
 import { getEmissionIntensity, getEmissionIntensityComparison, getProductionDataForManager } from "../../services/productionDataService";
 import { getThresholdByCompany } from "../../services/thresholdService";
-import { type Intensity, combinedIntensity, siteIntensity } from "./logic";
+import { type Intensity, addSiteMonths, combinedIntensity, siteIntensity } from "./logic";
 
 export const keys = {
   all: ["overview"] as const,
@@ -14,7 +14,7 @@ export const keys = {
   pending: (siteIds: number[]) => [...keys.all, "pending", siteIds] as const,
   production: (siteIds: number[]) => [...keys.all, "production-pending", siteIds] as const,
   threshold: (companyId: number) => ["threshold", companyId] as const,
-  siteIntensity: (siteId: number, from: string, to: string) => [...keys.all, "site-intensity", siteId, from, to] as const,
+  intensityMonthly: (siteIds: number[], from: string, to: string) => [...keys.all, "intensity-monthly", siteIds, from, to] as const,
   scope2: (siteIds: number[], categoryIds: number[], year: number) => [...keys.all, "scope2", siteIds, categoryIds, year] as const,
 };
 
@@ -110,14 +110,22 @@ function combine<T>(results: { data?: T; isPending: boolean; isError: boolean; r
   };
 }
 
-/** Monthly gross emissions and production per site (one request per site, in parallel). */
-export function useSiteIntensityMonthly(siteIds: number[], from: string, to: string) {
-  return useQueries({
-    queries: siteIds.map((siteId) => ({
-      queryKey: keys.siteIntensity(siteId, from, to),
-      queryFn: async () => (await getEmissionIntensity(siteId, { startDate: from, endDate: to })).monthlyData,
-    })),
-    combine,
+/**
+ * Monthly gross emissions and production of the chosen sites, combined by the
+ * server (ESG-lite D14: each month's kg rounded once). An older server without
+ * `monthlyData` is asked per site and its months are added, as before.
+ */
+export function useIntensityMonthly(siteIds: number[], from: string, to: string) {
+  return useQuery({
+    queryKey: keys.intensityMonthly(siteIds, from, to),
+    enabled: siteIds.length > 0,
+    queryFn: async () => {
+      const params = { startDate: from, endDate: to };
+      const d = await getEmissionIntensityComparison(siteIds, params);
+      if (d.monthlyData) return d.monthlyData;
+      const perSite = await Promise.all(siteIds.map(async (siteId) => (await getEmissionIntensity(siteId, params)).monthlyData));
+      return addSiteMonths(perSite);
+    },
   });
 }
 
