@@ -18,9 +18,9 @@ export type AdminUser = {
   last_name?: string | null;
   email: string;
   role: string;
-  /** The one site a data-entry user reports for. */
+  /** The one site of an older data-entry account. */
   site?: { site_id: number } | null;
-  /** Sites a manager looks after. */
+  /** Sites a manager looks after, or a user reports for. */
   sites?: { site_id: number }[] | null;
 };
 export type ColumnConfig = {
@@ -75,8 +75,9 @@ export function buildRows(sites: Site[], users: AdminUser[] = [], configs: Colum
   const managersBy = new Map<number, AdminUser[]>();
   const push = (m: Map<number, AdminUser[]>, id: number, u: AdminUser) => m.set(id, [...(m.get(id) ?? []), u]);
   for (const u of users) {
-    if (u.site?.site_id) push(usersBy, u.site.site_id, u);
-    for (const s of u.sites ?? []) push(managersBy, s.site_id, u);
+    // The role decides the list: a User can be on several sites (user.sites) too.
+    const ids = new Set([u.site?.site_id, ...(u.sites ?? []).map((s) => s.site_id)].filter((id): id is number => !!id));
+    for (const id of ids) push(u.role === "User" ? usersBy : managersBy, id, u);
   }
   const configsBy = new Map<number, ColumnConfig[]>();
   for (const c of configs) {
