@@ -10,7 +10,7 @@
 
 ## Data
 
-`reportService.getEdeReport` (POST `/user/reports/ede` `{siteIds, frequency, year, month?, categoryIds?}`) → totals, bySite, siteDonut, monthlyBySite, savedBySite, renewableKwhBySite, intensityMonthly.
+`reportService.getEdeReport` (POST `/user/reports/ede` `{siteIds, frequency, year, month?, categoryIds?}`) → totals, bySite, siteDonut, monthlyBySite, savedBySite, renewableKwhBySite, intensityMonthly. The "Saved" tile and the Overall totals row show `totals.saved` (ESG-lite D14: the selection's kg, rounded once), never `savedBySite` added up; only an older server without it gets the sites added.
 
 ## Layout
 

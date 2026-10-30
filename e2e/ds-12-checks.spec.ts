@@ -99,7 +99,7 @@ async function mockApi(page: Page, opts: { studio?: boolean } = {}) {
       if (/\/studio\/jobs\/\d+\/file$/.test(path)) return route.fulfill({ status: 200, contentType: "application/pdf", body: Buffer.from("%PDF-1.7\n%%EOF\n") });
       if (path.endsWith("/studio/resolve")) {
         const b = request.postDataJSON() as { bindings: unknown[]; tokens: unknown[] };
-        const v = { display: "1,000", value: 1000, unit: "tCO₂e", source: "ghg" };
+        const v = { display: "1,000.000", value: 1000, unit: "tCO₂e", source: "ghg" };
         return json({ values: b.bindings.map(() => v), tokens: b.tokens.map(() => v), dataHash: "h", unavailable: [] });
       }
       if (path.endsWith("/studio/assets") || path.endsWith("/studio/layouts") || path.endsWith("/studio/elements")) return json([]);

@@ -91,6 +91,11 @@ export interface OverviewResponse {
   submission: OverviewSubmission;
   /** 12 months for CY/FY, else the 6 months ending with the period. */
   trend: OverviewMonth[];
+  /**
+   * ESG-lite D14: approved monthly Scope 2 per trend month, tCO₂e (its kg rounded once),
+   * for the Scope 2 tab. Missing from an older server.
+   */
+  trend_scope_2?: { month: string; total: number }[];
   last_year: OverviewLastYear | null;
 }
 

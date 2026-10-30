@@ -4,7 +4,7 @@ import { ArrowRight, Check, Eye, Pencil, ShieldCheck, X } from "lucide-react";
 import type { KpiValue } from "../../../lib/kpi/contracts";
 import { breakdownTitle, checkBreakdown, periodText } from "../../../lib/kpi/entry";
 import { breakdownLabel } from "../../../lib/kpi/labels";
-import { conversionLine, formatWithUnit } from "../../../lib/kpi/units";
+import { columnDecimals, conversionLine, formatWithUnit } from "../../../lib/kpi/units";
 import { useKpiCompanyId } from "../../../lib/kpi/switch";
 import { getKpiValues } from "../../../services/kpiService";
 import {
@@ -296,7 +296,7 @@ function LastPeriods({ value, unit }: { value: KpiValue; unit: string | null }) 
       table={{
         columns: [
           { id: "period", header: "Period" },
-          { id: "value", header: shownUnit ?? "Value", numeric: true, decimals: 2 },
+          { id: "value", header: shownUnit ?? "Value", numeric: true, decimals: columnDecimals(shownUnit, 2) },
         ],
         rows: points.map((p) => ({ period: p.mine ? `${p.label} (this value)` : p.label, value: p.value })),
       }}

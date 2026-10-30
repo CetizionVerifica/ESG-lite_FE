@@ -58,6 +58,8 @@ function overview(period: string) {
       ],
     },
     trend: ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09"].map((month, i) => ({ month, gross: 20 + i, saved: 1, net: 19 + i })),
+    // D14: Scope 2 per trend month, the server's (the entries below store 1.2 and 1.5 t; their kg round to 1.201 and 1.501).
+    trend_scope_2: ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09"].map((month) => ({ month, total: month === "2025-09" ? 1.501 : month === "2025-08" ? 1.201 : 0 })),
     last_year: { period: {}, status: "complete", kpis: kpis(125), by_site: [] },
   };
 }
@@ -104,7 +106,12 @@ async function signIn(page: Page, role: "Manager" | "Admin" = "Manager") {
       if (path.endsWith("/user/production-data/manager")) return json([{ production_id: 1, status: "pending", site: { site_id: 2, name: "Sitra" } }]);
       if (path.includes("/user/thresholds/company/")) return json({ threshold_percentage: 5 });
       if (path.includes("/user/emission-intensity/comparison"))
-        return json({ comparison: [{ siteId: 1, totalEmissions: 80, totalProduction: 400, emissionIntensity: 0.2 }], dateRange: {} });
+        return json({
+          comparison: [{ siteId: 1, totalEmissions: 80, totalProduction: 400, emissionIntensity: 0.2 }],
+          // D14: both sites' months combined on the server (each site's 8 t month; their kg add to 16.001 t).
+          monthlyData: [{ month: "2025-09", emissions: 16.001, production: 80, intensity: 0.2000125 }],
+          dateRange: {},
+        });
       if (/\/user\/emission-intensity\/site\/\d+$/.test(path))
         return json({ totalEmissions: 80, productionByUnit: [{ unit: "t", totalProduction: 400, emissionIntensity: 0.2 }], monthlyData: [{ month: "2025-09", emissions: 8, production: 40, intensity: 0.2 }], dateRange: {} });
       return json({});
@@ -207,12 +214,15 @@ test("the lower tabs load on demand and follow the header context", async ({ pag
   await expect(panel.getByRole("heading", { name: "Scope 2 electricity" })).toBeVisible();
   await panel.getByRole("radio", { name: "Table" }).click();
   await expect(panel.getByRole("row", { name: /Sep 2025/ })).toContainText("1,200");
+  // D14: the month's tCO₂e is the server's trend_scope_2, not the entries' stored tonnes added.
+  await expect(panel.getByRole("row", { name: /Sep 2025/ })).toContainText("1.501");
 
   await page.getByRole("tab", { name: "Intensity" }).click();
   await expect(page).toHaveURL(/view=intensity/);
   await page.getByRole("tabpanel").getByRole("radio", { name: "Table" }).click();
-  // Two sites, 8 t over 40 units each: combined 16 / 80.
+  // Two sites, about 8 t over 40 units each: the server's combined month, 16.001 / 80.
   await expect(page.getByRole("tabpanel").getByRole("row", { name: /Sep 2025/ })).toContainText("0.2000");
+  await expect(page.getByRole("tabpanel").getByRole("row", { name: /Sep 2025/ })).toContainText("16.001");
 
   await page.getByRole("tab", { name: "Year over year" }).click();
   const years = page.getByRole("group", { name: "Years" });

@@ -3,6 +3,7 @@ import type {
   GhgDetailsRow,
   GhgReportTablesResponse,
   OverviewRow,
+  SiteTotalsRow,
 } from "../../services/ghgreportService";
 import {
   categoryOptions,
@@ -44,10 +45,36 @@ const row = (
   total: bySite.reduce((a, [, , v]) => a + v, 0),
 });
 
+/**
+ * The server's siteTotals for fixture rows whose figures are exact (no kg
+ * rounding to cross), so each site's figure is its Scope 1–3 cells added.
+ */
+const exactSiteTotals = (rows: OverviewRow[]): SiteTotalsRow[] => {
+  const map = new Map<number, SiteTotalsRow>();
+  for (const r of rows) {
+    const k = ({ "Scope 1": "scope1", "Scope 2": "scope2", "Scope 3": "scope3" } as const)[r.scope as "Scope 1"];
+    if (!k) continue;
+    for (const b of r.bySite) {
+      const t = map.get(b.siteId) ?? { siteId: b.siteId, siteName: b.siteName, scope1: 0, scope2: 0, scope3: 0, total: 0 };
+      t[k] += b.value;
+      t.total += b.value;
+      map.set(b.siteId, t);
+    }
+  }
+  return [...map.values()];
+};
+
 function tables(
   selected: OverviewRow[],
   compare: OverviewRow[],
+  siteTotals: "server" | "older server" | { selected: SiteTotalsRow[]; compare: SiteTotalsRow[] } = "server",
 ): GhgReportTablesResponse {
+  const st =
+    siteTotals === "older server"
+      ? null
+      : siteTotals === "server"
+        ? { selected: exactSiteTotals(selected), compare: exactSiteTotals(compare) }
+        : siteTotals;
   const totals = (rows: OverviewRow[]) => {
     const t = { scope1: 0, scope2: 0, scope3: 0, total: 0 };
     for (const r of rows) {
@@ -76,8 +103,8 @@ function tables(
     totals: { "2025": totals(selected), "2024": totals(compare) },
     tables: {
       table1_emissionsByScope_twoYears: [],
-      table_overviewByLocations_selectedYear: { year: 2025, rows: selected },
-      table_overviewByLocations_compareYear: { year: 2024, rows: compare },
+      table_overviewByLocations_selectedYear: { year: 2025, rows: selected, ...(st ? { siteTotals: st.selected } : {}) },
+      table_overviewByLocations_compareYear: { year: 2024, rows: compare, ...(st ? { siteTotals: st.compare } : {}) },
     },
   };
 }
@@ -385,6 +412,41 @@ describe("tables", () => {
     expect(rows[0].previous.total).toBe(100);
     expect(rows[1].selected.total).toBe(20);
     expect(rows[2].selected.total).toBe(0);
+  });
+
+  it("reads each site's figures from the server's siteTotals, not its cells added up (D14)", () => {
+    // Two Scope 1 categories at Hidd, one 1,234.4 kg row each: each cell is
+    // 1.234 t, but the site's 2,468.8 kg round once to 2.469 t (the server's
+    // siteTotals, as EDE and Overview say). Last year: 1,000.4 kg -> 1.0 t.
+    const d = tables(
+      [
+        row("Scope 1", "Diesel", [[1, "Hidd", 1.234]]),
+        row("Scope 1", "Natural Gas", [[1, "Hidd", 1.234]]),
+      ],
+      [row("Scope 1", "Diesel", [[1, "Hidd", 1]])],
+      {
+        selected: [{ siteId: 1, siteName: "Hidd", scope1: 2.469, scope2: 0, scope3: 0, total: 2.469 }],
+        compare: [{ siteId: 1, siteName: "Hidd", scope1: 1, scope2: 0, scope3: 0, total: 1 }],
+      },
+    );
+    const rows = locationRows(d, sites);
+    expect(rows.map((r) => r.site)).toEqual(["Hidd", "Askar", "Sitra"]);
+    expect(rows[0].selected).toEqual({ "Scope 1": 2.469, "Scope 2": 0, "Scope 3": 0, total: 2.469 });
+    expect(rows[0].previous).toEqual({ "Scope 1": 1, "Scope 2": 0, "Scope 3": 0, total: 1 });
+    expect(rows[1].selected.total).toBe(0);
+    // A site the user didn't ask for still gets its row, under the server's name.
+    const other = locationRows(d, [])[0];
+    expect(other).toMatchObject({ siteId: 1, site: "Hidd" });
+  });
+
+  it("adds the cells for an older server that sends no siteTotals", () => {
+    const old = tables(
+      data.tables.table_overviewByLocations_selectedYear.rows,
+      data.tables.table_overviewByLocations_compareYear.rows,
+      "older server",
+    );
+    expect(old.tables.table_overviewByLocations_selectedYear.siteTotals).toBeUndefined();
+    expect(locationRows(old, sites)).toEqual(locationRows(data, sites));
   });
 });
 

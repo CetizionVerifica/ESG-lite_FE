@@ -20,7 +20,8 @@ test("the GRI content index: values in GRI's units, omissions with reasons, the 
   await expect(page.getByRole("tab", { name: "GRI content index" })).toHaveAttribute("aria-selected", "true");
   await expect(row(page, "302-1")).toContainText("14,832 GJ");
   await expect(row(page, "303-3")).toContainText("3.63 ML");
-  await expect(row(page, "305-1")).toContainText("512.4 tCO₂e");
+  // #209: 305-1 is the one approved 2026 Scope 1 value (Bahrain plant, September: 512.4), with 3 decimals.
+  await expect(row(page, "305-1")).toContainText("512.400 tCO₂e");
   await expect(omission(page, "2-25")).toContainText("Not tracked in ESGLite");
   await expect(omission(page, "305-3")).toContainText("No approved value for 2026 yet.");
 

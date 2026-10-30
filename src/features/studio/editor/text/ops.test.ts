@@ -91,10 +91,10 @@ describe("chips", () => {
   const scope = { kind: "ghg" as const, year: 2025, yearType: "FY" as const, sites: "all" as const };
 
   it("the hover card shows source, period, sites, approval, and approved entries (GHG) or evidence (KPI)", () => {
-    const c = chipCard(ghg, { display: "12,480", value: 12480, unit: "tCO₂e", approvedAt: "2026-04-12T08:00:00.000Z", approvedEntries: 318 }, scope);
+    const c = chipCard(ghg, { display: "12,480.000", value: 12480, unit: "tCO₂e", approvedAt: "2026-04-12T08:00:00.000Z", approvedEntries: 318 }, scope);
     expect(c).toEqual({
       title: "Scope 1",
-      value: "12,480 tCO₂e",
+      value: "12,480.000 tCO₂e", // #209: the server's display, tCO₂e with 3 decimals
       lines: ["Source: approved emission entries", "Period: FY 2025", "Sites: All sites", "Linked to approved data · 12 Apr 2026", "Approved entries: 318"],
     });
     const k = chipCard(kpi, { display: "4,100", value: 4100, unit: "GJ", approvedAt: null, evidenceCount: 2 }, { ...scope, kind: "sustainability", yearType: "CY" }, "Total energy");

@@ -20,7 +20,7 @@ const DOT = { on_track: "bg-good", behind: "bg-warn", no_data: "bg-line" } as co
 export function KpiCard({ card, year, topic, target }: { card: KpiDashboardCard; year: number; topic: string; target: KpiTargetWithProgress | null }) {
   const change = changeText(card, year);
   const status = card.target?.status ?? target?.status ?? null;
-  const label = card.target?.label ?? (target ? targetText(target) : null);
+  const label = card.target?.label ?? (target ? targetText({ ...target, unit: target.unit ?? card.unit }) : null);
   const pct = card.target?.progress_pct ?? target?.progress_pct ?? null;
   // A change is only good or bad against a target's direction; otherwise it's just shown.
   const c = card.change_pct ?? 0;

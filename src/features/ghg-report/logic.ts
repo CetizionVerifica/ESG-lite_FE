@@ -24,6 +24,7 @@ import type {
   GhgReportTablesRequest,
   GhgReportTablesResponse,
   OverviewRow,
+  OverviewTable,
 } from "../../services/ghgreportService";
 import {
   DEFAULT_FY_START_MONTH,
@@ -267,37 +268,44 @@ const zero = (): ScopeSplit => ({
   total: 0,
 });
 
-/** Site × scope for both years. Sites asked for but without data still get a row of zeros. */
+/**
+ * Site × scope for both years. Sites asked for but without data still get a row of zeros.
+ * Every figure is the server's `siteTotals` (D14: the site's own kg, rounded once), so a
+ * site reads as in EDE, Overview and the branded PDF. Adding the site's category cells
+ * could miss by 0.001 a cell; that is left only for an older server without `siteTotals`.
+ */
 export function locationRows(
   data: GhgReportTablesResponse,
   sites: { site_id: number; name: string }[],
 ): LocationRow[] {
   const map = new Map<number, LocationRow>();
-  for (const s of sites)
-    map.set(s.site_id, {
-      siteId: s.site_id,
-      site: s.name,
+  const rowFor = (siteId: number, site: string) => {
+    const row = map.get(siteId) ?? {
+      siteId,
+      site,
       previous: zero(),
       selected: zero(),
-    });
-  const add = (rows: OverviewRow[], field: "previous" | "selected") => {
-    for (const r of rows) {
+    };
+    map.set(siteId, row);
+    return row;
+  };
+  for (const s of sites) rowFor(s.site_id, s.name);
+  const add = (table: OverviewTable, field: "previous" | "selected") => {
+    if (table.siteTotals) {
+      for (const t of table.siteTotals) rowFor(t.siteId, t.siteName)[field] = split(t);
+      return;
+    }
+    for (const r of table.rows) {
       if (!isCore(r.scope)) continue;
       for (const b of r.bySite) {
-        const row = map.get(b.siteId) ?? {
-          siteId: b.siteId,
-          site: b.siteName,
-          previous: zero(),
-          selected: zero(),
-        };
+        const row = rowFor(b.siteId, b.siteName);
         row[field][r.scope] += b.value;
         row[field].total += b.value;
-        map.set(b.siteId, row);
       }
     }
   };
-  add(data.tables.table_overviewByLocations_compareYear.rows, "previous");
-  add(data.tables.table_overviewByLocations_selectedYear.rows, "selected");
+  add(data.tables.table_overviewByLocations_compareYear, "previous");
+  add(data.tables.table_overviewByLocations_selectedYear, "selected");
   return [...map.values()].sort(
     (a, b) =>
       b.selected.total - a.selected.total || a.site.localeCompare(b.site),

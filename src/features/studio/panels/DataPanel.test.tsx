@@ -40,7 +40,7 @@ describe("DataPanel · GHG", () => {
     const onInsert = vi.fn();
     wrap(<DataPanel scope={ghgScope} onInsert={onInsert} />);
     const scope1 = await screen.findByTestId("data-item-scope1");
-    expect(within(scope1).getByText("1,111")).toBeTruthy();
+    expect(within(scope1).getByText("1,111.000")).toBeTruthy(); // #209: tCO₂e with 3 decimals
     expect(within(scope1).getByText("Approved 12 Apr 2026")).toBeTruthy();
     const market = screen.getByTestId("data-item-scope2_market");
     expect(within(market).getByText("Not reported")).toBeTruthy();
