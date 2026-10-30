@@ -215,14 +215,14 @@ describe("Approval (DS-13, D14)", () => {
 describe("Data changes (drift)", () => {
   it("shows the banner and Mark as checked saves the current hash on the text", async () => {
     setStudioMockDrift(1, [
-      { elementId: "p-summary.body", pageId: "p-summary", pageName: "Executive summary", text: "Scope 1 emissions were 1,200 tCO₂e", basedOnHash: "sha256:abc", before: "Scope 1: 1,200", after: "Scope 1: 1,260", figures: [{ elementId: "p-summary.split", label: "Scope split", before: "1,200 tCO₂e", after: "1,260 tCO₂e" }] },
+      { elementId: "p-summary.body", pageId: "p-summary", pageName: "Executive summary", text: "Scope 1 emissions were 1,200 tCO₂e", basedOnHash: "sha256:abc", before: "Scope split: 1,200.000", after: "Scope split: 1,260.000", figures: [{ elementId: "p-summary.split", label: "Scope split", before: "1,200.000", after: "1,260.000" }] },
     ]);
     await openEditor();
     const banner = await screen.findByTestId("drift-banner", {}, { timeout: 4000 });
     expect(banner.textContent).toContain("one text was written");
     fireEvent.click(within(banner).getByRole("button", { name: "Review changes" }));
     const list = await screen.findByTestId("drift-list");
-    expect(within(list).getByText("1,260 tCO₂e")).toBeTruthy();
+    expect(within(list).getByText("1,260.000")).toBeTruthy(); // #209: the figure is the server's display, 3 decimals
     fireEvent.click(within(list).getByRole("button", { name: "Mark as checked" }));
     await waitFor(
       () => {

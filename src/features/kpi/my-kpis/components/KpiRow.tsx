@@ -42,7 +42,7 @@ export function KpiRow({ item, today, showSite, onOpen, target, aiCount = 0 }: {
             <TargetProgress
               compact
               className="max-w-xs"
-              label={`${target.site_id === null && item.site_id !== null ? "company, " : ""}${targetText(target)}`}
+              label={`${target.site_id === null && item.site_id !== null ? "company, " : ""}${targetText({ ...target, unit: target.unit ?? item.canonical_unit })}`}
               pct={target.progress_pct}
               status={target.status ?? null}
             />

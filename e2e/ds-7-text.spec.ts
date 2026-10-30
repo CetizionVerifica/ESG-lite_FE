@@ -16,7 +16,8 @@ type El = { id: string; type: string; frame: { x: number; y: number; w: number; 
 type Pg = { id: string; kind: string; name: string; elements?: El[]; options?: Record<string, unknown> };
 type Doc = { pages: Pg[]; [k: string]: unknown };
 
-const DISPLAY: Record<string, string> = { total: "18,940", scope1: "12,480", scope2_location: "5,210" };
+// The server's display strings: tCO₂e figures with 3 decimals (#209, src/studio/sources/format.ts).
+const DISPLAY: Record<string, string> = { total: "18,940.000", scope1: "12,480.000", scope2_location: "5,210.000" };
 
 async function mockApi(page: Page, opts: { studio?: boolean } = {}) {
   const studio = opts.studio ?? true;
@@ -38,7 +39,7 @@ async function mockApi(page: Page, opts: { studio?: boolean } = {}) {
     [JSON.stringify(user)],
   );
   const value = (b: { source: string; metric?: string }) => {
-    const display = (b.source === "ghg" && b.metric && DISPLAY[b.metric]) || "1,000";
+    const display = (b.source === "ghg" && b.metric && DISPLAY[b.metric]) || "1,000.000";
     return { display, value: Number(display.replace(/,/g, "")), unit: "tCO₂e", source: b.source, approvedAt: "2026-04-12T00:00:00.000Z", approvedEntries: 318, series: [{ label: "2025", values: [{ key: "2025", value: 1 }] }] };
   };
   const g = (metric: string) => ({ source: "ghg", metric, years: { last: 1 }, sites: "all" });
@@ -111,7 +112,7 @@ test("type {{scope, pick Scope 1 → a chip with the value; delete it; undo; Esc
   await expect(picker).toBeVisible();
   await picker.getByTestId("pick-scope1").click();
   const chip = editing.getByTestId("data-chip");
-  await expect(chip).toHaveText("12,480");
+  await expect(chip).toHaveText("12,480.000");
   await expect(text).not.toContainText("{{");
 
   // Delete the chip (the space after it, then the chip), then undo.
@@ -119,13 +120,13 @@ test("type {{scope, pick Scope 1 → a chip with the value; delete it; undo; Esc
   await page.keyboard.press("Backspace");
   await expect(chip).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+z");
-  await expect(chip).toHaveText("12,480");
+  await expect(chip).toHaveText("12,480.000");
 
   // Esc commits one step; the sheet prints the chip's value and the doc autosaves.
   await page.keyboard.press("Escape");
   await expect(editing).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Undo Edit text/ })).toBeVisible();
-  await expect(page.locator('[data-sheet-host="p-summary"] [data-el-id="p-summary.heading"] .ds-chip')).toHaveText("12,480");
+  await expect(page.locator('[data-sheet-host="p-summary"] [data-el-id="p-summary.heading"] .ds-chip')).toHaveText("12,480.000");
   await expect
     .poll(() => JSON.stringify(pageOf(lastSaved(state), "p-summary")?.elements?.find((e) => e.id === "p-summary.heading")?.props.doc ?? null), { timeout: 6000 })
     .toContain('"metric":"scope1"');

@@ -5,7 +5,7 @@
  * of one family convert (tCO₂e never converts to tonnes of waste, INR never
  * to USD). This is a preview: the server converts and its number wins.
  */
-import { formatNumber } from "../../ui/format";
+import { TONNES_DP, formatNumber } from "../../ui/format";
 
 export interface KpiUnit {
   /** The spelling shown. */
@@ -156,11 +156,32 @@ export function displayDecimals(value: number): number {
   return Math.min(places, abs >= 1 ? 2 : 3);
 }
 
-/** "1,200 m³": a value with its unit in the locale format; decimals follow the size unless given. */
+/**
+ * #209: whether a unit is tonnes of CO₂e ("tCO₂e", "tCO2e", "t CO2e", "tonnes CO2e"), read through the
+ * registry above. kgCO₂e, other masses and intensities ("tCO₂e / M USD") are not.
+ */
+export const isTonnesCo2e = (unit: string | null | undefined): boolean => normaliseUnit(unit) === "tco2e";
+
+/**
+ * Decimals a figure in `unit` shows. A tCO₂e figure always shows `TONNES_DP` (3), as every emission
+ * figure in the app does (#209), whatever the KPI's own `decimals` say. Any other unit keeps `decimals`
+ * when given, else the size rule (`displayDecimals`).
+ */
+export function figureDecimals(value: number, unit: string | null | undefined, decimals?: number): number {
+  if (isTonnesCo2e(unit)) return TONNES_DP;
+  return decimals ?? displayDecimals(value);
+}
+
+/** Decimals for a column of figures in `unit` (chart table views): `TONNES_DP` for tCO₂e (#209), else `fallback`. */
+export const columnDecimals = (unit: string | null | undefined, fallback: number): number => (isTonnesCo2e(unit) ? TONNES_DP : fallback);
+
+/**
+ * "1,200 m³": a value with its unit in the locale format; decimals follow the size unless given.
+ * A tCO₂e figure always has 3 decimals ("4,650.200 tCO₂e", #209).
+ */
 export function formatWithUnit(value: number | null | undefined, unit: string | null | undefined, decimals?: number): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-  const d = decimals ?? displayDecimals(value);
-  const text = formatNumber(value, d);
+  const text = formatNumber(value, figureDecimals(value, unit, decimals));
   return unit ? `${text} ${unit}` : text;
 }
 

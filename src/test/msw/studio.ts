@@ -23,6 +23,8 @@
 import { http, HttpResponse } from "msw";
 import ghgFixture from "../fixtures/studio/ghg-doc.json";
 import { resizeDocument } from "../../lib/studio/resize"; // DS-10
+import { formatNumber as renderNumber, isTonnesCo2e } from "../../lib/studio/render/format"; // #209
+import { KPI_DEFINITIONS } from "./kpiData"; // #209 review: a KPI binding's units, as the server reads them
 import sustainabilityFixture from "../fixtures/studio/sustainability-doc.json";
 import {
   type AiAction,
@@ -609,20 +611,33 @@ const addDoc = (doc: ReportDoc, inputs: ReportInputs = {}, sourceDocId: number |
   return row;
 };
 
-/** A made-up display string per binding (mock data, never a reported figure). DS-2: the real shapes of src/studio/sources. */
+/** A KPI in the KPI sample library, for its name and canonical unit (undefined when the mock doesn't know the code). */
+const kpiDef = (code: string | undefined) => KPI_DEFINITIONS.find((d) => d.code === code);
+
+/**
+ * A made-up display string per binding (mock data, never a reported figure). DS-2: the real shapes of src/studio/sources.
+ * #209: a tCO₂e figure reads with 3 decimals ("1,111.000"), as src/studio/sources/format.ts sends it; other units as before.
+ * #209 review: as src/studio/sources/kpi.ts, a KPI binding's unit is its `unit` or the first KPI's canonical unit, and
+ * every KPI series carries its unit; without a breakdown there is one series per KPI, each in the binding's unit or its own.
+ */
 const resolveOne = (b: Binding, i: number): ResolvedBinding => {
   if (b.source === "custom") return { display: "Unlinked data", value: null, unit: null, source: "custom" };
   if (b.source === "input") return { display: "From report details", value: null, unit: null, source: "input" };
   if (b.source === "ghg" && b.metric === "scope2_market")
     return { display: "Not reported", value: null, unit: "tCO₂e", source: "ghg", unavailable: { reason: "NOT_RECORDED", detail: "Market-based Scope 2 isn't recorded (D7)." } };
   const value = 1000 + i * 111;
+  const unit = b.source === "ghg" ? "tCO₂e" : (b.unit ?? kpiDef(b.kpis[0])?.canonical_unit ?? null);
+  const series: NonNullable<ResolvedBinding["series"]> =
+    b.source === "kpi" && !b.breakdown
+      ? b.kpis.map((code, k) => ({ label: kpiDef(code)?.name ?? code, values: [{ key: "2025", value: value + k }], unit: b.unit ?? kpiDef(code)?.canonical_unit ?? null }))
+      : [{ label: "2025", values: [{ key: "2025", value }], ...(b.source === "kpi" ? { unit } : {}) }];
   return {
-    display: value.toLocaleString("en-GB"),
+    display: isTonnesCo2e(unit) ? renderNumber(value, "auto", unit) : value.toLocaleString("en-GB"),
     value,
-    unit: b.source === "ghg" ? "tCO₂e" : (b.unit ?? null),
+    unit,
     source: b.source,
     approvedAt: "2026-04-12T00:00:00.000Z",
-    series: [{ label: "2025", values: [{ key: "2025", value }] }],
+    series,
     ...(b.source === "ghg" ? { approvedEntries: 42 } : { evidenceCount: 3 }), // DS-7: chip hover card
     // DS-8: GHG breakdowns and year ranges in DS-2's series shapes, so the GHG charts draw.
     ...(b.source === "ghg" ? mockGhgShape(b, value) : {}),
@@ -647,7 +662,8 @@ function mockGhgShape(b: GhgBinding, value: number): Partial<ResolvedBinding> {
   if (b.breakdown && MOCK_BREAKDOWN[b.breakdown]) {
     let pts = MOCK_BREAKDOWN[b.breakdown];
     if (b.top && pts.length > b.top) pts = [...pts.slice(0, b.top), ["Other", pts.slice(b.top).reduce((a, p) => a + p[1], 0)]];
-    const series = years.map((y) => ({ label: String(y), values: pts.map(([key, v]) => ({ key: b.breakdown === "month" ? `${y}-${key.slice(5)}` : key, value: Math.round(v * scale(y) * 10) / 10 })) }));
+    // #209 review: gas parts are tonnes of each gas, so each series says "t" (src/studio/sources/ghg.ts GAS_TONNES).
+    const series = years.map((y) => ({ label: String(y), values: pts.map(([key, v]) => ({ key: b.breakdown === "month" ? `${y}-${key.slice(5)}` : key, value: Math.round(v * scale(y) * 10) / 10 })), ...(b.breakdown === "gas" ? { unit: "t" } : {}) }));
     const stacks =
       b.breakdown === "month" || b.breakdown === "quarter"
         ? ["Scope 1", "Scope 2", "Scope 3"].filter((s) => b.metric === "total" || (b.metric === "scope1" && s === "Scope 1") || (b.metric === "scope2_location" && s === "Scope 2") || (b.metric === "scope3" && s === "Scope 3")).map((label, k) => ({ label, values: series[series.length - 1].values.map((p) => ({ key: p.key, value: Math.round(((p.value ?? 0) * [0.27, 0.46, 0.27][k]) * 10) / 10 })) }))
