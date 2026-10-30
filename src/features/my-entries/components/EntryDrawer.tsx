@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { Pencil } from "lucide-react";
 import { FileText } from "lucide-react";
 import {
@@ -178,15 +177,14 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
     }
   }
   const update = useUpdateEntry();
-  const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const save = (body: EntryUpdate) => {
+  const save = (body: EntryUpdate, opts?: { keepBoth?: boolean }) => {
     // Someone else changed or approved the entry: the edit is over (Enter mustn't retry it).
     if (!entry || saveError?.stopEdit) return;
     setSaveError(null);
     update.mutate(
-      { id: entry.pk_id, update: { ...body, expected_updated_at: entry.updated_at } },
+      { id: entry.pk_id, update: { ...body, expected_updated_at: entry.updated_at }, keepBoth: opts?.keepBoth },
       {
         onSuccess: () => {
           toast({ title: entry.status === "rejected" ? "Resubmitted for review" : "Changes saved", tone: "good" });
@@ -199,17 +197,16 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
 
   const editable = entry !== null && canEdit(entry);
   // Someone else changed or reviewed the entry meanwhile: the edit ends, with no Save to retry.
+  // The list was refreshed when the save was refused, so the entry opens as it is now.
   const stopped = !!saveError?.stopEdit;
+  // Save is gone, so focus goes to Close rather than being lost.
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (stopped) closeRef.current?.focus();
+  }, [stopped]);
   const footer = !editable ? undefined : editing ? (
     stopped ? (
-      <Button
-        variant="ghost"
-        onClick={() => {
-          // Show the entry as it is now (approved, or someone else's change) when it's opened again.
-          void queryClient.invalidateQueries({ queryKey: ["my-entries"] });
-          onClose();
-        }}
-      >
+      <Button ref={closeRef} variant="ghost" onClick={onClose}>
         Close
       </Button>
     ) : (

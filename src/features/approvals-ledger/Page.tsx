@@ -78,6 +78,7 @@ import {
   possibleDuplicates,
   asStatus,
   attentionOn,
+  drawerRow,
   effectiveStatus,
   listParams,
   foldedTwinNote,
@@ -549,7 +550,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
       <EmptyState icon={SearchX} title="No records match" action={<Button onClick={clearFilters}>Clear filters</Button>} />
     );
 
-  const liveDrawerRow = drawer ? (list.data?.data.find((r) => r.pk_id === drawer.pk_id) ?? drawer) : null;
+  const liveDrawerRow = drawerRow(drawer, list.data?.data);
 
   const exportView = async (format: ExportFormat) => {
     try {

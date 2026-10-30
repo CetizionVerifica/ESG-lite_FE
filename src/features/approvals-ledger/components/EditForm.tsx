@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button, Callout, Select, SkeletonText, TextField, Textarea } from "../../../ui";
 import { useColumnConfig, useFactorNames, useManagerEdit, useUnitOptions, useUnits } from "../api";
 import { saveProblem } from "../../../lib/saveProblem";
@@ -86,6 +86,12 @@ function Loaded({
   const unitId = useId();
   const amountId = useId();
   const formRef = useRef<HTMLFormElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  // A stopped edit hides Save, so focus goes to Cancel rather than being lost.
+  const stopped = !!problem?.stopEdit;
+  useEffect(() => {
+    if (stopped) cancelRef.current?.focus();
+  }, [stopped]);
   // Older entries have no stored factor; say where the one shown came from.
   const derivedFactor = sendsValues && !row.activity_data?.emission_category && !!category;
 
@@ -96,9 +102,10 @@ function Loaded({
     setActivity(next);
   };
 
-  const submit = () => {
+  /** keepBoth: the manager chose Keep both on a duplicate, so the entry is saved beside the other one. */
+  const submit = (keepBoth = false) => {
     // Someone else changed or approved the entry: the edit is over (Enter mustn't retry it).
-    if (problem?.stopEdit) return;
+    if (stopped) return;
     setTried(true);
     if (errors.reason || errors.category || errors.unit || errors.amount) {
       // Take the manager to the first field that stops the save; the message by the button says what's missing.
@@ -111,7 +118,7 @@ function Loaded({
       target?.focus();
       return;
     }
-    save.mutate({ id: row.pk_id, body: { ...payload, expected_updated_at: openedVersion } }, { onSuccess: (data) => onDone(data?.emission) });
+    save.mutate({ id: row.pk_id, body: { ...payload, expected_updated_at: openedVersion }, keepBoth }, { onSuccess: (data) => onDone(data?.emission) });
   };
   return (
     <form
@@ -225,13 +232,13 @@ function Loaded({
           {notSaved}
         </p>
       )}
-      {problem && !notSaved && <SaveProblemNote problem={problem} />}
+      {problem && !notSaved && <SaveProblemNote problem={problem} onKeepBoth={() => submit(true)} />}
       <div className="flex justify-end gap-2">
-        <Button type="button" onClick={onCancel} disabled={save.isPending}>
+        <Button ref={cancelRef} type="button" onClick={onCancel} disabled={save.isPending}>
           Cancel
         </Button>
         {/* Someone else changed or reviewed the entry meanwhile: no Save to retry over their change. */}
-        {!problem?.stopEdit && (
+        {!stopped && (
           <Button type="submit" variant="primary" loading={save.isPending}>
             Save changes
           </Button>

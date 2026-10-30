@@ -21,7 +21,8 @@ const NO_FACTORS: EmissionFactor[] = [];
 type Props = {
   entry: EntryRow;
   saveError: SaveProblem | null;
-  onSubmit: (update: EntryUpdate) => void;
+  /** keepBoth: the person chose Keep both on a duplicate, so the entry is saved beside the other one. */
+  onSubmit: (update: EntryUpdate, opts?: { keepBoth?: boolean }) => void;
 };
 
 /**
@@ -131,11 +132,14 @@ function Fields(p: FieldsProps) {
       : [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(currentUnit ? [currentUnit] : [])])];
   const change = (column: string, value: string) => setRow((r) => applyChange(model, r, column, value));
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const send = (keepBoth: boolean) => {
     setTried(true);
     if (issue || p.loadingFactors) return;
-    p.onSubmit(buildUpdate(row, p.date, reason));
+    p.onSubmit(buildUpdate(row, p.date, reason), { keepBoth });
+  };
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    send(false);
   };
 
   return (
@@ -241,7 +245,7 @@ function Fields(p: FieldsProps) {
         error={shown("reason")}
       />
 
-      {p.saveError && <SaveProblemNote problem={p.saveError} />}
+      {p.saveError && <SaveProblemNote problem={p.saveError} onKeepBoth={() => send(true)} />}
     </form>
   );
 }

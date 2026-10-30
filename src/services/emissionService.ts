@@ -259,9 +259,11 @@ export const updateEmission = async (
     reason?: string;
     /** The entry's updated_at when the form opened: the save is refused if it changed since. */
     expected_updated_at?: string;
-  }
+  },
+  /** A move onto a date that already holds the same activity is saved beside it, as a separate bill (F-06). */
+  opts?: { keepBoth?: boolean }
 ) => {
-  const response = await api.put(`/user/emissions/${id}`, data);
+  const response = await api.put(`/user/emissions/${id}`, data, opts?.keepBoth ? { params: { keep_both: "true" } } : undefined);
   return response.data;
 };
 
@@ -356,9 +358,11 @@ export const rejectEmissionsByBatch = async (batchId: string, comment?: string) 
 
 export const managerUpdateEmission = async (
   id: string | number,
-  data: { activity_data?: any; date_of_reporting?: string; activity_data_unit?: string; reason?: string; expected_updated_at?: string }
+  data: { activity_data?: any; date_of_reporting?: string; activity_data_unit?: string; reason?: string; expected_updated_at?: string },
+  /** As updateEmission: keep both entries when the edit lands on the same activity. */
+  opts?: { keepBoth?: boolean }
 ) => {
-  const response = await api.put(`/user/emissions/manager-edit/${id}`, data);
+  const response = await api.put(`/user/emissions/manager-edit/${id}`, data, opts?.keepBoth ? { params: { keep_both: "true" } } : undefined);
   return response.data;
 };
 

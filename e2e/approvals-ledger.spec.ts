@@ -317,6 +317,50 @@ test("a date the server refuses (filed yearly) shows its reason and keeps the fo
   await expect(page.getByRole("dialog", { name: "Edit · Diesel" })).toBeVisible();
 });
 
+test("a move onto a month that already holds the activity offers Keep both, which saves it as a separate bill", async ({ page }) => {
+  await signIn(page);
+  const message = "An entry for this site, category, date and emission subcategory already exists. Keep both if this is a separate bill, or edit that entry instead.";
+  const puts: URL[] = [];
+  await page.route(/\/user\/emissions\/manager-edit\//, (route) => {
+    const url = new URL(route.request().url());
+    puts.push(url);
+    return url.searchParams.get("keep_both") === "true"
+      ? route.fulfill({ json: { emission: null } })
+      : route.fulfill({ status: 409, json: { duplicate: true, severity: "warning", message } });
+  });
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  const form = page.getByRole("dialog", { name: "Edit · Diesel" });
+  await form.getByRole("group", { name: "Reporting month" }).getByLabel("Month").selectOption({ label: "Aug" });
+  await form.getByLabel("Reason for the change").fill("Second bill for August");
+  await form.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(form.getByRole("status").filter({ hasText: message })).toBeVisible();
+  expect(puts[0]?.searchParams.get("keep_both")).toBeNull();
+  await form.getByRole("button", { name: "Keep both" }).click();
+  await expect(page.getByText("Changes saved")).toBeVisible();
+  expect(puts).toHaveLength(2);
+  expect(puts[1]?.searchParams.get("keep_both")).toBe("true");
+});
+
+test("an entry changed by someone else meanwhile ends the edit: a warning, no Save, focus on Cancel", async ({ page }) => {
+  await signIn(page);
+  const message = "This entry was changed or reviewed by someone else while you were editing it, so your change wasn't saved.";
+  await page.route(/\/user\/emissions\/manager-edit\//, (route) => route.fulfill({ status: 409, json: { code: "ENTRY_CHANGED", severity: "warning", message } }));
+  await page.goto("/data/ledger");
+  await page.getByRole("table", { name: "Emission entries" }).locator("tbody tr").first().click();
+  await page.getByRole("dialog", { name: "Diesel" }).getByRole("button", { name: "Edit" }).click();
+  const form = page.getByRole("dialog", { name: "Edit · Diesel" });
+  await form.getByLabel("Quantity").fill("150");
+  await form.getByLabel("Reason for the change").fill("Meter read corrected");
+  await form.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(form.getByRole("status").filter({ hasText: message })).toBeVisible();
+  await expect(form.getByRole("button", { name: "Save changes" })).toHaveCount(0);
+  await expect(form.getByRole("button", { name: "Cancel" })).toBeFocused();
+});
+
 test("an amount change on an entry without a unit waits for a unit", async ({ page }) => {
   const { rows, calls } = await signIn(page);
   rows[0].activity_data_unit = null;

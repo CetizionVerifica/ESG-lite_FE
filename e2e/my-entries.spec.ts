@@ -186,6 +186,63 @@ test("a rejected entry is fixed and resubmitted in the drawer", async ({ page })
   });
 });
 
+test("a move onto a month that already holds the activity offers Keep both, which saves it as a separate bill", async ({ page }) => {
+  await signIn(page);
+  const message = "An entry for this site, category, date and emission subcategory already exists. Keep both if this is a separate bill, or edit that entry instead.";
+  const puts: URL[] = [];
+  await page.route(/\/user\/emissions\/41(\?|$)/, (route) => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    const url = new URL(route.request().url());
+    puts.push(url);
+    return url.searchParams.get("keep_both") === "true"
+      ? route.fulfill({ json: { message: "Emission updated" } })
+      : route.fulfill({ status: 409, json: { duplicate: true, severity: "warning", message } });
+  });
+  await page.goto("/data/mine");
+  await page.getByRole("table", { name: "My entries" }).getByRole("row").filter({ hasText: "Wrong unit" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByRole("button", { name: "Fix and resubmit" }).click();
+  await drawer.getByRole("group", { name: "Month" }).getByLabel("Month").selectOption({ label: "Aug" });
+  await drawer.getByLabel("What did you change?").fill("This is the August bill");
+  await drawer.getByRole("button", { name: "Resubmit" }).click();
+
+  // A warning, not an error: the person can keep both, or pick another month.
+  await expect(drawer.getByRole("status").filter({ hasText: message })).toBeVisible();
+  await expect(drawer.getByRole("alert")).toHaveCount(0);
+  expect(puts[0]?.searchParams.get("keep_both")).toBeNull();
+  await drawer.getByRole("button", { name: "Keep both" }).click();
+  await expect(page.getByText("Resubmitted for review")).toBeVisible();
+  expect(puts).toHaveLength(2);
+  expect(puts[1]?.searchParams.get("keep_both")).toBe("true");
+});
+
+test("an entry changed by someone else meanwhile ends the edit: a warning, focus on Close and a fresh list", async ({ page }) => {
+  const requests: URLSearchParams[] = [];
+  await signIn(page, requests);
+  const message = "This entry was changed or reviewed by someone else while you were editing it, so your change wasn't saved.";
+  await page.route(/\/user\/emissions\/41(\?|$)/, (route) =>
+    route.request().method() === "PUT" ? route.fulfill({ status: 409, json: { code: "ENTRY_CHANGED", severity: "warning", message } }) : route.fallback(),
+  );
+  await page.goto("/data/mine");
+  await page.getByRole("table", { name: "My entries" }).getByRole("row").filter({ hasText: "Wrong unit" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByRole("button", { name: "Fix and resubmit" }).click();
+  await drawer.getByLabel("Quantity").fill("1200");
+  await drawer.getByLabel("What did you change?").fill("Corrected the litres");
+  const listed = requests.length;
+  await drawer.getByRole("button", { name: "Resubmit" }).click();
+
+  await expect(drawer.getByRole("status").filter({ hasText: message })).toBeVisible();
+  await expect(drawer.getByRole("button", { name: "Resubmit" })).toHaveCount(0);
+  await expect(drawer.getByRole("button", { name: "Keep both" })).toHaveCount(0);
+  // Save is gone, so focus lands on Close rather than nowhere.
+  await expect(page.locator(":focus")).toHaveText("Close");
+  // The list refreshed when the save was refused, so the entry opens as it is now however the drawer is closed.
+  await expect.poll(() => requests.length).toBeGreaterThan(listed);
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+});
+
 test("#183: an entry whose unit the form no longer offers keeps it, says so, and saves unchanged", async ({ page }) => {
   const saved: { url: string; body: unknown }[] = [];
   // The form now fixes the unit to kl; the rejected entry was saved in litre.
