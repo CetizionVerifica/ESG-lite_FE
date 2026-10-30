@@ -257,6 +257,8 @@ export const updateEmission = async (
     date_of_reporting?: string;
     activity_data_unit?: string;
     reason?: string;
+    /** The entry's updated_at when the form opened: the save is refused if it changed since. */
+    expected_updated_at?: string;
   }
 ) => {
   const response = await api.put(`/user/emissions/${id}`, data);
@@ -354,7 +356,7 @@ export const rejectEmissionsByBatch = async (batchId: string, comment?: string) 
 
 export const managerUpdateEmission = async (
   id: string | number,
-  data: { activity_data?: any; date_of_reporting?: string; activity_data_unit?: string; reason?: string }
+  data: { activity_data?: any; date_of_reporting?: string; activity_data_unit?: string; reason?: string; expected_updated_at?: string }
 ) => {
   const response = await api.put(`/user/emissions/manager-edit/${id}`, data);
   return response.data;

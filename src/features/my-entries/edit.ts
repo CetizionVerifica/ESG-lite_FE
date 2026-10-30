@@ -171,6 +171,8 @@ export type EntryUpdate = {
   activity_data_unit?: string;
   date_of_reporting: string;
   reason?: string;
+  /** The entry's updated_at when the form opened: the save is refused if someone changed it since. */
+  expected_updated_at?: string;
 };
 
 /** The PUT body. The backend recalculates the total and puts the entry back to Pending. */
