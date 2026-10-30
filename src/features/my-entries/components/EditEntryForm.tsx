@@ -5,6 +5,8 @@ import { useEditSetup } from "../api";
 import { type EditIssue, type EntryUpdate, buildUpdate, editAddsWtt, editIssue, editedDate, entryMonth, factorYearFor, feraCategoryIdOf, monthBounds, rowFromEntry } from "../edit";
 import { type EntryRow, periodText } from "../logic";
 import { plainProblem } from "../../../lib/entryDetail";
+import type { SaveProblem } from "../../../lib/saveProblem";
+import { SaveProblemNote } from "../../../lib/SaveProblemNote";
 import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
 import { columnTitle } from "../../../lib/emissions/form";
 import { settingFor } from "../../../lib/forms/settings";
@@ -18,7 +20,7 @@ const NO_FACTORS: EmissionFactor[] = [];
 
 type Props = {
   entry: EntryRow;
-  saveError: string | null;
+  saveError: SaveProblem | null;
   onSubmit: (update: EntryUpdate) => void;
 };
 
@@ -239,11 +241,7 @@ function Fields(p: FieldsProps) {
         error={shown("reason")}
       />
 
-      {p.saveError && (
-        <p role="alert" className="rounded-control border border-bad/30 bg-bad-soft px-3 py-2 text-sm text-bad">
-          {p.saveError}
-        </p>
-      )}
+      {p.saveError && <SaveProblemNote problem={p.saveError} />}
     </form>
   );
 }

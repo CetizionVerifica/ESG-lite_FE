@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { FileText } from "lucide-react";
 import {
@@ -26,7 +27,8 @@ import {
 } from "../../../ui";
 import { useAddEvidence, useEntryDocuments, useLabelConfig, useRemoveEvidence, useUpdateEntry } from "../api";
 import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
-import { type EntryUpdate, canEdit, saveErrorMessage } from "../edit";
+import { type EntryUpdate, canEdit } from "../edit";
+import { type SaveProblem, saveProblem } from "../../../lib/saveProblem";
 import { EDIT_FORM_ID, EditEntryForm } from "./EditEntryForm";
 import { type EntryRow, activityFields, entryQuantity, keyActivity, periodText, quantityDecimals } from "../logic";
 import type { EmissionDocument } from "../../../services/documentService";
@@ -166,7 +168,7 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
   const [entry, setEntry] = useState(current);
   const [opened, setOpened] = useState(current);
   const [editing, setEditing] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<SaveProblem | null>(null);
   if (current !== opened) {
     setOpened(current);
     if (current) {
@@ -176,33 +178,50 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
     }
   }
   const update = useUpdateEntry();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const save = (body: EntryUpdate) => {
-    if (!entry) return;
+    // Someone else changed or approved the entry: the edit is over (Enter mustn't retry it).
+    if (!entry || saveError?.stopEdit) return;
     setSaveError(null);
     update.mutate(
-      { id: entry.pk_id, update: body },
+      { id: entry.pk_id, update: { ...body, expected_updated_at: entry.updated_at } },
       {
         onSuccess: () => {
           toast({ title: entry.status === "rejected" ? "Resubmitted for review" : "Changes saved", tone: "good" });
           onClose();
         },
-        onError: (e) => setSaveError(saveErrorMessage(e)),
+        onError: (e) => setSaveError(saveProblem(e, "Couldn't save your changes. Try again.")),
       },
     );
   };
 
   const editable = entry !== null && canEdit(entry);
+  // Someone else changed or reviewed the entry meanwhile: the edit ends, with no Save to retry.
+  const stopped = !!saveError?.stopEdit;
   const footer = !editable ? undefined : editing ? (
-    <>
-      <Button variant="ghost" onClick={() => setEditing(false)} disabled={update.isPending}>
-        Cancel
+    stopped ? (
+      <Button
+        variant="ghost"
+        onClick={() => {
+          // Show the entry as it is now (approved, or someone else's change) when it's opened again.
+          void queryClient.invalidateQueries({ queryKey: ["my-entries"] });
+          onClose();
+        }}
+      >
+        Close
       </Button>
-      <Button variant="primary" type="submit" form={EDIT_FORM_ID} loading={update.isPending}>
-        {entry.status === "rejected" ? "Resubmit" : "Save changes"}
-      </Button>
-    </>
+    ) : (
+      <>
+        <Button variant="ghost" onClick={() => setEditing(false)} disabled={update.isPending}>
+          Cancel
+        </Button>
+        <Button variant="primary" type="submit" form={EDIT_FORM_ID} loading={update.isPending}>
+          {entry.status === "rejected" ? "Resubmit" : "Save changes"}
+        </Button>
+      </>
+    )
   ) : (
     <Button variant="primary" icon={<Pencil aria-hidden className="size-4" />} onClick={() => setEditing(true)}>
       {entry.status === "rejected" ? "Fix and resubmit" : "Edit entry"}

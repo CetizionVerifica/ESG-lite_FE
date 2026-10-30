@@ -1,6 +1,8 @@
 import { useId, useRef, useState } from "react";
 import { Button, Callout, Select, SkeletonText, TextField, Textarea } from "../../../ui";
-import { errorMessage, useColumnConfig, useFactorNames, useManagerEdit, useUnitOptions, useUnits } from "../api";
+import { useColumnConfig, useFactorNames, useManagerEdit, useUnitOptions, useUnits } from "../api";
+import { saveProblem } from "../../../lib/saveProblem";
+import { SaveProblemNote } from "../../../lib/SaveProblemNote";
 import { sameUnit, unitForCategory, unitsForRow } from "../../../lib/emissions/unitOptions";
 import {
   type Activity,
@@ -47,6 +49,9 @@ function Loaded({
     date: row.date_of_reporting.slice(0, 10),
     unit: row.activity_data_unit ?? "",
   }));
+  // The version the form was built from: a save is refused if someone changed the entry since
+  // (a refetch while the form is open mustn't move it).
+  const [openedVersion] = useState(row.updated_at);
   const [activity, setActivity] = useState<Activity>(start.activity);
   const [date, setDate] = useState(start.date);
   const [unit, setUnit] = useState(start.unit);
@@ -76,6 +81,7 @@ function Loaded({
     ...(Object.keys(amounts).length > 0 ? { amount: AMOUNT_ERROR } : {}),
   };
   const notSaved = tried ? blockedMessage(errors) : null;
+  const problem = save.isError ? saveProblem(save.error, "Couldn't save the changes. Nothing was changed.") : null;
   const reasonId = useId();
   const unitId = useId();
   const amountId = useId();
@@ -91,6 +97,8 @@ function Loaded({
   };
 
   const submit = () => {
+    // Someone else changed or approved the entry: the edit is over (Enter mustn't retry it).
+    if (problem?.stopEdit) return;
     setTried(true);
     if (errors.reason || errors.category || errors.unit || errors.amount) {
       // Take the manager to the first field that stops the save; the message by the button says what's missing.
@@ -103,7 +111,7 @@ function Loaded({
       target?.focus();
       return;
     }
-    save.mutate({ id: row.pk_id, body: payload }, { onSuccess: (data) => onDone(data?.emission) });
+    save.mutate({ id: row.pk_id, body: { ...payload, expected_updated_at: openedVersion } }, { onSuccess: (data) => onDone(data?.emission) });
   };
   return (
     <form
@@ -217,18 +225,17 @@ function Loaded({
           {notSaved}
         </p>
       )}
-      {save.isError && !notSaved && (
-        <p role="alert" className="rounded-control bg-bad-soft px-3 py-2 text-sm text-bad">
-          {errorMessage(save.error, "Couldn't save the changes. Nothing was changed.")}
-        </p>
-      )}
+      {problem && !notSaved && <SaveProblemNote problem={problem} />}
       <div className="flex justify-end gap-2">
         <Button type="button" onClick={onCancel} disabled={save.isPending}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" loading={save.isPending}>
-          Save changes
-        </Button>
+        {/* Someone else changed or reviewed the entry meanwhile: no Save to retry over their change. */}
+        {!problem?.stopEdit && (
+          <Button type="submit" variant="primary" loading={save.isPending}>
+            Save changes
+          </Button>
+        )}
       </div>
     </form>
   );
