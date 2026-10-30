@@ -60,9 +60,9 @@ describe("DataChip serialisation", () => {
   });
 
   it("copies a chip as its value (renderText) and parses a pasted chip back to the node", () => {
-    const shown: Record<string, string> = { ghg: "12,480", kpi: "+4.2%" };
+    const shown: Record<string, string> = { ghg: "12,480.000", kpi: "+4.2%" }; // #209: the server's tCO₂e display has 3 decimals
     const e = make(toTiptap(DOC), { chipText: (a) => shown[(a.binding as { source: string }).source] ?? "#" });
-    expect(e.getText()).toContain("Scope 1 12,480");
+    expect(e.getText()).toContain("Scope 1 12,480.000");
     expect(e.getText()).toContain("Renewables +4.2%");
     const html = e.getHTML();
     expect(html).toContain("data-ds-chip");
