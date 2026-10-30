@@ -53,6 +53,9 @@ describe("buildRows", () => {
     user(1, { site: { site_id: 1 } }),
     user(2, { role: "Manager", sites: [{ site_id: 1 }, { site_id: 2 }] }),
     user(3, { site: { site_id: 2 } }),
+    // A User on several sites comes back with `sites`, like a Manager.
+    user(4, { sites: [{ site_id: 1 }, { site_id: 2 }] }),
+    user(5, { site: { site_id: 1 }, sites: [{ site_id: 1 }] }),
   ];
   const configs = [
     { pk_id: 1, config_name: "a", site: { site_id: 1 }, category: { category_id: 1 } },
@@ -62,8 +65,8 @@ describe("buildRows", () => {
   ];
   const [row] = buildRows([site], users, configs);
 
-  it("splits users and managers per site", () => {
-    expect(row.users.map((u) => u.user_id)).toEqual([1]);
+  it("splits users and managers per site by role", () => {
+    expect(row.users.map((u) => u.user_id)).toEqual([1, 4, 5]);
     expect(row.managers.map((u) => u.user_id)).toEqual([2]);
   });
   it("counts coverage over the site's own categories", () => {
@@ -89,7 +92,7 @@ describe("buildRows", () => {
         "Its site-specific units",
       ]),
     );
-    expect(items[items.length - 1]).toBe("Access for 1 person assigned to this site (u1@x.io); their accounts stay");
+    expect(items[items.length - 1]).toBe("Access for 3 people assigned to this site (u1@x.io, u4@x.io, u5@x.io); their accounts stay");
   });
   it("says who has no site left after the delete", () => {
     expect(deletedMessage("Noida", { people_without_site: 0 })).toEqual({ title: 'Site "Noida" deleted' });
