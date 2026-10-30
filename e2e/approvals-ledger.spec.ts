@@ -1,5 +1,9 @@
 import { type Page, expect, test } from "@playwright/test";
 
+// The mocked entry's updated_at: a manager edit sends it as expected_updated_at, so the
+// server refuses a save over a change someone made while the form was open (ESG-lite #218).
+const ENTRY_VERSION = "2025-10-01T08:00:00Z";
+
 /**
  * P07 Approvals and Emissions ledger smoke tests. The
  * API is answered locally from an in-memory list, and every review request is
@@ -257,6 +261,7 @@ test("a manager edits an entry from the drawer with a reason", async ({ page }) 
   await expect(page.getByText("Changes saved")).toBeVisible();
   // Only the changed values go: the unchanged unit and date stay off the request.
   expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    expected_updated_at: ENTRY_VERSION,
     activity_data: { fuel_type: "1", quantity: "150", emission_category: "Diesel (average biofuel blend)" },
     reason: "Meter read corrected",
   });
@@ -272,6 +277,7 @@ test("a date-only fix sends just the date", async ({ page }) => {
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Changes saved")).toBeVisible();
   expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    expected_updated_at: ENTRY_VERSION,
     date_of_reporting: "2025-08-31",
     reason: "Wrong reporting month",
   });
@@ -327,6 +333,7 @@ test("an amount change on an entry without a unit waits for a unit", async ({ pa
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Changes saved")).toBeVisible();
   expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    expected_updated_at: ENTRY_VERSION,
     activity_data: { fuel_type: "1", quantity: "150", emission_category: "Diesel (average biofuel blend)" },
     activity_data_unit: "litre",
     reason: "Meter read corrected",
@@ -344,6 +351,7 @@ test("a date-only fix on an entry without a unit sends just the date", async ({ 
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Changes saved")).toBeVisible();
   expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    expected_updated_at: ENTRY_VERSION,
     date_of_reporting: "2025-08-31",
     reason: "Wrong reporting month",
   });
@@ -363,6 +371,7 @@ test("the period is a month in the entry's own year, saved as its last day", asy
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Changes saved")).toBeVisible();
   expect(calls.find((c) => c.path === "/user/emissions/manager-edit/1")?.body).toEqual({
+    expected_updated_at: ENTRY_VERSION,
     date_of_reporting: "2025-02-28",
     reason: "Wrong reporting month",
   });
