@@ -37,7 +37,7 @@ type Body = {
 function report(body: Body, empty = false) {
   if (empty)
     return {
-      totals: { scope1: 0, scope2: 0, scope3: 0, total: 0 },
+      totals: { scope1: 0, scope2: 0, scope3: 0, total: 0, saved: 0 },
       bySite: [],
       siteDonut: [],
       monthlyBySite: [],
@@ -47,7 +47,8 @@ function report(body: Body, empty = false) {
     };
   const y = body.year;
   return {
-    totals: { scope1: 30, scope2: 70, scope3: 0, total: 100 },
+    // saved: the selection's renewable kg rounded once (D14), here Sitra's 4 t.
+    totals: { scope1: 30, scope2: 70, scope3: 0, total: 100, saved: 4 },
     bySite: [
       {
         siteId: 1,
@@ -153,7 +154,7 @@ test("3-decimal figures stay inside their KPI tiles at 1024, 768 and 390 px (#20
     return route.fulfill({
       json: {
         ...r,
-        totals: { scope1: 1_234.567, scope2: 123_456.789, scope3: 12_345.678, total: 137_037.034 },
+        totals: { scope1: 1_234.567, scope2: 123_456.789, scope3: 12_345.678, total: 137_037.034, saved: 12_345.678 },
         savedBySite: [{ siteId: 2, siteName: "Sitra", saved: 12_345.678 }],
         renewableKwhBySite: [{ siteId: 2, siteName: "Sitra", kwh: 1_250_000, unit: "kWh" }],
       },
@@ -174,6 +175,31 @@ test("3-decimal figures stay inside their KPI tiles at 1024, 768 and 390 px (#20
     expect(outside, `at ${width} px`).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `at ${width} px`).toBe(true);
   }
+});
+
+test("Saved is the server's figure for the whole selection (D14)", async ({ page }) => {
+  await signIn(page);
+  // One 100.45 kg renewable row at each site: each site says 0.1 t, the 200.9 kg
+  // round once to 0.201 t (totals.saved). Registered last, so it answers first.
+  await page.route("**/user/reports/ede", (route) => {
+    const r = report(route.request().postDataJSON() as Body);
+    return route.fulfill({
+      json: {
+        ...r,
+        totals: { ...r.totals, saved: 0.201 },
+        savedBySite: [
+          { siteId: 1, siteName: "Hidd", saved: 0.1 },
+          { siteId: 2, siteName: "Sitra", saved: 0.1 },
+        ],
+      },
+    });
+  });
+  await page.goto("/reports/ede?year=2025");
+
+  await expect(page.locator("dl").first()).toContainText("0.201");
+  const saved = page.getByRole("table", { name: "Overall totals" }).getByRole("row", { name: /Emissions saved by renewables/ });
+  await expect(saved).toContainText("0.201");
+  await expect(saved).not.toContainText("0.200");
 });
 
 test("a GHG report link with an FY quarter falls back to the calendar year", async ({ page }) => {

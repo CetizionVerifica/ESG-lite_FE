@@ -54,7 +54,7 @@ export interface EdeFigures {
   scope3: number;
   /** Renewable electricity produced (kWh of activity data, scope-less rows). */
   renewableKwh: number;
-  /** tCO₂e avoided by renewables (scope-less rows), outside the scope totals. */
+  /** tCO₂e avoided by renewables (scope-less rows), outside the scope totals: the server's totals.saved. */
   saved: number;
   /** True when the period has no approved rows at all. */
   empty: boolean;
@@ -64,7 +64,10 @@ const sum = (xs: number[]) => xs.reduce((a, b) => a + (Number.isFinite(b) ? b : 
 
 export function edeFigures(d: EdeReportResponse): EdeFigures {
   const renewableKwh = sum(d.renewableKwhBySite.map((r) => Number(r.kwh)));
-  const saved = sum(d.savedBySite.map((r) => Number(r.saved)));
+  // D14: the server's figure (the selection's kg, rounded once), so "Saved" matches
+  // Overview and the GHG report; adding the sites' rounded figures could miss by
+  // 0.001 a site. Only an older server without totals.saved gets them added.
+  const saved = typeof d.totals.saved === "number" ? d.totals.saved : sum(d.savedBySite.map((r) => Number(r.saved)));
   return {
     total: d.totals.total,
     scope1: d.totals.scope1,
