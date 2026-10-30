@@ -36,8 +36,13 @@ function tables(body: { siteIds: number[]; yearType: string; year: number }) {
           { scope: "Scope 1", category: "Diesel", bySite: [site(1, "Hidd", 30)], total: 30 },
           { scope: "Scope 2", category: "Electricity", bySite: [site(1, "Hidd", 50), site(2, "Sitra", 20)], total: 70 },
         ],
+        // Each site's figures as the server sends them (D14).
+        siteTotals: [
+          { siteId: 1, siteName: "Hidd", scope1: 30, scope2: 50, scope3: 0, total: 80 },
+          { siteId: 2, siteName: "Sitra", scope1: 0, scope2: 20, scope3: 0, total: 20 },
+        ],
       },
-      table_overviewByLocations_compareYear: { year: body.year - 1, rows: [] },
+      table_overviewByLocations_compareYear: { year: body.year - 1, rows: [], siteTotals: [] },
     },
   };
 }

@@ -33,6 +33,9 @@ function tables(body: Body, empty = false, scope3 = 0) {
     { scope: "Scope 1", category: "Diesel", bySite: [site(1, "Hidd", 40)], total: 40 },
     { scope: "Scope 2", category: "Electricity", bySite: [site(1, "Hidd", 85)], total: 85 },
   ];
+  // Each site's Scope 1–3 and total, as the server sends them (D14: the site's own kg, rounded once).
+  const siteTotal = (siteId: number, siteName: string, scope1: number, scope2: number, scope3: number) => ({ siteId, siteName, scope1, scope2, scope3, total: scope1 + scope2 + scope3 });
+  const selectedSites = empty ? [] : [siteTotal(1, "Hidd", 30, 50, 0), siteTotal(2, "Sitra", 0, 20, scope3)];
   const y = String(body.year);
   const p = String(body.year - 1);
   return {
@@ -44,8 +47,8 @@ function tables(body: Body, empty = false, scope3 = 0) {
     },
     tables: {
       table1_emissionsByScope_twoYears: [],
-      table_overviewByLocations_selectedYear: { year: body.year, rows: selected },
-      table_overviewByLocations_compareYear: { year: body.year - 1, rows: compare },
+      table_overviewByLocations_selectedYear: { year: body.year, rows: selected, siteTotals: selectedSites },
+      table_overviewByLocations_compareYear: { year: body.year - 1, rows: compare, siteTotals: [siteTotal(1, "Hidd", 40, 85, 0)] },
     },
   };
 }
@@ -192,6 +195,31 @@ test("a manager compares a year with the last one and narrows it live", async ({
   await expect(page.getByText("Comparing Q2 FY 2024-25 (Jul–Sep 2024) with Q2 FY 2023-24 (Jul–Sep 2023)")).toBeVisible();
   await expect.poll(() => last()).toEqual({ siteIds: [1, 2], yearType: "FY", year: 2025, frequency: "quarterly", quarter: 2 });
   await expect(page).toHaveURL(/cal=FY&freq=quarter&year=2025&quarter=2/);
+});
+
+test("By location shows each site's figures as the server sends them (D14)", async ({ page }) => {
+  await signIn(page);
+  // Two Scope 1 categories at Hidd with one 1,234.4 kg row each: each cell is
+  // 1.234 t, the site's 2,468.8 kg round once to 2.469 t (siteTotals).
+  // Registered last, so it answers the tables before signIn's catch-all.
+  await page.route("**/user/ghg/tables", (route) => {
+    const body = route.request().postDataJSON() as Body;
+    const base = tables(body);
+    const cell = (category: string) => ({ scope: "Scope 1", category, bySite: [{ siteId: 1, siteName: "Hidd", value: 1.234 }], total: 1.234 });
+    const hidd = { siteId: 1, siteName: "Hidd", scope1: 2.469, scope2: 0, scope3: 0, total: 2.469 };
+    return route.fulfill({
+      json: {
+        ...base,
+        totals: { ...base.totals, [String(body.year)]: { scope1: 2.469, scope2: 0, scope3: 0, total: 2.469 } },
+        tables: { ...base.tables, table_overviewByLocations_selectedYear: { year: body.year, rows: [cell("Diesel"), cell("Natural gas")], siteTotals: [hidd] } },
+      },
+    });
+  });
+  await page.goto("/reports/ghg?year=2025&tab=location");
+
+  const row = page.getByRole("table", { name: "Emissions by site and scope" }).getByRole("row", { name: /Hidd/ });
+  await expect(row).toContainText("2.469 tCO₂e");
+  await expect(row).not.toContainText("2.468");
 });
 
 test("narrowing to one site sends only that site and its categories", async ({ page }) => {
