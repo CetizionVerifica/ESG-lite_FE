@@ -57,6 +57,9 @@ function Loaded({
   const [unit, setUnit] = useState(start.unit);
   const [reason, setReason] = useState("");
   const [tried, setTried] = useState(false);
+  // What the last save sent, bar the reason: Keep both is offered only while the date and values are the
+  // ones the duplicate warning was about, so a change since is checked again rather than kept unseen.
+  const [sentTarget, setSentTarget] = useState<string | null>(null);
 
   const hasMapping = Object.keys(config?.emission_category_mapping ?? {}).length > 0;
   const units = useUnits(siteId, categoryId);
@@ -66,6 +69,7 @@ function Loaded({
   const save = useManagerEdit();
   const category = String(activity.emission_category ?? "");
   const payload = editPayload(activity, date, unit, reason, start);
+  const target = JSON.stringify({ ...payload, reason: undefined });
   // The factor and unit are needed only when the values are sent; a date-only fix keeps them as stored.
   const sendsValues = !!payload.activity_data;
   // Amounts are checked only when the values are sent (a date-only fix keeps them as stored).
@@ -118,6 +122,7 @@ function Loaded({
       target?.focus();
       return;
     }
+    setSentTarget(target);
     save.mutate({ id: row.pk_id, body: { ...payload, expected_updated_at: openedVersion }, keepBoth }, { onSuccess: (data) => onDone(data?.emission) });
   };
   return (
@@ -232,7 +237,7 @@ function Loaded({
           {notSaved}
         </p>
       )}
-      {problem && !notSaved && <SaveProblemNote problem={problem} onKeepBoth={() => submit(true)} />}
+      {problem && !notSaved && <SaveProblemNote problem={problem} onKeepBoth={sentTarget === target ? () => submit(true) : undefined} />}
       <div className="flex justify-end gap-2">
         <Button ref={cancelRef} type="button" onClick={onCancel} disabled={save.isPending}>
           Cancel

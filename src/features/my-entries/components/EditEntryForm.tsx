@@ -95,6 +95,9 @@ function Fields(p: FieldsProps) {
   const [row, setRow] = useState<ModalRow>(() => rowFromEntry(model, entry));
   const [reason, setReason] = useState("");
   const [tried, setTried] = useState(false);
+  // What the last save sent, bar the reason: Keep both is offered only while the month and values are the
+  // ones the duplicate warning was about, so a change since is checked again rather than kept unseen.
+  const [sentTarget, setSentTarget] = useState<string | null>(null);
 
   const baseCalc = useEmissionCalc({
     emissionFactors: p.factors,
@@ -132,9 +135,11 @@ function Fields(p: FieldsProps) {
       : [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(currentUnit ? [currentUnit] : [])])];
   const change = (column: string, value: string) => setRow((r) => applyChange(model, r, column, value));
 
+  const target = JSON.stringify({ ...buildUpdate(row, p.date, reason), reason: undefined });
   const send = (keepBoth: boolean) => {
     setTried(true);
     if (issue || p.loadingFactors) return;
+    setSentTarget(target);
     p.onSubmit(buildUpdate(row, p.date, reason), { keepBoth });
   };
   const submit = (e: React.FormEvent) => {
@@ -245,7 +250,7 @@ function Fields(p: FieldsProps) {
         error={shown("reason")}
       />
 
-      {p.saveError && <SaveProblemNote problem={p.saveError} onKeepBoth={() => send(true)} />}
+      {p.saveError && <SaveProblemNote problem={p.saveError} onKeepBoth={sentTarget === target ? () => send(true) : undefined} />}
     </form>
   );
 }

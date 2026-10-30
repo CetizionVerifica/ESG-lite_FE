@@ -210,6 +210,11 @@ test("a move onto a month that already holds the activity offers Keep both, whic
   await expect(drawer.getByRole("status").filter({ hasText: message })).toBeVisible();
   await expect(drawer.getByRole("alert")).toHaveCount(0);
   expect(puts[0]?.searchParams.get("keep_both")).toBeNull();
+  // Keep both is for the month the warning was about: another month is checked again first.
+  const month = drawer.getByRole("group", { name: "Month" }).getByLabel("Month");
+  await month.selectOption({ label: "Jul" });
+  await expect(drawer.getByRole("button", { name: "Keep both" })).toHaveCount(0);
+  await month.selectOption({ label: "Aug" });
   await drawer.getByRole("button", { name: "Keep both" }).click();
   await expect(page.getByText("Resubmitted for review")).toBeVisible();
   expect(puts).toHaveLength(2);
