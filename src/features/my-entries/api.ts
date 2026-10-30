@@ -125,8 +125,9 @@ export function useEditSetup(siteId: number | undefined, categoryId: number | un
 export function useUpdateEntry() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, update }: { id: number; update: EntryUpdate }) => updateEmission(id, update),
-    onSuccess: (_data, { id }) => {
+    mutationFn: ({ id, update, keepBoth }: { id: number; update: EntryUpdate; keepBoth?: boolean }) => updateEmission(id, update, { keepBoth }),
+    // A refused save can mean someone else changed or approved the entry: refresh either way, so it opens as it is now.
+    onSettled: (_data, _err, { id }) => {
       void client.invalidateQueries({ queryKey: ["my-entries"] });
       void client.invalidateQueries({ queryKey: ["audit-logs", "emission", id] });
     },

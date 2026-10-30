@@ -11,6 +11,7 @@ import {
   type ColumnConfig,
   activityFields,
   activitySummary,
+  drawerRow,
   effectiveStatus,
   factorValue,
   formatFactorValue,
@@ -489,3 +490,23 @@ describe("approving a possible duplicate", () => {
   });
 });
 
+describe("drawerRow", () => {
+  const listed = [row({ pk_id: 1, total_emission: 1.5 }), row({ pk_id: 2 })];
+
+  it("shows the listed row, so a refetch shows the record as it is now", () => {
+    expect(drawerRow(row({ pk_id: 1, total_emission: 9 }), listed)).toBe(listed[0]);
+  });
+
+  it("keeps a just-saved row until the list catches up, so a second edit starts from the saved version", () => {
+    const saved = row({ pk_id: 1, total_emission: 2, updated_at: "2025-10-02T09:00:00Z" });
+    expect(drawerRow(saved, listed)).toBe(saved);
+    expect(drawerRow(saved, [row({ pk_id: 1, updated_at: "2025-10-02T09:00:00Z" })])?.updated_at).toBe("2025-10-02T09:00:00Z");
+  });
+
+  it("keeps the held row when it isn't listed, and nothing when no record is open", () => {
+    const held = row({ pk_id: 3 });
+    expect(drawerRow(held, listed)).toBe(held);
+    expect(drawerRow(held, undefined)).toBe(held);
+    expect(drawerRow(null, listed)).toBeNull();
+  });
+});

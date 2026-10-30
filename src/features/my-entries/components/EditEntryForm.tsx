@@ -5,6 +5,8 @@ import { useEditSetup } from "../api";
 import { type EditIssue, type EntryUpdate, buildUpdate, editAddsWtt, editIssue, editedDate, entryMonth, factorYearFor, feraCategoryIdOf, monthBounds, rowFromEntry } from "../edit";
 import { type EntryRow, periodText } from "../logic";
 import { plainProblem } from "../../../lib/entryDetail";
+import type { SaveProblem } from "../../../lib/saveProblem";
+import { SaveProblemNote } from "../../../lib/SaveProblemNote";
 import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
 import { columnTitle } from "../../../lib/emissions/form";
 import { settingFor } from "../../../lib/forms/settings";
@@ -18,8 +20,9 @@ const NO_FACTORS: EmissionFactor[] = [];
 
 type Props = {
   entry: EntryRow;
-  saveError: string | null;
-  onSubmit: (update: EntryUpdate) => void;
+  saveError: SaveProblem | null;
+  /** keepBoth: the person chose Keep both on a duplicate, so the entry is saved beside the other one. */
+  onSubmit: (update: EntryUpdate, opts?: { keepBoth?: boolean }) => void;
 };
 
 /**
@@ -92,6 +95,9 @@ function Fields(p: FieldsProps) {
   const [row, setRow] = useState<ModalRow>(() => rowFromEntry(model, entry));
   const [reason, setReason] = useState("");
   const [tried, setTried] = useState(false);
+  // What the last save sent, bar the reason: Keep both is offered only while the month and values are the
+  // ones the duplicate warning was about, so a change since is checked again rather than kept unseen.
+  const [sentTarget, setSentTarget] = useState<string | null>(null);
 
   const baseCalc = useEmissionCalc({
     emissionFactors: p.factors,
@@ -129,11 +135,16 @@ function Fields(p: FieldsProps) {
       : [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(currentUnit ? [currentUnit] : [])])];
   const change = (column: string, value: string) => setRow((r) => applyChange(model, r, column, value));
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const target = JSON.stringify({ ...buildUpdate(row, p.date, reason), reason: undefined });
+  const send = (keepBoth: boolean) => {
     setTried(true);
     if (issue || p.loadingFactors) return;
-    p.onSubmit(buildUpdate(row, p.date, reason));
+    setSentTarget(target);
+    p.onSubmit(buildUpdate(row, p.date, reason), { keepBoth });
+  };
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    send(false);
   };
 
   return (
@@ -239,11 +250,7 @@ function Fields(p: FieldsProps) {
         error={shown("reason")}
       />
 
-      {p.saveError && (
-        <p role="alert" className="rounded-control border border-bad/30 bg-bad-soft px-3 py-2 text-sm text-bad">
-          {p.saveError}
-        </p>
-      )}
+      {p.saveError && <SaveProblemNote problem={p.saveError} onKeepBoth={sentTarget === target ? () => send(true) : undefined} />}
     </form>
   );
 }

@@ -348,6 +348,17 @@ export function effectiveStatus(row: EmissionData, optimistic: ReadonlyMap<numbe
   return optimistic.get(row.pk_id) ?? row.status;
 }
 
+/**
+ * The open record as the drawer shows it: the listed row, unless a save just sent back a newer
+ * one the list hasn't refetched yet. An edit opened in that moment must start from the saved
+ * version, or the server refuses its save as changed by someone else.
+ */
+export function drawerRow<T extends Pick<EmissionData, "pk_id" | "updated_at">>(held: T | null, listed: readonly T[] | undefined): T | null {
+  if (!held) return null;
+  const row = listed?.find((r) => r.pk_id === held.pk_id);
+  return row && !(Date.parse(held.updated_at) > Date.parse(row.updated_at)) ? row : held;
+}
+
 // ── Excel reports (server files) ────────────────────────────────────────────
 
 export type ReportOption =
