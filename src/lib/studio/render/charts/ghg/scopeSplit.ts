@@ -9,7 +9,7 @@
 import { formatNumber, seriesUnit } from "../../format";
 import type { Theme } from "../../theme";
 import { esc, n3 } from "../../util";
-import { donutCentre, ringLabels, ringRadius, underDonut } from "../donut";
+import { besideDonut, donutCentre, looseRing, ringFit, ringLabels, underDonut } from "../donut";
 import { textWidth } from "../metrics";
 import { FONT, SMALL, emptyChart, rect, svgOpen, text, wrapWords, type ChartInput } from "../svg";
 import { HEADLINE_STEPS, biggest, currentSeries, headline, partColor, partsOf, pct, total } from "./common";
@@ -100,11 +100,23 @@ export function scopeSplitChart(input: ChartInput): string {
     // #209 review: as the bar's plan below: the legend (measured, wrapping onto rows) and the whole basis note (wrapped) keep
     // their place, stepping their text down to 5.2 pt, as long as the donut keeps a radius of at least FONT × 1.2; the total sits
     // in the hole when it fits there, else under the donut, never over the ring. Only a frame too small for that gives something
-    // up, in the bar's order.
+    // up, in the bar's order. #209 round 4: the ring is placed by ringFit (room only on the sides that carry a share label). A
+    // frame too small for the full ring tries a ring of at least FONT, then FONT × 0.5, with every share label, giving up the
+    // note's second sentence, then the note for it; then production's ring (looseRing, never under FONT), leaving out the
+    // share labels it has no room for, with the whole note, its first sentence, none; then the same without the total (it
+    // goes in the hole, under the ring, or beside it in a wide frame, while it fits); only then the legend's figures, in the
+    // same order. The scope names go last: a frame too small for them, the ring at FONT and the total takes a smaller ring,
+    // then leaves out the total (a ring never under FONT × 0.75 with it); the names are left out only when they don't fit
+    // the frame at all.
     const figure = value.display ?? "";
-    const minR = FONT * 1.2;
-    const sideLabels = ps.filter((p, i) => labelled.has(i) && p.value / sum >= 0.04).map((p) => pct(p.value / sum));
-    const donutPlan = (items: Item[], noteText: string, k: number, strict: boolean) => {
+    const ring = ps.map((p, i) => ({ share: p.value / sum, show: labelled.has(i) && p.value / sum >= 0.04 }));
+    /**
+     * How small the ring may be: over 0, the least radius at which every share label fits; 0, production's ring (at least FONT)
+     * whose labels without room are left out; under 0, a ring smaller than FONT (as big as the plot leaves, at least −tier).
+     */
+    const tiers = [FONT * 1.2, FONT, FONT * 0.5, 0];
+    type DonutPlan = { plotH: number; r: number; fit: number; cx: number; cy: number; inner: number; leg: ReturnType<typeof legendRows>; lines: string[]; ns: number; noteH: number; centre: string; under: string; underH: number };
+    const donutPlan = (items: Item[], noteText: string, k: number, tier: number, withFigure = true): DonutPlan | null => {
       const size = SMALL * k;
       const leg = items.length ? legendRows(items, w, size) : null;
       if (items.length && !leg) return null;
@@ -114,33 +126,56 @@ export function scopeSplitChart(input: ChartInput): string {
       const noteH = lines.length ? noteHeight(lines, size) + SMALL * 0.4 : 0;
       const geom = (underH: number) => {
         const plotH = h - legH - noteH - underH;
-        const r = Math.max(strict ? 0 : FONT, ringRadius(w, plotH, sideLabels));
-        return { plotH, r, cx: w / 2, cy: plotH / 2, inner: r * 0.62 };
+        const f = tier > 0 ? ringFit(w, Math.max(0, plotH), ring) : null;
+        const g = f ? { r: f.fit, ...f } : { fit: 0, ...looseRing(w, Math.max(0, plotH), FONT) };
+        return { plotH, ...g, inner: g.r * 0.62 };
       };
+      const ok = (g: ReturnType<typeof geom>) => (tier > 0 ? g.fit >= tier : tier === 0 ? Math.min(w, g.plotH) >= FONT * 2 : Math.min(w, g.plotH) >= -tier * 2);
       let g = geom(0);
-      if (strict && g.r < minR) return null;
-      let centre = figure || value.unit ? donutCentre(figure, value.unit, g.cx, g.cy, g.inner, theme) : "";
+      if (!ok(g)) return null;
+      let centre = withFigure && (figure || value.unit) ? donutCentre(figure, value.unit, g.cx, g.cy, g.inner, theme) : "";
       let under = "";
       let underH = 0;
       if (centre === null) {
         const u = underDonut(figure, value.unit, w, theme);
-        g = geom(u.h);
-        if (strict && g.r < minR) return null;
+        const gu = geom(u.h);
+        if (!ok(gu)) {
+          // #209 round 4: no room under the ring: beside it, in a wide frame (besideDonut).
+          const side = besideDonut(figure, value.unit, { ...g, plotH: Math.max(0, g.plotH), labels: ringLabels(ring, g.cx, g.cy, g.r, w, Math.max(0, g.plotH)) }, w, theme);
+          if (side === null) return null;
+          return { ...g, leg, lines, ns: size, noteH, centre: "", under: side, underH: 0 };
+        }
+        g = gu;
         under = u.svg(g.plotH);
         underH = u.h;
         centre = "";
       }
       return { ...g, leg, lines, ns: size, noteH, centre, under, underH };
     };
-    let dp: ReturnType<typeof donutPlan> = null;
-    search: for (const items of legendModes)
-      for (const noteText of noteModes)
-        for (const k of SMALL_TEXT_STEPS) {
-          dp = donutPlan(items, noteText, k, true);
-          if (dp) break search;
-        }
-    const { plotH, r, cx, cy, inner, leg, lines, ns, noteH, centre, under, underH } = dp ?? (donutPlan([], "", 1, false) as NonNullable<typeof dp>);
-    const shareLabels = ringLabels(ps.map((p, i) => ({ share: p.value / sum, show: labelled.has(i) && p.value / sum >= 0.04 })), cx, cy, r);
+    const legends: Item[][] = options.showLegend === false ? [[]] : [valueItems, nameItems];
+    const last = SMALL_TEXT_STEPS[SMALL_TEXT_STEPS.length - 1];
+    let dp: DonutPlan | null = null;
+    // For each legend: every note mode with every share label first (a ring of FONT × 1.2, FONT, FONT × 0.5), then every note
+    // mode with production's ring, then those without the total in or by the ring (production drew it over a ring whose
+    // hole couldn't hold it): the legend's tCO₂e figures outrank the share labels, and those the note.
+    const passes: [number[], boolean][] = [[tiers.filter((t) => t > 0), true], [[0], true], [[0], false]];
+    search: for (const items of legends)
+      for (const [pass, withFigure] of passes)
+        for (const noteText of noteModes)
+          for (const tier of pass)
+            for (const k of SMALL_TEXT_STEPS) {
+              dp = donutPlan(items, noteText, k, tier, withFigure);
+              if (dp) break search;
+            }
+    const names = legends[legends.length - 1];
+    dp ??= donutPlan(names, "", last, -FONT * 0.75) ?? donutPlan(names, "", last, -SMALL * 0.25, false) ?? donutPlan([], "", last, -SMALL * 0.25, false);
+    if (!dp) {
+      // A frame too small for any ring: the ring as big as the frame is, alone.
+      const r = Math.max(SMALL * 0.25, Math.min(w, h) / 2);
+      dp = { plotH: h, r, fit: 0, cx: w / 2, cy: h / 2, inner: r * 0.62, leg: null, lines: [], ns: SMALL, noteH: 0, centre: "", under: "", underH: 0 };
+    }
+    const { plotH, r, cx, cy, inner, leg, lines, ns, noteH, centre, under, underH } = dp as NonNullable<typeof dp>;
+    const shareLabels = ringLabels(ring, cx, cy, r, w, Math.max(plotH, 0));
     let a0 = -Math.PI / 2;
     const pt = (rad: number, a: number) => `${n3(cx + rad * Math.cos(a))} ${n3(cy + rad * Math.sin(a))}`;
     ps.forEach((p, i) => {
@@ -168,7 +203,8 @@ export function scopeSplitChart(input: ChartInput): string {
   const gap = SMALL * 0.35;
   const shares = ps.map((p, i) => labelled.has(i) && p.value / sum >= 0.08);
   const minBar = shares.some(Boolean) ? SMALL * 1.1 : SMALL * 0.5;
-  const heads = [headline(value, theme, "Total", w), headline(value, theme, "Total", w, HEADLINE_STEPS.slice(-1))];
+  // #209 round 4: the last resort is one smaller line, never a cut figure (production drew one line).
+  const heads = [headline(value, theme, "Total", w), headline(value, theme, "Total", w, { steps: HEADLINE_STEPS.slice(-1) }), headline(value, theme, "Total", w, { maxH: 0 })];
   type Plan = { head: { svg: string; h: number }; leg: ReturnType<typeof legendRows>; lines: string[]; ns: number; room: number };
   const planFor = (head: Plan["head"], items: Item[], noteText: string, k: number): Plan | null => {
     const size = SMALL * k;
@@ -190,7 +226,7 @@ export function scopeSplitChart(input: ChartInput): string {
             break search;
           }
         }
-  const head = plan?.head ?? heads[0];
+  const head = plan?.head ?? heads[heads.length - 1];
   const barY = head.h + SMALL * 0.4;
   const want = Math.min(FONT * 3, Math.max(FONT * 1.5, (h - head.h) * 0.35));
   // A frame too small for even the bar and its share labels: the bar alone, as tall as it can be.

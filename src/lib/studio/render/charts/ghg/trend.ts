@@ -11,9 +11,9 @@
  */
 import { formatNumber, seriesUnit, sharedUnit } from "../../format";
 import { esc, n3 } from "../../util";
-import { axisWidth, bandLabels, tickBoxes, valueGridY } from "../axis";
+import { axisWidth, bandLabels, tickBoxes, tickRoom, valueGridY } from "../axis";
 import { linearScale } from "../scale";
-import { FONT, SMALL, emptyChart, fitLabelRow, rect, rectBox, svgOpen, text, valueAt, type ChartInput } from "../svg";
+import { FONT, SMALL, emptyChart, fitLabelRow, plotSpan, rect, rectBox, svgOpen, text, valueAt, type ChartInput } from "../svg";
 import { clip, partsOf, total, type Part } from "./common";
 
 type Step = { key: string; from: number; to: number; kind: "abs" | "up" | "down" };
@@ -94,8 +94,7 @@ export function baseYearWaterfallChart(input: ChartInput): string {
   const fit = fitLabelRow(
     (extra) => {
       if (options.showValues === false) return { labels: [] };
-      const te = FONT * 1.4 + extra;
-      const phe = h - te - FONT * 1.8;
+      const { top: te, ph: phe } = plotSpan(FONT * 1.4 + extra, h - FONT * 1.8);
       const obstacles = [...tickBoxes(scale, x0, te, phe), ...steps.map((_, i) => {
         const r = stepRect(i, te, phe);
         return rectBox(r.x, r.y, r.w, r.h, i);
@@ -104,10 +103,10 @@ export function baseYearWaterfallChart(input: ChartInput): string {
     },
     w,
     h,
-    { x0 },
+    // #209 round 4: a staggered row takes only the height the plot can spare; the plot never goes under PLOT_FLOOR.
+    { x0, maxLift: h - FONT * 3.2 - tickRoom(scale) },
   );
-  const top = FONT * 1.4 + fit.extraTop;
-  const ph = h - top - FONT * 1.8;
+  const { top, ph } = plotSpan(FONT * 1.4 + fit.extraTop, h - FONT * 1.8);
   let body = valueGridY(scale, x0, top, pw, ph, theme);
   steps.forEach((s, i) => {
     const r = stepRect(i, top, ph);
@@ -142,17 +141,15 @@ export function intensityLineChart(input: ChartInput): string {
   // #209 review: the two end labels may not meet each other or the tick labels, or leave the plot (svg.ts fitLabelRow); the latest is kept first.
   const fit = fitLabelRow(
     (extra) => {
-      const te = unitH + FONT * 1.2 + extra;
-      const phe = h - te - FONT * 1.8;
+      const { top: te, ph: phe } = plotSpan(unitH + FONT * 1.2 + extra, h - FONT * 1.8, unitH);
       const labels = ends.map(({ p, i }) => ({ x: x0 + band * (keys.indexOf(p.key) + 0.5), y: te + phe - scale.t(p.value) * phe - SMALL * 0.9, text: formatNumber(p.value, "auto", lineUnit), bold: i === pts.length - 1 }));
       return { labels, obstacles: tickBoxes(scale, x0, te, phe) };
     },
     w,
     h,
-    { x0, minY: unitH },
+    { x0, minY: unitH, maxLift: h - unitH - FONT * 3 - tickRoom(scale) },
   );
-  const top = unitH + FONT * 1.2 + fit.extraTop;
-  const ph = h - top - FONT * 1.8;
+  const { top, ph } = plotSpan(unitH + FONT * 1.2 + fit.extraTop, h - FONT * 1.8, unitH);
   const xy = (k: string, v: number) => [x0 + band * (keys.indexOf(k) + 0.5), top + ph - scale.t(v) * ph] as const;
   let body = value.unit ? text(0, SMALL, clip(value.unit, Math.floor(w / (SMALL * 0.55))), theme.colors.muted, { size: SMALL }) : "";
   body += valueGridY(scale, x0, top, pw, ph, theme);

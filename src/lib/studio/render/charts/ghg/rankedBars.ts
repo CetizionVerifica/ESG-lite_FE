@@ -8,11 +8,12 @@
  */
 import { formatNumber, seriesUnit } from "../../format";
 import { esc, n3 } from "../../util";
-import { valueGridX } from "../axis";
+import { tickFloorX, valueGridX } from "../axis";
 import { linearScale } from "../scale";
-import { LABEL_STEPS, SMALL, boxesMeet, emptyChart, fitBarEnds, labelBox, rect, rectBox, svgOpen, text, type ChartInput, type LabelBox, type Obstacle } from "../svg";
+import { INK_GAP, LABEL_STEPS, PLOT_FLOOR, SMALL, barEndsPlot, boxesMeet, emptyChart, fitBarEnds, inkBox, rect, rectBox, svgOpen, text, type ChartInput, type LabelBox, type Obstacle } from "../svg";
 import { biggest, clip, currentSeries, headline, partColor, partsOf, priorSeries, ranked, wrapLegend } from "./common";
 import { mix } from "../../theme";
+import { inkExtent } from "../metrics";
 
 function rankedBars(input: ChartInput, kind: "category_bars" | "site_bars"): string {
   const { value, w, h, theme, options } = input;
@@ -24,7 +25,6 @@ function rankedBars(input: ChartInput, kind: "category_bars" | "site_bars"): str
   const showValues = options.showValues !== false;
   const labelled = biggest(ps, 3);
 
-  const head = headline(value, theme, "Total", w);
   const legendItems = prior
     ? [
         { label: cur?.label ?? "", color: options.colors === "brand" ? theme.series[0] : kind === "category_bars" ? theme.colors.s3 : theme.colors.primary },
@@ -32,6 +32,9 @@ function rankedBars(input: ChartInput, kind: "category_bars" | "site_bars"): str
       ]
     : [];
   const leg = options.showLegend === false ? { svg: "", h: 0 } : wrapLegend(legendItems, w, 0, theme);
+  // #209 round 4: the total line is chosen with the plot: more lines only while every bar keeps a band its name fits (a
+  // SMALL line), and the plot never goes under PLOT_FLOOR.
+  const head = headline(value, theme, "Total", w, { maxH: h - leg.h - SMALL * 2 - Math.max(SMALL * 2, ps.length * SMALL * 1.1) });
   const all = [...ps.map((p) => p.value), ...ps.map((p) => priorOf(p.key) ?? 0)];
   const scale = linearScale(Math.min(0, ...all), Math.max(...all), 4);
   const labelChars = Math.max(6, Math.floor((w * 0.34) / (SMALL * 0.55)));
@@ -41,22 +44,28 @@ function rankedBars(input: ChartInput, kind: "category_bars" | "site_bars"): str
   const unit = seriesUnit(cur, value.unit); // #209 review: the series' own unit
   const valueText = (v: number) => formatNumber(v, "auto", unit);
   const top = head.h;
-  const ph = h - top - leg.h - SMALL * 2;
+  const ph = Math.max(PLOT_FLOOR, h - top - leg.h - SMALL * 2);
   const band = ph / ps.length;
   const mainH = prior ? band * 0.5 : band * 0.66;
-  // #209 review: a value label sits after its bar's end, centred on it. When the band is so thin that the label would reach down
-  // onto the prior year's bar under it, and that bar is the longer one, the label goes after the prior bar's end instead.
-  const endOf = (p: (typeof ps)[number]): number => {
+  // #209 review: a value label sits after its bar's end, centred on it. When the band is so thin that the label's ink (#209
+  // round 4: its glyphs, metrics.ts inkExtent, not an em box) would reach down onto the prior year's bar under it, and that
+  // bar is the longer one, the label goes after the prior bar's end instead.
+  const endOf = (p: (typeof ps)[number], size = SMALL): number => {
     const t = scale.t(Math.max(0, p.value));
     const pv = priorOf(p.key);
-    const reachesPrior = SMALL / 2 + SMALL * 0.15 > mainH / 2 + band * 0.04;
+    const reachesPrior = (inkExtent(valueText(p.value), "middle").down + INK_GAP) * size > mainH / 2 + band * 0.04;
     return prior && pv !== null && reachesPrior ? Math.max(t, scale.t(Math.max(0, pv))) : t;
   };
-  const pw0 = w - x0 - (showValues ? SMALL * 4.5 : SMALL);
-  const pw = showValues ? fitBarEnds(pw0, x0, w, ps.map((p, i) => ({ p, i })).filter(({ i }) => labelled.has(i)).map(({ p, i }) => ({ t: endOf(p), label: valueText(p.value), bold: i === 0 }))) : pw0;
+  // #209 round 4: no narrower than its tick labels need while the labels can step down instead (barEndsPlot). A frame too narrow for
+  // the label gutter keeps a plot of SMALL × 2 (production's went negative there).
+  const pw0 = Math.max(w - x0 - (showValues ? SMALL * 4.5 : SMALL), Math.min(SMALL * 2, w - x0));
+  const steps = LABEL_STEPS.map((k) => SMALL * k);
+  const ends = (sz: number) => ps.map((p, i) => ({ p, i })).filter(({ i }) => labelled.has(i)).map(({ p, i }) => ({ t: endOf(p, sz), label: valueText(p.value), bold: i === 0 }));
+  const pw = showValues ? barEndsPlot(tickFloorX(scale, pw0), steps, (sz) => fitBarEnds(pw0, x0, w, ends(sz), SMALL * 0.4, sz)) : pw0;
   // #209 review: the labels (after the bar ends, centred on the bars) may not meet each other or a bar other than their own:
   // in thin bands they step down a size, down to 80 %; at that size a label that still meets one is left out, the
-  // biggest bars' labels kept first.
+  // biggest bars' labels kept first. #209 round 4: decided on the labels' ink (inkBox), so a label production drew clear
+  // of the next bar stays.
   const bars: Obstacle[] = ps.flatMap((p, i) => {
     const y = top + band * i;
     const out = [rectBox(x0 + scale.t(Math.min(0, p.value)) * pw, y + band * 0.14, (scale.t(Math.max(0, p.value)) - scale.t(Math.min(0, p.value))) * pw, mainH, i)];
@@ -64,13 +73,13 @@ function rankedBars(input: ChartInput, kind: "category_bars" | "site_bars"): str
     if (prior && pv !== null) out.push(rectBox(x0 + scale.t(Math.min(0, pv)) * pw, y + band * 0.14 + mainH + band * 0.04, (scale.t(Math.max(0, pv)) - scale.t(Math.min(0, pv))) * pw, band * 0.18));
     return out;
   });
-  const shown = showValues ? ps.map((p, i) => i).filter((i) => labelled.has(i)) : [];
+  const shown = showValues ? ps.map((_, i) => i).filter((i) => labelled.has(i)) : [];
   const labelFit = (size: number, drop: boolean): { size: number; keep: Set<number> } | null => {
     const placed: LabelBox[] = [];
     const keep = new Set<number>();
     for (const i of shown) {
-      const box = labelBox(x0 + endOf(ps[i]) * pw + SMALL * 0.4, top + band * i + band * 0.14 + mainH / 2, valueText(ps[i].value), size, { baseline: "middle", bold: i === 0 });
-      const meets = placed.some((b) => boxesMeet(b, box, size * 0.15)) || bars.some((b) => b.owner !== i && boxesMeet(b, box, size * 0.15));
+      const box = inkBox(x0 + endOf(ps[i], size) * pw + SMALL * 0.4, top + band * i + band * 0.14 + mainH / 2, valueText(ps[i].value), size, { baseline: "middle", bold: i === 0 });
+      const meets = placed.some((b) => boxesMeet(b, box, size * INK_GAP)) || bars.some((b) => b.owner !== i && boxesMeet(b, box, size * INK_GAP)) || box.x1 > w + 1e-6;
       if (meets && !drop) return null;
       if (meets) continue;
       placed.push(box);
@@ -78,7 +87,6 @@ function rankedBars(input: ChartInput, kind: "category_bars" | "site_bars"): str
     }
     return { size, keep };
   };
-  const steps = LABEL_STEPS.map((k) => SMALL * k);
   const fit = steps.map((sz) => labelFit(sz, false)).find(Boolean) ?? (labelFit(steps[steps.length - 1], true) as { size: number; keep: Set<number> });
   let body = head.svg + valueGridX(scale, x0, top, pw, ph, theme);
   ps.forEach((p, i) => {
@@ -94,7 +102,7 @@ function rankedBars(input: ChartInput, kind: "category_bars" | "site_bars"): str
       const pb = x0 + scale.t(Math.max(0, pv)) * pw;
       body += rect(pa, y + band * 0.14 + mainH + band * 0.04, pb - pa, band * 0.18, legendItems[1].color, ` data-prior="${esc(prior.label)}"`);
     }
-    if (fit.keep.has(i)) body += text(x0 + endOf(p) * pw + SMALL * 0.4, y + band * 0.14 + mainH / 2, valueText(p.value), theme.colors.ink, { size: fit.size, baseline: "middle", weight: i === 0 ? 700 : undefined });
+    if (fit.keep.has(i)) body += text(x0 + endOf(p, fit.size) * pw + SMALL * 0.4, y + band * 0.14 + mainH / 2, valueText(p.value), theme.colors.ink, { size: fit.size, baseline: "middle", weight: i === 0 ? 700 : undefined });
   });
   body += `<g transform="translate(0 ${n3(h - leg.h)})">${leg.svg}</g>`;
   return `${svgOpen(w, h, input.label)}<g data-ghg-chart="${kind}" data-bars="${ps.length}">${body}</g></svg>`;

@@ -14,9 +14,9 @@ import { formatNumber, seriesUnit, sharedUnit } from "../../format";
 import { mix } from "../../theme";
 import type { RenderSeries } from "../../types";
 import { esc, n3 } from "../../util";
-import { axisWidth, tickBoxes, valueGridY } from "../axis";
+import { axisWidth, tickBoxes, tickRoom, valueGridY } from "../axis";
 import { linearScale } from "../scale";
-import { FONT, SMALL, emptyChart, fitLabelRow, keysOf, rect, rectBox, svgOpen, text, valueAt, type ChartInput, type Obstacle } from "../svg";
+import { FONT, PLOT_FLOOR, SMALL, emptyChart, fitLabelRow, keysOf, plotSpan, rect, rectBox, svgOpen, text, valueAt, type ChartInput, type Obstacle } from "../svg";
 import { biggest, currentSeries, headline, partColor, partsOf, shortKey, wrapLegend } from "./common";
 
 export const GAS_UNIT_NOTE = "Tonnes of each gas, not CO₂e.";
@@ -28,7 +28,6 @@ export function gasSplitChart(input: ChartInput): string {
   const ps = partsOf(cur);
   if (!cur || !ps.length) return emptyChart(w, h, "No data", theme);
   const years = series.slice(-3);
-  const head = headline(value, theme, "Total emissions", w);
   const priorColor = (i: number) => (options.greyPrior === false ? mix(theme.colors.primary, theme.colors.paper, 0.3 + 0.2 * i) : mix(theme.colors.prior, theme.colors.paper, 0.25 * i));
   const legendItems = years.length > 1 ? years.map((s, i) => ({ label: s.label, color: i === years.length - 1 ? theme.colors.primary : priorColor(years.length - 2 - i) })) : [];
   const leg = options.showLegend === false ? { svg: "", h: 0 } : wrapLegend(legendItems, w, 0, theme);
@@ -36,7 +35,18 @@ export function gasSplitChart(input: ChartInput): string {
   const scale = linearScale(Math.min(0, ...all), Math.max(...all), 4);
   const x0 = axisWidth(scale);
   const pw = w - x0;
-  const noteH = SMALL * 1.6;
+  // #209 round 4: the total line is chosen with the plot: more lines only while the plot keeps its axis room; the plot
+  // never goes under PLOT_FLOOR (svg.ts plotSpan: never an upside-down axis), and a staggered label row takes only height
+  // it can spare. A frame too short for the plot's floor with the unit note leaves the note out rather than push the gas
+  // names into the legend.
+  const layout = (noteH: number) => {
+    const below = FONT * 1.2 + FONT * 1.8 + leg.h + noteH;
+    const head = headline(value, theme, "Total emissions", w, { maxH: h - below - tickRoom(scale) });
+    return { noteH, below, head, fits: h - FONT * 1.8 - leg.h - noteH - head.h >= PLOT_FLOOR - 1e-9 };
+  };
+  const withNote = layout(SMALL * 1.6);
+  const { noteH, below, head } = withNote.fits ? withNote : layout(0);
+  const maxLift = h - head.h - below - tickRoom(scale);
   const band = pw / ps.length;
   const labelled = biggest(ps, 3);
   const sub = (band * 0.7) / years.length;
@@ -53,8 +63,7 @@ export function gasSplitChart(input: ChartInput): string {
   // #209 review: labels over the gases may not meet each other, the tick labels or another column (svg.ts fitLabelRow).
   const fit = fitLabelRow(
     (extra) => {
-      const te = head.h + FONT * 1.2 + extra;
-      const phe = h - te - FONT * 1.8 - leg.h - noteH;
+      const { top: te, ph: phe } = plotSpan(head.h + FONT * 1.2 + extra, h - FONT * 1.8 - leg.h - noteH, head.h);
       const obstacles: Obstacle[] = [...tickBoxes(scale, x0, te, phe)];
       ps.forEach((_, ki) =>
         years.forEach((__, si) => {
@@ -71,10 +80,9 @@ export function gasSplitChart(input: ChartInput): string {
     },
     w,
     h,
-    { x0, minY: head.h },
+    { x0, minY: head.h, maxLift },
   );
-  const top = head.h + FONT * 1.2 + fit.extraTop;
-  const ph = h - top - FONT * 1.8 - leg.h - noteH;
+  const { top, ph } = plotSpan(head.h + FONT * 1.2 + fit.extraTop, h - FONT * 1.8 - leg.h - noteH, head.h);
   let body = head.svg + valueGridY(scale, x0, top, pw, ph, theme);
   ps.forEach((p, ki) => {
     const x = x0 + band * ki;
@@ -90,7 +98,7 @@ export function gasSplitChart(input: ChartInput): string {
     });
     body += text(x + band / 2, top + ph + FONT * 1.2, p.key, theme.colors.ink, { size: SMALL, anchor: "middle" });
   });
-  body += text(0, top + ph + FONT * 1.8 + noteH * 0.7, GAS_UNIT_NOTE, theme.colors.muted, { size: SMALL });
+  if (noteH) body += text(0, top + ph + FONT * 1.8 + noteH * 0.7, GAS_UNIT_NOTE, theme.colors.muted, { size: SMALL });
   body += `<g transform="translate(0 ${n3(h - leg.h)})">${leg.svg}</g>`;
   return `${svgOpen(w, h, input.label)}<g data-ghg-chart="gas_split">${body}</g></svg>`;
 }
@@ -101,13 +109,21 @@ export function monthlyStackChart(input: ChartInput): string {
   const keys = keysOf(stacks);
   if (!stacks.length || !keys.length) return emptyChart(w, h, "No data", theme);
   const totals = keys.map((k) => stacks.reduce((a, s) => a + Math.max(0, valueAt(s, k) ?? 0), 0));
-  const head = headline(value, theme, "Total", w);
   const colors = stacks.map((s, i) => (value.stacks?.length ? partColor(input, s.label, i) : theme.colors.primary));
   const leg = options.showLegend === false || stacks.length < 2 ? { svg: "", h: 0 } : wrapLegend(stacks.map((s, i) => ({ label: s.label, color: colors[i] })), w, 0, theme);
   const scale = linearScale(0, Math.max(...totals), 4);
   const x0 = axisWidth(scale);
   const pw = w - x0;
   const band = pw / keys.length;
+  // #209 round 4: as gas_split, the total line is chosen with the plot, which never goes under PLOT_FLOOR. A frame too short
+  // for the plot's floor with the month names under it leaves the names out (their line goes to the plot) rather than push
+  // them into the legend.
+  const namesH = FONT * 1.8;
+  const below = FONT * 1.2 + namesH + leg.h;
+  const head = headline(value, theme, "Total", w, { maxH: h - below - tickRoom(scale) });
+  const names = h - namesH - leg.h - head.h >= PLOT_FLOOR - 1e-9;
+  const foot = h - (names ? namesH : SMALL * 0.4) - leg.h;
+  const maxLift = h - head.h - below - tickRoom(scale);
   let peak = 0;
   totals.forEach((t, i) => {
     if (t > totals[peak]) peak = i;
@@ -128,17 +144,15 @@ export function monthlyStackChart(input: ChartInput): string {
   const fit = fitLabelRow(
     (extra) => {
       if (options.showValues === false || !(totals[peak] > 0)) return { labels: [] };
-      const te = head.h + FONT * 1.2 + extra;
-      const phe = h - te - FONT * 1.8 - leg.h;
+      const { top: te, ph: phe } = plotSpan(head.h + FONT * 1.2 + extra, foot, head.h);
       const obstacles: Obstacle[] = [...tickBoxes(scale, x0, te, phe), ...keys.flatMap((_, ki) => segRects(ki, te, phe).map((r) => rectBox(r.x, r.y, r.w, r.h, ki === peak ? 0 : undefined)))];
       return { labels: [{ x: x0 + band * (peak + 0.5), y: te + phe - scale.t(totals[peak]) * phe - SMALL * 0.5, text: peakLabel, bold: true }], obstacles };
     },
     w,
     h,
-    { x0, minY: head.h },
+    { x0, minY: head.h, maxLift },
   );
-  const top = head.h + FONT * 1.2 + fit.extraTop;
-  const ph = h - top - FONT * 1.8 - leg.h;
+  const { top, ph } = plotSpan(head.h + FONT * 1.2 + fit.extraTop, foot, head.h);
   let body = head.svg + valueGridY(scale, x0, top, pw, ph, theme);
   keys.forEach((k, ki) => {
     const x = x0 + band * ki;
@@ -147,7 +161,7 @@ export function monthlyStackChart(input: ChartInput): string {
     });
     const at = ki === peak ? fit.labels[0] : null;
     if (at) body += text(at.x, at.y, peakLabel, theme.colors.ink, { size: fit.size, anchor: "middle", weight: 700 });
-    body += text(x + band / 2, top + ph + FONT * 1.2, shortKey(k), theme.colors.muted, { size: SMALL, anchor: "middle" });
+    if (names) body += text(x + band / 2, top + ph + FONT * 1.2, shortKey(k), theme.colors.muted, { size: SMALL, anchor: "middle" });
   });
   body += `<g transform="translate(0 ${n3(h - leg.h)})">${leg.svg}</g>`;
   return `${svgOpen(w, h, input.label)}<g data-ghg-chart="monthly_stack" data-stacks="${stacks.length}" data-keys="${keys.length}">${body}</g></svg>`;

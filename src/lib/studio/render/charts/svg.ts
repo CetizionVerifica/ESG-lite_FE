@@ -5,12 +5,27 @@
 import type { Theme } from "../theme";
 import type { RenderSeries, RenderValue } from "../types";
 import { esc, n3 } from "../util";
-import { TEXT_MARGIN_EM, textWidth } from "./metrics";
+import { TEXT_MARGIN_EM, inkExtent, textWidth } from "./metrics";
 
 export const U = 4;
 /** 7.5 pt in viewBox units (1 pt = 0.3528 mm). */
 export const FONT = 7.5 * 0.3528 * U;
 export const SMALL = 6.5 * 0.3528 * U;
+/**
+ * #209 round 4: the least height a plot is ever given (half a SMALL line, about 1.1 mm): a frame too small for its chart
+ * draws short bars on an upright axis, never a zero or negative plot (bars of height 0, an axis upside down).
+ */
+export const PLOT_FLOOR = SMALL * 0.5;
+/**
+ * A plot from `top` down to `bottom` (the content under it stays where it is), never under PLOT_FLOOR: a plot too short
+ * grows up into the room above it (its value labels' line), as far as `ceiling` (a headline's foot); only a frame too
+ * small even for that pushes the plot's bottom down.
+ */
+export const plotSpan = (top: number, bottom: number, ceiling = 0): { top: number; ph: number } => {
+  if (bottom - top >= PLOT_FLOOR) return { top, ph: bottom - top };
+  const t = Math.max(ceiling, Math.min(top, bottom - PLOT_FLOOR));
+  return { top: t, ph: Math.max(PLOT_FLOOR, bottom - t) };
+};
 
 /**
  * Chart options (01-contracts §2 chart props). DS-8 adds: `colors` (scope
@@ -80,6 +95,19 @@ export const labelBox = (x: number, y: number, s: string, size = SMALL, opts: { 
   return { x0, x1: x0 + lw, y0: mid ? y - size / 2 : y - LABEL_ASCENT * size, y1: mid ? y + size / 2 : y + LABEL_DESCENT * size };
 };
 
+/**
+ * #209 round 4: a text's ink box (metrics.ts inkExtent: the glyphs it holds, worst of the eight faces) drawn at x, y with
+ * `anchor` and `baseline`; its width as labelWidth. Fits are decided on it (INK_GAP).
+ */
+export const inkBox = (x: number, y: number, s: string, size = SMALL, opts: { anchor?: "start" | "middle" | "end"; bold?: boolean; baseline?: string } = {}): LabelBox => {
+  const lw = labelWidth(s, size, opts.bold);
+  const x0 = opts.anchor === "middle" ? x - lw / 2 : opts.anchor === "end" ? x - lw : x;
+  const ink = inkExtent(s, opts.baseline === "middle" || opts.baseline === "central" ? "middle" : "alphabetic");
+  return { x0, x1: x0 + lw, y0: y - ink.up * size, y1: y + ink.down * size };
+};
+/** Air kept between ink boxes (em of the label's size): none, as the boxes already hold the worst face's glyphs (touching is not meeting). */
+export const INK_GAP = 0;
+
 /** Whether two label boxes meet (touching counts, with `gap` of air around them). */
 export const boxesMeet = (a: LabelBox, b: LabelBox, gap = 0): boolean => a.x0 < b.x1 + gap && b.x0 < a.x1 + gap && a.y0 < b.y1 + gap && b.y0 < a.y1 + gap;
 
@@ -98,11 +126,25 @@ export const insideX = (x: number, s: string, w: number, size = SMALL, bold = fa
  * The plot width that keeps value labels drawn after horizontal bar ends
  * (at x0 + t·pw + gap, t the bar's end on the scale) inside the chart: `pw`
  * itself when they fit, else just narrow enough, never below 60 % of `pw`.
+ * #209 round 4: for labels at `size`.
  */
-export const fitBarEnds = (pw: number, x0: number, w: number, ends: { t: number; label: string; bold?: boolean }[], gap = SMALL * 0.4): number => {
+export const fitBarEnds = (pw: number, x0: number, w: number, ends: { t: number; label: string; bold?: boolean }[], gap = SMALL * 0.4, size = SMALL): number => {
   let fit = pw;
-  for (const e of ends) if (e.t > 0) fit = Math.min(fit, (w - x0 - gap - labelWidth(e.label, SMALL, e.bold)) / e.t);
+  for (const e of ends) if (e.t > 0) fit = Math.min(fit, (w - x0 - gap - labelWidth(e.label, size, e.bold)) / e.t);
   return Math.max(pw * 0.6, fit);
+};
+
+/**
+ * #209 round 4: a horizontal bar chart's plot width: fitBarEnds for its value labels at the largest step (`steps`) whose
+ * narrowing keeps the plot at least `floor` wide (the tick labels' tickFloorX); when no step does, fitBarEnds at the smallest
+ * step: a reported figure keeps its place and the tick labels step down or thin (tickLabelsX) instead.
+ */
+export const barEndsPlot = (floor: number, steps: number[], widthAt: (size: number) => number): number => {
+  for (const size of steps) {
+    const fit = widthAt(size);
+    if (fit >= floor) return fit;
+  }
+  return widthAt(steps[steps.length - 1]);
 };
 
 /** A value label a chart wants centred over its mark: x, baseline y, text; bold labels and higher priority are kept first. */
@@ -147,7 +189,7 @@ export const rectBox = (x: number, y: number, w: number, h: number, owner?: numb
 /**
  * Places one row of centred value labels (bar totals, waterfall steps, target bars, gas
  * columns, line end points) so that no two meet, none meets an obstacle (a tick label, a
- * bar other than its own, a target's words) and each stays inside the plot, x0..w (#209
+ * bar, its own too, a target's words) and each stays inside the plot, x0..w (#209
  * review: 3-decimal tCO₂e labels are wider than their bands). Tried in order, the first
  * that fits wins:
  *   1. as drawn, at each font step (LABEL_STEPS, down to 80 %), each label moved inside
@@ -156,16 +198,27 @@ export const rectBox = (x: number, y: number, w: number, h: number, owner?: numb
  *      left to right, a label that would meet a label or obstacle goes up just above it
  *      (at most two lines above its mark);
  *   3. at the smallest step and staggered, a label that still meets something is left out
- *      (bold, then `priority`, then left to right keep their place first). Never an overlap.
+ *      (bold, then `priority`, then left to right keep their place first), after trying it moved
+ *      sideways (up to SMALL × 2, still over its mark's middle), then under its mark (a floating
+ *      step with room under it), then beside it (into a gap no other mark spans). In this pass a label may rise
+ *      (up to two lines) within the room the plot has even when no line could be reserved.
+ *      Never an overlap.
+ *      #209 round 4: the kept-first labels (the row's highest rank, bold then `priority`: a
+ *      latest total, a waterfall's start and end, the biggest gas) are placed before the
+ *      others and may rise past the two-line limit, as far as the chart's top line (above
+ *      every bar), rather than be left out while a lower label is drawn.
  * `make(extraTop, size)` builds the row for a plot whose top is `extraTop` lower (the
  * chart's own geometry, so a staggered row takes room from the bars, not from the page);
  * the chart draws with the returned `extraTop` and `size`. `minY` is the top labels may
- * reach (a headline above the plot).
+ * reach (a headline above the plot). `maxLift` (#209 round 4) is the most height the plot
+ * can give up and keep the room its axis needs (axis.ts tickRoom): a stagger that would take
+ * more is not tried.
  */
-export function fitLabelRow(make: (extraTop: number, size: number) => LabelRow, w: number, h: number, opts: { x0?: number; minY?: number; size0?: number } = {}): LabelFit {
+export function fitLabelRow(make: (extraTop: number, size: number) => LabelRow, w: number, h: number, opts: { x0?: number; minY?: number; size0?: number; maxLift?: number } = {}): LabelFit {
   const x0 = opts.x0 ?? 0;
   const minY = opts.minY ?? 0;
   const size0 = opts.size0 ?? SMALL;
+  const canLift = (size: number) => LABEL_LIFT * size <= (opts.maxLift ?? Infinity) + 1e-9;
   const attempt = (size: number, stagger: boolean, drop: boolean): LabelFit | null => {
     const extraTop = stagger ? LABEL_LIFT * size : 0;
     const { labels: row, obstacles = [] } = make(extraTop, size);
@@ -174,26 +227,69 @@ export function fitLabelRow(make: (extraTop: number, size: number) => LabelRow, 
     else order.sort((a, b) => row[a].x - row[b].x || a - b);
     const placed: LabelBox[] = [];
     const out: ({ x: number; y: number } | null)[] = row.map(() => null);
-    const top = minY + LABEL_ASCENT * size;
-    const bottom = h - LABEL_DESCENT * size;
-    const gap = LABEL_GAP * size;
+    // The kept-first labels: the row's highest rank (bold, then priority), when the row ranks its labels at all.
+    const topBold = row.some((l) => l.bold);
+    const topPriority = Math.max(0, ...row.filter((l) => !!l.bold === topBold).map((l) => l.priority ?? 0));
+    // #209 round 4: decided on the labels' ink (inkBox: their glyphs, worst of the eight faces) with INK_GAP of air.
+    const gap = INK_GAP * size;
     for (const i of order) {
       const l = row[i];
+      const ink = inkExtent(l.text);
+      const top = minY + ink.up * size;
+      const bottom = h - ink.down * size;
       let spot: { x: number; y: number; box: LabelBox } | null = null;
-      if (labelWidth(l.text, size, l.bold) <= w - x0) {
-        const x = insideX(l.x, l.text, w, size, l.bold, x0);
+      const lw = labelWidth(l.text, size, l.bold);
+      // #209 round 4: in the last pass a label wider than the plot may use the axis gutter too (the tick labels are obstacles).
+      if (lw <= w - x0 || (drop && lw <= w)) {
+        const x = lw <= w - x0 ? insideX(l.x, l.text, w, size, l.bold, x0) : Math.min(Math.max(l.x, lw / 2), w - lw / 2);
         const y0 = Math.min(Math.max(l.y, top), bottom);
-        let y = y0;
-        for (let tries = 0; tries < 6 && y >= top && y0 - y <= MAX_RISE * size; tries++) {
-          const box = labelBox(x, y, l.text, size, { anchor: "middle", bold: l.bold });
-          const hits: LabelBox[] = [...placed.filter((p) => boxesMeet(p, box, gap)), ...obstacles.filter((o) => o.owner !== i && boxesMeet(o, box, gap))];
-          if (!hits.length) {
-            spot = { x, y, box };
-            break;
+        const first = drop && (!!l.bold || (l.priority ?? 0) > 0) && !!l.bold === topBold && (l.priority ?? 0) === topPriority;
+        const maxRise = first ? Infinity : MAX_RISE * size;
+        // #209 round 4: its own mark is an obstacle too (a label held under the chart's top line no longer sits on it).
+        const at = (x: number, yFrom = y0) => {
+          let y = yFrom;
+          for (let tries = 0; tries < 12 && y >= top && yFrom - y <= maxRise; tries++) {
+            const box = inkBox(x, y, l.text, size, { anchor: "middle", bold: l.bold });
+            const hits: LabelBox[] = [...placed.filter((p) => boxesMeet(p, box, gap)), ...obstacles.filter((o) => boxesMeet(o, box, gap))];
+            if (!hits.length) return { x, y, box };
+            if (!stagger && !first && !drop) return null;
+            // Stagger: just above what it would meet.
+            y = Math.min(...hits.map((p) => p.y0)) - gap - ink.down * size - 0.01; // 0.01: clear of the 3-decimal rounding of x, y
           }
-          if (!stagger) break;
-          // Stagger: just above what it would meet.
-          y = Math.min(...hits.map((p) => p.y0)) - gap - LABEL_DESCENT * size - 1e-6;
+          return null;
+        };
+        spot = at(x);
+        // #209 round 4: before a label is left out, it moves sideways (the smallest move first), inside the chart (over the axis
+        // gutter too: the tick labels are obstacles) and still over its mark's middle (its own obstacle's, else its own x),
+        // then rises as above.
+        if (!spot && drop) {
+          const own = obstacles.filter((o) => o.owner === i);
+          const mid = own.length ? (Math.min(...own.map((o) => o.x0)) + Math.max(...own.map((o) => o.x1))) / 2 : l.x;
+          const moves = [1, 2, 3, 4, 5, 6, 7, 8].flatMap((k) => [-k, k].map((d) => d * SMALL * 0.25));
+          for (const d of moves) {
+            const nx = x + d;
+            if (nx - lw / 2 < -1e-6 || nx + lw / 2 > w + 1e-6 || nx - lw / 2 > mid || nx + lw / 2 < mid) continue;
+            spot = at(nx);
+            if (spot) break;
+          }
+          const marks = obstacles.filter((o) => o.owner !== i && o.x0 >= x0 - 1e-6);
+          // Then under its mark, when the mark floats in the plot (a waterfall's step) with a line of room under it.
+          if (!spot && own.length) {
+            const floor = Math.max(...obstacles.filter((o) => o.x0 >= x0 - 1e-6).map((o) => o.y1));
+            const yb = Math.max(...own.map((o) => o.y1)) + gap + ink.up * size + 0.01;
+            const box = inkBox(x, yb, l.text, size, { anchor: "middle", bold: l.bold });
+            if (box.y1 <= floor + 1e-6 && box.y1 <= h && !placed.some((p) => boxesMeet(p, box, gap)) && !obstacles.some((o) => boxesMeet(o, box, gap))) spot = { x, y: yb, box };
+          }
+          // Then beside its mark, level with its top (a plot too short for a line over it): only into a gap no other mark
+          // spans, so it never reads as a neighbour's.
+          if (!spot && own.length) {
+            const [ox0, ox1, oy0] = [Math.min(...own.map((o) => o.x0)), Math.max(...own.map((o) => o.x1)), Math.min(...own.map((o) => o.y0))];
+            for (const nx of [ox1 + SMALL * 0.3 + lw / 2, ox0 - SMALL * 0.3 - lw / 2]) {
+              if (nx - lw / 2 < x0 - 1e-6 || nx + lw / 2 > w + 1e-6 || marks.some((o) => o.x0 < nx + lw / 2 && o.x1 > nx - lw / 2)) continue;
+              spot = at(nx, Math.min(Math.max(oy0 + ink.up * size, top), bottom));
+              if (spot) break;
+            }
+          }
         }
       }
       if (!spot) {
@@ -208,10 +304,12 @@ export function fitLabelRow(make: (extraTop: number, size: number) => LabelRow, 
   const steps = LABEL_STEPS.map((k) => size0 * k);
   for (const stagger of [false, true])
     for (const size of steps) {
+      if (stagger && !canLift(size)) continue;
       const fit = attempt(size, stagger, false);
       if (fit) return fit;
     }
-  return attempt(steps[steps.length - 1], true, true) as LabelFit;
+  const last = steps[steps.length - 1];
+  return attempt(last, canLift(last), true) as LabelFit;
 }
 
 /**
