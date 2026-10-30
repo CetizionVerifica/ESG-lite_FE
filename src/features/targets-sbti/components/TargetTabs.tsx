@@ -104,6 +104,7 @@ export function TargetTabs({ model, tab, onTab }: { model: TargetModel; tab: Tab
       <TabPanel idBase={ID} value="scopes" current={tab} className="space-y-4">
         <ScopeChart model={model} />
         <DataTable label="Scope-wise target pathway" rows={model.scopes} columns={scopeColumns(s3)} getRowId={(r) => r.year} exportName={`targets-scopes-${name}`} />
+        <p className="text-xs text-muted">Each scope is rounded on its own, so the scopes can add up to 0.001 more or less than the target.</p>
       </TabPanel>
       <TabPanel idBase={ID} value="actual" current={tab}>
         <p className="mb-2 text-xs text-muted">Comparing {s3 ? "Scope 1 + 2 + 3" : "Scope 1 + 2 only"} with the pathway. Approved entries only.</p>

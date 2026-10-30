@@ -163,6 +163,29 @@ describe("net-zero model", () => {
     expect(m.scopes[1].target).toBeCloseTo(911.932, 3);
   });
 
+  it("D14: the boundary and every Scope-wise target are the server's, not the rounded scopes added up", () => {
+    // Base Scope 1 3,703.2 kg → 3.703 t and Scope 2 1,234.4 kg → 1.234 t; Scope 1 + 2 is 4,937.6 kg → 4.938 t (the
+    // rounded scopes add to 4.937). The server's year 1 is 4.938 × f = 4.731 while its scope targets add to 4.730.
+    const d14: LongTermChartResponse = {
+      ...r,
+      baseEmissions: 4.938,
+      targetEmissions: 0.494,
+      scope3Share: 0,
+      scope3TargetRequired: false,
+      baseTotals: { scope1: 3.703, scope2: 1.234, scope3: 0, total: 4.938 },
+      rows: [
+        { year: 2038, n: 0, targetEmission: 4.938, scope1Target: 3.703, scope2Target: 1.234, scope3Target: null, reducedBy: null, reducedByPct: null },
+        { year: 2039, n: 1, targetEmission: 4.731, scope1Target: 3.547, scope2Target: 1.183, scope3Target: null, reducedBy: 0.207, reducedByPct: 4.192 },
+      ],
+      actualVsTarget: [],
+    };
+    const z = fromNetZero(d14);
+    expect(z.boundaryBase).toBe(4.938);
+    expect(z.scopes.map((s) => s.target)).toEqual(z.pathway.map((p) => p.target));
+    expect(z.scopes.map((s) => s.target)).toEqual([4.938, 4.731]);
+    expect(z.scopes[1].totalReductionPct).toBe(z.pathway[1].totalReductionPct);
+  });
+
   it("milestones inside the pathway", () => {
     expect(milestonesIn(m)).toEqual([2030, 2035, 2040, 2045, 2050]);
     expect(milestonesIn({ baseYear: 2025, targetYear: 2030 })).toEqual([2030]);
