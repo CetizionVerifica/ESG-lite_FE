@@ -39,7 +39,7 @@ export function StatusBar() {
         </div>
       )}
       {ui.view === "strip" && <ThumbStrip />}
-      <footer className="flex h-10 flex-none items-center gap-3 border-t border-line bg-panel px-3 text-xs text-muted" aria-label="Pages and zoom">
+      <footer data-bottom-bar className="flex h-10 flex-none items-center gap-3 border-t border-line bg-panel px-3 text-xs text-muted" aria-label="Pages and zoom">
         <TbButton active={ui.notesOpen} onClick={() => ed.setNotesOpen(!ui.notesOpen)} disabled={page?.kind !== "freeform"} icon={<NotebookPen aria-hidden className="size-4" />}>
           Notes
         </TbButton>

@@ -7,7 +7,7 @@ import { MemoryRouter } from "react-router-dom";
 import { setupServer } from "msw/node";
 import { ToastProvider } from "../../../../ui";
 import { assistantHandlers, assistantMockRequests, resetAssistantMocks, setAssistantMockNext, setAssistantMockStatus } from "../../../../test/msw/assistant";
-import AssistantButton from "./AssistantButton";
+import AssistantBubble from "./AssistantBubble";
 
 vi.mock("../../../../context/AuthContext", () => ({ useAuth: () => ({ role: "User", user: { user_id: 1 } }) }));
 
@@ -26,7 +26,7 @@ function renderButton() {
     <QueryClientProvider client={client}>
       <ToastProvider>
         <MemoryRouter initialEntries={["/my-month"]}>
-          <AssistantButton />
+          <AssistantBubble />
         </MemoryRouter>
       </ToastProvider>
     </QueryClientProvider>,

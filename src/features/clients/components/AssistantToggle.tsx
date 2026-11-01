@@ -8,9 +8,9 @@ import type { ClientRow } from "../logic";
 /**
  * Overview → "Help assistant" (AS-1). Bound to `company.assistant_enabled`
  * (default off, Superadmin only). On: everyone at the client gets "Ask ESGLite"
- * in the top bar, answering how-to questions from ESGLite's help articles. It
- * reads no client data; questions go to an outside AI service. Off: the button
- * goes; the call log is kept.
+ * as a bubble at the bottom right, answering how-to questions from ESGLite's
+ * help articles. It reads no client data; questions go to an outside AI
+ * service. Off: the bubble goes; the call log is kept.
  */
 export function AssistantToggle({ row }: { row: ClientRow }) {
   const update = useUpdateCompany();
@@ -54,7 +54,7 @@ export function AssistantToggle({ row }: { row: ClientRow }) {
         onChange={save}
         disabled={update.isPending}
         error={error}
-        inlineLabel={on ? `On. ${row.name}'s people see "Ask ESGLite" in the top bar.` : `Off. ${row.name}'s people don't see the help assistant.`}
+        inlineLabel={on ? `On. ${row.name}'s people see "Ask ESGLite" as a bubble at the bottom right.` : `Off. ${row.name}'s people don't see the help assistant.`}
       />
     </section>
   );
