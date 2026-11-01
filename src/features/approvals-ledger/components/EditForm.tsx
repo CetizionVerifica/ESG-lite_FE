@@ -1,6 +1,8 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button, Callout, Select, SkeletonText, TextField, Textarea } from "../../../ui";
-import { errorMessage, useColumnConfig, useFactorNames, useManagerEdit, useUnitOptions, useUnits } from "../api";
+import { useColumnConfig, useFactorNames, useManagerEdit, useUnitOptions, useUnits } from "../api";
+import { saveProblem } from "../../../lib/saveProblem";
+import { SaveProblemNote } from "../../../lib/SaveProblemNote";
 import { sameUnit, unitForCategory, unitsForRow } from "../../../lib/emissions/unitOptions";
 import {
   type Activity,
@@ -47,11 +49,17 @@ function Loaded({
     date: row.date_of_reporting.slice(0, 10),
     unit: row.activity_data_unit ?? "",
   }));
+  // The version the form was built from: a save is refused if someone changed the entry since
+  // (a refetch while the form is open mustn't move it).
+  const [openedVersion] = useState(row.updated_at);
   const [activity, setActivity] = useState<Activity>(start.activity);
   const [date, setDate] = useState(start.date);
   const [unit, setUnit] = useState(start.unit);
   const [reason, setReason] = useState("");
   const [tried, setTried] = useState(false);
+  // What the last save sent, bar the reason: Keep both is offered only while the date and values are the
+  // ones the duplicate warning was about, so a change since is checked again rather than kept unseen.
+  const [sentTarget, setSentTarget] = useState<string | null>(null);
 
   const hasMapping = Object.keys(config?.emission_category_mapping ?? {}).length > 0;
   const units = useUnits(siteId, categoryId);
@@ -61,6 +69,7 @@ function Loaded({
   const save = useManagerEdit();
   const category = String(activity.emission_category ?? "");
   const payload = editPayload(activity, date, unit, reason, start);
+  const target = JSON.stringify({ ...payload, reason: undefined });
   // The factor and unit are needed only when the values are sent; a date-only fix keeps them as stored.
   const sendsValues = !!payload.activity_data;
   // Amounts are checked only when the values are sent (a date-only fix keeps them as stored).
@@ -76,10 +85,17 @@ function Loaded({
     ...(Object.keys(amounts).length > 0 ? { amount: AMOUNT_ERROR } : {}),
   };
   const notSaved = tried ? blockedMessage(errors) : null;
+  const problem = save.isError ? saveProblem(save.error, "Couldn't save the changes. Nothing was changed.") : null;
   const reasonId = useId();
   const unitId = useId();
   const amountId = useId();
   const formRef = useRef<HTMLFormElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  // A stopped edit hides Save, so focus goes to Cancel rather than being lost.
+  const stopped = !!problem?.stopEdit;
+  useEffect(() => {
+    if (stopped) cancelRef.current?.focus();
+  }, [stopped]);
   // Older entries have no stored factor; say where the one shown came from.
   const derivedFactor = sendsValues && !row.activity_data?.emission_category && !!category;
 
@@ -90,7 +106,10 @@ function Loaded({
     setActivity(next);
   };
 
-  const submit = () => {
+  /** keepBoth: the manager chose Keep both on a duplicate, so the entry is saved beside the other one. */
+  const submit = (keepBoth = false) => {
+    // Someone else changed or approved the entry: the edit is over (Enter mustn't retry it).
+    if (stopped) return;
     setTried(true);
     if (errors.reason || errors.category || errors.unit || errors.amount) {
       // Take the manager to the first field that stops the save; the message by the button says what's missing.
@@ -103,7 +122,8 @@ function Loaded({
       target?.focus();
       return;
     }
-    save.mutate({ id: row.pk_id, body: payload }, { onSuccess: (data) => onDone(data?.emission) });
+    setSentTarget(target);
+    save.mutate({ id: row.pk_id, body: { ...payload, expected_updated_at: openedVersion }, keepBoth }, { onSuccess: (data) => onDone(data?.emission) });
   };
   return (
     <form
@@ -217,18 +237,17 @@ function Loaded({
           {notSaved}
         </p>
       )}
-      {save.isError && !notSaved && (
-        <p role="alert" className="rounded-control bg-bad-soft px-3 py-2 text-sm text-bad">
-          {errorMessage(save.error, "Couldn't save the changes. Nothing was changed.")}
-        </p>
-      )}
+      {problem && !notSaved && <SaveProblemNote problem={problem} onKeepBoth={sentTarget === target ? () => submit(true) : undefined} />}
       <div className="flex justify-end gap-2">
-        <Button type="button" onClick={onCancel} disabled={save.isPending}>
+        <Button ref={cancelRef} type="button" onClick={onCancel} disabled={save.isPending}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" loading={save.isPending}>
-          Save changes
-        </Button>
+        {/* Someone else changed or reviewed the entry meanwhile: no Save to retry over their change. */}
+        {!stopped && (
+          <Button type="submit" variant="primary" loading={save.isPending}>
+            Save changes
+          </Button>
+        )}
       </div>
     </form>
   );

@@ -2,6 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { setupServer } from "msw/node";
 import type { ReportDoc, StudioDocResponse, StudioDocSummary } from "../../lib/studio/contracts";
 import { handlers, resetStudioMocks, setStudioMockEnabled, setStudioMockKpi, studioMockDoc } from "./index";
+import { renderData, renderSheet, type RenderBinding, type RenderDoc, type RenderFreeformPage, type RenderValue } from "../../lib/studio/render";
+import ghgRenderFixture from "../fixtures/studio-render/ghg-fixture.json";
 
 const server = setupServer(...handlers);
 const API = "http://api.test";
@@ -155,8 +157,44 @@ describe("studio mocks (01-contracts §4)", () => {
       ],
       tokens: [],
     });
-    expect(res.body.values.map((v) => v.display)).toEqual(["1,000", "Not reported", "Unlinked data"]);
+    expect(res.body.values.map((v) => v.display)).toEqual(["1,000.000", "Not reported", "Unlinked data"]); // #209: tCO₂e with 3 decimals
     expect(res.body.unavailable).toEqual([{ bindingIdx: 1, reason: "NOT_RECORDED" }]); // DS-2: a reason code
+  });
+
+  it("#209 review: series carry their own unit as the server sends it, and the renderer prints each in it", async () => {
+    const gas = { source: "ghg", metric: "total", years: { last: 1 }, sites: "all", breakdown: "gas" } as const;
+    const kpis = { source: "kpi", kpis: ["GHG_SCOPE1", "WATER_WITHDRAWAL", "ENERGY_TOTAL"], years: { last: 1 }, sites: "all" } as const;
+    const res = await json<{ values: RenderValue[] }>("POST", "/studio/resolve", { kind: "sustainability", year: 2025, yearType: "CY", sites: "all", bindings: [gas, kpis], tokens: [] });
+    const [g, k] = res.body.values;
+    // A gas breakdown: tonnes of each gas ("t", src/studio/sources/ghg.ts GAS_TONNES); the binding stays tCO₂e.
+    expect(g.unit).toBe("tCO₂e");
+    expect(g.series?.map((s) => s.unit)).toEqual(["t"]);
+    // Several KPIs: the value is in the first KPI's unit; one series per KPI, each in its own (src/studio/sources/kpi.ts).
+    expect(k).toMatchObject({ unit: "tCO₂e", display: "1,111.000" });
+    expect(k.series?.map((s) => [s.label, s.unit])).toEqual([
+      ["Scope 1 emissions", "tCO₂e"],
+      ["Water withdrawn", "m³"],
+      ["Energy consumed", "MWh"],
+    ]);
+
+    // Through the mirror: gas parts keep `auto` (8,350 / 19.8 / 2.9, the mock's 2025 parts), and the bound
+    // table prints only the tCO₂e row with 3 decimals (1,111.000; 1,112 m³; 1,113 MWh).
+    const doc = JSON.parse(JSON.stringify(ghgRenderFixture.doc)) as RenderDoc;
+    const page = doc.pages[0] as RenderFreeformPage;
+    const frame = { x: 10, y: 10, w: 90, h: 60, rotation: 0 };
+    page.elements = [
+      { id: "u.gas", type: "chart", frame, z: 1, source: "user", props: { binding: gas, kind: "gas_split", options: {} } },
+      { id: "u.table", type: "table", frame: { ...frame, y: 100 }, z: 2, source: "user", props: { binding: kpis, style: "lined", totalRow: false } },
+    ] as unknown as RenderFreeformPage["elements"];
+    const html = renderSheet(page, doc, renderData([gas, kpis] as unknown as RenderBinding[], [], res.body), { mode: "sheet" }).html;
+    const chart = html.slice(html.indexOf('data-ghg-chart="gas_split"'), html.indexOf("<table"));
+    for (const label of [">8,350<", ">19.8<", ">2.9<"]) expect(chart, label).toContain(label);
+    expect(chart).not.toMatch(/>(8,350|19\.8|2\.9)00</);
+    const table = html.slice(html.indexOf("<table"), html.indexOf("</table>"));
+    expect(table).toContain(">1,111.000<");
+    expect(table).toContain(">1,112<");
+    expect(table).toContain(">1,113<");
+    expect(table).not.toMatch(/>1,11[23]\.000</);
   });
 
   it("makes a final as a version through a render job; the draft stays editable (DS-11)", async () => {

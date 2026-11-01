@@ -21,7 +21,10 @@ describe("framework report logic", () => {
 
   it("shows the server's figure as sent", () => {
     expect(reportValue(173560, "GJ")).toBe("173,560 GJ");
-    expect(reportValue(512.4, "tCO₂e")).toBe("512.4 tCO₂e");
+    // #209: a tCO₂e figure always shows 3 decimals; the server's 512.4 is 512.400, never rounded.
+    expect(reportValue(512.4, "tCO₂e")).toBe("512.400 tCO₂e");
+    expect(reportValue(4650.2, "tCO2e")).toBe("4,650.200 tCO2e");
+    expect(reportValue(12.3456, "tCO₂e / M USD")).toBe("12.346 tCO₂e / M USD");
     expect(reportValue(3.63, "ML")).toBe("3.63 ML");
     expect(reportValue("See page 12", null)).toBe("See page 12");
     expect(reportValue(null, "GJ")).toBe("—");

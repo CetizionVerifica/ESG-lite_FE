@@ -193,7 +193,7 @@ test("an admin enters Category 6 spend, sees the estimate, ticks Stakeholders an
   expect(JSON.stringify(calls)).not.toContain("0.6");
   await drawer.getByRole("button", { name: "Close" }).first().click();
 
-  await expect(row6).toContainText("0.6 tCO₂e");
+  await expect(row6).toContainText("0.600 tCO₂e");
   await expect(row6).toContainText("Estimate, not saved");
 
   await row6.getByRole("checkbox", { name: "Stakeholders" }).check();
@@ -220,7 +220,7 @@ test("extrapolate shows the formula before it creates a Pending row", async ({ p
   await expect(dialog.getByTestId("extrapolation-preview")).toContainText("850 kgCO₂e × (100 − 85) ÷ 85 = 150 kgCO₂e");
   expect(calls.at(-1)?.path).toMatch(/\/scope3\/extrapolate\?dry_run=1$/);
   await dialog.getByRole("button", { name: "Create Pending row" }).click();
-  await expect(page.getByText("Extrapolated row of 0.15 tCO₂e added as Pending")).toBeVisible();
+  await expect(page.getByText("Extrapolated row of 0.150 tCO₂e added as Pending")).toBeVisible();
   expect(calls.at(-1)).toMatchObject({ path: expect.stringMatching(/\/scope3\/extrapolate$/), body: { ghg_category: 6, site_id: 1, year: 2025, year_type: "CY", basis: "coverage", coverage_pct: 85 } });
 });
 

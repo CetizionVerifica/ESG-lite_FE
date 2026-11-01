@@ -13,6 +13,8 @@ import {
   sameUnit,
   unitNotOfferedMessage,
 } from "../../lib/emissions";
+import { feraCategoryIds } from "../../lib/emissions/pendingCount";
+import { wttInRow } from "../../lib/scope3/fera";
 import { canConvert, unitsMatchExact } from "../../ui";
 import type { EmissionData } from "../../services/emissionService";
 import { META_KEYS } from "./logic";
@@ -95,6 +97,26 @@ export { editedDate, entryMonth, monthBounds, monthEndDate } from "../../lib/emi
 
 export const factorYearFor = (date: string) => factorYearForDate(date) as number;
 
+type UserSite = { site_id: number; categories?: { category_id: number; category_name: string }[]; fera_category_id?: number | null };
+
+/**
+ * The entry's site's FERA category, from the signed-in user's sites (user.sites, or user.site on older
+ * accounts): one of its categories, else the server's `fera_category_id`, set when the user's grants leave FERA out.
+ */
+export function feraCategoryIdOf(user: unknown, siteId: number | undefined): number | null {
+  const u = (user ?? {}) as { sites?: UserSite[]; site?: UserSite | null };
+  const site = [...(u.sites ?? []), ...(u.site ? [u.site] : [])].find((s) => s.site_id === siteId);
+  return site ? (feraCategoryIds([site])[0] ?? site.fera_category_id ?? null) : null;
+}
+
+/**
+ * D6a: whether the edit preview adds the WTT part, as the save does: a Category 4, 6, 7 or 9
+ * entry on a form without a calculation spec, saved without a Category 3 twin (one saved with
+ * a twin keeps its WTT there, the server's keep_fera_twin).
+ */
+export const editAddsWtt = (entry: Pick<EmissionData, "category" | "fera_linked_id"> & { fera?: unknown[] }, model: Pick<FormModel, "spec">): boolean =>
+  wttInRow(entry.category) && !model.spec && !entry.fera_linked_id && !entry.fera?.length;
+
 /* ------------------------------------------------------------- validation */
 
 export type EditIssue = {
@@ -149,6 +171,8 @@ export type EntryUpdate = {
   activity_data_unit?: string;
   date_of_reporting: string;
   reason?: string;
+  /** The entry's updated_at when the form opened: the save is refused if someone changed it since. */
+  expected_updated_at?: string;
 };
 
 /** The PUT body. The backend recalculates the total and puts the entry back to Pending. */

@@ -31,6 +31,7 @@ Right rail (≥1440px): "Report preview" thumbnail of branded cover in client th
 ## Rules
 - KPI set mirrors the backend branded report's "Emissions at a glance" (Total, YoY, S1, S2, S3, Data coverage).
 - Renewable Electricity (scope null) excluded from scope charts, shown as "Saved" line in KPI tooltip.
+- By location (tab, "By location" sheet, findings' largest site) reads each site's figures from the tables' `siteTotals` (ESG-lite D14: the site's kg, rounded once), never its category cells added up; only an older server without `siteTotals` gets the cells added.
 - Period labels come from one util respecting `fyStartMonth` and month/quarter (fixes `PdfShared.formatPeriodLabel` hardcoding Apr–Mar).
 - **One PDF story:** primary = branded backend PDF (client theme, logo, AI narrative). Secondary "Quick PDF" (client-side @react-pdf) moves under ⋯ and must use `pdfTheme(brand)` + logo (today no brand at all) or be retired; decision for team lead, default = retire after backend PDF covers monthly/quarterly.
 - Token: don't put the JWT in the URL. Proposed: short-lived signed download link from the API.

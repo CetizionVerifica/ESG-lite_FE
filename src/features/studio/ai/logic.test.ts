@@ -74,8 +74,8 @@ describe("text and diff", () => {
     ]);
     expect(wordDiff("", "New text")).toEqual([{ op: "add", text: "New text" }]);
     const joined = (parts: ReturnType<typeof wordDiff>, keep: "del" | "add") => parts.filter((p) => p.op !== keep).map((p) => p.text).join("");
-    const a = "Scope 1 was [12,480] tCO₂e and the total moved [−4.1%].";
-    const b = "Our own operations emitted [12,480] tCO₂e; the total moved [−4.1%] on 2024.";
+    const a = "Scope 1 was [12,480.000] tCO₂e and the total moved [−4.1%].";
+    const b = "Our own operations emitted [12,480.000] tCO₂e; the total moved [−4.1%] on 2024.";
     const parts = wordDiff(a, b);
     expect(joined(parts, "add")).toBe(a);
     expect(joined(parts, "del")).toBe(b);
@@ -93,7 +93,8 @@ describe("panel words", () => {
     const d = doc();
     const p = page(d, "p-summary");
     expect(aboutLabel(d, p, p.elements.find((e) => e.id === "p-summary.split"))).toBe("Emissions by scope chart (page 2)");
-    expect(aboutLabel(d, p, p.elements[1], () => "12,480")).toBe("“Scope 1 emissions were 12,480 t…” (page 2)");
+    // #209: a chip shows the server's 3-decimal tCO₂e display; the line keeps 31 characters then "…".
+    expect(aboutLabel(d, p, p.elements[1], () => "12,480.000")).toBe("“Scope 1 emissions were 12,480.0…” (page 2)");
     expect(aboutLabel(d, p, null)).toBeNull();
     expect(selectionKindOf(p.elements[1])).toBe("text");
     expect(selectionKindOf(p.elements.find((e) => e.id === "p-summary.split"))).toBe("chart");

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
-import { Badge, Button, Callout, type Column, DataTable, EmptyState, FileDrop, KpiStrip, SegmentedControl, exportMatrix, formatNumber, type FileDropItem } from "../../../ui";
+import { Badge, Button, Callout, type Column, DataTable, EmptyState, FileDrop, KpiStrip, SegmentedControl, exportMatrix, formatTonnes, type FileDropItem } from "../../../ui";
 import { type HistoricalPlanRow, type Site, errorMessage, useHistoricalImport, useHistoricalPreview } from "../api";
 import type { UploadContext } from "../hooks/useUploadContext";
 import { HISTORICAL_ACCEPT, HISTORICAL_COLUMNS, HISTORICAL_MAX_BYTES, historicalFileProblem, historicalSkippedMatrix, monthLabel } from "../historical";
@@ -69,7 +69,7 @@ export function HistoricalImport(props: {
     { id: "fuel", header: "Fuel type", sortable: true, value: (r) => r.fuelType },
     { id: "activity", header: "Activity", numeric: true, value: (r) => r.activity },
     { id: "unit", header: "Unit", value: (r) => r.unit },
-    { id: "tco2e", header: "tCO₂e", numeric: true, sortable: true, value: (r) => r.total, cell: (r) => (r.total === null ? <span className="text-muted">–</span> : formatNumber(r.total, 2)) },
+    { id: "tco2e", header: "tCO₂e", numeric: true, sortable: true, value: (r) => r.total, cell: (r) => (r.total === null ? <span className="text-muted">–</span> : formatTonnes(r.total)) },
     { id: "from", header: "Total from", value: (r) => (r.totalFrom === "calculated" ? "Calculated" : r.totalFrom === "file" ? "The sheet" : "") },
     {
       id: "status",

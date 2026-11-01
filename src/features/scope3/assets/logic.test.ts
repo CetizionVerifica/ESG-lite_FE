@@ -46,7 +46,8 @@ describe("investments register logic", () => {
   });
 
   it("shows emissions, or revenue and sector, or Missing", () => {
-    expect(dataText(inv(), fmt)).toBe("60,000 tCO₂e");
+    expect(dataText(inv(), fmt)).toBe("60,000.000 tCO₂e");
+    expect(dataText(inv({ investee_scope12_tco2e: 1234.567 }), fmt)).toBe("1,234.567 tCO₂e");
     expect(dataText(inv({ investee_scope12_tco2e: null, revenue: 3_000_000, currency: "USD", eeio_sector: "Telecom" }), fmt)).toBe("3,000,000 USD · Telecom");
     expect(dataText(inv({ investee_scope12_tco2e: null, revenue: 10, sector_split: { A: 0.5, B: 0.5 } }), fmt)).toBe("10 USD · 2 sectors");
     expect(dataText(inv({ investee_scope12_tco2e: null }), fmt)).toBe("Missing");

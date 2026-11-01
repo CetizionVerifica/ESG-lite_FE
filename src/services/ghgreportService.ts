@@ -41,6 +41,23 @@ export type OverviewRow = {
   total: number;
 };
 
+/**
+ * One site's Scope 1, 2, 3 and total (tCO₂e), each the site's own kgCO₂e summed
+ * and rounded once on the server (ESG-lite D14, computeGhgTables `siteTotals`).
+ * Adding the site's category cells instead can miss by 0.001 a cell.
+ */
+export type SiteTotalsRow = {
+  siteId: number;
+  siteName: string;
+  scope1: number;
+  scope2: number;
+  scope3: number;
+  total: number;
+};
+
+/** One period's category × site table; `siteTotals` is missing on an older server. */
+export type OverviewTable = { year: number; rows: OverviewRow[]; siteTotals?: SiteTotalsRow[] };
+
 export type GhgReportTablesResponse = {
   filters: {
     siteIds: number[];
@@ -56,8 +73,8 @@ export type GhgReportTablesResponse = {
   totals: Record<string, ScopeTotals>;
   tables: {
     table1_emissionsByScope_twoYears: Table1Row[];
-    table_overviewByLocations_compareYear: { year: number; rows: OverviewRow[] };
-    table_overviewByLocations_selectedYear: { year: number; rows: OverviewRow[] };
+    table_overviewByLocations_compareYear: OverviewTable;
+    table_overviewByLocations_selectedYear: OverviewTable;
   };
 };
 

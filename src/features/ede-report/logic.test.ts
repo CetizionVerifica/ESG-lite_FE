@@ -28,7 +28,7 @@ const june = {
 };
 
 const sample: EdeReportResponse = normalize({
-  totals: { scope1: 10, scope2: 5, scope3: 1, total: 16 },
+  totals: { scope1: 10, scope2: 5, scope3: 1, total: 16, saved: 0.5 },
   bySite: [
     {
       siteId: 2,
@@ -107,6 +107,26 @@ describe("figures", () => {
   });
   it("is empty when nothing came back", () => {
     expect(edeFigures(normalize({})).empty).toBe(true);
+  });
+  it("shows the server's saved figure, not the sites' figures added up (D14)", () => {
+    // One 100.45 kg renewable row at each of two sites: each site rounds to
+    // 0.1 t, but the 200.9 kg round once to 0.201 t (totals.saved, as
+    // Overview and the GHG report say).
+    const d = normalize({
+      ...sample,
+      totals: { ...sample.totals, saved: 0.201 },
+      savedBySite: [
+        { siteId: 1, siteName: "Askar", saved: 0.1 },
+        { siteId: 2, siteName: "Hidd", saved: 0.1 },
+      ],
+    });
+    expect(edeFigures(d).saved).toBe(0.201);
+    expect(overallTotals(edeFigures(d))[5]).toEqual({ metric: "Emissions saved by renewables", value: 0.201, unit: "tCO₂e" });
+  });
+  it("adds the sites' figures for an older server that sends no totals.saved", () => {
+    const older = normalize({ ...sample, totals: { scope1: 10, scope2: 5, scope3: 1, total: 16 } });
+    expect("saved" in older.totals).toBe(false);
+    expect(edeFigures(older).saved).toBe(0.5);
   });
   it("lists the PDF's overall totals", () => {
     expect(overallTotals(edeFigures(sample)).map((r) => r.value)).toEqual([10, 5, 1, 16, 1200, 0.5]);

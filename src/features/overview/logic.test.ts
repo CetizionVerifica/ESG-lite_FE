@@ -3,6 +3,7 @@ import type { OverviewCategory, OverviewSite, SubmissionUser } from "../../servi
 import {
   activityValue,
   attentionItems,
+  addSiteMonths,
   intensityMonthly,
   recentYears,
   scope2Monthly,
@@ -208,15 +209,54 @@ describe("lower tabs", () => {
     });
   });
 
-  it("combines intensity over sites by month", () => {
+  it("D14: a month's Scope 2 tCO₂e is the server's (its kg rounded once), not the entries' stored tonnes added", () => {
+    // ESG-lite d14-kg-splits CY 2045: February, a Scope 2 row of 1,234.4 kg at each of two sites (stored 1.234 t each):
+    // 2,468.8 kg → 2.469 t; March, a row stored at 2 dp as 0.89 t whose kg is 885.4 → 0.885 t.
+    const rows = [
+      { date_of_reporting: "2045-02-10", total_emission: 1.234, activity_data: { activity_value: 1 }, activity_data_unit: "kWh" },
+      { date_of_reporting: "2045-02-10", total_emission: 1.234, activity_data: { activity_value: 1 }, activity_data_unit: "kWh" },
+      { date_of_reporting: "2045-03-10", total_emission: 0.89, activity_data: { activity_value: 1 }, activity_data_unit: "kWh" },
+    ];
+    const months = ["2045-01", "2045-02", "2045-03"];
+    const totals = [
+      { month: "2045-01", total: 0 },
+      { month: "2045-02", total: 2.469 },
+      { month: "2045-03", total: 0.885 },
+    ];
+    expect(scope2Monthly(rows, months, totals).rows.map((r) => [r.emissions, r.activity])).toEqual([
+      [0, 0],
+      [2.469, 2],
+      [0.885, 1],
+    ]);
+    // An older server without the totals: the stored tonnes, as before.
+    expect(scope2Monthly(rows, months).rows.map((r) => r.emissions)).toEqual([0, 2.468, 0.89]);
+  });
+
+  it("D14: intensity months are the server's combined months; intensity only with production", () => {
+    // Two sites, January 1,234.4 kg each: the server's month is 2,468.8 kg → 2.469 t (the sites' months add to 2.468).
     const out = intensityMonthly(
       [
+        { month: "2045-01", emissions: 2.469, production: 10, intensity: 0.2469 },
+        { month: "2045-03", emissions: 0.885, production: 0, intensity: 0 },
+      ],
+      ["2045-01", "2045-02", "2045-03"],
+    );
+    expect(out).toEqual([
+      { month: "2045-01", emissions: 2.469, production: 10, intensity: 0.2469 },
+      { month: "2045-02", emissions: 0, production: 0, intensity: null },
+      { month: "2045-03", emissions: 0.885, production: 0, intensity: null },
+    ]);
+  });
+
+  it("an older server's per-site months are added, as before", () => {
+    const out = intensityMonthly(
+      addSiteMonths([
         [{ month: "2025-09", emissions: 4, production: 10 }],
         [
           { month: "2025-09", emissions: 6, production: 10 },
           { month: "2025-08", emissions: 3, production: 0 },
         ],
-      ],
+      ]),
       ["2025-08", "2025-09"],
     );
     expect(out).toEqual([

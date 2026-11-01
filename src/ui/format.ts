@@ -28,34 +28,48 @@ export function formatNumber(value: number | null | undefined, decimals = 0): st
 
 export type FormattedFigure = { value: string; unit: string };
 
+/** #209: every tCO₂e figure is calculated, stored and shown to 3 decimals. */
+export const TONNES_DP = 3;
+
+/** A tCO₂e figure as the server stores it: "1,234.567", "0.050", "-12.000" (no unit). */
+export function formatTonnes(tonnes: number | null | undefined): string {
+  return isNum(tonnes) ? nf(TONNES_DP, TONNES_DP).format(tonnes) : EMPTY_VALUE;
+}
+
+/** A signed change in tCO₂e: "+600.000 tCO₂e", "−12.500 tCO₂e", "0.000 tCO₂e". */
+export function formatTonnesChange(tonnes: number | null | undefined): string {
+  if (!isNum(tonnes)) return EMPTY_VALUE;
+  const body = formatTonnes(Math.abs(tonnes));
+  const sign = /[1-9]/.test(body) ? (tonnes > 0 ? "+" : tonnes < 0 ? "−" : "") : "";
+  return `${sign}${body} tCO₂e`;
+}
+
 /**
  * Emissions given in tonnes CO₂e, split into value and unit so the unit can be
- * set in smaller type. Always tCO₂e, never converted to kg. ≥ 1,000 t: no
- * decimals; 1–1,000 t: 1 decimal; below 1 t: up to 3 decimals.
+ * set in smaller type. Always tCO₂e, never converted to kg, always 3 decimals
+ * (#209): "1,234.567", "12.500", "0.042".
  */
 export function emissionsParts(tonnes: number | null | undefined): FormattedFigure {
   if (!isNum(tonnes)) return { value: EMPTY_VALUE, unit: "tCO₂e" };
-  const abs = Math.abs(tonnes);
-  const decimals = abs >= 1000 ? 0 : abs >= 1 ? 1 : 3;
-  return { value: nf(0, decimals).format(tonnes), unit: "tCO₂e" };
+  return { value: formatTonnes(tonnes), unit: "tCO₂e" };
 }
 
-/** "1,234 tCO₂e", "12.5 tCO₂e", "0.42 tCO₂e". */
+/** "1,234.567 tCO₂e", "12.500 tCO₂e", "0.420 tCO₂e". */
 export function formatEmissions(tonnes: number | null | undefined): string {
   const { value, unit } = emissionsParts(tonnes);
   return value === EMPTY_VALUE ? value : `${value} ${unit}`;
 }
 
 /**
- * One entry's tCO₂e as the server stores it, 2 decimals: "4.02", "4.00", "0.07" — the figure Add
- * data shows before saving. Lists of single entries (Add data, My entries, Approvals) use it so one
- * entry reads the same everywhere (F-12, F-17); totals and KPIs keep `formatEmissions`.
+ * One entry's tCO₂e as the server stores it, 3 decimals (#209): "4.022", "4.000", "0.071" — the
+ * figure Add data shows before saving. Lists of single entries (Add data, My entries, Approvals) use
+ * it so one entry reads the same everywhere (F-12, F-17). Same digits as `formatTonnes`.
  */
 export function formatEntryTonnes(tonnes: number | null | undefined): string {
-  return isNum(tonnes) ? nf(2, 2).format(tonnes) : EMPTY_VALUE;
+  return formatTonnes(tonnes);
 }
 
-/** `formatEntryTonnes` with its unit: "4.02 tCO₂e". */
+/** `formatEntryTonnes` with its unit: "4.022 tCO₂e". */
 export function formatEntryEmissions(tonnes: number | null | undefined): string {
   const value = formatEntryTonnes(tonnes);
   return value === EMPTY_VALUE ? value : `${value} tCO₂e`;

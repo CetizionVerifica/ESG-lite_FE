@@ -181,12 +181,12 @@ export function pathwayOption(data: Pathway, t: ChartTheme, opts: PathwayOptionO
 
 export const PATHWAY_COLUMNS: ChartTableColumn[] = [
   { id: "year", header: "Year" },
-  { id: "s1", header: "Scope 1 (tCO₂e)", numeric: true },
-  { id: "s2", header: "Scope 2 (tCO₂e)", numeric: true },
-  { id: "s3", header: "Scope 3 (tCO₂e)", numeric: true },
-  { id: "pathway", header: "Pathway (tCO₂e)", numeric: true },
+  { id: "s1", header: "Scope 1 (tCO₂e)", numeric: true, decimals: 3 },
+  { id: "s2", header: "Scope 2 (tCO₂e)", numeric: true, decimals: 3 },
+  { id: "s3", header: "Scope 3 (tCO₂e)", numeric: true, decimals: 3 },
+  { id: "pathway", header: "Pathway (tCO₂e)", numeric: true, decimals: 3 },
   { id: "renewable", header: "Renewable share" },
-  { id: "gap", header: "Above pathway (tCO₂e)", numeric: true },
+  { id: "gap", header: "Above pathway (tCO₂e)", numeric: true, decimals: 3 },
   { id: "events", header: "Events" },
 ];
 

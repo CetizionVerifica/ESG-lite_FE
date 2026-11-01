@@ -347,6 +347,21 @@ describe("KPI mock handlers: behaviour", () => {
     expect(((await noReason.json()) as { code: string }).code).toBe("KPI_REASON_REQUIRED");
   });
 
+  it("#209 review: a dashboard card's target words read as the server's targetLabel; a tCO₂e figure has 3 decimals", async () => {
+    type Card = { code: string; target: { label: string } | null };
+    const labels = async () => Object.fromEntries((await get<{ cards: Card[] }>("/kpi/dashboard?year=2026")).cards.flatMap((c) => (c.target ? [[c.code, c.target.label]] : [])));
+    const put = async (body: Record<string, unknown>) => expect((await send("PUT", "/kpi/targets", { baseline_year: 2024, target_year: 2030, ...body })).status).toBe(200);
+    // The sample: Scope 1 7,000 → 4,200 tCO₂e (−40 %); water 48,000 → 38,000 m³ (−20.8 %, one decimal as the server rounds).
+    expect(await labels()).toMatchObject({ GHG_SCOPE1: "−40 % by 2030 from 2024", WATER_WITHDRAWAL: "−20.8 % by 2030 from 2024" });
+    // Keep level: the baseline in words, tCO₂e with 3 decimals, other units as stored.
+    await put({ id: 1, kpi_definition_id: 1, baseline_value: 1234.5, target_value: 1234.5, direction: "maintain" });
+    await put({ id: 2, kpi_definition_id: 13, baseline_value: 41600, target_value: 41600, direction: "maintain" });
+    expect(await labels()).toMatchObject({ GHG_SCOPE1: "Keep at 1,234.500 tCO₂e to 2030", WATER_WITHDRAWAL: "Keep at 41600 m³ to 2030" });
+    // From a zero baseline: the target value in words.
+    await put({ id: 1, kpi_definition_id: 1, baseline_value: 0, target_value: 1000, direction: "increase" });
+    expect((await labels()).GHG_SCOPE1).toBe("1,000.000 tCO₂e by 2030");
+  });
+
   it("D17: My KPIs follow topic owners and exceptions; a person's topics move with a note", async () => {
     type My = { items: { code: string; topic: string; topic_label: string }[] };
     const before = (await get<My>("/kpi/my?period=2026-09")).items;

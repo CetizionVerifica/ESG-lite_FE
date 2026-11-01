@@ -83,7 +83,7 @@ import { ESRS_TOPIC_LABEL, PILLAR_LABEL, TOPIC_LABEL } from "../../lib/kpi/label
 import { isPillar, pillarOf } from "../../lib/kpi/pillars";
 import { formulaCodes } from "../../lib/kpi/formula";
 import { recommendKpis } from "../../lib/kpi/recommend";
-import { convertUnit } from "../../lib/kpi/units";
+import { convertUnit, isTonnesCo2e } from "../../lib/kpi/units";
 import {
   ACME,
   ACME_ASSIGNMENTS,
@@ -588,10 +588,23 @@ function targetOut(t: KpiTargetWithProgress): KpiTargetWithProgress {
   return { ...t, current_value: current ?? null, current_year: currentYear ?? null, progress_pct: pct, status, series, kpi_name: def?.name ?? null, kpi_code: def?.code ?? null, unit: def?.canonical_unit ?? null, site_name: t.site_id ? siteName(t.site_id) : null };
 }
 
-/** "−40 % by 2030 from 2024": how the server words a target on a card. */
+/**
+ * How the server words a target on a card (ESG-lite src/kpi/targets/service.ts `targetLabel`):
+ * "−40 % by 2030 from 2024", "Keep at 1,234.500 tCO₂e to 2030", "1,000.000 tCO₂e by 2030" (from a
+ * zero baseline). #209 review: a tCO₂e figure has 3 decimals (`targetFigure`); other units print
+ * the stored number.
+ */
 function targetText(t: KpiTargetWithProgress): string {
-  const pct = t.baseline_value ? Math.round(((t.target_value - t.baseline_value) / t.baseline_value) * 100) : 0;
-  return t.direction === "maintain" ? `Keep level to ${t.target_year} from ${t.baseline_year}` : `${pct < 0 ? "−" : "+"}${Math.abs(pct)} % by ${t.target_year} from ${t.baseline_year}`;
+  const figure = (v: number) => {
+    if (!isTonnesCo2e(t.unit)) return String(v);
+    const text = Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    return v < 0 && /[1-9]/.test(text) ? `−${text}` : text;
+  };
+  const unit = t.unit ? ` ${t.unit}` : "";
+  if (t.direction === "maintain") return `Keep at ${figure(t.baseline_value)}${unit} to ${t.target_year}`;
+  if (t.baseline_value === 0) return `${figure(t.target_value)}${unit} by ${t.target_year}`;
+  const pct = Math.round(((t.target_value - t.baseline_value) / Math.abs(t.baseline_value)) * 1000) / 10;
+  return `${pct < 0 ? "−" : "+"}${Math.abs(pct)} % by ${t.target_year} from ${t.baseline_year}`;
 }
 
 /** Gaps of the sample company for the dashboard. */

@@ -65,6 +65,9 @@ test("a Manager reads targets but can't change them; deleting asks first", async
   await expect(targets(page)).toHaveCount(2);
   await expect(page.getByRole("button", { name: "Set a target" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Edit the target/ })).toHaveCount(0);
+  // #209: the Scope 1 target's figures (baseline 7,000, now 6,212, target 4,200) in tCO₂e, with 3 decimals.
+  const scope1 = targets(page).filter({ hasText: "Scope 1 emissions" });
+  await expect(scope1.getByRole("definition")).toHaveText(["7,000.000 tCO₂e", "6,212.000 tCO₂e", "4,200.000 tCO₂e"]);
 });
 
 test("an Admin deletes a target after confirming", async ({ page }) => {

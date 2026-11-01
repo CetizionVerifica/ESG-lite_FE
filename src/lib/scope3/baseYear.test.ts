@@ -19,9 +19,9 @@ describe("S3-14 base year wording", () => {
   });
 
   it("signs changes with a true minus", () => {
-    expect(signedT(600)).toBe("+600 tCO₂e");
-    expect(signedT(-12.5)).toBe("−12.5 tCO₂e");
-    expect(signedT(0)).toBe("0 tCO₂e");
+    expect(signedT(600)).toBe("+600.000 tCO₂e");
+    expect(signedT(-12.5)).toBe("−12.500 tCO₂e");
+    expect(signedT(0)).toBe("0.000 tCO₂e");
     expect(signedPct(null)).toBe("—");
   });
 

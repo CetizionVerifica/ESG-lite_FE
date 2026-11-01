@@ -18,7 +18,7 @@ const COLUMNS: Column<SupplierListItem>[] = [
   { id: "name", header: "Supplier", value: (s) => s.name, sortable: true, hideable: false, wrap: true },
   { id: "country", header: "Country", value: (s) => s.country ?? "", cell: (s) => s.country ?? <span className="text-muted">Not set</span>, width: "6rem" },
   { id: "rows", header: "Rows this year", value: (s) => s.rows_this_year, numeric: true, sortable: true, width: "8rem" },
-  { id: "tco2e", header: "tCO₂e", value: (s) => s.tco2e, numeric: true, decimals: 2, sortable: true, width: "7rem" },
+  { id: "tco2e", header: "tCO₂e", value: (s) => s.tco2e, numeric: true, decimals: 3, sortable: true, width: "7rem" },
   {
     id: "figure",
     header: "Supplier figure",

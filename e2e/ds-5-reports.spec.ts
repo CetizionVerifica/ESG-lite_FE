@@ -36,8 +36,13 @@ function tables(body: { siteIds: number[]; yearType: string; year: number }) {
           { scope: "Scope 1", category: "Diesel", bySite: [site(1, "Hidd", 30)], total: 30 },
           { scope: "Scope 2", category: "Electricity", bySite: [site(1, "Hidd", 50), site(2, "Sitra", 20)], total: 70 },
         ],
+        // Each site's figures as the server sends them (D14).
+        siteTotals: [
+          { siteId: 1, siteName: "Hidd", scope1: 30, scope2: 50, scope3: 0, total: 80 },
+          { siteId: 2, siteName: "Sitra", scope1: 0, scope2: 20, scope3: 0, total: 20 },
+        ],
       },
-      table_overviewByLocations_compareYear: { year: body.year - 1, rows: [] },
+      table_overviewByLocations_compareYear: { year: body.year - 1, rows: [], siteTotals: [] },
     },
   };
 }
@@ -143,7 +148,7 @@ async function signIn(page: Page, studio: boolean) {
       if (path.endsWith("/studio/resolve")) {
         const bindings = ((body?.bindings as { metric: string }[]) ?? []).map((b) => {
           const v = b.metric === "total" ? TOTALS.total : b.metric === "scope1" ? TOTALS.scope1 : b.metric === "scope2_location" ? TOTALS.scope2 : null;
-          return v === null ? { source: "ghg", display: "Not reported", value: null, unit: null, unavailable: { reason: "NO_DATA" } } : { source: "ghg", display: String(v), value: v, unit: "tCO₂e", approvedAt: "2026-04-12T00:00:00Z" };
+          return v === null ? { source: "ghg", display: "Not reported", value: null, unit: null, unavailable: { reason: "NO_DATA" } } : { source: "ghg", display: v.toFixed(3), value: v, unit: "tCO₂e", approvedAt: "2026-04-12T00:00:00Z" }; // #209: the server prints tCO₂e with 3 decimals
         });
         return json({ values: bindings, tokens: [], dataHash: "sha256:x", unavailable: [] });
       }
@@ -177,9 +182,9 @@ test("GHG report → Design this report → Inventory → build → the editor s
   const pages = page.locator("[data-page-slot]");
   await expect(pages).toHaveCount(22);
   // The cover total and the Scope 1 page show the GHG report's figures, drawn by the renderer in shadow roots.
-  await expect(page.locator('[data-sheet-host="p-cover"]')).toContainText("100");
+  await expect(page.locator('[data-sheet-host="p-cover"]')).toContainText("100.000");
   await page.locator('[data-page-slot="p-5"]').scrollIntoViewIfNeeded();
-  await expect(page.locator('[data-sheet-host="p-5"]')).toContainText("30");
+  await expect(page.locator('[data-sheet-host="p-5"]')).toContainText("30.000");
   await expect(page.getByTestId("page-counter")).toContainText("/ 22");
 
   const create = calls.find((c) => c.method === "POST" && c.path.endsWith("/studio/docs"));

@@ -30,7 +30,7 @@ describe("commuting spec: method_column @method (S3-9)", () => {
   it("distance_based scales the survey distance (golden 7.1, rail)", () => {
     // 8,640 km × 3 ÷ 3 surveyed × 0.1 = 864 kg
     const r = row({ "@method": "distance_based", "Total distance (km)": "8640", "Total employees": "3", "Employees surveyed": "3" });
-    expect(calculateEmission(input, r)).toEqual({ value: 0.86, status: "ok" });
+    expect(calculateEmission(input, r)).toEqual({ value: 0.864, status: "ok" }); // 864 kg at 3 dp (#209)
     // A 1 % sample of 300 employees: × 100.
     const scaled = row({ "@method": "distance_based", "Total distance (km)": "8640", "Total employees": "300", "Employees surveyed": "3" });
     expect(calculateEmission(input, scaled).value).toBe(86.4);

@@ -759,8 +759,12 @@ export interface ResolvedBinding {
   display: string;
   value: number | null;
   unit: string | null;
-  /** Without a breakdown: one series over the years; with one: a series per year keyed by the breakdown. */
-  series?: { label: string; values: { key: string; value: number | null }[] }[];
+  /**
+   * Without a breakdown: one series over the years; with one: a series per year keyed by the breakdown.
+   * #209 review: `unit` is the series' own unit when the source knows it (a KPI binding mixes units;
+   * a GHG `gas` breakdown is "t", tonnes of each gas). Absent: the binding's `unit`; null: no unit.
+   */
+  series?: { label: string; values: { key: string; value: number | null }[]; unit?: string | null }[];
   approvedAt?: string | null;
   evidenceCount?: number;
   /** DS-7 (GHG): approved emission entries behind the figure (chip hover card). */

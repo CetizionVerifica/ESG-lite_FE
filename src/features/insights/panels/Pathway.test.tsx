@@ -89,7 +89,7 @@ describe("Pathway panel (IN-4)", () => {
     renderPathway({}, "table");
     const table = screen.getByRole("table");
     const r2025 = within(table).getByText("2025").closest("tr")!;
-    expect([...r2025.querySelectorAll("td")].map((td) => td.textContent)).toEqual(["2025", "19,300", "20,550", "5,060", "42,980", "38%", "1,930", "New grid factors (CEA v20)"]);
+    expect([...r2025.querySelectorAll("td")].map((td) => td.textContent)).toEqual(["2025", "19,300.000", "20,550.000", "5,060.000", "42,980.000", "38%", "1,930.000", "New grid factors (CEA v20)"]);
   });
 
   it("the table toggle drives the panel's view", async () => {

@@ -6,6 +6,7 @@ import { Button, Callout, EmptyState, Loading, Modal, PageHeader, Skeleton, Step
 import { useCreateSupplier, useEntrySetup, useExistingEntries, usePeriodMode, usePeriodTotals, useSiteCountry, useSupplierDetails, useSupplierOptions, useThreshold } from "./api";
 import { SupplierFields } from "./components/SupplierFields";
 import { hasSupplierField, supplierIdOf, withSuppliers } from "./logic/supplier";
+import { withWttInRow } from "../../lib/scope3/wtt";
 import { errorMessage as supplierError } from "../../services/scope3SuppliersService";
 import { useReviewWorkflow } from "../../lib/reviewWorkflow";
 import { LiveChecks, type LiveCheckRow } from "./components/LiveChecks";
@@ -19,7 +20,7 @@ import { useRowEvidence } from "./hooks/useRowEvidence";
 import { billGroups, billOf } from "./logic/bill";
 import { buildPayload, comparison, entryDate, entryFactorYear, entryPeriodLabel, formatEntryPeriodParam, parseEntryPeriod, previousPeriod, rowIssue, type EntryPeriod } from "./logic/entry";
 import { formColumns, rowMethodChoices, toFormModel } from "./logic/form";
-import { entryCategories, feraCategoryOf, sitesOf, userIdOf } from "./logic/sites";
+import { entryCategories, feraCategoryIdOf, sitesOf, userIdOf } from "./logic/sites";
 import { entryDraftKey } from "../../lib/entryDrafts";
 import { ChooseContext } from "./steps/ChooseContext";
 import { EnterRows } from "./steps/EnterRows";
@@ -28,7 +29,7 @@ import type { RowComparison } from "./components/EntryRow";
 import { ExistingEntries } from "./components/ExistingEntries";
 import { PeriodModeNote } from "./components/PeriodModeNote";
 import { editOf, fixTarget, rowFromEntry, savedExcludingEdits } from "./logic/existing";
-import { isScope2, splitFeraFactors, upstreamSubFor } from "../../lib/scope3/fera";
+import { isScope2, splitFeraFactors, upstreamSubFor, wttInRow } from "../../lib/scope3/fera";
 import type { Cat3Calc } from "./components/EntryRow";
 import { companyOfUserSite } from "../../lib/entryDetail";
 
@@ -81,13 +82,12 @@ export default function AddDataPage() {
     );
 
   const factorYear = period ? entryFactorYear(period) : null;
-  const fera = feraCategoryOf(site);
   const setup = useEntrySetup({
     siteId: contextReady ? site.site_id : null,
     categoryId: contextReady ? category.category_id : null,
     factorYear,
     companyId: site?.company_id ?? null,
-    feraCategoryId: fera?.category_id ?? null,
+    feraCategoryId: feraCategoryIdOf(site),
   });
   const threshold = useThreshold(site?.company_id ?? null);
   const model = useMemo(() => (setup.data ? toFormModel(setup.data.config, setup.data.unitOptions) : null), [setup.data]);
@@ -152,7 +152,15 @@ export default function AddDataPage() {
   const supplierOptions = useSupplierOptions(reportingYear, supplierRows);
   const supplierDetails = useSupplierDetails(supplierRows ? rows.map(supplierIdOf).filter((id): id is number => id !== null) : []);
   const createSupplier = useCreateSupplier(reportingYear);
-  const calc = supplierRows ? withSuppliers(baseCalc, spendLookup, supplierDetails, reportingYear) : baseCalc;
+  const supplierCalc = supplierRows ? withSuppliers(baseCalc, spendLookup, supplierDetails, reportingYear) : baseCalc;
+  // FERA preview: same row against the FERA factors, raw value when no conversion exists.
+  // S3-7: td_loss factors make a second, T&D-loss row for Scope 2 categories only.
+  // Only the factor year's FERA factors count: the backend never falls back to another year for a twin.
+  const feraSplit = useMemo(() => splitFeraFactors(setup.data?.feraFactors ?? [], factorYear), [setup.data, factorYear]);
+  // D6a: a Category 4, 6, 7 or 9 row's total includes its WTT part (no Category 3 line); spec forms get none, as on the server.
+  const wttHere = contextReady && wttInRow(category) && !model?.spec;
+  const wttCalc = useEmissionCalc({ ...calcInput, emissionFactors: wttHere ? feraSplit.upstream : [] });
+  const calc = wttHere ? withWttInRow(supplierCalc, wttCalc) : supplierCalc;
   const factorNames = useMemo(() => [...new Set(factors.map((f) => f.emission_category_name))].sort(), [factors]);
   const renderSupplier = supplierRows
     ? (row: (typeof rows)[number]) => {
@@ -178,15 +186,17 @@ export default function AddDataPage() {
         );
       }
     : undefined;
-  // FERA preview: same row against the FERA factors, raw value when no conversion exists.
-  // S3-7: td_loss factors make a second, T&D-loss row for Scope 2 categories only.
-  // Only the factor year's FERA factors count: the backend never falls back to another year for a twin.
-  const feraSplit = useMemo(() => splitFeraFactors(setup.data?.feraFactors ?? [], factorYear), [setup.data, factorYear]);
   const upstreamCalc = useEmissionCalc({ ...calcInput, emissionFactors: feraSplit.upstream, fallbackToRaw: true });
   const tdLossCalc = useEmissionCalc({ ...calcInput, emissionFactors: isScope2(category?.scope) ? feraSplit.tdLoss : [], fallbackToRaw: true });
+  // D6a: in a Category 4, 6, 7 or 9 the line shows only for a saved entry that kept its twin.
   const feraCalc: Cat3Calc | null =
     feraSplit.upstream.length || (isScope2(category?.scope) && feraSplit.tdLoss.length)
-      ? { upstream: feraSplit.upstream.length ? upstreamCalc : null, tdLoss: isScope2(category?.scope) && feraSplit.tdLoss.length ? tdLossCalc : null, upstreamSub: upstreamSubFor(category?.scope) }
+      ? {
+          upstream: feraSplit.upstream.length ? upstreamCalc : null,
+          tdLoss: isScope2(category?.scope) && feraSplit.tdLoss.length ? tdLossCalc : null,
+          upstreamSub: upstreamSubFor(category?.scope),
+          keptTwinsOnly: wttHere,
+        }
       : null;
 
   // Rows that will be sent: bill rows, and typed rows with something in them

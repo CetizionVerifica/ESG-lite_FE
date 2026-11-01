@@ -4,6 +4,7 @@ import { EmptyState } from "./EmptyState";
 import { SkeletonKpi } from "./Skeleton";
 import { cn } from "./cn";
 import { focusRing } from "./styles";
+import { fitFigureSize } from "./figureFit";
 import { AutoInfoTip } from "./InfoTerm";
 import { EMPTY_VALUE, emissionsParts, formatDelta, formatNumber, formatPercent, type Delta } from "./format";
 
@@ -64,8 +65,11 @@ export function KpiStrip({ items, loading, error, onRetry, className }: KpiStrip
       </div>
     );
 
+  // #209: five or six 3-decimal figures don't fit one row on a tablet, so such a strip keeps
+  // three tiles a row until lg.
+  const many = items.length > 4;
   return (
-    <dl className={cn(panel, "grid grid-cols-2 divide-line sm:flex sm:divide-x")}>
+    <dl className={cn(panel, "grid grid-cols-2 divide-line", many ? "sm:grid-cols-3 lg:flex lg:divide-x" : "sm:flex sm:divide-x")}>
       {items.map((k) => {
         const { value, unit } = valueParts(k);
         const delta = formatDelta(k.value, k.previous, { lowerIsBetter: k.lowerIsBetter ?? true });
@@ -73,8 +77,9 @@ export function KpiStrip({ items, loading, error, onRetry, className }: KpiStrip
           <div
             key={k.label}
             className={cn(
-              "relative min-w-0 p-4 sm:p-5",
-              k.primary ? "col-span-2 sm:flex-[1.6]" : "sm:flex-1",
+              // A size container: the figure is sized to the tile's width (fitFigureSize).
+              "@container relative min-w-0 p-4 sm:p-5",
+              k.primary ? cn("col-span-2", many ? "sm:col-span-1 lg:flex-[1.6]" : "sm:flex-[1.6]") : many ? "lg:flex-1" : "sm:flex-1",
               k.onSelect && "[&>dt]:pointer-events-none [&>dd]:pointer-events-none",
               k.selected && "bg-tint",
             )}
@@ -96,8 +101,19 @@ export function KpiStrip({ items, loading, error, onRetry, className }: KpiStrip
               <AutoInfoTip label={k.label} className="pointer-events-auto" />
             </dt>
             <dd className="relative mt-1">
-              <span className={cn("font-num font-semibold tabular-nums text-ink", k.primary ? "text-3xl" : "text-2xl")}>{value}</span>
-              {unit && value !== EMPTY_VALUE && <span className="ml-1 text-xs text-muted">{unit}</span>}
+              {/* #209: a long 3-decimal figure steps down to fit a narrow tile (and only breaks below 0.75rem); the unit may wrap onto its own line. */}
+              <span
+                className={cn("font-num font-semibold tabular-nums text-ink [overflow-wrap:anywhere]", k.primary ? "text-3xl" : "text-2xl")}
+                style={{ fontSize: fitFigureSize(value, k.primary ? "1.875rem" : "1.5rem") }}
+              >
+                {value}
+              </span>
+              {unit && value !== EMPTY_VALUE && (
+                <>
+                  {" "}
+                  <span className="text-xs text-muted">{unit}</span>
+                </>
+              )}
             </dd>
             {(delta || k.hint) && (
               <dd className="relative mt-1 flex flex-wrap items-baseline gap-x-1.5 text-xs">

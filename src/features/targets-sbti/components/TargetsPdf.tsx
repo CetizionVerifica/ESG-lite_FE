@@ -1,6 +1,6 @@
 import { Defs, Document, Image, LinearGradient, Page, Rect, StyleSheet, Stop, Svg, Text, View } from "@react-pdf/renderer";
 import type { PdfTheme } from "../../../theme";
-import { POWERED_BY_TEXT, formatNumber, formatPercent } from "../../../ui";
+import { POWERED_BY_TEXT, formatNumber, formatPercent, formatTonnes } from "../../../ui";
 import { PATHWAYS, type Pathway, type Rule, type TargetModel, latestScored, statusWord, yearsLeft } from "../logic";
 
 export type TargetsPdfProps = {
@@ -43,9 +43,9 @@ export function TargetsPdf({ theme, model: m, pathway, siteNames, rules, generat
       ? `Near-term, ${m.baseYear}–${m.targetYear}, ${PATHWAYS[pathway].label} pathway (${m.annualRatePct}% a year)`
       : `Net-zero ${m.targetYear}, 90% cut from ${m.baseYear} (${m.annualRatePct}% a year)`;
   const kpis: Array<[string, string]> = [
-    [`Base emissions ${m.baseYear}`, `${formatNumber(m.boundaryBase, 1)} t`],
-    [`Target ${m.targetYear}`, `${formatNumber(m.targetEmissions, 1)} t`],
-    [latest ? `Actual ${latest.year} · ${statusWord(latest.status)}` : "Latest actual", latest ? `${formatNumber(latest.actual, 1)} t` : "No data"],
+    [`Base emissions ${m.baseYear}`, `${formatTonnes(m.boundaryBase)} t`],
+    [`Target ${m.targetYear}`, `${formatTonnes(m.targetEmissions)} t`],
+    [latest ? `Actual ${latest.year} · ${statusWord(latest.status)}` : "Latest actual", latest ? `${formatTonnes(latest.actual)} t` : "No data"],
     ["Annual rate", `${m.annualRatePct}%`],
     ["Years left", String(yearsLeft(m.targetYear, generatedAt))],
   ];

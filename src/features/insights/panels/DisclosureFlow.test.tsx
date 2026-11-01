@@ -89,7 +89,7 @@ describe("DisclosureFlow (IN-6)", () => {
     const table = screen.getByRole("table");
     const rows = within(table).getAllByRole("row");
     expect(rows).toHaveLength(flowData(true).links.length + 1);
-    expect(rows[1].textContent).toBe("Chennai plantScope 16,100tCO₂e—");
+    expect(rows[1].textContent).toBe("Chennai plantScope 16,100.000tCO₂e—");
     expect(rows[rows.length - 1].textContent).toBe("Gross Scope 3ESRS E1-61CountDerived");
   });
 

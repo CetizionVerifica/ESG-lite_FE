@@ -20,7 +20,7 @@ test("the Data flow tab draws the sankey and its table lists every link with mea
   await expect(table.getByRole("columnheader")).toHaveText(["From", "To", "Value", "Measure", "Fit"]);
   const rows = table.locator("tbody tr");
   await expect(rows).toHaveCount(15);
-  await expect(rows.first()).toHaveText(/Chennai plant\s*Scope 1\s*6,100\s*tCO₂e/);
+  await expect(rows.first()).toHaveText(/Chennai plant\s*Scope 1\s*6,100\.000\s*tCO₂e/);
   await expect(rows.last()).toHaveText(/Gross Scope 3\s*ESRS E1-6\s*1\s*Count\s*Derived/);
 });
 

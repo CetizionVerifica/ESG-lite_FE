@@ -28,6 +28,7 @@ Actions: Export (PDF summary + XLSX), PNG per chart
 - On-track/off-track status pills use fixed status colours. Pathway bars `--t-brand`, actual line `--t-ink`, scopes `--t-s1/2/3`.
 - Near-term gets KPI cards too (today only long-term has them). Replace emoji icons with Lucide icons.
 - Site names come from the chosen sites, not `user.sites`.
+- A year's target on every tab is the server's (near-term `table1.targetEmission` = `table2.totalTarget`; net-zero `rows[].targetEmission`, boundary `baseEmissions`): ESG-lite D14 rounds the boundary's kg once, so the rounded scope targets added up can be 0.001 off it. The Scope-wise tab says so; it never adds the scopes into a total.
 - "Commitment" can be saved later (proposed backend `Target` entity) so P06 attention list can show "2030 pathway: on track"; until then compute live.
 
 ## States

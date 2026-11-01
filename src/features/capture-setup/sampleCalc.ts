@@ -20,7 +20,7 @@ export function describeResult(result: EmissionCalculationResult, factor: Emissi
   if (result.value !== null) {
     return {
       tone: "good",
-      headline: `${result.value.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tCO₂e`,
+      headline: `${result.value.toLocaleString("en-GB", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} tCO₂e`, // #209
       detail: used ? `${used}${result.status === "converted" ? ", unit converted" : ""}` : null,
     };
   }

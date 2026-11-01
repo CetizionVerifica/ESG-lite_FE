@@ -14,7 +14,7 @@ describe("describeResult", () => {
   it("shows tCO2e and the factor used", () => {
     expect(describeResult({ value: 1234.5, status: "ok" }, f(2025))).toEqual({
       tone: "good",
-      headline: "1,234.50 tCO₂e",
+      headline: "1,234.500 tCO₂e",
       detail: "Diesel: 2.5 kgCO₂e per litre (2025)",
     });
   });

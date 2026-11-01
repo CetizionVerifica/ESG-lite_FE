@@ -29,7 +29,7 @@ export function placesOf(v: number): number {
   return text.includes(".") ? text.length - text.indexOf(".") - 1 : 0;
 }
 
-/** "173,560 GJ", "512.4 tCO₂e", a narrative answer, or "—". */
+/** "173,560 GJ", "512.400 tCO₂e" (tCO₂e always 3 decimals, #209), a narrative answer, or "—". */
 export function reportValue(v: KpiReportRow["value"] | undefined, unit: string | null): string {
   if (v === null || v === undefined || v === "") return "—";
   if (typeof v === "number") return formatWithUnit(v, unit, placesOf(v));

@@ -90,7 +90,7 @@ async function signIn(page: Page, opts: { aiUsed?: boolean } = {}) {
       if (path.endsWith("/studio/inputs/prefill")) return json({ keys: [], prefill: {} });
       if (path.endsWith("/studio/brand-kit")) return json({ name: "Midal", logos: { primary: null, onDark: null }, colors: { primary: "#0F5132", accent: "#F59E0B", coverFrom: "#0F5132", coverTo: "#0B3D26" }, defaultLook: "classic", fonts: { heading: null, body: null }, voice: "", palettes: [], canEdit: true, brandControls: false, updatedAt: null });
       if (path.endsWith("/studio/resolve")) {
-        const values = ((body?.bindings as unknown[]) ?? []).map(() => ({ source: "ghg", display: "18,940", value: 18940, unit: "tCO₂e", approvedAt: "2026-04-12T00:00:00Z" }));
+        const values = ((body?.bindings as unknown[]) ?? []).map(() => ({ source: "ghg", display: "18,940.000", value: 18940, unit: "tCO₂e", approvedAt: "2026-04-12T00:00:00Z" }));
         return json({ values, tokens: [], dataHash: "sha256:x", unavailable: [] });
       }
       if (path.includes("/studio/")) return json({ code: "DS_DOC_NOT_FOUND", message: "Not found." }, 404);

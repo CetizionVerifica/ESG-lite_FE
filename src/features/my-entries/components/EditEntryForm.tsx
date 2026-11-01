@@ -1,20 +1,28 @@
 import { useMemo, useState } from "react";
-import { applyChange, formColumns, isColumnVisible, mappingKeyLabel, offeredUnits, sameUnit, toFormModel, unitsForRow, useEmissionCalc, type ModalRow } from "../../../lib/emissions";
-import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEntryEmissions } from "../../../ui";
+import { applyChange, formColumns, isColumnVisible, mappingKeyLabel, offeredUnits, sameUnit, toFormModel, unitsForRow, useEmissionCalc, type EmissionFactor, type ModalRow } from "../../../lib/emissions";
+import { Button, DynamicField, EmptyState, MonthPicker, Select, SkeletonText, Textarea, cn, formatEntryEmissions, formatTonnes } from "../../../ui";
 import { useEditSetup } from "../api";
-import { type EditIssue, type EntryUpdate, buildUpdate, editIssue, editedDate, entryMonth, factorYearFor, monthBounds, rowFromEntry } from "../edit";
+import { type EditIssue, type EntryUpdate, buildUpdate, editAddsWtt, editIssue, editedDate, entryMonth, factorYearFor, feraCategoryIdOf, monthBounds, rowFromEntry } from "../edit";
 import { type EntryRow, periodText } from "../logic";
 import { plainProblem } from "../../../lib/entryDetail";
+import type { SaveProblem } from "../../../lib/saveProblem";
+import { SaveProblemNote } from "../../../lib/SaveProblemNote";
 import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
 import { columnTitle } from "../../../lib/emissions/form";
 import { settingFor } from "../../../lib/forms/settings";
+import { splitFeraFactors } from "../../../lib/scope3/fera";
+import { withWttInRow } from "../../../lib/scope3/wtt";
+import { useAuth } from "../../../context/AuthContext";
 
 export const EDIT_FORM_ID = "edit-entry-form";
 
+const NO_FACTORS: EmissionFactor[] = [];
+
 type Props = {
   entry: EntryRow;
-  saveError: string | null;
-  onSubmit: (update: EntryUpdate) => void;
+  saveError: SaveProblem | null;
+  /** keepBoth: the person chose Keep both on a duplicate, so the entry is saved beside the other one. */
+  onSubmit: (update: EntryUpdate, opts?: { keepBoth?: boolean }) => void;
 };
 
 /**
@@ -26,7 +34,8 @@ export function EditEntryForm({ entry, saveError, onSubmit }: Props) {
   const [month, setMonth] = useState(() => entryMonth(entry));
   const date = editedDate(entry, month);
   const factorYear = factorYearFor(date);
-  const setup = useEditSetup(entry.site?.site_id, entry.category?.category_id, factorYear);
+  const { user } = useAuth();
+  const setup = useEditSetup(entry.site?.site_id, entry.category?.category_id, factorYear, feraCategoryIdOf(user, entry.site?.site_id));
   // The config doesn't change with the factor year, so the row survives a month change.
   const [config, setConfig] = useState(setup.data?.config);
   if (setup.data && config === undefined) setConfig(setup.data.config);
@@ -53,6 +62,7 @@ export function EditEntryForm({ entry, saveError, onSubmit }: Props) {
       entry={entry}
       config={config}
       factors={setup.data?.factors ?? []}
+      feraFactors={setup.data?.feraFactors ?? NO_FACTORS}
       units={setup.data?.units ?? []}
       unitOptions={setup.data?.unitOptions ?? null}
       loadingFactors={setup.isFetching}
@@ -69,6 +79,7 @@ export function EditEntryForm({ entry, saveError, onSubmit }: Props) {
 type FieldsProps = Props & {
   config: NonNullable<ReturnType<typeof useEditSetup>["data"]>["config"];
   factors: NonNullable<ReturnType<typeof useEditSetup>["data"]>["factors"];
+  feraFactors: NonNullable<ReturnType<typeof useEditSetup>["data"]>["feraFactors"];
   units: string[];
   unitOptions: NonNullable<ReturnType<typeof useEditSetup>["data"]>["unitOptions"];
   loadingFactors: boolean;
@@ -84,13 +95,22 @@ function Fields(p: FieldsProps) {
   const [row, setRow] = useState<ModalRow>(() => rowFromEntry(model, entry));
   const [reason, setReason] = useState("");
   const [tried, setTried] = useState(false);
+  // What the last save sent, bar the reason: Keep both is offered only while the month and values are the
+  // ones the duplicate warning was about, so a change since is checked again rather than kept unseen.
+  const [sentTarget, setSentTarget] = useState<string | null>(null);
 
-  const calc = useEmissionCalc({
+  const baseCalc = useEmissionCalc({
     emissionFactors: p.factors,
     targetYear: p.factorYear,
     columns: model.columns,
     calculationSpec: model.spec,
   });
+  // D6a: a Category 4, 6, 7 or 9 row's total includes its WTT part, as the save adds it. An entry
+  // saved with a Category 3 twin keeps its WTT there (the server's keep_fera_twin); spec forms get none.
+  const wttHere = editAddsWtt(entry, model);
+  const wttFactors = useMemo(() => (wttHere ? splitFeraFactors(p.feraFactors, p.factorYear).upstream : NO_FACTORS), [wttHere, p.feraFactors, p.factorYear]);
+  const wttCalc = useEmissionCalc({ emissionFactors: wttFactors, targetYear: p.factorYear, columns: model.columns });
+  const calc = wttHere ? withWttInRow(baseCalc, wttCalc) : baseCalc;
   const result = calc.calculateEmission(row);
   const factor = row.emission_category ? calc.getEmissionFactor(row.emission_category) : undefined;
   const expectedUnit = row.emission_category ? calc.getExpectedUnit(row.emission_category) : null;
@@ -115,11 +135,16 @@ function Fields(p: FieldsProps) {
       : [...new Set([...(expectedUnit ? [expectedUnit] : []), ...p.units, ...(currentUnit ? [currentUnit] : [])])];
   const change = (column: string, value: string) => setRow((r) => applyChange(model, r, column, value));
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const target = JSON.stringify({ ...buildUpdate(row, p.date, reason), reason: undefined });
+  const send = (keepBoth: boolean) => {
     setTried(true);
     if (issue || p.loadingFactors) return;
-    p.onSubmit(buildUpdate(row, p.date, reason));
+    setSentTarget(target);
+    p.onSubmit(buildUpdate(row, p.date, reason), { keepBoth });
+  };
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    send(false);
   };
 
   return (
@@ -201,6 +226,9 @@ function Fields(p: FieldsProps) {
           ) : row.emission_category ? (
             <span className="text-bad">No factor for this category</span>
           ) : null}
+          {detail && result.value !== null && result.wtt_kg !== undefined && (
+            <span className="mt-1 block font-num">Includes {formatTonnes(result.wtt_kg / 1000)} tCO₂e well-to-tank (WTT)</span>
+          )}
           {detail && entry.fera && <span className="mt-1 block">Linked Category 3 entries are recalculated when you save.</span>}
         </div>
         <div className="text-right" aria-live="polite">
@@ -222,11 +250,7 @@ function Fields(p: FieldsProps) {
         error={shown("reason")}
       />
 
-      {p.saveError && (
-        <p role="alert" className="rounded-control border border-bad/30 bg-bad-soft px-3 py-2 text-sm text-bad">
-          {p.saveError}
-        </p>
-      )}
+      {p.saveError && <SaveProblemNote problem={p.saveError} onKeepBoth={sentTarget === target ? () => send(true) : undefined} />}
     </form>
   );
 }

@@ -46,7 +46,7 @@ Tabs below the fold: Intensity · Scope 2 electricity · Year over year · Site 
 5. **Needs your attention** list (right): every item is a link with a count. Sources: pending emissions, pending production, missing submitters, categories over threshold (vs last month, using company threshold %), SBTi pathway status (from P12).
 6. **Insight callout**: largest source share ("Purchased aluminium is 87% of the footprint"). Rule-based text, no AI needed.
 7. **Submission status**: month picker (last 6 months), avatars with submitted/missing; "Send reminder" (uses existing notification queue; proposed endpoint).
-8. **Below-the-fold tabs** (lazy-loaded): Intensity trend (bars + line, dual axis), Scope 2 electricity (emissions + kWh), Year over year (lines per year, multi-select years), Site comparison (bars). All use the header filters (fixes today's per-chart filters).
+8. **Below-the-fold tabs** (lazy-loaded): Intensity trend (bars + line, dual axis), Scope 2 electricity (emissions + kWh), Year over year (lines per year, multi-select years), Site comparison (bars). All use the header filters (fixes today's per-chart filters). Their tCO₂e come from the server (ESG-lite D14, each month's kg rounded once): the Intensity tab reads the comparison endpoint's combined `monthlyData`, the Scope 2 tab B4's `trend_scope_2` (entries give only the kWh line). Per-site months or stored tonnes are added only for an older server without those fields.
 
 ## States
 - No sites assigned: `EmptyState` "You don't manage any sites yet. Ask your admin to assign one."

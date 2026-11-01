@@ -17,7 +17,7 @@ function FontPicker({ label, role, value, readOnly, onChange }: { label: string;
         <Select<FontId> label={label} value={value} onChange={onChange} options={OPTIONS} placeholder={`Template default (${FONT_NAMES[DEFAULT_FONTS[role]]})`} />
       )}
       <p className="rounded-control border border-line bg-tint px-3 py-2 text-ink" style={{ fontFamily: fontStack(shown) }} data-testid={`font-sample-${role}`}>
-        {role === "heading" ? <span className="text-xl">Scope 3 fell 12% from the base year</span> : <span className="text-sm">We cut total emissions 12% from our base year. 95,710 tCO₂e in FY 2025–26.</span>}
+        {role === "heading" ? <span className="text-xl">Scope 3 fell 12% from the base year</span> : <span className="text-sm">We cut total emissions 12% from our base year. 95,710.000 tCO₂e in FY 2025–26.</span>}
       </p>
     </div>
   );

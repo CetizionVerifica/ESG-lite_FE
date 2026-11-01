@@ -6,7 +6,7 @@ const t = (v: number) => emissionsParts(v).value;
 /** Per-category tCO₂e: one column (what is frozen) or frozen beside today with the change. */
 export function TotalsTable({ caption, totals, after }: { caption: string; totals: CategoryTotal[]; after?: CategoryTotal[] }) {
   const rows = after ? beforeAfterRows(totals, after) : beforeAfterRows(totals, totals);
-  const sum = (key: "before" | "after") => Math.round(rows.reduce((a, r) => a + r[key], 0) * 100) / 100;
+  const sum = (key: "before" | "after") => Math.round(rows.reduce((a, r) => a + r[key], 0) * 1000) / 1000; // #209: 3 dp
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[20rem] text-sm">

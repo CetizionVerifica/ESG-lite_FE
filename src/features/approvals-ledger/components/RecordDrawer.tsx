@@ -239,6 +239,8 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
   // a same-currency row without a deflator has no conversion term and no exchange-rate line.
   const fx = row.fx ?? null;
   const deflator = snapshot?.deflator ?? null;
+  // D6a: a transport or travel row's factor plus the well-to-tank factor its total includes.
+  const wtt = snapshot?.wtt ?? null;
   const fxText = fx ? fxLine(fx) : null;
   const rateTerm = fx ? drawerRateTerm(fx, deflator) : null;
   const spent = fx ? Number(String(row.activity_data?.spent_value ?? "").replace(/,/g, "")) : NaN;
@@ -258,7 +260,13 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
             <span className="sr-only">times</span>
           </>
         )}
-        <span>{factor ? `${formatFactorValue(factor)} per ${factor.denominator_unit}` : "factor unknown"}</span>
+        <span>
+          {!factor
+            ? "factor unknown"
+            : wtt
+              ? `(${formatFactorValue(factor)} + ${formatFactorValue(wtt)} WTT) per ${factor.denominator_unit}`
+              : `${formatFactorValue(factor)} per ${factor.denominator_unit}`}
+        </span>
         <span aria-hidden className="text-muted">=</span>
         <span className="sr-only">equals</span>
         <span className="font-semibold">{formatEmissions(Number(row.total_emission))}</span>
@@ -270,6 +278,11 @@ function Calculation({ row, quantity }: { row: LedgerRow; quantity: number | nul
         </p>
       ) : (
         <p className="text-sm text-muted">{fallback.isError ? "Couldn't load the factor." : "No factor matched this entry."}</p>
+      )}
+      {factor && wtt && (
+        <p className="text-sm text-muted" data-testid="drawer-wtt">
+          Includes well-to-tank (WTT) “{wtt.emission_category_name}”, {wtt.source || "source not recorded"}, {wtt.year}: {formatEmissions(Number(wtt.kgco2e) / 1000)}
+        </p>
       )}
       {fx && (fxText || deflator) && (
         <p className="text-sm text-muted" data-testid="drawer-fx">

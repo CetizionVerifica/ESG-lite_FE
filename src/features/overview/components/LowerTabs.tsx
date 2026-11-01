@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { OverviewResponse } from "../../../services/overviewService";
 import { useTheme } from "../../../theme";
 import { ChartFrame, MONTH_SHORT, TabPanel, Tabs, cn, focusRing, formatEmissions, formatNumber } from "../../../ui";
-import { SCOPE2_CAP, useScope2Entries, useSiteIntensityMonthly, useYearTrends } from "../api";
+import { SCOPE2_CAP, useIntensityMonthly, useScope2Entries, useYearTrends } from "../api";
 import { intensityMonthly, lastYearCaption, monthLabel, recentYears, scope2Monthly, shortMonth, yearsOf } from "../logic";
 
 type View = "intensity" | "scope2" | "yoy" | "sites";
@@ -53,7 +53,7 @@ export function LowerTabs(props: { overview: OverviewResponse | undefined; siteI
         {months.length > 0 && <IntensityChart siteIds={props.siteIds} months={months} />}
       </TabPanel>
       <TabPanel idBase={ID} value="scope2" current={view}>
-        {months.length > 0 && <Scope2Chart siteIds={props.siteIds} categoryIds={props.categoryIds} months={months} />}
+        {months.length > 0 && <Scope2Chart siteIds={props.siteIds} categoryIds={props.categoryIds} months={months} totals={props.overview?.trend_scope_2} />}
       </TabPanel>
       <TabPanel idBase={ID} value="yoy" current={view}>
         <YearOverYear siteIds={props.siteIds} categoryIds={props.categoryIds} now={props.now} />
@@ -67,7 +67,7 @@ export function LowerTabs(props: { overview: OverviewResponse | undefined; siteI
 
 function IntensityChart({ siteIds, months }: { siteIds: number[]; months: string[] }) {
   const { tokens } = useTheme();
-  const q = useSiteIntensityMonthly(siteIds, `${months[0]}-01`, lastDay(months[months.length - 1]));
+  const q = useIntensityMonthly(siteIds, `${months[0]}-01`, lastDay(months[months.length - 1]));
   const rows = q.data ? intensityMonthly(q.data, months) : [];
   return (
     <ChartFrame
@@ -107,10 +107,10 @@ function IntensityChart({ siteIds, months }: { siteIds: number[]; months: string
   );
 }
 
-function Scope2Chart({ siteIds, categoryIds, months }: { siteIds: number[]; categoryIds: number[]; months: string[] }) {
+function Scope2Chart({ siteIds, categoryIds, months, totals }: { siteIds: number[]; categoryIds: number[]; months: string[]; totals?: { month: string; total: number }[] }) {
   const { tokens } = useTheme();
   const q = useScope2Entries(siteIds, categoryIds, yearsOf(months));
-  const { unit, rows } = scope2Monthly(q.data?.flatMap((y) => y.rows) ?? [], months);
+  const { unit, rows } = scope2Monthly(q.data?.flatMap((y) => y.rows) ?? [], months, totals);
   const truncated = q.data?.some((y) => y.truncated) ?? false;
   return (
     <ChartFrame

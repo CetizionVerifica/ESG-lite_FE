@@ -51,6 +51,14 @@ describe("existing entries", () => {
     const payload = buildPayload(row, { siteId: 4, categoryId: 9, period: sep });
     expect(payload.activity_data).toEqual({ Mode: "Car", "Activity Data": "120", emission_category: "Car (petrol)" });
     expect(payload.date_of_reporting).toBe("2025-09-30");
+    expect(row._keepsFeraTwin).toBeUndefined();
+  });
+
+  it("marks an entry saved with a Category 3 twin, so its WTT stays there (D6a), and never sends the mark", () => {
+    const row = rowFromEntry(entry({ fera_linked_id: 41 }), toFormModel(config), 3, sep);
+    expect(row._keepsFeraTwin).toBe(true);
+    const payload = buildPayload(row, { siteId: 4, categoryId: 9, period: sep });
+    expect(payload.activity_data).toEqual({ Mode: "Car", "Activity Data": "120", emission_category: "Car (petrol)" });
   });
 
   it("loads a composite unit as 1 × the saved product", () => {

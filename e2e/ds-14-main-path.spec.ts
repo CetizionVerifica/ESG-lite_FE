@@ -78,7 +78,8 @@ test("main path on the real stack: GHG report → design → build → resize �
   expect((await setStudio(true)).status).toBe(200);
   await signIn(page);
   const tables = await api<{ totals: Record<string, { total: number }> }>("POST", "/user/ghg/tables", { siteIds: [11, 12], yearType: "FY", year: 2026 });
-  const total = Math.round(tables.json.totals["2026"].total).toLocaleString("en-US");
+  // #209: the big number shows the server's display, a tCO₂e figure with exactly 3 decimals (src/studio/sources/format.ts).
+  const total = tables.json.totals["2026"].total.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
   // GHG report → Design this report, with the page's year and sites.
   await page.goto("/reports/ghg?cal=FY&freq=year&year=2026");

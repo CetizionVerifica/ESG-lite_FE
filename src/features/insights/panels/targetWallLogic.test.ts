@@ -30,7 +30,8 @@ describe("targetWallLogic (IN-2 H)", () => {
   });
 
   it("values with units", () => {
-    expect(valueText(41_280, "tCO2e")).toBe("41,280 tCO₂e");
+    expect(valueText(41_280, "tCO2e")).toBe("41,280.000 tCO₂e");
+    expect(valueText(41_280.4, "tCO2e")).toBe("41,280.400 tCO₂e");
     expect(valueText(46.6, "%")).toBe("46.6%");
     expect(valueText(2.2, "per million hours")).toBe("2.2 per million hours");
     expect(valueText(0.617, "tCO2e/t")).toBe("0.62 tCO₂e/t");
@@ -111,9 +112,9 @@ describe("targetWallLogic (IN-2 H)", () => {
       progress: "39%",
       expected: "45%",
       status: "At risk",
-      baseline: "51,020 tCO₂e (2021)",
-      target: "29,590 tCO₂e (2030)",
-      latest: "41,280 tCO₂e (2026)",
+      baseline: "51,020.000 tCO₂e (2021)",
+      target: "29,590.000 tCO₂e (2030)",
+      latest: "41,280.000 tCO₂e (2026)",
     });
   });
 });

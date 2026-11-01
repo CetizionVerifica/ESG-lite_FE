@@ -1,5 +1,5 @@
 import type { KpiEsgTrend } from "../../../../lib/kpi/contracts";
-import { formatWithUnit } from "../../../../lib/kpi/units";
+import { columnDecimals, formatWithUnit } from "../../../../lib/kpi/units";
 import { ChartFrame } from "../../../../ui";
 import { PillarBadge } from "../../components/PillarBadge";
 import { changeWords, pointLabel, yRange } from "../logic";
@@ -60,8 +60,8 @@ export function TrendChart({ trend, vsLabel }: { trend: KpiEsgTrend; vsLabel: st
         table={{
           columns: [
             { id: "period", header: "Period" },
-            { id: "value", header: trend.unit ? `Value (${trend.unit})` : "Value", numeric: true, decimals: trend.decimals ?? 0 },
-            ...(targetValue !== null ? [{ id: "target", header: "Target", numeric: true, decimals: trend.decimals ?? 0 }] : []),
+            { id: "value", header: trend.unit ? `Value (${trend.unit})` : "Value", numeric: true, decimals: columnDecimals(trend.unit, trend.decimals ?? 0) },
+            ...(targetValue !== null ? [{ id: "target", header: "Target", numeric: true, decimals: columnDecimals(trend.unit, trend.decimals ?? 0) }] : []),
           ],
           rows: points.map((p) => ({ period: pointLabel(p), value: p.value, ...(targetValue !== null ? { target: targetValue } : {}) })),
         }}

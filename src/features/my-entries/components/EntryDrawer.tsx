@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil } from "lucide-react";
 import { FileText } from "lucide-react";
 import {
@@ -26,7 +26,8 @@ import {
 } from "../../../ui";
 import { useAddEvidence, useEntryDocuments, useLabelConfig, useRemoveEvidence, useUpdateEntry } from "../api";
 import { useCalcDetailForSite } from "../../../lib/useCalcDetail";
-import { type EntryUpdate, canEdit, saveErrorMessage } from "../edit";
+import { type EntryUpdate, canEdit } from "../edit";
+import { type SaveProblem, saveProblem } from "../../../lib/saveProblem";
 import { EDIT_FORM_ID, EditEntryForm } from "./EditEntryForm";
 import { type EntryRow, activityFields, entryQuantity, keyActivity, periodText, quantityDecimals } from "../logic";
 import type { EmissionDocument } from "../../../services/documentService";
@@ -166,7 +167,7 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
   const [entry, setEntry] = useState(current);
   const [opened, setOpened] = useState(current);
   const [editing, setEditing] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<SaveProblem | null>(null);
   if (current !== opened) {
     setOpened(current);
     if (current) {
@@ -178,31 +179,46 @@ export function EntryDrawer({ entry: current, onClose }: { entry: EntryRow | nul
   const update = useUpdateEntry();
   const { toast } = useToast();
 
-  const save = (body: EntryUpdate) => {
-    if (!entry) return;
+  const save = (body: EntryUpdate, opts?: { keepBoth?: boolean }) => {
+    // Someone else changed or approved the entry: the edit is over (Enter mustn't retry it).
+    if (!entry || saveError?.stopEdit) return;
     setSaveError(null);
     update.mutate(
-      { id: entry.pk_id, update: body },
+      { id: entry.pk_id, update: { ...body, expected_updated_at: entry.updated_at }, keepBoth: opts?.keepBoth },
       {
         onSuccess: () => {
           toast({ title: entry.status === "rejected" ? "Resubmitted for review" : "Changes saved", tone: "good" });
           onClose();
         },
-        onError: (e) => setSaveError(saveErrorMessage(e)),
+        onError: (e) => setSaveError(saveProblem(e, "Couldn't save your changes. Try again.")),
       },
     );
   };
 
   const editable = entry !== null && canEdit(entry);
+  // Someone else changed or reviewed the entry meanwhile: the edit ends, with no Save to retry.
+  // The list was refreshed when the save was refused, so the entry opens as it is now.
+  const stopped = !!saveError?.stopEdit;
+  // Save is gone, so focus goes to Close rather than being lost.
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (stopped) closeRef.current?.focus();
+  }, [stopped]);
   const footer = !editable ? undefined : editing ? (
-    <>
-      <Button variant="ghost" onClick={() => setEditing(false)} disabled={update.isPending}>
-        Cancel
+    stopped ? (
+      <Button ref={closeRef} variant="ghost" onClick={onClose}>
+        Close
       </Button>
-      <Button variant="primary" type="submit" form={EDIT_FORM_ID} loading={update.isPending}>
-        {entry.status === "rejected" ? "Resubmit" : "Save changes"}
-      </Button>
-    </>
+    ) : (
+      <>
+        <Button variant="ghost" onClick={() => setEditing(false)} disabled={update.isPending}>
+          Cancel
+        </Button>
+        <Button variant="primary" type="submit" form={EDIT_FORM_ID} loading={update.isPending}>
+          {entry.status === "rejected" ? "Resubmit" : "Save changes"}
+        </Button>
+      </>
+    )
   ) : (
     <Button variant="primary" icon={<Pencil aria-hidden className="size-4" />} onClick={() => setEditing(true)}>
       {entry.status === "rejected" ? "Fix and resubmit" : "Edit entry"}

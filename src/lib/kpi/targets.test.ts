@@ -10,6 +10,12 @@ describe("targetText", () => {
   });
   it("words a target from a zero baseline without a percent", () => {
     expect(targetText({ ...t, baseline_value: 0, target_value: 40, direction: "increase" })).toBe("Up to 40 by 2030 from 2024");
+    expect(targetText({ ...t, baseline_value: 0, target_value: 12.5, direction: "increase", unit: "m³" })).toBe("Up to 12.50 by 2030 from 2024");
+  });
+  it("names a tCO₂e target figure with 3 decimals (#209); a percent target is unchanged", () => {
+    expect(targetText({ ...t, baseline_value: 0, target_value: 1200, direction: "reduce", unit: "tCO₂e" })).toBe("Down to 1,200.000 by 2030 from 2024");
+    expect(targetText({ ...t, baseline_value: 0, target_value: 123456.789, direction: "reduce", unit: "tCO2e" })).toBe("Down to 123,456.789 by 2030 from 2024");
+    expect(targetText({ ...t, baseline_value: 4980.4, target_value: 2988.24, direction: "reduce", unit: "tCO₂e" })).toBe("−40 % by 2030 from 2024");
   });
 });
 

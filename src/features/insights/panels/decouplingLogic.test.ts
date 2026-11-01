@@ -45,7 +45,7 @@ describe("decouplingLogic (IN-2 B)", () => {
     const tip = decouplingTooltip(decouplingData, 5);
     expect(tip).toContain("<b>2026</b>");
     expect(tip).toContain("Output: <b>142.0</b> (66,880 t)");
-    expect(tip).toContain("Emissions: <b>80.9</b> (41,280 tCO₂e)");
+    expect(tip).toContain("Emissions: <b>80.9</b> (41,280.000 tCO₂e)");
     expect(tip).toContain("Intensity: <b>57.0</b> (0.617 tCO₂e/t)");
     expect(decouplingTooltip(decouplingData, 0)).toContain("2021 · base year");
     expect(decouplingTooltip(decouplingData, 99)).toBe("");
@@ -73,5 +73,8 @@ describe("decouplingLogic (IN-2 B)", () => {
     expect(tb.columns.map((c) => c.header)).toEqual(["Year", "Output index", "Emissions index", "Intensity index", "Output (t)", "Emissions (tCO₂e)", "Intensity (tCO₂e/t)"]);
     expect(tb.rows[0]).toEqual({ year: "2021 (base)", output_index: 100, emissions_index: 100, intensity_index: 100, output_raw: 47_100, emissions_raw: 51_020, intensity_raw: 1.083 });
     expect(tb.columns.find((c) => c.id === "intensity_raw")?.decimals).toBe(3);
+    // #209: tCO₂e at 3 decimals however large; output keeps the display rule.
+    expect(tb.columns.find((c) => c.id === "emissions_raw")?.decimals).toBe(3);
+    expect(tb.columns.find((c) => c.id === "output_raw")?.decimals).toBe(0);
   });
 });

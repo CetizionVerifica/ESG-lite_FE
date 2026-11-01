@@ -23,6 +23,7 @@ import {
   exportMatrix,
   focusRing,
   formatNumber,
+  formatTonnes,
   UNDO_MS,
   toMatrix,
   useContextParams,
@@ -77,6 +78,7 @@ import {
   possibleDuplicates,
   asStatus,
   attentionOn,
+  drawerRow,
   effectiveStatus,
   listParams,
   foldedTwinNote,
@@ -548,7 +550,7 @@ function ListView({ tab, showFera }: { tab: Tab; showFera: boolean }) {
       <EmptyState icon={SearchX} title="No records match" action={<Button onClick={clearFilters}>Clear filters</Button>} />
     );
 
-  const liveDrawerRow = drawer ? (list.data?.data.find((r) => r.pk_id === drawer.pk_id) ?? drawer) : null;
+  const liveDrawerRow = drawerRow(drawer, list.data?.data);
 
   const exportView = async (format: ExportFormat) => {
     try {
@@ -752,7 +754,7 @@ function DuplicateApproveModal({
           <li key={r.pk_id} className="px-3 py-2">
             <p className="font-medium text-ink">{describe(r)}</p>
             <p className="text-xs text-muted">
-              <span className="font-num">{formatNumber(Number(r.total_emission ?? 0), 2)} tCO₂e</span>
+              <span className="font-num">{formatTonnes(Number(r.total_emission ?? 0))} tCO₂e</span>
               {r.created_by?.name ? ` · ${r.created_by.name}` : ""}
             </p>
           </li>

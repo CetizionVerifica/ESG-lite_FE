@@ -59,7 +59,8 @@ test("headline trends: a line per KPI with good or bad in words, a target line w
   // The composite headline comes with Scope 1's id; it's told apart by its code.
   const scope1 = page.locator('[data-testid="esg-trend"][data-kpi="GHG_SCOPE1_2"]');
   await expect(scope1).toContainText("GHG emissions, Scope 1 and 2");
-  await expect(scope1.getByTestId("esg-trend-value")).toHaveText("20,701.60 tCO₂e");
+  // #209: tCO₂e with 3 decimals. The mock's months add up to 2,341 + 2,290 + 2,265 + 2,230 + 2,190 + 2,350 + 2,402 + 2,318 + 2,315.6 = 20,701.6.
+  await expect(scope1.getByTestId("esg-trend-value")).toHaveText("20,701.600 tCO₂e");
   await expect(scope1.getByTestId("change-chip")).toContainText("−28.5 % vs 2025 · Better");
   const ltifr = page.locator('[data-testid="esg-trend"][data-kpi="LTIFR"]');
   await expect(ltifr).toContainText("Target: Below 0.35 by 2027");
@@ -67,6 +68,10 @@ test("headline trends: a line per KPI with good or bad in words, a target line w
   await ltifr.getByRole("radio", { name: "Table" }).click();
   await expect(ltifr.getByRole("table")).toContainText("Jan 2026");
   await expect(ltifr.getByRole("columnheader", { name: "Target" })).toBeVisible();
+  // The table view of a tCO₂e line has 3 decimals too (January: 2,341).
+  await scope1.getByRole("radio", { name: "Table" }).click();
+  await expect(scope1.getByRole("row", { name: /Jan 2026/ })).toContainText("2,341.000");
+  await scope1.getByRole("radio", { name: "Chart" }).click();
 
   // Hovering the chart shows the month's value.
   const box = await scope1.locator("canvas").first().boundingBox();

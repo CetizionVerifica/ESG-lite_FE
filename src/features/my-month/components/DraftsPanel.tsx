@@ -109,7 +109,7 @@ export function DraftsPanel({ drafts, month, showSite, loading, error, onRetry }
               </div>
               <div className="ml-auto flex items-center gap-3">
                 <StatusPill status={d.locked ? "locked" : "draft"} />
-                <span className="w-24 whitespace-nowrap text-right font-num text-sm tabular-nums text-ink">{formatEmissions(d.tco2e)}</span>
+                <span className="min-w-36 shrink-0 whitespace-nowrap text-right font-num text-sm tabular-nums text-ink">{formatEmissions(d.tco2e)}</span>
                 {d.locked ? (
                   <span className="w-14" />
                 ) : (

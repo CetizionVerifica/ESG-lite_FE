@@ -132,12 +132,13 @@ describe("in-place text editing (DS-7)", () => {
     const chipIn = () => activeTextEditor()?.view.dom.querySelector<HTMLElement>('[data-testid="data-chip"]') ?? null;
     await waitFor(() => expect(chipIn()).toBeTruthy());
     const chip = chipIn() as HTMLElement;
-    expect(chip.textContent).toBe("1,111");
+    expect(chip.textContent).toBe("1,111.000"); // #209: the mock server sends Scope 1 (1,111 tCO₂e) with 3 decimals
     expect(ed?.getText()).not.toContain("{{");
     // Hovering shows source, period, sites, approval and the approved entry count.
     fireEvent.mouseEnter(chip);
     const card = await screen.findByTestId("chip-card");
     expect(card.textContent).toContain("Scope 1");
+    expect(card.textContent).toContain("1,111.000 tCO₂e"); // #209: the value with its unit, 3 decimals
     expect(card.textContent).toContain("Source: approved emission entries");
     expect(card.textContent).toContain("Linked to approved data · 12 Apr 2026");
     act(() => keyIn("Escape"));

@@ -7,7 +7,7 @@ const groups: DataGroup[] = [
     id: "scopes",
     label: "Scopes",
     items: [
-      { id: "scope1", label: "Scope 1", binding: { source: "ghg", metric: "scope1", years: { last: 1 }, sites: "all" }, resolved: { display: "12,480", value: 12480, unit: "tCO₂e", approvedAt: "2026-04-12T08:00:00.000Z" } },
+      { id: "scope1", label: "Scope 1", binding: { source: "ghg", metric: "scope1", years: { last: 1 }, sites: "all" }, resolved: { display: "12,480.000", value: 12480, unit: "tCO₂e", approvedAt: "2026-04-12T08:00:00.000Z" } },
       { id: "scope2_market", label: "Scope 2 (market-based)", binding: { source: "ghg", metric: "scope2_market", years: { last: 1 }, sites: "all" }, resolved: { display: "Not reported", value: null, unit: "tCO₂e", approvedAt: null, unavailable: { reason: "NOT_RECORDED" } } },
     ],
   },

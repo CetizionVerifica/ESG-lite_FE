@@ -62,7 +62,7 @@ async function mockApi(page: Page, opts: { studio?: boolean } = {}) {
       }
       if (path.endsWith("/studio/resolve")) {
         const b = request.postDataJSON() as { bindings: { source: string }[]; tokens: unknown[] };
-        const v = (i: number) => ({ display: (1000 + i * 111).toLocaleString("en-GB"), value: 1000 + i * 111, unit: "tCO₂e", source: "ghg", approvedAt: "2026-04-12T00:00:00.000Z", series: [{ label: "2025", values: [{ key: "2025", value: 1000 + i * 111 }] }] });
+        const v = (i: number) => ({ display: (1000 + i * 111).toLocaleString("en-GB", { minimumFractionDigits: 3, maximumFractionDigits: 3 }), value: 1000 + i * 111, unit: "tCO₂e", source: "ghg", approvedAt: "2026-04-12T00:00:00.000Z", series: [{ label: "2025", values: [{ key: "2025", value: 1000 + i * 111 }] }] });
         return json({ values: b.bindings.map((_, i) => v(i)), tokens: b.tokens.map((_, i) => v(i)), dataHash: "h", unavailable: [] });
       }
       if (path.endsWith("/studio/assets")) return json([{ id: "a-plant", kind: "image", w: 2400, h: 1600, alt: "The plant at dawn", folder: null, url: IMAGE, bytes: 1, mime: "image/svg+xml" }]);

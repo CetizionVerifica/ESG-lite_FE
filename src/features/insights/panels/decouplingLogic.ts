@@ -7,7 +7,7 @@ import type { EChartsOption } from "echarts";
 import type { Decoupling, DecouplingSeriesKey, EventRef } from "../../../lib/insights/contracts";
 import { changeText, unitText } from "../../../lib/insights/labels";
 import { entrance } from "../../../lib/insights/motion";
-import { formatNumber } from "../../../ui/format";
+import { TONNES_DP, formatNumber } from "../../../ui/format";
 import type { ChartTableColumn } from "../../../ui";
 import type { ChartTheme } from "../../../theme";
 import { esc } from "./shared";
@@ -47,6 +47,9 @@ export function rawDecimals(values: (number | null)[]): number {
   return Math.max(...nums.map(Math.abs)) < 10 ? 3 : 0;
 }
 
+/** Decimals for one series' raw values: tCO₂e always to 3 (#209), output and intensity by `rawDecimals`. */
+export const seriesRawDecimals = (s: Series): number => (s.unit === "tCO2e" ? TONNES_DP : rawDecimals(s.raw));
+
 /** Event marks on the x axis: events whose year is on the chart, labelled with their own words. */
 export function eventMarks(data: Decoupling, events: EventRef[] | undefined): { xAxis: string; name: string }[] {
   if (!events?.length) return [];
@@ -61,7 +64,7 @@ export function decouplingTooltip(data: Decoupling, i: number): string {
   const lines = data.series.map((s) => {
     const idx = s.index[i];
     const raw = s.raw[i];
-    const rawText = raw === null || raw === undefined ? "no data" : `${formatNumber(raw, rawDecimals(s.raw))} ${esc(unitText(s.unit))}`;
+    const rawText = raw === null || raw === undefined ? "no data" : `${formatNumber(raw, seriesRawDecimals(s))} ${esc(unitText(s.unit))}`;
     return `${esc(s.label)}: <b>${idx === null || idx === undefined ? "—" : formatNumber(idx, 1)}</b> (${rawText})`;
   });
   return [`<b>${year}${year === data.base_year ? " · base year" : ""}</b>`, ...lines].join("<br/>");
@@ -125,7 +128,7 @@ export function decouplingTable(data: Decoupling): { columns: ChartTableColumn[]
   const columns: ChartTableColumn[] = [
     { id: "year", header: "Year" },
     ...data.series.map((s) => ({ id: `${s.key}_index`, header: `${s.label} index`, numeric: true, decimals: 1 })),
-    ...data.series.map((s) => ({ id: `${s.key}_raw`, header: `${s.label} (${unitText(s.unit)})`, numeric: true, decimals: rawDecimals(s.raw) })),
+    ...data.series.map((s) => ({ id: `${s.key}_raw`, header: `${s.label} (${unitText(s.unit)})`, numeric: true, decimals: seriesRawDecimals(s) })),
   ];
   const rows = data.years.map((year, i) => {
     const row: Record<string, string | number | null> = { year: year === data.base_year ? `${year} (base)` : String(year) };

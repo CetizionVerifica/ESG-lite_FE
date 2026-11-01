@@ -175,7 +175,8 @@ export function fromNearTerm(r: NearTermTargetResponse): TargetModel {
 
 export function fromNetZero(r: LongTermChartResponse): TargetModel {
   const t = r.baseTotals;
-  const base = r.scope3TargetRequired ? t.total : t.scope1 + t.scope2;
+  // D14: the boundary is the server's (its kg rounded once), not the rounded scopes added up.
+  const base = Number.isFinite(r.baseEmissions) ? r.baseEmissions : r.scope3TargetRequired ? t.total : t.scope1 + t.scope2;
   return {
     kind: "netzero",
     baseYear: r.baseYear,
@@ -197,20 +198,19 @@ export function fromNetZero(r: LongTermChartResponse): TargetModel {
       reducedByPct: row.reducedByPct,
       totalReductionPct: vsBase(base, row.targetEmission, row.n),
     })),
-    scopes: r.rows.map((row) => {
-      const total = row.scope1Target + row.scope2Target + (row.scope3Target ?? 0);
-      return {
-        year: row.year,
-        n: row.n,
-        s1: row.scope1Target,
-        s2: row.scope2Target,
-        s3: row.scope3Target,
-        target: round(total),
-        reducedBy: row.reducedBy,
-        reducedByPct: row.reducedByPct,
-        totalReductionPct: vsBase(base, total, row.n),
-      };
-    }),
+    // D14: a year's target is the server's targetEmission, as in the pathway; the scope
+    // columns are its parts, each rounded on its own, so they can add up to 0.001 off it.
+    scopes: r.rows.map((row) => ({
+      year: row.year,
+      n: row.n,
+      s1: row.scope1Target,
+      s2: row.scope2Target,
+      s3: row.scope3Target,
+      target: row.targetEmission,
+      reducedBy: row.reducedBy,
+      reducedByPct: row.reducedByPct,
+      totalReductionPct: vsBase(base, row.targetEmission, row.n),
+    })),
     actual: (r.actualVsTarget ?? []).map((row) => {
       const status = STATUS[row.status] ?? "no-data";
       const scored = status === "reached" || status === "not-reached";

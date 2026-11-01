@@ -82,7 +82,7 @@ test("a manager uploads the 7.1 sample, previews km by mode and imports the plan
   await expect(preview).toContainText("3 people in the survey, scaled × 1.0 to 3 employees");
 
   await page.getByRole("button", { name: "Create import plan" }).click();
-  await expect(page.getByTestId("plan-total")).toHaveText("3.1 tCO₂e");
+  await expect(page.getByTestId("plan-total")).toHaveText("3.070 tCO₂e");
   expect(calls.at(-1)).toMatchObject({
     path: expect.stringMatching(/\/scope3\/commuting\/surveys$/),
     body: { site_id: 4, year: 2025, year_type: "CY", total_employees: 3 },

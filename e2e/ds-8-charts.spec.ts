@@ -36,16 +36,19 @@ const BY: Record<string, [string, number][]> = {
   month: Array.from({ length: 12 }, (_, m) => [`2025-${String(m + 1).padStart(2, "0")}`, 1000 + m * 10] as [string, number]),
 };
 
-/** A made-up resolved value in DS-2's series shapes (one series per year keyed by the breakdown, top n + Other). */
+/**
+ * A made-up resolved value in DS-2's series shapes (one series per year keyed by the breakdown, top n + Other).
+ * #209: the server prints a tCO₂e figure with 3 decimals; a gas breakdown's series are tonnes of each gas ("t").
+ */
 function resolved(b: GhgB, i: number) {
   const value = 1000 + i * 111;
   const years = Array.isArray(b.years) ? b.years : Array.from({ length: b.years?.last ?? 1 }, (_, k) => 2025 - (b.years && !Array.isArray(b.years) ? b.years.last : 1) + 1 + k);
-  const base = { display: value.toLocaleString("en-GB"), value, unit: "tCO₂e", source: b.source, approvedAt: "2026-04-12T00:00:00.000Z" };
+  const base = { display: value.toLocaleString("en-GB", { minimumFractionDigits: 3, maximumFractionDigits: 3 }), value, unit: "tCO₂e", source: b.source, approvedAt: "2026-04-12T00:00:00.000Z" };
   if (b.source === "custom") return { display: "", value: null, unit: null, source: "custom" };
   if (b.breakdown && BY[b.breakdown]) {
     let pts = BY[b.breakdown];
     if (b.top && pts.length > b.top) pts = [...pts.slice(0, b.top), ["Other", pts.slice(b.top).reduce((a, p) => a + p[1], 0)]];
-    return { ...base, series: years.map((y) => ({ label: String(y), values: pts.map(([key, v]) => ({ key, value: Math.round(v * (1 + (2025 - y) * 0.05)) })) })) };
+    return { ...base, series: years.map((y) => ({ label: String(y), values: pts.map(([key, v]) => ({ key, value: Math.round(v * (1 + (2025 - y) * 0.05)) })), ...(b.breakdown === "gas" ? { unit: "t" } : {}) })) };
   }
   return { ...base, series: [{ label: "Total", values: years.map((y) => ({ key: String(y), value })) }] };
 }
@@ -96,7 +99,7 @@ async function mockApi(page: Page, opts: { studio?: boolean } = {}) {
         return json({ values: b.bindings.map((x, i) => resolved(x, i)), tokens: b.tokens.map((_, i) => resolved({ source: "ghg" }, i)), dataHash: "h", unavailable: [] });
       }
       if (path.endsWith("/studio/docs/1/inputs")) return json({ rev: state.rev, inputs: {}, prefill: { base_year: { value: 2022, source: "company" } } });
-      if (path.endsWith("/studio/data")) return json({ groups: [{ id: "scopes", label: "Scopes", items: [{ id: "total", label: "Total emissions", binding: { source: "ghg", metric: "total", years: { last: 1 }, sites: "all" }, resolved: { display: "12,480", value: 12480, unit: "tCO₂e", approvedAt: "2026-04-12T00:00:00.000Z" } }] }] });
+      if (path.endsWith("/studio/data")) return json({ groups: [{ id: "scopes", label: "Scopes", items: [{ id: "total", label: "Total emissions", binding: { source: "ghg", metric: "total", years: { last: 1 }, sites: "all" }, resolved: { display: "12,480.000", value: 12480, unit: "tCO₂e", approvedAt: "2026-04-12T00:00:00.000Z" } }] }] });
       if (path.endsWith("/studio/assets")) return json([]);
       if (path.endsWith("/studio/layouts")) return json([]);
       if (path.endsWith("/studio/elements")) return json([]);

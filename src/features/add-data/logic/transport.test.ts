@@ -46,15 +46,15 @@ describe("S3-8 unit keys", () => {
       calculationSpec: spec,
     });
     const row = (over: Partial<ModalRow>): ModalRow => ({ id: 1, ...over }) as ModalRow;
-    // Fuel-based (Glochem, Mar 2026): 1,000 L at 100 % → 3.18 t, as saved.
-    expect(calc.calculateEmission(row({ emission_category: "Diesel", activity_data_unit: "litre", "Fuel used (litres)": "1000", "Your share of the load (%)": "100" })).value).toBe(3.18);
+    // Fuel-based (Glochem, Mar 2026): 1,000 L at 100 % → 3.182 t, as saved (3 dp, #209).
+    expect(calc.calculateEmission(row({ emission_category: "Diesel", activity_data_unit: "litre", "Fuel used (litres)": "1000", "Your share of the load (%)": "100" })).value).toBe(3.182);
     // Warehouse energy: 10,000 kWh × 25 % × 0.71 = 1,775 kg.
-    expect(calc.calculateEmission(row({ emission_category: "Grid", activity_data_unit: "kWh", "Energy used (kWh)": "10000", "Your share (%)": "25" })).value).toBe(1.78);
+    expect(calc.calculateEmission(row({ emission_category: "Grid", activity_data_unit: "kWh", "Energy used (kWh)": "10000", "Your share (%)": "25" })).value).toBe(1.775);
     // Refrigerant: 2 kg × 50 % × 2,256.
-    expect(calc.calculateEmission(row({ emission_category: "R410A", activity_data_unit: "kg", "Refrigerant leaked (kg)": "2", "Your share (%)": "50" })).value).toBe(2.26);
+    expect(calc.calculateEmission(row({ emission_category: "R410A", activity_data_unit: "kg", "Refrigerant leaked (kg)": "2", "Your share (%)": "50" })).value).toBe(2.256);
     // Average storage, with the unit written as people do.
     expect(calc.calculateEmission(row({ emission_category: "Storage", activity_data_unit: "m³.day", "Volume stored": "4000", "Days stored": "2" })).value).toBe(0.08);
-    expect(calc.calculateEmission(row({ emission_category: "Pallets", activity_data_unit: "pallet.day", "Volume stored": "120", "Days stored": "30" })).value).toBe(0.07);
+    expect(calc.calculateEmission(row({ emission_category: "Pallets", activity_data_unit: "pallet.day", "Volume stored": "120", "Days stored": "30" })).value).toBe(0.072);
     // A share over 100 % is refused.
     expect(calc.calculateEmission(row({ emission_category: "Grid", activity_data_unit: "kWh", "Energy used (kWh)": "100", "Your share (%)": "150" })).status).toMatch(/cannot be more than 100/);
   });

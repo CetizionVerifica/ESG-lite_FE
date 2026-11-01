@@ -20,12 +20,12 @@ test("What moved shows the waterfall with signed changes, a table view and the c
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockInsightsApi(page, "Manager", managerAt(true, true), { insights: true, kpi: true });
   const bridge = await openBridge(page);
-  await expect(bridge.getByRole("img")).toHaveAttribute("aria-label", /^Emissions went from 44,910 tCO₂e in 2025 to 41,280 tCO₂e in 2026; the biggest driver was cleaner electricity/);
+  await expect(bridge.getByRole("img")).toHaveAttribute("aria-label", /^Emissions went from 44,910\.200 tCO₂e in 2025 to 41,280\.400 tCO₂e in 2026; the biggest driver was cleaner electricity/);
   await expect(bridge.getByRole("list", { name: "Bar colours" })).toContainText("Increase (+)");
 
   await bridge.getByRole("radio", { name: "Table" }).click();
   const table = bridge.getByRole("table", { name: "What moved" });
-  await expect(table.getByRole("row", { name: /More output/ })).toContainText("+2,331");
+  await expect(table.getByRole("row", { name: /More output/ })).toContainText("+2,330.600");
   await expect(table.getByRole("row", { name: /Cleaner electricity/ })).toContainText("Decrease");
 
   await bridge.getByRole("button", { name: "How this is calculated" }).click();

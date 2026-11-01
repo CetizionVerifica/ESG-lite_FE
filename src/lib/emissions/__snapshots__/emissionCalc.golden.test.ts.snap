@@ -51,7 +51,7 @@ exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matc
     "factorId": 1,
     "result": {
       "status": "converted",
-      "value": 4260.86,
+      "value": 4260.857,
     },
     "row": {
       "activity_data_unit": "gallon",
@@ -126,7 +126,7 @@ exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matc
     "factorId": 3,
     "result": {
       "status": "converted",
-      "value": 0.55,
+      "value": 0.549,
     },
     "row": {
       "activity_data_unit": "MWh",
@@ -141,7 +141,7 @@ exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matc
     "factorId": 3,
     "result": {
       "status": "converted",
-      "value": 0.61,
+      "value": 0.611,
     },
     "row": {
       "activity_data_unit": "gj",
@@ -156,7 +156,7 @@ exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matc
     "factorId": 5,
     "result": {
       "status": "ok",
-      "value": 3.91,
+      "value": 3.912,
     },
     "row": {
       "activity_data_unit": "tonne",
@@ -171,7 +171,7 @@ exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matc
     "factorId": 5,
     "result": {
       "status": "converted",
-      "value": 2.54,
+      "value": 2.536,
     },
     "row": {
       "activity_data_unit": "kg",
@@ -290,7 +290,7 @@ exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matc
     "factorId": 4,
     "result": {
       "status": "ok",
-      "value": 117.4,
+      "value": 117.403,
     },
     "row": {
       "activity_data_unit": "litre",
@@ -327,7 +327,7 @@ exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matc
     "factorId": 4,
     "result": {
       "status": "ok",
-      "value": 1.56,
+      "value": 1.555,
     },
     "row": {
       "activity_data_unit": "litre",
@@ -342,7 +342,7 @@ exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matc
     "factorId": 4,
     "result": {
       "status": "ok",
-      "value": 0.01,
+      "value": 0.006,
     },
     "row": {
       "activity_data_unit": "litre",
@@ -357,7 +357,7 @@ exports[`Context 1 · Bahrain × Stationary combustion · monthly 2025-09 > matc
     "factorId": 4,
     "result": {
       "status": "ok",
-      "value": 0,
+      "value": 0.003,
     },
     "row": {
       "activity_data_unit": "litre",
@@ -846,7 +846,7 @@ exports[`Context 5 · Bahrain × Upstream transport · a form's hidden default a
     "factorId": 16,
     "result": {
       "status": "ok",
-      "value": 3.12,
+      "value": 3.124,
     },
     "row": {
       "Fuel used (litres)": "1000",
@@ -866,7 +866,7 @@ exports[`Context 5 · Bahrain × Upstream transport · a form's hidden default a
     "factorId": 16,
     "result": {
       "status": "ok",
-      "value": 1.56,
+      "value": 1.562,
     },
     "row": {
       "Fuel used (litres)": "1000",

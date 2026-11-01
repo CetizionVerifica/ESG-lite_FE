@@ -26,6 +26,8 @@ test("a contributor sees progress, Due / Sent back / Done and read-only auto and
   // Auto rows: the value with "From your data", nothing to enter.
   const scope1 = rows.filter({ hasText: "Scope 1 emissions" });
   await expect(scope1).toContainText("From your data");
+  // #209: Ravi's September Scope 1 (512.4) in tCO₂e, with 3 decimals.
+  await expect(scope1).toContainText("512.400 tCO₂e");
   await expect(scope1.getByRole("button")).toHaveCount(0);
   // Calculated rows explain themselves.
   await expect(rows.filter({ hasText: "Water consumed" })).toContainText("Water consumed = water withdrawn 1,200 m³ − water discharged 860 m³ = 340 m³");

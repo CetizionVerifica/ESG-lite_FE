@@ -40,7 +40,7 @@ export function TargetDrawer({ target, lookup, onClose, onSaved }: { target: Kpi
 
   const numeric = lookup.selected.filter((d) => d.value_type !== "text" && d.value_type !== "yes_no" && d.value_type !== "choice");
   const siteOptions = def?.level === "company" ? [] : lookup.sites.map((s) => ({ value: s.site_id, label: s.name }));
-  const preview = form.baselineYear && form.targetYear && form.baselineValue !== null && form.targetValue !== null ? targetText({ baseline_value: form.baselineValue, target_value: form.targetValue, baseline_year: form.baselineYear, target_year: form.targetYear, direction: form.direction }) : null;
+  const preview = form.baselineYear && form.targetYear && form.baselineValue !== null && form.targetValue !== null ? targetText({ baseline_value: form.baselineValue, target_value: form.targetValue, baseline_year: form.baselineYear, target_year: form.targetYear, direction: form.direction, unit }) : null;
 
   const submit = () => {
     const e = checkForm(form, { typedBaseline: !target && (prefill === null || form.baselineValue !== prefill) });

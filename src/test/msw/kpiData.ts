@@ -73,7 +73,8 @@ const def = (d: DefInput): KpiDefinition => ({
   pillar: d.pillar ?? TOPIC_PILLAR[d.topic],
 });
 
-const GHG: Partial<KpiDefinition> = { unit_dimension: "mass", canonical_unit: "tCO₂e", allowed_units: ["tCO₂e"], decimals: 2 };
+// #209: tCO₂e KPIs have 3 decimals, as the server's seed (ESG-lite data/kpi/definitions.json, migrate:kpi-tonnes-decimals).
+const GHG: Partial<KpiDefinition> = { unit_dimension: "mass", canonical_unit: "tCO₂e", allowed_units: ["tCO₂e"], decimals: 3 };
 const ENERGY: Partial<KpiDefinition> = { unit_dimension: "energy", canonical_unit: "MWh", allowed_units: ["MWh", "kWh", "GJ"], decimals: 0 };
 const WATER: Partial<KpiDefinition> = { unit_dimension: "volume", canonical_unit: "m³", allowed_units: ["m³", "kL", "litres", "ML"], decimals: 0 };
 const MASS: Partial<KpiDefinition> = { unit_dimension: "mass", canonical_unit: "t", allowed_units: ["t", "kg"], decimals: 1 };

@@ -56,7 +56,18 @@ export interface IntensityMonthlyRow {
   unit: string;
 }
 export interface EdeReportResponse {
-  totals: { scope1: number; scope2: number; scope3: number; total: number };
+  totals: {
+    scope1: number;
+    scope2: number;
+    scope3: number;
+    total: number;
+    /**
+     * tCO₂e avoided by renewables (rows whose category has no scope) for the
+     * whole selection: the rows' kgCO₂e summed and rounded once (ESG-lite D14).
+     * Missing on an older server.
+     */
+    saved?: number;
+  };
 
   bySite: BySiteRow[];
   siteDonut: SiteDonutRow[];

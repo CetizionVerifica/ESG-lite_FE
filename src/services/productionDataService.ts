@@ -59,6 +59,11 @@ export interface IntensityComparison {
     totalProduction: number;
     emissionIntensity: number;
   }>;
+  /**
+   * ESG-lite D14: the chosen sites' gross emissions (their kg added, rounded once) and
+   * production per month, combined on the server. Missing from an older server.
+   */
+  monthlyData?: EmissionIntensityData["monthlyData"];
   dateRange: {
     startDate: string;
     endDate: string;

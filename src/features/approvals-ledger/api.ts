@@ -209,7 +209,8 @@ export function useFactorNames(siteId: number | undefined, categoryId: number | 
 export function useManagerEdit() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: number; body: Parameters<typeof managerUpdateEmission>[1] }) => managerUpdateEmission(id, body),
+    mutationFn: ({ id, body, keepBoth }: { id: number; body: Parameters<typeof managerUpdateEmission>[1]; keepBoth?: boolean }) =>
+      managerUpdateEmission(id, body, { keepBoth }),
     onSettled: (_d, _e, v) => {
       void invalidateEmissionQueries(qc);
       void qc.invalidateQueries({ queryKey: ["audit-logs", "emission", v.id] });

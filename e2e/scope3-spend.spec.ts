@@ -119,7 +119,7 @@ test("a Category 1 row from the amount spent shows the rate and deflator, and se
   await expect(row.getByLabel("Spend currency")).toHaveCount(0);
 
   await expect(row.getByTestId("spend-preview")).toHaveText("₹ 12,40,000 ≈ USD 12,362 (rate on 3 Sep 2026) × 0.42 kgCO₂e/USD (2022 USD, deflated)");
-  await expect(row.getByText("= 5.19 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 5.192 tCO₂e")).toBeVisible();
   expect(rateQueries.at(-1)?.toString()).toBe("currency=INR&date=2026-09-03&to=USD&price_year=2022");
 
   await page.getByRole("button", { name: "Review" }).click();
@@ -200,7 +200,7 @@ test("SE-1: a User enters the amount and sees the total, not the rate, the defla
   await row.getByLabel("Amount spent").fill("1240000");
   await row.getByLabel("Currency").selectOption("INR");
   await row.getByLabel("Invoice date").fill("2026-09-03");
-  await expect(row.getByText("= 5.19 tCO₂e")).toBeVisible();
+  await expect(row.getByText("= 5.192 tCO₂e")).toBeVisible();
   await expect(row.getByTestId("spend-preview")).toHaveCount(0);
   for (const text of ["rate on", "kgCO₂e/USD", "deflated", "exchange rate"]) {
     await expect(row.getByText(text, { exact: false })).toHaveCount(0);

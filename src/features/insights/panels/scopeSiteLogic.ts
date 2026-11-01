@@ -67,7 +67,7 @@ export function scopeSiteOption(rows: SiteScopeRow[], t: ChartTheme, motion: obj
 export const SCOPE_SITE_COLUMNS = [
   { id: "site", header: "Site" },
   { id: "scope", header: "Scope" },
-  { id: "value", header: "tCO₂e", numeric: true, decimals: 0 },
+  { id: "value", header: "tCO₂e", numeric: true, decimals: 3 },
 ];
 
 export const scopeSiteTable = (rows: SiteScopeRow[]) => ({ columns: SCOPE_SITE_COLUMNS, rows: rows.map((r) => ({ site: r.site, scope: r.scope, value: r.value })) });

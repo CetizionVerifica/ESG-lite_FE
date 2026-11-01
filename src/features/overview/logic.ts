@@ -256,17 +256,23 @@ type Scope2Entry = {
 /**
  * Scope 2 emissions and activity (e.g. kWh) per month. Yearly filings are
  * left out, as in the trend. The unit is the most common activity unit.
+ * ESG-lite D14: a month's tCO₂e is the server's (`trend_scope_2`, its kg rounded
+ * once); the entries' stored tonnes are added only for an older server without it.
  */
-export function scope2Monthly(rows: Scope2Entry[], months: string[]) {
+export function scope2Monthly(rows: Scope2Entry[], months: string[], totals?: { month: string; total: number }[]) {
   const by = new Map(months.map((m) => [m, { month: m, emissions: 0, activity: 0 }]));
   const units = new Map<string, number>();
   for (const r of rows) {
     if (r.reporting_period === "yearly") continue;
     const b = by.get(r.date_of_reporting.slice(0, 7));
     if (!b) continue;
-    b.emissions += Number(r.total_emission) || 0;
+    if (!totals) b.emissions += Number(r.total_emission) || 0;
     b.activity += activityValue(r.activity_data) ?? 0;
     if (r.activity_data_unit) units.set(r.activity_data_unit, (units.get(r.activity_data_unit) ?? 0) + 1);
+  }
+  for (const t of totals ?? []) {
+    const b = by.get(t.month);
+    if (b) b.emissions = t.total;
   }
   const unit = [...units].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "kWh";
   return { unit, rows: [...by.values()].map((b) => ({ ...b, emissions: round3(b.emissions), activity: round3(b.activity) })) };
@@ -277,22 +283,41 @@ export function yearsOf(months: string[]): number[] {
   return [...new Set(months.map((m) => Number(m.slice(0, 4))))].sort((a, b) => a - b);
 }
 
-/** Monthly gross emissions, production and intensity summed over sites. */
-export function intensityMonthly(sites: { month: string; emissions: number; production: number }[][], months: string[]) {
-  const by = new Map(months.map((m) => [m, { month: m, emissions: 0, production: 0 }]));
+type IntensityMonth = { month: string; emissions: number; production: number; intensity?: number };
+
+/**
+ * Monthly gross emissions, production and intensity of the chosen sites over
+ * `months`, as the server combined them (ESG-lite D14: each month's kg rounded
+ * once). No intensity in a month without production.
+ */
+export function intensityMonthly(rows: IntensityMonth[], months: string[]) {
+  const by = new Map(rows.map((r) => [r.month, r]));
+  return months.map((month) => {
+    const r = by.get(month);
+    const production = r?.production ?? 0;
+    return {
+      month,
+      emissions: round3(r?.emissions ?? 0),
+      production: round3(production),
+      intensity: r && production > 0 ? (r.intensity ?? r.emissions / production) : null,
+    };
+  });
+}
+
+/**
+ * Only for an older server without the combined `monthlyData`: each site's
+ * months added (the sum of per-site rounded months).
+ */
+export function addSiteMonths(sites: IntensityMonth[][]): IntensityMonth[] {
+  const by = new Map<string, { month: string; emissions: number; production: number }>();
   for (const site of sites)
     for (const r of site) {
-      const b = by.get(r.month);
-      if (!b) continue;
+      const b = by.get(r.month) ?? { month: r.month, emissions: 0, production: 0 };
       b.emissions += r.emissions;
       b.production += r.production;
+      by.set(r.month, b);
     }
-  return [...by.values()].map((b) => ({
-    month: b.month,
-    emissions: round3(b.emissions),
-    production: round3(b.production),
-    intensity: b.production > 0 ? b.emissions / b.production : null,
-  }));
+  return [...by.values()];
 }
 
 /** Years offered for the year-over-year chart: the last `n`, newest first. */

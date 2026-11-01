@@ -1,6 +1,7 @@
 // S3-11 investments register: pure logic. No React here.
 import type { InvestmentType } from "../../../lib/scope3/assets";
 import type { Investment, InvestmentBody, InvestmentsPlan } from "../../../services/scope3AssetsService";
+import { formatTonnes } from "../../../ui/format";
 
 /** How the investee's share is calculated: 15.1 reported emissions, or 15.2 revenue × sector factor. */
 export type InvestmentBasis = "reported" | "revenue";
@@ -99,9 +100,9 @@ export function toBody(d: InvestmentDraft, existing?: Investment | null): Invest
   };
 }
 
-/** The register's "Scope 1+2 or revenue" cell. */
+/** The register's "Scope 1+2 or revenue" cell: tCO₂e to 3 decimals (#209), revenue with `fmt`. */
 export function dataText(i: Investment, fmt: (n: number) => string): string {
-  if (i.investee_scope12_tco2e !== null) return `${fmt(i.investee_scope12_tco2e)} tCO₂e`;
+  if (i.investee_scope12_tco2e !== null) return `${formatTonnes(i.investee_scope12_tco2e)} tCO₂e`;
   if (i.revenue !== null) {
     const sector = i.sector_split ? `${Object.keys(i.sector_split).length} sectors` : (i.eeio_sector ?? "no sector");
     return `${fmt(i.revenue)} ${i.currency ?? "USD"} · ${sector}`;
