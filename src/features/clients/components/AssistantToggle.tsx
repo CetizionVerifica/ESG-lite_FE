@@ -11,6 +11,9 @@ import type { ClientRow } from "../logic";
  * as a bubble at the bottom right, answering how-to questions from ESGLite's
  * help articles. It reads no client data; questions go to an outside AI
  * service. Off: the bubble goes; the call log is kept.
+ *
+ * `company.assistant_files_enabled` is separate and off by default: a file
+ * people attach is client data, so this client has to be told first.
  */
 export function AssistantToggle({ row }: { row: ClientRow }) {
   const update = useUpdateCompany();
@@ -18,24 +21,24 @@ export function AssistantToggle({ row }: { row: ClientRow }) {
   const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const on = row.assistant_enabled === true;
+  const filesOn = row.assistant_files_enabled === true;
 
-  const save = (next: boolean) => {
+  const change = (data: { assistant_enabled: boolean } | { assistant_files_enabled: boolean }, title: string) => {
     setError(null);
     update.mutate(
-      { id: row.company_id, data: { assistant_enabled: next } },
+      { id: row.company_id, data },
       {
         onSuccess: () => {
           void qc.invalidateQueries({ queryKey: assistantStatusKey });
-          toast(
-            next
-              ? { title: `The help assistant is on for ${row.name}. Their people will see "Ask ESGLite" in the top bar.`, tone: "good" }
-              : { title: `The help assistant is off for ${row.name}.`, tone: "good" },
-          );
+          toast({ title, tone: "good" });
         },
         onError: (e) => setError(errorMessage(e, "The switch wasn't changed. Try again.")),
       },
     );
   };
+  const save = (next: boolean) =>
+    change({ assistant_enabled: next }, next ? `The help assistant is on for ${row.name}. Their people will see "Ask ESGLite" as a bubble at the bottom right.` : `The help assistant is off for ${row.name}.`);
+  const saveFiles = (next: boolean) => change({ assistant_files_enabled: next }, next ? `${row.name}'s people can attach files to the help assistant.` : `${row.name}'s people can't attach files any more.`);
 
   return (
     <section aria-labelledby="assistant-title" className={`${panel} space-y-3 p-5`} data-testid="assistant-toggle">
@@ -56,6 +59,21 @@ export function AssistantToggle({ row }: { row: ClientRow }) {
         error={error}
         inlineLabel={on ? `On. ${row.name}'s people see "Ask ESGLite" as a bubble at the bottom right.` : `Off. ${row.name}'s people don't see the help assistant.`}
       />
+      {on && (
+        <div className="space-y-2 border-t border-line pt-3" data-testid="assistant-files-toggle">
+          <p className="text-sm text-muted">
+            Let people attach files such as bills and spreadsheets and ask about them. What's in a file goes to an outside AI service to be read, and ESGLite doesn't save it. Tell {row.name} before turning this on.
+          </p>
+          <Toggle
+            label="Attach files"
+            hideLabel
+            checked={filesOn}
+            onChange={saveFiles}
+            disabled={update.isPending}
+            inlineLabel={filesOn ? `On. ${row.name}'s people see a paperclip in "Ask ESGLite".` : `Off. "Ask ESGLite" can't read ${row.name}'s files.`}
+          />
+        </div>
+      )}
     </section>
   );
 }

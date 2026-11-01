@@ -24,6 +24,8 @@ export type DrawerProps = {
   children?: ReactNode;
   /** 480, 600 or 720px wide (full width on phones); "nav" is 320px, 85% on phones. */
   size?: "nav" | "sm" | "md" | "lg";
+  /** Extra classes on the panel itself, for example an entrance animation. */
+  panelClassName?: string;
   /** "left" for navigation drawers; detail panels stay on the right. */
   side?: "left" | "right";
   /** Set false when the content brings its own spacing (e.g. a nav list). */
@@ -45,7 +47,7 @@ export function Drawer({
   headerActions,
   footer,
   children,
-  size = "md",
+  panelClassName, size = "md",
   side = "right",
   padded = true,
   loading,
@@ -86,6 +88,7 @@ export function Drawer({
           "relative flex h-full max-w-full flex-col border-line bg-panel text-ink shadow-xl focus:outline-none",
           side === "left" ? "border-r" : "border-l",
           widths[size],
+          panelClassName,
         )}
       >
         <header className="flex items-start gap-3 border-b border-line px-5 py-4">

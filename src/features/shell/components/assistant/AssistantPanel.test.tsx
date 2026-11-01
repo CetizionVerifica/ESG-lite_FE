@@ -6,7 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { setupServer } from "msw/node";
 import { ToastProvider } from "../../../../ui";
-import { assistantHandlers, assistantMockRequests, resetAssistantMocks, setAssistantMockNext, setAssistantMockStatus } from "../../../../test/msw/assistant";
+import { assistantHandlers, assistantMockFeedback, assistantMockRequests, resetAssistantMocks, setAssistantMockDelay, setAssistantMockNext, setAssistantMockStatus } from "../../../../test/msw/assistant";
+import "../../../../test/fileShim";
 import AssistantBubble from "./AssistantBubble";
 
 vi.mock("../../../../context/AuthContext", () => ({ useAuth: () => ({ role: "User", user: { user_id: 1 } }) }));
@@ -78,6 +79,96 @@ describe("Ask ESGLite", () => {
     await user.click(within(dialog).getByRole("button", { name: "New conversation" }));
     expect(within(dialog).queryByTestId("assistant-answer")).toBeNull();
     expect(sessionStorage.getItem("esglite.assistant.thread.1")).toBeNull();
+  });
+
+  it("offers what to ask next, and a follow-up chip asks it", async () => {
+    const user = userEvent.setup();
+    renderButton();
+    const dialog = await openPanel(user);
+    await user.click(within(dialog).getByRole("button", { name: "What does Pending mean?" }));
+    await within(dialog).findByTestId("assistant-answer");
+    await user.click(within(dialog).getByRole("button", { name: "How do I fix a rejected entry?" }));
+    await waitFor(() => expect(assistantMockRequests()).toHaveLength(2));
+    expect(assistantMockRequests()[1].messages.slice(-1)[0].content).toBe("How do I fix a rejected entry?");
+  });
+
+  it("a thumb reaches the server once and says thanks; copying gives plain text", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    renderButton();
+    const dialog = await openPanel(user);
+    await user.click(within(dialog).getByRole("button", { name: "What does Pending mean?" }));
+    await within(dialog).findByTestId("assistant-answer");
+    await user.click(within(dialog).getByRole("button", { name: "This helped" }));
+    expect(await within(dialog).findByText("Thanks for telling me")).toBeTruthy();
+    await waitFor(() => expect(assistantMockFeedback()).toEqual([{ call_id: 41, helpful: true }]));
+    await user.click(within(dialog).getByRole("button", { name: "Copy answer" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    expect(writeText.mock.calls[0][0]).toContain("Open Add data.");
+    expect(writeText.mock.calls[0][0]).not.toContain("**");
+  });
+
+  it("closing while it's thinking keeps the answer: the bubble shows a dot and the answer is there", async () => {
+    const user = userEvent.setup();
+    renderButton();
+    const dialog = await openPanel(user);
+    setAssistantMockDelay(150);
+    await user.type(within(dialog).getByTestId("assistant-input"), "How do I approve?{Enter}");
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.getByTestId("assistant-bubble-busy")).toBeTruthy();
+    expect(await screen.findByTestId("assistant-bubble-dot")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Ask ESGLite, new answer" }));
+    const again = await screen.findByRole("dialog", { name: "Ask ESGLite" });
+    expect(await within(again).findByTestId("assistant-answer")).toBeTruthy();
+    expect(screen.queryByTestId("assistant-bubble-dot")).toBeNull();
+  });
+
+  it("no paperclip while files are off for the client", async () => {
+    const user = userEvent.setup();
+    renderButton();
+    const dialog = await openPanel(user);
+    expect(within(dialog).queryByRole("button", { name: "Attach a file" })).toBeNull();
+    expect(within(dialog).queryByText(/show me a file/)).toBeNull();
+  });
+
+  it("a file: read in the browser, quick questions offered, sent with the question and kept for the next one", async () => {
+    setAssistantMockStatus(true, true, true);
+    const user = userEvent.setup();
+    renderButton();
+    const dialog = await openPanel(user);
+    expect(within(dialog).getByText(/show me a file/)).toBeTruthy();
+    await user.upload(within(dialog).getByTestId("assistant-file-input"), new File(["month,litres\nSep,1200"], "fuel.csv", { type: "text/csv" }));
+    const chip = await within(dialog).findByTestId("assistant-file");
+    expect(await within(chip).findByText("fuel.csv")).toBeTruthy();
+    expect(within(chip).getByText(/outside AI service/)).toBeTruthy();
+    await user.click(await within(dialog).findByRole("button", { name: "Where should I upload this?" }));
+    await within(dialog).findByTestId("assistant-answer");
+    expect(assistantMockRequests()[0].attachment).toEqual({ name: "fuel.csv", type: "csv", text: "month,litres\nSep,1200", truncated: false });
+    expect(within(dialog).getByTestId("assistant-question-file").textContent).toContain("fuel.csv");
+    expect(sessionStorage.getItem("esglite.assistant.thread.1")).not.toContain("1200");
+
+    await user.type(within(dialog).getByTestId("assistant-input"), "And the month?{Enter}");
+    await waitFor(() => expect(assistantMockRequests()).toHaveLength(2));
+    expect(assistantMockRequests()[1].attachment?.name).toBe("fuel.csv");
+
+    await user.click(within(dialog).getByRole("button", { name: "Remove file" }));
+    await user.type(within(dialog).getByTestId("assistant-input"), "Thanks{Enter}");
+    await waitFor(() => expect(assistantMockRequests()).toHaveLength(3));
+    expect(assistantMockRequests()[2].attachment).toBeUndefined();
+  });
+
+  it("a file with no question asks what it is and where it goes", async () => {
+    setAssistantMockStatus(true, true, true);
+    const user = userEvent.setup();
+    renderButton();
+    const dialog = await openPanel(user);
+    await user.upload(within(dialog).getByTestId("assistant-file-input"), new File(["x"], "drawing.dwg"));
+    await within(dialog).findByText(/going by its name/);
+    await user.click(within(dialog).getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(assistantMockRequests()).toHaveLength(1));
+    expect(assistantMockRequests()[0].messages[0].content).toBe("What is this file, and where should I upload it?");
+    expect(assistantMockRequests()[0].attachment).toEqual({ name: "drawing.dwg", type: "other" });
   });
 
   it("a refused question says why, keeps the question and Try again resends it", async () => {

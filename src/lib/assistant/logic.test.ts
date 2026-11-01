@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { assistantVisible, errorCopy, inlines, isAppPath, loadThread, markdownBlocks, requestFor, saveThread, starterQuestions, type ThreadTurn } from "./logic";
+import { FILE_QUESTIONS, assistantVisible, errorCopy, firstName, partialAnswer, plainAnswer, thinkingLines, wordCount, inlines, isAppPath, loadThread, markdownBlocks, requestFor, saveThread, starterQuestions, type ThreadTurn } from "./logic";
 
 const err = (code: string, details?: unknown) => ({ response: { data: { code, details } } });
 
@@ -84,5 +84,54 @@ describe("the thread for this tab", () => {
     expect(loadThread(9)).toEqual([]);
     sessionStorage.setItem("esglite.assistant.thread.9", JSON.stringify([{ role: "system", content: "x" }, { role: "user", content: "ok" }]));
     expect(loadThread(9)).toEqual([{ role: "user", content: "ok" }]);
+  });
+});
+
+describe("the answer typing out", () => {
+  const text = "Open **Add data** and pick [the site](/data/new) now.";
+  it("never shows half-typed Markdown", () => {
+    expect(partialAnswer(text, 0)).toBe("");
+    expect(partialAnswer(text, 2)).toBe("Open **Add**");
+    expect(partialAnswer(text, 3)).toBe("Open **Add data**");
+    expect(partialAnswer(text, 6)).toBe("Open **Add data** and pick");
+    expect(partialAnswer(text, 7)).toBe("Open **Add data** and pick [the site](/data/new)");
+    expect(partialAnswer(text, wordCount(text))).toBe(text);
+    expect(partialAnswer("Use `the code here` now", 2)).toBe("Use `the`");
+  });
+  it("counts words", () => {
+    expect(wordCount("  one two\n\nthree ")).toBe(3);
+    expect(wordCount("")).toBe(0);
+  });
+  it("copies as plain text", () => {
+    expect(plainAnswer("Open **Add data**, then [the site](/data/new) and `Send`.")).toBe("Open Add data, then the site and Send.");
+  });
+});
+
+describe("what it offers", () => {
+  it("starts with what people ask on this page, for their role", () => {
+    expect(starterQuestions("User", "/data/new")[0]).toBe("Can the AI read my bill for me?");
+    expect(starterQuestions("User", "/data/new")).toHaveLength(3);
+    expect(starterQuestions("Manager", "/data/new")[0]).toBe("How do I approve entries?");
+    expect(starterQuestions("Manager", "/data/approvals")[0]).toBe("How do I approve several entries at once?");
+    expect(starterQuestions("User")).toEqual(starterQuestions("User", "/settings"));
+  });
+  it("offers file questions, greets by first name and says what's happening", () => {
+    expect(FILE_QUESTIONS).toContain("Is this accurate?");
+    expect(firstName("Demo Noida")).toBe("Demo");
+    expect(firstName(null)).toBe("");
+    expect(thinkingLines(true)[0]).toBe("Reading your file…");
+    expect(thinkingLines(false)[0]).toBe("Looking through the help articles…");
+  });
+  it("sends a file with the question, and never the file's contents with earlier turns", () => {
+    const thread = [{ role: "user" as const, content: "What is it?", file: { name: "a.pdf", type: "pdf" as const } }, { role: "assistant" as const, content: "A bill.", followups: ["x"], callId: 3 }];
+    const req = requestFor(thread, "Is it right?", null, { name: "a.pdf", type: "pdf", text: "Total 5" });
+    expect(req.messages).toEqual([{ role: "user", content: "What is it?" }, { role: "assistant", content: "A bill." }, { role: "user", content: "Is it right?" }]);
+    expect(req.attachment?.text).toBe("Total 5");
+    expect(requestFor([], "Hi", null)).toEqual({ messages: [{ role: "user", content: "Hi" }], page: null });
+  });
+  it("explains a refused file", () => {
+    expect(errorCopy(err("AS_FILES_OFF"))).toMatch(/Attaching files isn't turned on/);
+    expect(errorCopy(err("AS_VALIDATION", { issues: [{ path: "attachment.images.0" }] }))).toMatch(/That file couldn't be sent/);
+    expect(errorCopy(err("AS_VALIDATION", { issues: [{ path: "messages" }] }))).toMatch(/too long/);
   });
 });

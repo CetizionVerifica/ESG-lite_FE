@@ -1,22 +1,54 @@
 // AS-1 · the help assistant's pure logic: the request from the thread, the
 // answer's small Markdown (paragraphs, lists, bold, code, links to app paths
 // only), error copy, starter questions per role and the thread kept for the tab.
-import { ASSISTANT_MAX_QUESTION_CHARS, ASSISTANT_MAX_TURNS, type AssistantChatRequest, type AssistantRole, type AssistantSource, type AssistantStatus, type AssistantTurn } from "./contracts";
+import { ASSISTANT_MAX_QUESTION_CHARS, ASSISTANT_MAX_TURNS, type AssistantAttachment, type AssistantChatRequest, type AssistantFileType, type AssistantRole, type AssistantSource, type AssistantStatus, type AssistantTurn } from "./contracts";
 
 export interface ThreadTurn extends AssistantTurn {
   sources?: AssistantSource[];
   answered?: boolean;
+  followups?: string[];
+  callId?: number;
+  helpful?: boolean;
+  /** The file sent with this question: its name only, never its contents. */
+  file?: { name: string; type: AssistantFileType };
 }
 
 export const assistantVisible = (status: AssistantStatus | undefined): boolean => status?.enabled === true && status?.configured === true;
 
-/** The last turns that fit, then the new question. Earlier answers are cut to what the server takes. */
-export function requestFor(thread: ThreadTurn[], question: string, page: { path: string; title?: string } | null): AssistantChatRequest {
+/** The last turns that fit, then the new question, and the file if one is attached. Earlier answers are cut to what the server takes. */
+export function requestFor(thread: ThreadTurn[], question: string, page: { path: string; title?: string } | null, attachment?: AssistantAttachment): AssistantChatRequest {
   const earlier = thread.slice(-(ASSISTANT_MAX_TURNS - 1)).map((t) => ({ role: t.role, content: t.content.slice(0, 4000) }));
   // The server wants the last turn to be the person's and the first to make sense on its own.
   while (earlier.length && earlier[0].role === "assistant") earlier.shift();
-  return { messages: [...earlier, { role: "user", content: question.trim().slice(0, ASSISTANT_MAX_QUESTION_CHARS) }], page };
+  return { messages: [...earlier, { role: "user", content: question.trim().slice(0, ASSISTANT_MAX_QUESTION_CHARS) }], page, ...(attachment ? { attachment } : {}) };
 }
+
+export const wordCount = (text: string): number => text.split(/\s+/).filter(Boolean).length;
+
+/** The first `words` words of an answer: half-typed bold is closed and a half-typed link waits until it's whole. */
+export function partialAnswer(text: string, words: number): string {
+  if (words <= 0) return "";
+  let out = text
+    .split(/(\s+)/)
+    .slice(0, words * 2 - 1)
+    .join("");
+  const link = out.lastIndexOf("[");
+  if (link > out.lastIndexOf(")")) out = out.slice(0, link).trimEnd();
+  if ((out.match(/\*\*/g)?.length ?? 0) % 2) out += "**";
+  if ((out.match(/`/g)?.length ?? 0) % 2) out += "`";
+  return out;
+}
+
+/** An answer as plain text, for the clipboard. */
+export const plainAnswer = (text: string): string =>
+  text
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)\s]+\)/g, "$1")
+    .trim();
+
+/** True when motion should stay off (asked for, or the browser can't say). */
+export const reducedMotion = (): boolean => typeof window === "undefined" || typeof window.matchMedia !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export type Inline = { t: "text"; v: string } | { t: "bold"; v: string } | { t: "code"; v: string } | { t: "link"; label: string; to: string };
 export type Block = { type: "p"; inlines: Inline[] } | { type: "ol" | "ul"; items: Inline[][] };
@@ -85,12 +117,16 @@ export function errorCopy(error: unknown): string {
   switch (data?.code) {
     case "AS_OFF":
       return "The help assistant isn't turned on for your company.";
+    case "AS_FILES_OFF":
+      return "Attaching files isn't turned on for your company. Ask your Admin, or remove the file and ask again.";
     case "AS_BUDGET":
       return data.details?.limit === "company_month_usd"
         ? "The help assistant has reached this month's limit for your company. Ask your Admin, or try again next month."
         : "You've asked a lot of questions today. The help assistant can answer again tomorrow.";
     case "AS_VALIDATION":
-      return `That question is too long. Keep it under ${ASSISTANT_MAX_QUESTION_CHARS.toLocaleString("en")} characters.`;
+      return (data as { details?: { issues?: Array<{ path?: string }> } }).details?.issues?.some((i) => i.path?.startsWith("attachment"))
+        ? "That file couldn't be sent. Try a smaller one, or a different format."
+        : `That question is too long. Keep it under ${ASSISTANT_MAX_QUESTION_CHARS.toLocaleString("en")} characters.`;
     case "AS_AI_UNAVAILABLE":
       return "The help assistant can't answer right now. Try again in a moment.";
     default:
@@ -105,7 +141,30 @@ const STARTERS: Record<AssistantRole, string[]> = {
   Superadmin: ["How do I set up a form?", "How do I turn on a feature for a client?", "How do I give a user more sites?"],
 };
 
-export const starterQuestions = (role: string | null | undefined): string[] => STARTERS[(role as AssistantRole) in STARTERS ? (role as AssistantRole) : "User"];
+/** What people usually want to know on these pages, first in the list. */
+const PAGE_STARTERS: Array<{ path: RegExp; roles: AssistantRole[]; question: string }> = [
+  { path: /^\/data\/new/, roles: ["User"], question: "Can the AI read my bill for me?" },
+  { path: /^\/data\/mine/, roles: ["User"], question: "Why was my entry rejected?" },
+  { path: /^\/data\/approvals/, roles: ["Manager"], question: "How do I approve several entries at once?" },
+  { path: /^\/capture\/upload/, roles: ["User", "Manager", "Admin", "Superadmin"], question: "How do I upload a spreadsheet?" },
+];
+
+export function starterQuestions(role: string | null | undefined, path?: string): string[] {
+  const who = (role as AssistantRole) in STARTERS ? (role as AssistantRole) : "User";
+  const page = PAGE_STARTERS.find((p) => p.roles.includes(who) && p.path.test(path ?? ""))?.question;
+  return page ? [page, ...STARTERS[who].slice(0, 2)] : STARTERS[who];
+}
+
+/** Quick questions about a file just attached. */
+export const FILE_QUESTIONS = ["Where should I upload this?", "What does this say?", "Is this accurate?"];
+
+/** Sent when someone attaches a file and presses Send without typing. */
+export const DEFAULT_FILE_QUESTION = "What is this file, and where should I upload it?";
+
+export const firstName = (name: string | null | undefined): string => (name ?? "").trim().split(/\s+/)[0] ?? "";
+
+export const thinkingLines = (hasFile: boolean): string[] =>
+  hasFile ? ["Reading your file…", "Looking through the help articles…", "Putting your answer together…"] : ["Looking through the help articles…", "Putting your answer together…"];
 
 const storageKey = (userId: unknown) => `esglite.assistant.thread.${String(userId ?? "anon")}`;
 

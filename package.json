@@ -36,6 +36,7 @@
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",
     "lucide-react": "^0.563.0",
+    "pdfjs-dist": "6.3.289",
     "postcss": "^8.5.6",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
