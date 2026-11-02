@@ -6,7 +6,7 @@ import { useAssistantChat, useAssistantFeedback } from "../../../../lib/assistan
 import { ASSISTANT_MAX_QUESTION_CHARS } from "../../../../lib/assistant/contracts";
 import { prepareFile, type PreparedFile } from "../../../../lib/assistant/files";
 import { DEFAULT_FILE_QUESTION, FILE_QUESTIONS, aiNote, canRetry, errorCopy, firstName, loadThread, requestFor, saveThread, starterQuestions, type ThreadTurn } from "../../../../lib/assistant/logic";
-import { AiLabel, Button, Callout, Drawer } from "../../../../ui";
+import { AiChip, Button, Callout, Drawer } from "../../../../ui";
 import { AnswerCard } from "./AnswerCard";
 import { Composer } from "./Composer";
 import { Thinking } from "./Thinking";
@@ -39,6 +39,7 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
   const [thread, setThread] = useState<ThreadTurn[]>(() => loadThread(userId));
   const [draft, setDraft] = useState("");
   const [failed, setFailed] = useState<{ question: string; message: string; retry: boolean } | null>(null);
+  const [focusAgain, setFocusAgain] = useState(0);
   const [file, setFile] = useState<PreparedFile | null>(null);
   const [reading, setReading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -123,6 +124,7 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
     setDraft("");
     setFile(null);
     setFresh(-1);
+    setFocusAgain((n) => n + 1);
   };
 
   const rate = (index: number, helpful: boolean) => {
@@ -142,7 +144,12 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
       size="sm"
       panelClassName="motion-safe:animate-as-slide"
       title="Ask ESGLite"
-      subtitle={<AiLabel text="Answers from ESGLite's help articles" ai />}
+      subtitle={
+        <span className="inline-flex items-center gap-1.5">
+          Answers from ESGLite's help articles
+          <AiChip hint="" />
+        </span>
+      }
       headerActions={
         thread.length > 0 ? (
           <Button variant="ghost" size="sm" onClick={clear} disabled={chat.isPending}>
@@ -153,6 +160,7 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
       footer={
         <Composer
           open={open}
+          focusAgain={focusAgain}
           draft={draft}
           onDraft={setDraft}
           onSend={() => !tooLong && ask(draft)}
@@ -203,7 +211,7 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
         )}
         {thread.map((t, i) =>
           t.role === "user" ? (
-            <div key={i} className={`ml-8 rounded-control bg-tint px-3 py-2 text-sm text-ink ${i >= lastAnswer - 1 ? "motion-safe:animate-as-rise" : ""}`} data-testid="assistant-question">
+            <div key={i} dir="auto" className={`ml-8 rounded-control bg-tint px-3 py-2 text-sm text-ink ${i >= lastAnswer - 1 ? "motion-safe:animate-as-rise" : ""}`} data-testid="assistant-question">
               {t.file && (
                 <p className="mb-1 flex items-center gap-1 text-xs text-muted" data-testid="assistant-question-file">
                   <Paperclip aria-hidden className="size-3 flex-none" />

@@ -44,4 +44,13 @@ describe("signOutSession", () => {
     expect(readStoredClientId()).toBeNull();
     expect(calls).toEqual(["logout", "clear", "navigate:/login"]);
   });
+
+  it("forgets the help assistant's conversations and nothing else", () => {
+    vi.stubGlobal("sessionStorage", memoryStorage());
+    sessionStorage.setItem("esglite.assistant.thread.7", "[]");
+    sessionStorage.setItem("something.else", "keep");
+    signOutSession({ logout: () => {}, setClientId: () => {}, clearQueries: () => {}, navigate: () => {} });
+    expect(sessionStorage.getItem("esglite.assistant.thread.7")).toBeNull();
+    expect(sessionStorage.getItem("something.else")).toBe("keep");
+  });
 });

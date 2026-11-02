@@ -7,6 +7,8 @@ import { Button, Textarea, cn, focusRing } from "../../../../ui";
 export interface ComposerProps {
   open: boolean;
   draft: string;
+  /** Changes when the cursor should come back to the box, as after New conversation. */
+  focusAgain: number;
   onDraft: (text: string) => void;
   onSend: () => void;
   busy: boolean;
@@ -27,7 +29,7 @@ export interface ComposerProps {
 const hasMouse = () => typeof window.matchMedia === "function" && window.matchMedia("(pointer: fine)").matches;
 
 /** The question box: type, attach or paste a file, and send. */
-export function Composer({ open, draft, onDraft, onSend, busy, tooLong, filesOn, file, reading, onPick, onRemove, questions, onQuestion, note }: ComposerProps) {
+export function Composer({ open, focusAgain, draft, onDraft, onSend, busy, tooLong, filesOn, file, reading, onPick, onRemove, questions, onQuestion, note }: ComposerProps) {
   const form = useRef<HTMLFormElement>(null);
   const picker = useRef<HTMLInputElement>(null);
 
@@ -35,7 +37,7 @@ export function Composer({ open, draft, onDraft, onSend, busy, tooLong, filesOn,
     if (!open || !hasMouse()) return;
     const id = setTimeout(() => form.current?.querySelector("textarea")?.focus(), 80);
     return () => clearTimeout(id);
-  }, [open]);
+  }, [open, focusAgain]);
 
   return (
     <form
@@ -94,6 +96,7 @@ export function Composer({ open, draft, onDraft, onSend, busy, tooLong, filesOn,
         value={draft}
         onChange={onDraft}
         placeholder={file ? "Ask about this file" : "Ask how to do something in ESGLite"}
+        dir="auto"
         error={tooLong ? `Keep it under ${ASSISTANT_MAX_QUESTION_CHARS.toLocaleString("en")} characters.` : undefined}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {

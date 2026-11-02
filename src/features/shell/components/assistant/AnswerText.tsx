@@ -27,13 +27,13 @@ export function AnswerText({ text, onNavigate }: { text: string; onNavigate?: ()
       {markdownBlocks(text).map((b, i) => {
         if (b.type === "p")
           return (
-            <p key={i}>
+            <p key={i} dir="auto">
               <Inlines items={b.inlines} onNavigate={onNavigate} />
             </p>
           );
         const List = b.type === "ol" ? "ol" : "ul";
         return (
-          <List key={i} className={`space-y-1 pl-5 ${b.type === "ol" ? "list-decimal" : "list-disc"}`}>
+          <List key={i} dir="auto" className={`space-y-1 ps-5 ${b.type === "ol" ? "list-decimal" : "list-disc"}`}>
             {b.items.map((item, j) => (
               <li key={j}>
                 <Inlines items={item} onNavigate={onNavigate} />

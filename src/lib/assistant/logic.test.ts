@@ -53,6 +53,7 @@ describe("copy and visibility", () => {
     expect(errorCopy(err("AS_OFF"))).toMatch(/isn't turned on/);
     expect(canRetry(err("AS_OFF"))).toBe(false);
     expect(canRetry(err("AS_AI_UNAVAILABLE"))).toBe(true);
+    expect(canRetry(err("AS_BUDGET", { limit: "user_day_calls" }))).toBe(false);
     expect(errorCopy(err("AS_BUDGET", { limit: "user_day_calls" }))).toMatch(/again tomorrow/);
     expect(errorCopy(err("AS_BUDGET", { limit: "company_month_usd" }))).toMatch(/this month's limit/);
     expect(errorCopy(err("AS_VALIDATION"))).toMatch(/2,000 characters/);

@@ -190,20 +190,30 @@ describe("Ask ESGLite", () => {
     await user.click(within(dialog).getByRole("button", { name: "Send" }));
     await waitFor(() => expect(assistantMockRequests()).toHaveLength(1));
     expect(assistantMockRequests()[0].messages[0].content).toBe("What is this file, and where should I upload it?");
-    expect(assistantMockRequests()[0].attachment).toEqual({ name: "drawing.dwg", type: "other" });
+    expect(assistantMockRequests()[0].attachment).toEqual({ name: "drawing.dwg", type: "other", unread: "type" });
   });
 
   it("a refused question says why, keeps the question and Try again resends it", async () => {
     const user = userEvent.setup();
     renderButton();
     const dialog = await openPanel(user);
-    setAssistantMockNext(429, { code: "AS_BUDGET", message: "x", details: { limit: "company_month_usd" } });
+    setAssistantMockNext(503, { code: "AS_AI_UNAVAILABLE", message: "x" });
     await user.type(within(dialog).getByTestId("assistant-input"), "How do I approve?{Enter}");
-    expect(await within(dialog).findByText(/this month's limit for your company/)).toBeTruthy();
+    expect(await within(dialog).findByText(/can't answer right now/)).toBeTruthy();
     expect((within(dialog).getByTestId("assistant-input") as HTMLTextAreaElement).value).toBe("How do I approve?");
     expect(within(dialog).queryByTestId("assistant-question")).toBeNull();
     await user.click(within(dialog).getByRole("button", { name: "Try again" }));
     await within(dialog).findByTestId("assistant-answer");
     expect(assistantMockRequests()).toHaveLength(2);
+  });
+
+  it("offers no Try again once the limit is used up", async () => {
+    const user = userEvent.setup();
+    renderButton();
+    const dialog = await openPanel(user);
+    setAssistantMockNext(429, { code: "AS_BUDGET", message: "x", details: { limit: "company_month_usd" } });
+    await user.type(within(dialog).getByTestId("assistant-input"), "How do I approve?{Enter}");
+    expect(await within(dialog).findByText(/this month's limit for your company/)).toBeTruthy();
+    expect(within(dialog).queryByRole("button", { name: "Try again" })).toBeNull();
   });
 });
