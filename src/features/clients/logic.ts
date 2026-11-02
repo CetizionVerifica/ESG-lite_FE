@@ -35,6 +35,8 @@ export type Company = {
   assistant_enabled?: boolean;
   /** Attaching files to the help assistant; off unless turned on. */
   assistant_files_enabled?: boolean;
+  /** The help assistant may use a summary of a person's own work; off unless turned on. */
+  assistant_data_enabled?: boolean;
 };
 export type Site = { site_id: number; name: string; address?: string | null; company?: { company_id: number } | null; country?: { name: string } | null };
 export type AdminUser = {

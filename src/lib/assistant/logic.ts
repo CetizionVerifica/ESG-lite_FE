@@ -9,6 +9,8 @@ export interface ThreadTurn extends AssistantTurn {
   followups?: string[];
   callId?: number;
   helpful?: boolean;
+  /** The answer used a summary of the person's own work. */
+  usedWork?: boolean;
   /** The file sent with this question: its name only, never its contents. */
   file?: { name: string; type: AssistantFileType };
 }
@@ -152,10 +154,19 @@ const PAGE_STARTERS: Array<{ path: RegExp; roles: AssistantRole[]; question: str
   { path: /^\/capture\/upload/, roles: ["User", "Manager", "Admin", "Superadmin"], question: "How do I upload a spreadsheet?" },
 ];
 
-export function starterQuestions(role: string | null | undefined, path?: string): string[] {
+/** The first thing each role wants to know, when the assistant can see their work. */
+const WORK_STARTERS: Record<AssistantRole, string> = {
+  User: "What do I still need to do this month?",
+  Manager: "What's waiting for me?",
+  Admin: "Who hasn't sent this month's data?",
+  Superadmin: "How are my clients doing?",
+};
+
+export function starterQuestions(role: string | null | undefined, path?: string, workOn = false): string[] {
   const who = (role as AssistantRole) in STARTERS ? (role as AssistantRole) : "User";
   const page = PAGE_STARTERS.find((p) => p.roles.includes(who) && p.path.test(path ?? ""))?.question;
-  return page ? [page, ...STARTERS[who].slice(0, 2)] : STARTERS[who];
+  const list = page ? [page, ...STARTERS[who].slice(0, 2)] : STARTERS[who];
+  return workOn ? [WORK_STARTERS[who], ...list.slice(0, 2)] : list;
 }
 
 /** The note under the box: who to check with depends on who's asking. */

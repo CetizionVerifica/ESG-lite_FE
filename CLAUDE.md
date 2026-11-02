@@ -104,4 +104,5 @@ Run after `npm ci`:
 - Answers render as React elements from a small Markdown subset (no HTML); links only to app paths. The FE sends the question, the last turns and the page path, plus a file only when the person attaches one.
 - Files are read in the browser by `src/lib/assistant/files.ts`; only text or up to 3 pictures go to the server. Never put a file's contents in sessionStorage or localStorage. The paperclip shows only when `GET /assistant/status` says `files`.
 - Motion is `--animate-as-*` in `src/index.css`, always behind `motion-safe:`. Anything timed in script checks `reducedMotion()`.
-- The Superadmin switches are Clients → client → Overview → Help assistant (`company.assistant_enabled`) and Attach files (`company.assistant_files_enabled`).
+- The Superadmin switches are Clients → client → Overview → Help assistant (`company.assistant_enabled`), Attach files (`company.assistant_files_enabled`) and Use their work data (`company.assistant_data_enabled`).
+- An answer that used the person's own work says so (`used_work`). The FE never builds that summary.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, Copy, Database, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Link } from "react-router-dom";
 import { partialAnswer, plainAnswer, reducedMotion, wordCount, type ThreadTurn } from "../../../../lib/assistant/logic";
 import { Button, cn, focusRing } from "../../../../ui";
@@ -83,6 +83,12 @@ export function AnswerCard({ turn, animate, last, onDone, onGrow, onNavigate, on
       </div>
       {reveal.done && (
         <div className="space-y-2 motion-safe:animate-as-rise">
+          {turn.usedWork && (
+            <p className="flex items-center gap-1 text-xs text-muted" data-testid="assistant-used-work">
+              <Database aria-hidden className="size-3 flex-none" />
+              From your ESGLite data just now. The screens have the full detail.
+            </p>
+          )}
           {!!turn.sources?.length && (
             <p className="text-xs text-muted">
               From:{" "}

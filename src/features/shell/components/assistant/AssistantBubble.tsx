@@ -70,6 +70,7 @@ export default function AssistantBubble() {
           onBusy={setBusy}
           onAnswer={() => setUnread(true)}
           filesOn={status.data?.files === true}
+          workOn={status.data?.work === true}
         />
       )}
     </>

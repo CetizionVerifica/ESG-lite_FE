@@ -45,6 +45,8 @@ export interface AssistantChatReply {
   followups?: string[];
   /** For a thumb up or down on this answer. */
   call_id?: number;
+  /** True when the answer used a summary of the person's own work. */
+  used_work?: boolean;
 }
 
 /** GET /assistant/status: the bubble shows only when `enabled` and `configured` are true; `files` adds the paperclip. */
@@ -52,6 +54,8 @@ export interface AssistantStatus {
   enabled: boolean;
   configured: boolean;
   files?: boolean;
+  /** The assistant may use a summary of the person's own work. */
+  work?: boolean;
 }
 
 export type AssistantErrorCode = "AS_OFF" | "AS_FILES_OFF" | "AS_VALIDATION" | "AS_BUDGET" | "AS_AI_UNAVAILABLE";

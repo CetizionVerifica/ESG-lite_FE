@@ -117,6 +117,14 @@ describe("what it offers", () => {
     expect(starterQuestions("Manager", "/data/approvals")[0]).toBe("How do I approve several entries at once?");
     expect(starterQuestions("User")).toEqual(starterQuestions("User", "/settings"));
   });
+  it("leads with each role's own work when the assistant can see it", () => {
+    expect(starterQuestions("User", "/my-month", true)[0]).toBe("What do I still need to do this month?");
+    expect(starterQuestions("Manager", "/overview", true)[0]).toBe("What's waiting for me?");
+    expect(starterQuestions("Admin", "/users", true)[0]).toBe("Who hasn't sent this month's data?");
+    expect(starterQuestions("Superadmin", "/console", true)[0]).toBe("How are my clients doing?");
+    expect(starterQuestions("User", "/my-month", true)).toHaveLength(3);
+    expect(starterQuestions("User", "/my-month", false)).not.toContain("What do I still need to do this month?");
+  });
   it("tells each role who to check with", () => {
     expect(aiNote("User")).toContain("your Manager or Admin");
     expect(aiNote("Superadmin")).not.toContain("Manager");

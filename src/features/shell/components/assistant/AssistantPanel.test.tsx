@@ -124,6 +124,28 @@ describe("Ask ESGLite", () => {
     expect(screen.queryByTestId("assistant-bubble-dot")).toBeNull();
   });
 
+  it("with the work summary on it says so, and an answer that used it is marked", async () => {
+    setAssistantMockStatus(true, true, false, true);
+    const user = userEvent.setup();
+    renderButton();
+    const dialog = await openPanel(user);
+    expect(within(dialog).getByText(/a summary of your work/)).toBeTruthy();
+    setAssistantMockNext(200, { reply: "You have 2 to do.", answered: true, sources: [], used_work: true, call_id: 9 });
+    await user.click(within(dialog).getByRole("button", { name: "What do I still need to do this month?" }));
+    const answer = await within(dialog).findByTestId("assistant-answer");
+    expect(within(answer).getByTestId("assistant-used-work").textContent).toContain("From your ESGLite data");
+  });
+
+  it("an ordinary answer isn't marked as using their data", async () => {
+    const user = userEvent.setup();
+    renderButton();
+    const dialog = await openPanel(user);
+    expect(within(dialog).getByText(/can't see your company's data/)).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: "What does Pending mean?" }));
+    const answer = await within(dialog).findByTestId("assistant-answer");
+    expect(within(answer).queryByTestId("assistant-used-work")).toBeNull();
+  });
+
   it("no paperclip while files are off for the client", async () => {
     const user = userEvent.setup();
     renderButton();

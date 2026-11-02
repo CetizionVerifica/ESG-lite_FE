@@ -8,7 +8,7 @@ export const assistantStatusKey = ["assistant", "status"] as const;
 
 export async function getAssistantStatus(): Promise<AssistantStatus> {
   const { data } = await api.get("/assistant/status");
-  return { enabled: data?.enabled === true, configured: data?.configured === true, files: data?.files === true };
+  return { enabled: data?.enabled === true, configured: data?.configured === true, files: data?.files === true, work: data?.work === true };
 }
 
 export async function postAssistantChat(req: AssistantChatRequest): Promise<AssistantChatReply> {
@@ -24,7 +24,7 @@ export async function postAssistantFeedback(body: { call_id: number; helpful: bo
 export function useAssistantStatus(signedIn: boolean) {
   return useQuery({
     queryKey: assistantStatusKey,
-    queryFn: () => getAssistantStatus().catch(() => ({ enabled: false, configured: false, files: false })),
+    queryFn: () => getAssistantStatus().catch(() => ({ enabled: false, configured: false, files: false, work: false })),
     enabled: signedIn,
     staleTime: 5 * 60_000,
     retry: false,

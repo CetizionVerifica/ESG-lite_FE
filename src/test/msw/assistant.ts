@@ -10,7 +10,7 @@ import type { AssistantChatReply, AssistantChatRequest, AssistantStatus } from "
 
 type Next = { status: number; body: unknown };
 
-const state = { enabled: true, configured: true, files: false, delayMs: 0, queue: [] as Next[], requests: [] as AssistantChatRequest[], feedback: [] as unknown[] };
+const state = { enabled: true, configured: true, files: false, work: false, delayMs: 0, queue: [] as Next[], requests: [] as AssistantChatRequest[], feedback: [] as unknown[] };
 
 export const ASSISTANT_MOCK_REPLY: AssistantChatReply = {
   reply: "1. Open [Add data](/data/new).\n2. Pick the **site**, category and month, then click **Send**.",
@@ -24,16 +24,18 @@ export function resetAssistantMocks(): void {
   state.enabled = true;
   state.configured = true;
   state.files = false;
+  state.work = false;
   state.delayMs = 0;
   state.queue.length = 0;
   state.requests.length = 0;
   state.feedback.length = 0;
 }
 
-export function setAssistantMockStatus(enabled: boolean, configured = true, files = false): void {
+export function setAssistantMockStatus(enabled: boolean, configured = true, files = false, work = false): void {
   state.enabled = enabled;
   state.configured = configured;
   state.files = files;
+  state.work = work;
 }
 
 /** The next chat answer: a status and body (an error code, or another reply). */
@@ -50,7 +52,7 @@ export const assistantMockRequests = (): AssistantChatRequest[] => state.request
 export const assistantMockFeedback = (): unknown[] => state.feedback;
 
 export const assistantHandlers = [
-  http.get("*/assistant/status", () => HttpResponse.json<AssistantStatus>({ enabled: state.enabled, configured: state.configured, files: state.files })),
+  http.get("*/assistant/status", () => HttpResponse.json<AssistantStatus>({ enabled: state.enabled, configured: state.configured, files: state.files, work: state.work })),
   http.post("*/assistant/chat", async ({ request }) => {
     state.requests.push((await request.json()) as AssistantChatRequest);
     if (state.delayMs) await delay(state.delayMs);

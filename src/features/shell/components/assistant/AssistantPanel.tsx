@@ -17,6 +17,7 @@ export interface AssistantPanelProps {
   onBusy?: (busy: boolean) => void;
   onAnswer?: () => void;
   filesOn?: boolean;
+  workOn?: boolean;
 }
 
 /** Chips rise one after another, a little later each. */
@@ -29,7 +30,7 @@ const stagger = (i: number) => ({ animationDelay: `${i * 60}ms` });
  * one. The thread lasts for the browser tab (sessionStorage); a file stays in
  * memory for follow-up questions and is never stored.
  */
-export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = false }: AssistantPanelProps) {
+export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = false, workOn = false }: AssistantPanelProps) {
   const { role, user } = useAuth();
   const userId = user?.user_id ?? null;
   const location = useLocation();
@@ -101,7 +102,7 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
     onBusy?.(true);
     chat.mutate(requestFor(before, q, { path: location.pathname, title: document.title || undefined }, file?.attachment), {
       onSuccess: (r) => {
-        setThread((t) => [...t, { role: "assistant", content: r.reply, sources: r.sources, answered: r.answered, followups: r.followups, callId: r.call_id }]);
+        setThread((t) => [...t, { role: "assistant", content: r.reply, sources: r.sources, answered: r.answered, followups: r.followups, callId: r.call_id, usedWork: r.used_work }]);
         setFresh(before.length + 1);
         onAnswer?.();
       },
@@ -183,12 +184,14 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
               </span>
               <p className="text-base font-semibold text-ink motion-safe:animate-as-rise">{name ? `Hi ${name}, what can I help with?` : "Hi, what can I help with?"}</p>
               <p className="text-sm text-muted motion-safe:animate-as-rise">
-                Ask how to do something in ESGLite. I answer from ESGLite's help articles and can't see your company's data.
+                {workOn
+                  ? "Ask how to do something in ESGLite, or what's on your plate. I use ESGLite's help articles and a summary of your work."
+                  : "Ask how to do something in ESGLite. I answer from ESGLite's help articles and can't see your company's data."}
                 {filesOn && " You can also show me a file."}
               </p>
             </div>
             <div className="flex flex-col items-start gap-2">
-              {starterQuestions(role, location.pathname).map((s, i) => (
+              {starterQuestions(role, location.pathname, workOn).map((s, i) => (
                 <span key={s} style={stagger(i + 1)} className="motion-safe:animate-as-rise">
                   <Button variant="secondary" size="sm" onClick={() => ask(s)}>
                     {s}
