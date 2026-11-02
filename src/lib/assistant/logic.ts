@@ -113,9 +113,10 @@ export function markdownBlocks(text: string): Block[] {
   return blocks;
 }
 
+/** Trying again can't help while it's switched off or the limit is used up. */
+export const canRetry = (error: unknown): boolean => !["AS_OFF", "AS_BUDGET"].includes(String((error as { response?: { data?: { code?: unknown } } })?.response?.data?.code));
+
 /** What a failed question says, from the server's code. */
-/** Trying again can't help while it's switched off. */
-export const canRetry = (error: unknown): boolean => (error as { response?: { data?: { code?: unknown } } })?.response?.data?.code !== "AS_OFF";
 
 export function errorCopy(error: unknown): string {
   const data = (error as { response?: { data?: { code?: unknown; details?: { limit?: unknown } } } })?.response?.data;
@@ -184,7 +185,19 @@ export const firstName = (name: string | null | undefined): string => (name ?? "
 export const thinkingLines = (hasFile: boolean): string[] =>
   hasFile ? ["Reading your file…", "Looking through the help articles…", "Putting your answer together…"] : ["Looking through the help articles…", "Putting your answer together…"];
 
-const storageKey = (userId: unknown) => `esglite.assistant.thread.${String(userId ?? "anon")}`;
+const THREAD_PREFIX = "esglite.assistant.thread.";
+const storageKey = (userId: unknown) => `${THREAD_PREFIX}${String(userId ?? "anon")}`;
+
+/** Sign-out: answers can quote a file or someone's figures, so none stay behind on a shared computer. */
+export function forgetThreads(): void {
+  try {
+    Array.from({ length: sessionStorage.length }, (_, i) => sessionStorage.key(i))
+      .filter((key): key is string => !!key?.startsWith(THREAD_PREFIX))
+      .forEach((key) => sessionStorage.removeItem(key));
+  } catch {
+    // Storage blocked: nothing was kept.
+  }
+}
 
 /** The thread for this tab and person (sessionStorage); empty when storage is blocked or the data is bad. */
 export function loadThread(userId: unknown): ThreadTurn[] {

@@ -297,7 +297,8 @@ export function DataTable<T>({
           <Button size="sm" variant="ghost" onClick={clear}>
             Clear
           </Button>
-          <div className="ml-auto flex flex-wrap gap-2">{bulkActions?.(selectedRows, clear, selected)}</div>
+          {/* The right gutter on a phone keeps these clear of the floating help bubble. */}
+          <div className="ml-auto flex flex-wrap gap-2 pr-12 sm:pr-0">{bulkActions?.(selectedRows, clear, selected)}</div>
         </div>
       )}
 

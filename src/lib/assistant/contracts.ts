@@ -15,6 +15,9 @@ export interface AssistantTurn {
 
 export type AssistantFileType = "image" | "pdf" | "spreadsheet" | "csv" | "word" | "slides" | "text" | "other";
 
+/** Why only a file's name reached the assistant. */
+export type AssistantUnreadReason = "password" | "empty" | "damaged" | "type" | "too_big";
+
 /** A file read in the browser: its text, pictures of it, or (neither) only its name. */
 export interface AssistantAttachment {
   name: string;
@@ -22,6 +25,9 @@ export interface AssistantAttachment {
   text?: string;
   images?: string[];
   truncated?: boolean;
+  /** A big picture cut down to size: its small print may be gone. */
+  shrunk?: boolean;
+  unread?: AssistantUnreadReason;
 }
 
 export interface AssistantChatRequest {

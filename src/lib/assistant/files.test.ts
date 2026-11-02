@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import { ASSISTANT_MAX_FILE_CHARS } from "./contracts";
-import { MAX_SOURCE_BYTES, clipText, fileTypeOf, humanSize, prepareFile, xmlToText } from "./files";
+import { MAX_SOURCE_BYTES, clipText, fileTypeOf, humanSize, looksLikeJunk, prepareFile, xmlToText } from "./files";
 import "../../test/fileShim";
 
 const named = (parts: BlobPart[], name: string, type = "") => new File(parts, name, { type });
@@ -82,7 +82,7 @@ describe("reading a file", () => {
 
   it("any other file still attaches, by name", async () => {
     const r = await prepareFile(named(["binary"], "plan.dwg"));
-    expect(r.attachment).toEqual({ name: "plan.dwg", type: "other" });
+    expect(r.attachment).toEqual({ name: "plan.dwg", type: "other", unread: "type" });
     expect(r.note).toMatch(/going by its name/);
   });
 
@@ -93,8 +93,33 @@ describe("reading a file", () => {
     const huge = named(["x"], "huge.pdf");
     Object.defineProperty(huge, "size", { value: MAX_SOURCE_BYTES + 1 });
     const big = await prepareFile(huge);
-    expect(big.attachment).toEqual({ name: "huge.pdf", type: "pdf" });
+    expect(big.attachment).toEqual({ name: "huge.pdf", type: "pdf", unread: "too_big" });
     expect(big.note).toMatch(/Too big to read/);
+  });
+
+  it("says a file is empty or damaged instead of claiming to have read it", async () => {
+    for (const name of ["empty.txt", "empty.pdf", "empty.xlsx", "empty.docx", "empty.png"]) {
+      const r = await prepareFile(named([], name));
+      expect(r.attachment.unread, name).toBe("empty");
+      expect(r.note).toMatch(/This file is empty/);
+    }
+    const blank = new TextEncoder().encode("   \n  ");
+    expect((await prepareFile(named([blank], "spaces.txt"))).attachment.unread).toBe("empty");
+    const sheet = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(sheet, XLSX.utils.aoa_to_sheet([]), "Sheet1");
+    expect((await prepareFile(named([XLSX.write(sheet, { type: "array", bookType: "xlsx" })], "no-rows.xlsx"))).attachment.unread).toBe("empty");
+
+    const junk = Uint8Array.from({ length: 2000 }, (_, i) => (i * 37) % 32);
+    const damaged = await prepareFile(named([junk], "damaged.xlsx"));
+    expect(damaged.attachment).toEqual({ name: "damaged.xlsx", type: "spreadsheet", unread: "damaged" });
+    expect(damaged.note).toMatch(/Couldn't open this file/);
+    expect((await prepareFile(named([junk], "damaged.txt"))).attachment.unread).toBe("damaged");
+  });
+
+  it("tells words from bytes", () => {
+    expect(looksLikeJunk("Diesel,815,L\nरसीद 12\n")).toBe(false);
+    expect(looksLikeJunk(`Page 1\f${"text ".repeat(20)}`)).toBe(false);
+    expect(looksLikeJunk(`abc${String.fromCharCode(0, 1, 2, 3)}�`)).toBe(true);
   });
 
   it("a very long name is shortened to what the server takes, keeping its end", async () => {

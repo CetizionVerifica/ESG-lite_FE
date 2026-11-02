@@ -2,10 +2,12 @@
 // itself never leaves the page: only its text, or pictures of a few pages, go to
 // the server with the question. Any file can be attached: one we can't open
 // still goes by its name.
-import { ASSISTANT_MAX_FILE_CHARS, ASSISTANT_MAX_FILE_IMAGES, ASSISTANT_MAX_IMAGE_CHARS, type AssistantAttachment, type AssistantFileType } from "./contracts";
+import { ASSISTANT_MAX_FILE_CHARS, ASSISTANT_MAX_FILE_IMAGES, ASSISTANT_MAX_IMAGE_CHARS, type AssistantAttachment, type AssistantFileType, type AssistantUnreadReason } from "./contracts";
 
 export const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
-const PICTURE_SIZE = 1600;
+const PICTURE_SIZE = 2400;
+/** Cut down further than this and small print is gone, so the model must be told. */
+const SHRUNK_BELOW = 0.4;
 const PDF_MAX_PAGES = 30;
 /** Fewer characters than this a page means a scan: send pictures of it instead. */
 const SCANNED_PAGE_CHARS = 40;
@@ -105,7 +107,9 @@ async function readImage(file: File, base: AssistantAttachment): Promise<Prepare
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close?.();
   const url = canvasPicture(canvas);
-  return { attachment: { ...base, images: [url] }, note: "Picture ready", preview: url };
+  return scale < SHRUNK_BELOW
+    ? { attachment: { ...base, images: [url], shrunk: true }, note: "Very large picture: crop it so small print can be read", preview: url }
+    : { attachment: { ...base, images: [url] }, note: "Picture ready", preview: url };
 }
 
 async function readPdf(file: File, base: AssistantAttachment): Promise<PreparedFile> {
@@ -156,6 +160,9 @@ async function readSheet(file: File, base: AssistantAttachment): Promise<Prepare
     return csv ? `Sheet: ${name}\n${csv}` : "";
   }).filter(Boolean);
   const { text, truncated } = clipText(parts.join("\n\n"));
+  if (!text) return emptyFile(base);
+  // The Excel reader takes anything, so a damaged file comes back as a sheet of junk.
+  if (looksLikeJunk(text)) throw new Error("Not a spreadsheet");
   const sheets = book.SheetNames.length;
   return { attachment: { ...base, text, truncated: truncated || cut }, note: `Read ${sheets === 1 ? "1 sheet" : `${sheets} sheets`}${truncated || cut ? ", the first rows" : ""}` };
 }
@@ -176,6 +183,8 @@ async function readOffice(file: File, base: AssistantAttachment): Promise<Prepar
 
 async function readText(file: File, base: AssistantAttachment): Promise<PreparedFile> {
   const { text, truncated } = clipText(await file.text());
+  if (!text) return emptyFile(base);
+  if (looksLikeJunk(text)) throw new Error("Not text");
   return { attachment: { ...base, text, truncated }, note: truncated ? "Read the first part" : "Read the file" };
 }
 
@@ -189,18 +198,37 @@ const READERS: Partial<Record<AssistantFileType, (file: File, base: AssistantAtt
   slides: readOffice,
 };
 
-const nameOnly = (base: AssistantAttachment, note: string): PreparedFile => ({ attachment: base, note });
+const nameOnly = (base: AssistantAttachment, note: string, unread: AssistantUnreadReason): PreparedFile => ({ attachment: { ...base, unread }, note });
+
+function emptyFile(base: AssistantAttachment): PreparedFile {
+  return nameOnly(base, "This file is empty, so going by its name", "empty");
+}
+
+/** Mostly control characters or replacement marks: bytes, not words. */
+export function looksLikeJunk(text: string): boolean {
+  let bad = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code === 0xfffd || code < 9 || (code > 13 && code < 32)) bad++;
+  }
+  return bad / text.length > 0.05;
+}
+
+const isLocked = (err: unknown): boolean => {
+  const e = err as { name?: string; message?: string };
+  return e?.name === "PasswordException" || /password|encrypted/i.test(e?.message ?? "");
+};
 
 /** Never fails: a file that can't be opened keeps its name and says why. */
 export async function prepareFile(file: File): Promise<PreparedFile> {
   const base: AssistantAttachment = { name: safeName(file.name || "pasted-picture.png"), type: fileTypeOf(file.name, file.type) };
-  if (file.size > MAX_SOURCE_BYTES) return nameOnly(base, `Too big to read (${humanSize(file.size)}), so going by its name`);
+  if (file.size > MAX_SOURCE_BYTES) return nameOnly(base, `Too big to read (${humanSize(file.size)}), so going by its name`, "too_big");
   const reader = READERS[base.type];
-  if (!reader) return nameOnly(base, "Can't read inside this file type, so going by its name");
+  if (!reader) return nameOnly(base, "Can't read inside this file type, so going by its name", "type");
+  if (file.size === 0) return emptyFile(base);
   try {
     return await reader(file, base);
   } catch (err) {
-    const locked = (err as { name?: string })?.name === "PasswordException";
-    return nameOnly(base, locked ? "This file has a password, so going by its name" : "Couldn't open this file, so going by its name");
+    return isLocked(err) ? nameOnly(base, "This file has a password, so going by its name", "password") : nameOnly(base, "Couldn't open this file, so going by its name", "damaged");
   }
 }
