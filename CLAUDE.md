@@ -97,3 +97,12 @@ Run after `npm ci`:
 - Each panel loads, fails and retries on its own. Every chart has a table view and an aria label; colour is never the only signal.
 - Motion goes through `src/lib/insights/motion.ts` and is off under `prefers-reduced-motion`.
 - `docs/insights/05-ux.md` is binding.
+
+## Help assistant ("Ask ESGLite") — see docs/assistant/ (in ESG-lite)
+- Logic and API in `src/lib/assistant/`; the bottom right bubble and chat drawer in `src/features/shell/components/assistant/` (the shell owns it, like the bell). The bubble shows only when `GET /assistant/status` says `enabled` and `configured`.
+- The bubble lifts above a page's bottom action bar so it never covers Save or Submit: any `.sticky.bottom-0` bar counts; a bar that isn't sticky adds `data-bottom-bar`.
+- Answers render as React elements from a small Markdown subset (no HTML); links only to app paths. The FE sends the question, the last turns and the page path, plus a file only when the person attaches one.
+- Files are read in the browser by `src/lib/assistant/files.ts`; only text or up to 3 pictures go to the server. Never put a file's contents in sessionStorage or localStorage. The paperclip shows only when `GET /assistant/status` says `files`.
+- Motion is `--animate-as-*` in `src/index.css`, always behind `motion-safe:`. Anything timed in script checks `reducedMotion()`.
+- The Superadmin switches are Clients → client → Overview → Help assistant (`company.assistant_enabled`), Attach files (`company.assistant_files_enabled`) and Use their work data (`company.assistant_data_enabled`).
+- An answer that used the person's own work says so (`used_work`). The FE never builds that summary.

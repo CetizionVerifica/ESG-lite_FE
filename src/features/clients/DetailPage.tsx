@@ -9,6 +9,7 @@ import { EntrySettings } from "./components/EntrySettings";
 import { KpiTrackingToggle } from "./components/KpiTrackingToggle";
 import { DesignStudioToggle } from "./components/DesignStudioToggle"; // DS-0
 import { InsightsToggle } from "./components/InsightsToggle"; // IN-0
+import { AssistantToggle } from "./components/AssistantToggle"; // AS-1
 import { CompanyDrawer } from "./components/CompanyDrawer";
 import { SetupCopyDrawer } from "./components/SetupCopyDrawer";
 import { ClientLogo, StatusBadge } from "./components/bits";
@@ -185,6 +186,7 @@ export default function ClientDetailPage() {
           <KpiTrackingToggle row={row} />
           <DesignStudioToggle row={row} />
           <InsightsToggle row={row} />
+          <AssistantToggle row={row} />
           <ClaudeImportsToggle row={row} />
         </div>
       </TabPanel>

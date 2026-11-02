@@ -12,6 +12,7 @@ import { CommandPalette } from "../../ui";
 import { shellUser } from "./account";
 import { brandForUser } from "./brand";
 import { type Command, routeCommands } from "./commands";
+import AssistantBubble from "./components/assistant/AssistantBubble"; // AS-1
 import ClientSwitcher from "./components/ClientSwitcher";
 import ContextBar from "./components/ContextBar";
 import MobileNav from "./components/MobileNav";
@@ -103,7 +104,7 @@ export default function AppShell() {
     });
 
   return (
-    <div style={previewStyle} className="min-h-screen bg-(--t-page) text-(--t-ink)">
+    <div style={previewStyle} className="group/shell min-h-screen bg-(--t-page) text-(--t-ink)">
       <a
         href="#main"
         className="sr-only z-50 rounded-(--r-md) bg-(--t-panel) px-3 py-2 text-sm focus:not-sr-only focus:fixed focus:left-2 focus:top-2"
@@ -152,6 +153,7 @@ export default function AppShell() {
           </Suspense>
         </KpiClientPickerContext.Provider>
       </main>
+      <AssistantBubble />
     </div>
   );
 }
