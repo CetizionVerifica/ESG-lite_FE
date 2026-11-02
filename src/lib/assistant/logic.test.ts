@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { FILE_QUESTIONS, assistantVisible, errorCopy, firstName, partialAnswer, plainAnswer, thinkingLines, wordCount, inlines, isAppPath, loadThread, markdownBlocks, requestFor, saveThread, starterQuestions, type ThreadTurn } from "./logic";
+import { FILE_QUESTIONS, aiNote, assistantVisible, canRetry, errorCopy, firstName, partialAnswer, plainAnswer, thinkingLines, wordCount, inlines, isAppPath, loadThread, markdownBlocks, requestFor, saveThread, starterQuestions, type ThreadTurn } from "./logic";
 
 const err = (code: string, details?: unknown) => ({ response: { data: { code, details } } });
 
@@ -51,6 +51,8 @@ describe("the request", () => {
 describe("copy and visibility", () => {
   it("says what each server code means", () => {
     expect(errorCopy(err("AS_OFF"))).toMatch(/isn't turned on/);
+    expect(canRetry(err("AS_OFF"))).toBe(false);
+    expect(canRetry(err("AS_AI_UNAVAILABLE"))).toBe(true);
     expect(errorCopy(err("AS_BUDGET", { limit: "user_day_calls" }))).toMatch(/again tomorrow/);
     expect(errorCopy(err("AS_BUDGET", { limit: "company_month_usd" }))).toMatch(/this month's limit/);
     expect(errorCopy(err("AS_VALIDATION"))).toMatch(/2,000 characters/);
@@ -114,6 +116,11 @@ describe("what it offers", () => {
     expect(starterQuestions("Manager", "/data/new")[0]).toBe("How do I approve entries?");
     expect(starterQuestions("Manager", "/data/approvals")[0]).toBe("How do I approve several entries at once?");
     expect(starterQuestions("User")).toEqual(starterQuestions("User", "/settings"));
+  });
+  it("tells each role who to check with", () => {
+    expect(aiNote("User")).toContain("your Manager or Admin");
+    expect(aiNote("Superadmin")).not.toContain("Manager");
+    expect(aiNote("Manager")).not.toContain("Manager");
   });
   it("offers file questions, greets by first name and says what's happening", () => {
     expect(FILE_QUESTIONS).toContain("Is this accurate?");

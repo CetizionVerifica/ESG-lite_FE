@@ -5,7 +5,7 @@ import { useAuth } from "../../../../context/AuthContext";
 import { useAssistantChat, useAssistantFeedback } from "../../../../lib/assistant/api";
 import { ASSISTANT_MAX_QUESTION_CHARS } from "../../../../lib/assistant/contracts";
 import { prepareFile, type PreparedFile } from "../../../../lib/assistant/files";
-import { DEFAULT_FILE_QUESTION, FILE_QUESTIONS, errorCopy, firstName, loadThread, requestFor, saveThread, starterQuestions, type ThreadTurn } from "../../../../lib/assistant/logic";
+import { DEFAULT_FILE_QUESTION, FILE_QUESTIONS, aiNote, canRetry, errorCopy, firstName, loadThread, requestFor, saveThread, starterQuestions, type ThreadTurn } from "../../../../lib/assistant/logic";
 import { AiLabel, Button, Callout, Drawer } from "../../../../ui";
 import { AnswerCard } from "./AnswerCard";
 import { Composer } from "./Composer";
@@ -37,7 +37,7 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
   const feedback = useAssistantFeedback();
   const [thread, setThread] = useState<ThreadTurn[]>(() => loadThread(userId));
   const [draft, setDraft] = useState("");
-  const [failed, setFailed] = useState<{ question: string; message: string } | null>(null);
+  const [failed, setFailed] = useState<{ question: string; message: string; retry: boolean } | null>(null);
   const [file, setFile] = useState<PreparedFile | null>(null);
   const [reading, setReading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -110,7 +110,7 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
         setThread(before);
         setDraft(q);
         setFileAsked(false);
-        setFailed({ question: q, message: errorCopy(e) });
+        setFailed({ question: q, message: errorCopy(e), retry: canRetry(e) });
       },
       onSettled: () => onBusy?.(false),
     });
@@ -164,6 +164,7 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
           onRemove={() => setFile(null)}
           questions={file && !fileAsked && !draft ? FILE_QUESTIONS : []}
           onQuestion={ask}
+          note={aiNote(role)}
         />
       }
     >
@@ -230,9 +231,11 @@ export function AssistantPanel({ open, onClose, onBusy, onAnswer, filesOn = fals
           <Callout
             tone="warn"
             action={
-              <Button variant="ghost" size="sm" onClick={() => ask(failed.question)}>
-                Try again
-              </Button>
+              failed.retry ? (
+                <Button variant="ghost" size="sm" onClick={() => ask(failed.question)}>
+                  Try again
+                </Button>
+              ) : undefined
             }
           >
             {failed.message}

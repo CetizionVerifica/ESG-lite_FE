@@ -112,16 +112,19 @@ export function markdownBlocks(text: string): Block[] {
 }
 
 /** What a failed question says, from the server's code. */
+/** Trying again can't help while it's switched off. */
+export const canRetry = (error: unknown): boolean => (error as { response?: { data?: { code?: unknown } } })?.response?.data?.code !== "AS_OFF";
+
 export function errorCopy(error: unknown): string {
   const data = (error as { response?: { data?: { code?: unknown; details?: { limit?: unknown } } } })?.response?.data;
   switch (data?.code) {
     case "AS_OFF":
       return "The help assistant isn't turned on for your company.";
     case "AS_FILES_OFF":
-      return "Attaching files isn't turned on for your company. Ask your Admin, or remove the file and ask again.";
+      return "Attaching files isn't turned on for your company. Remove the file and ask again.";
     case "AS_BUDGET":
       return data.details?.limit === "company_month_usd"
-        ? "The help assistant has reached this month's limit for your company. Ask your Admin, or try again next month."
+        ? "The help assistant has reached this month's limit for your company. Ask your ESGLite contact, or try again next month."
         : "You've asked a lot of questions today. The help assistant can answer again tomorrow.";
     case "AS_VALIDATION":
       return (data as { details?: { issues?: Array<{ path?: string }> } }).details?.issues?.some((i) => i.path?.startsWith("attachment"))
@@ -154,6 +157,10 @@ export function starterQuestions(role: string | null | undefined, path?: string)
   const page = PAGE_STARTERS.find((p) => p.roles.includes(who) && p.path.test(path ?? ""))?.question;
   return page ? [page, ...STARTERS[who].slice(0, 2)] : STARTERS[who];
 }
+
+/** The note under the box: who to check with depends on who's asking. */
+export const aiNote = (role: string | null | undefined): string =>
+  role === "User" ? "AI answers can be wrong. Check anything important with your Manager or Admin." : "AI answers can be wrong. Check anything important on the screen itself.";
 
 /** Quick questions about a file just attached. */
 export const FILE_QUESTIONS = ["Where should I upload this?", "What does this say?", "Is this accurate?"];

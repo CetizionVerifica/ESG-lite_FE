@@ -19,13 +19,15 @@ export interface ComposerProps {
   /** Quick questions about the file attached. */
   questions: string[];
   onQuestion: (question: string) => void;
+  /** The note about checking AI answers, for this person's role. */
+  note: string;
 }
 
 /** A phone's keyboard shouldn't jump up just because the panel opened. */
 const hasMouse = () => typeof window.matchMedia === "function" && window.matchMedia("(pointer: fine)").matches;
 
 /** The question box: type, attach or paste a file, and send. */
-export function Composer({ open, draft, onDraft, onSend, busy, tooLong, filesOn, file, reading, onPick, onRemove, questions, onQuestion }: ComposerProps) {
+export function Composer({ open, draft, onDraft, onSend, busy, tooLong, filesOn, file, reading, onPick, onRemove, questions, onQuestion, note }: ComposerProps) {
   const form = useRef<HTMLFormElement>(null);
   const picker = useRef<HTMLInputElement>(null);
 
@@ -127,7 +129,7 @@ export function Composer({ open, draft, onDraft, onSend, busy, tooLong, filesOn,
               </button>
             </>
           )}
-          <p className="text-xs text-muted">AI answers can be wrong. Check anything important with your Manager or Admin.</p>
+          <p className="text-xs text-muted">{note}</p>
         </div>
         <Button type="submit" size="sm" loading={busy} disabled={(!draft.trim() && !file) || tooLong || reading} icon={<SendHorizontal aria-hidden className="size-3.5" />}>
           Send
